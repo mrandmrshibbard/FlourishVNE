@@ -1,0 +1,304 @@
+import React from 'react';
+import Panel from '../ui/Panel';
+import { useProject } from '../../contexts/ProjectContext';
+import { VNID } from '../../types';
+import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, GameSetting, GameToggleSetting } from '../../features/ui/types';
+import { VNVariable } from '../../features/variables/types';
+import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
+import { FormField, TextInput, Select } from '../ui/Form';
+import { TrashIcon } from '../icons';
+import FontEditor from '../ui/FontEditor';
+import ActionEditor from './ActionEditor';
+import AssetSelector from '../ui/AssetSelector';
+
+const UIElementInspector: React.FC<{
+    screenId: VNID;
+    elementId: VNID;
+    setSelectedElementId: (id: VNID | null) => void;
+}> = ({ screenId, elementId, setSelectedElementId }) => {
+    const { project, dispatch } = useProject();
+    const screen = project.uiScreens[screenId];
+    const element = screen?.elements[elementId];
+
+    if (!element) return <Panel title="Properties">Element not found</Panel>;
+
+    const updateElement = (updates: Partial<VNUIElement>) => {
+        dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId, elementId, updates }});
+    };
+    
+    const handleDelete = () => {
+        dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId, elementId } });
+        setSelectedElementId(null);
+    };
+
+    const renderCommonProperties = () => (
+        <>
+            <FormField label="Element Name"><TextInput value={element.name} onChange={e => updateElement({ name: e.target.value })} /></FormField>
+            <div className="grid grid-cols-2 gap-2">
+                <FormField label="X %"><TextInput type="number" value={element.x} onChange={e => updateElement({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                <FormField label="Y %"><TextInput type="number" value={element.y} onChange={e => updateElement({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <FormField label="Width %"><TextInput type="number" value={element.width} onChange={e => updateElement({ width: parseFloat(e.target.value) || 0 })} /></FormField>
+                <FormField label="Height %"><TextInput type="number" value={element.height} onChange={e => updateElement({ height: parseFloat(e.target.value) || 0 })} /></FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <FormField label="Anchor X (0-1)"><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
+                <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
+            </div>
+        </>
+    );
+
+    const renderSpecificProperties = () => {
+        switch (element.type) {
+            case UIElementType.Button: {
+                const el = element as UIButtonElement;
+                return <>
+                    <FormField label="Text"><TextInput value={el.text} onChange={e => updateElement({ text: e.target.value })} /></FormField>
+                    
+                    <h4 className="font-bold text-sm mt-2 text-slate-400">Default Image</h4>
+                    <div className="grid grid-cols-2 gap-2 p-2 border border-slate-700 rounded">
+                        <AssetSelector label="Asset" assetType={el.image?.type === 'video' ? 'videos' : 'backgrounds'} value={el.image?.id || null} onChange={id => updateElement({ image: id ? { type: el.image?.type || 'image', id } : null })} />
+                        <FormField label="Type">
+                            <Select value={el.image?.type || 'image'} onChange={e => updateElement({ image: { type: e.target.value as 'image'|'video', id: el.image?.id || '' }})}>
+                                <option value="image">Image</option>
+                                <option value="video">Video</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    
+                    <h4 className="font-bold text-sm mt-2 text-slate-400">Hover Image</h4>
+                    <div className="grid grid-cols-2 gap-2 p-2 border border-slate-700 rounded">
+                        <AssetSelector label="Asset" assetType={el.hoverImage?.type === 'video' ? 'videos' : 'backgrounds'} value={el.hoverImage?.id || null} onChange={id => updateElement({ hoverImage: id ? { type: el.hoverImage?.type || 'image', id } : null })} />
+                        <FormField label="Type">
+                            <Select value={el.hoverImage?.type || 'image'} onChange={e => updateElement({ hoverImage: { type: e.target.value as 'image'|'video', id: el.hoverImage?.id || '' }})}>
+                                <option value="image">Image</option>
+                                <option value="video">Video</option>
+                            </Select>
+                        </FormField>
+                    </div>
+
+                     <div className="grid grid-cols-2 gap-2 mt-2">
+                        <AssetSelector label="Hover Sound" assetType="audio" value={el.hoverSoundId} onChange={id => updateElement({ hoverSoundId: id })} />
+                        <AssetSelector label="Click Sound" assetType="audio" value={el.clickSoundId} onChange={id => updateElement({ clickSoundId: id })} />
+                    </div>
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                    <h3 className="font-bold my-2 text-slate-400">Action</h3>
+                    <ActionEditor action={el.action} onActionChange={action => updateElement({ action })} />
+                </>
+            }
+            case UIElementType.Text: {
+                 const el = element as UITextElement;
+                 return <>
+                    <FormField label="Text"><TextInput value={el.text} onChange={e => updateElement({ text: e.target.value })} /></FormField>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Horizontal Align">
+                            <Select value={el.textAlign} onChange={e => updateElement({ textAlign: e.target.value as any })}>
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="right">Right</option>
+                            </Select>
+                        </FormField>
+                        <FormField label="Vertical Align">
+                            <Select value={el.verticalAlign} onChange={e => updateElement({ verticalAlign: e.target.value as any })}>
+                                <option value="top">Top</option>
+                                <option value="middle">Middle</option>
+                                <option value="bottom">Bottom</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                 </>
+            }
+            case UIElementType.Image: {
+                const el = element as UIImageElement;
+                return <>
+                    <FormField label="Asset Type">
+                        <Select 
+                            value={el.image?.type || 'image'} 
+                            onChange={e => {
+                                const newType = e.target.value as 'image'|'video';
+                                // Clear the ID when switching types to avoid mismatched asset types
+                                updateElement({ image: { type: newType, id: '' }});
+                            }}
+                        >
+                            <option value="image">Image</option>
+                            <option value="video">Video</option>
+                        </Select>
+                    </FormField>
+                    <AssetSelector 
+                        label={el.image?.type === 'video' ? 'Video' : 'Image'} 
+                        assetType={el.image?.type === 'video' ? 'videos' : 'backgrounds'} 
+                        value={el.image?.id || null} 
+                        onChange={id => updateElement({ image: id ? { type: el.image?.type || 'image', id } : null })} 
+                    />
+                    <FormField label="Fit Mode">
+                        <Select 
+                            value={el.objectFit || 'contain'} 
+                            onChange={e => updateElement({ objectFit: e.target.value as 'contain' | 'cover' | 'fill' })}
+                        >
+                            <option value="contain">Contain (fit inside, show all)</option>
+                            <option value="cover">Cover (fill entire area)</option>
+                            <option value="fill">Fill (stretch to fit)</option>
+                        </Select>
+                    </FormField>
+                    <p className="text-xs text-slate-400 mt-1">
+                        💡 <strong>Cover</strong> mode fills the entire element but may crop edges. Perfect for fullscreen backgrounds!
+                    </p>
+                </>
+            }
+            case UIElementType.SaveSlotGrid: {
+                const el = element as UISaveSlotGridElement;
+                return <>
+                    <FormField label="Slot Count"><TextInput type="number" value={el.slotCount} onChange={e => updateElement({ slotCount: parseInt(e.target.value) || 1})} /></FormField>
+                    <FormField label="Empty Slot Text"><TextInput value={el.emptySlotText} onChange={e => updateElement({ emptySlotText: e.target.value })} /></FormField>
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                </>
+            }
+            case UIElementType.SettingsSlider: {
+                const el = element as UISettingsSliderElement;
+                return <>
+                    <FormField label="Setting Controlled">
+                        <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameSetting })}>
+                            <option value="musicVolume">Music Volume</option>
+                            <option value="sfxVolume">SFX Volume</option>
+                            <option value="textSpeed">Text Speed</option>
+                        </Select>
+                    </FormField>
+                    
+                    <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Images</h4>
+                    <AssetSelector label="Thumb Image" assetType="backgrounds" value={el.thumbImage?.id || null} onChange={id => updateElement({ thumbImage: id ? { type: 'image', id } : null })} />
+                    <AssetSelector label="Track Image" assetType="backgrounds" value={el.trackImage?.id || null} onChange={id => updateElement({ trackImage: id ? { type: 'image', id } : null })} />
+                    
+                    <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Colors</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Thumb Color">
+                            <TextInput type="color" value={el.thumbColor || '#ec4899'} onChange={e => updateElement({ thumbColor: e.target.value })} />
+                        </FormField>
+                        <FormField label="Track Color">
+                            <TextInput type="color" value={el.trackColor || '#a855f7'} onChange={e => updateElement({ trackColor: e.target.value })} />
+                        </FormField>
+                    </div>
+                </>
+            }
+            case UIElementType.SettingsToggle: {
+                const el = element as UISettingsToggleElement;
+                return <>
+                    <FormField label="Setting Controlled">
+                        <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameToggleSetting })}>
+                            <option value="enableSkip">Enable Skip</option>
+                        </Select>
+                    </FormField>
+                    <FormField label="Label Text"><TextInput value={el.text} onChange={e => updateElement({ text: e.target.value })} /></FormField>
+                    
+                    <h4 className="font-bold text-sm mt-3 text-slate-400">Checkbox Images</h4>
+                    <AssetSelector label="Checked Image" assetType="backgrounds" value={el.checkedImage?.id || null} onChange={id => updateElement({ checkedImage: id ? { type: 'image', id } : null })} />
+                    <AssetSelector label="Unchecked Image" assetType="backgrounds" value={el.uncheckedImage?.id || null} onChange={id => updateElement({ uncheckedImage: id ? { type: 'image', id } : null })} />
+                    
+                    <h4 className="font-bold text-sm mt-3 text-slate-400">Checkbox Color</h4>
+                    <FormField label="Color">
+                        <TextInput type="color" value={el.checkboxColor || '#ec4899'} onChange={e => updateElement({ checkboxColor: e.target.value })} />
+                    </FormField>
+                    
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                </>
+            }
+            case UIElementType.CharacterPreview: {
+                const el = element as UICharacterPreviewElement;
+                const character = el.characterId ? project.characters[el.characterId] : null;
+                const numberVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'number');
+                
+                return <>
+                    <FormField label="Character">
+                        <Select value={el.characterId} onChange={e => {
+                            const newCharId = e.target.value;
+                            const newChar = project.characters[newCharId];
+                            const firstExprId = newChar ? Object.keys(newChar.expressions)[0] : undefined;
+                            updateElement({ characterId: newCharId, expressionId: firstExprId, layerVariableMap: {} });
+                        }}>
+                            {Object.keys(project.characters).length === 0 && <option value="">No characters available</option>}
+                            {Object.values(project.characters).map((char: unknown) => {
+                                const c = char as VNCharacter;
+                                return <option key={c.id} value={c.id}>{c.name}</option>;
+                            })}
+                        </Select>
+                    </FormField>
+                    
+                    {character && Object.keys(character.expressions).length > 0 && (
+                        <FormField label="Default Expression">
+                            <Select value={el.expressionId || ''} onChange={e => updateElement({ expressionId: e.target.value || undefined })}>
+                                <option value="">None</option>
+                                {Object.values(character.expressions).map((expr: unknown) => {
+                                    const e = expr as any;
+                                    return <option key={e.id} value={e.id}>{e.name}</option>;
+                                })}
+                            </Select>
+                        </FormField>
+                    )}
+                    
+                    {character && Object.keys(character.layers).length > 0 && (
+                        <>
+                            <h3 className="font-bold my-2 text-slate-400">Layer Variable Mappings</h3>
+                            <p className="text-xs text-slate-400 mb-2">
+                                Map layers to number variables to dynamically control assets. Layers without mappings will use the default expression.
+                            </p>
+                            
+                            {Object.values(character.layers).map((layerUnknown: unknown) => {
+                                const layer = layerUnknown as VNCharacterLayer;
+                                return (
+                                    <FormField key={layer.id} label={layer.name}>
+                                        <Select 
+                                            value={el.layerVariableMap[layer.id] || ''} 
+                                            onChange={e => {
+                                                const newMap = { ...el.layerVariableMap };
+                                                if (e.target.value) {
+                                                    newMap[layer.id] = e.target.value;
+                                                } else {
+                                                    delete newMap[layer.id];
+                                                }
+                                                updateElement({ layerVariableMap: newMap });
+                                            }}
+                                        >
+                                            <option value="">None (use default expression)</option>
+                                            {numberVariables.map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </Select>
+                                    </FormField>
+                                );
+                            })}
+                        </>
+                    )}
+                    
+                    {character && Object.keys(character.layers).length === 0 && (
+                        <p className="text-xs text-slate-400 mt-2">
+                            This character has no layers. Add layers to enable variable-driven customization.
+                        </p>
+                    )}
+                </>
+            }
+            default: return null;
+        }
+    };
+
+    return (
+        <Panel title={`Properties: ${element.type}`} className="w-96 flex-shrink-0">
+            <div className="flex-grow overflow-y-auto pr-1">
+                {renderCommonProperties()}
+                <hr className="border-slate-700 my-4" />
+                {renderSpecificProperties()}
+            </div>
+             <div className="pt-4 mt-auto">
+                <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                    <TrashIcon/> Delete Element
+                </button>
+            </div>
+        </Panel>
+    );
+};
+
+export default UIElementInspector;

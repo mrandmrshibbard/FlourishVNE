@@ -1,0 +1,239 @@
+import React, { useState, useEffect } from 'react';
+import { useProject } from '../contexts/ProjectContext';
+import Header from './Header';
+import ResourceManager from './ResourceManager';
+import SceneEditor from './SceneEditor';
+import PropertiesInspector from './PropertiesInspector';
+import StagingArea from './StagingArea';
+import { VNID } from '../types';
+import MenuEditor from './menu-editor/MenuEditor';
+import LivePreview from './LivePreview';
+import ScreenInspector from './menu-editor/ScreenInspector';
+import UIElementInspector from './menu-editor/UIElementInspector';
+import Panel from './ui/Panel';
+import CharacterEditor from './CharacterEditor';
+import CharacterInspector from './CharacterInspector';
+import NavigationTabs, { NavigationTab } from './NavigationTabs';
+import SceneManager from './SceneManager';
+import CharacterManager from './CharacterManager';
+import UIManager from './UIManager';
+import AssetManager from './AssetManager';
+import VariableManager from './VariableManager';
+import SettingsManager from './SettingsManager';
+import { PhotoIcon, Cog6ToothIcon } from './icons';
+
+
+const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+    const { project, dispatch } = useProject();
+    const [activeSceneId, setActiveSceneId] = useState<VNID>(project.startSceneId);
+    const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
+    const [activeMenuScreenId, setActiveMenuScreenId] = useState<VNID | null>(null);
+    const [selectedUIElementId, setSelectedUIElementId] = useState<VNID | null>(null);
+    const [activeCharacterId, setActiveCharacterId] = useState<VNID | null>(null);
+    const [selectedExpressionId, setSelectedExpressionId] = useState<VNID | null>(null);
+    const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [activeTab, setActiveTab] = useState<NavigationTab>('scenes');
+    const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
+    const [isConfiguringScene, setIsConfiguringScene] = useState(false);
+
+    // REMOVED: The useEffect hook for saving the project has been removed.
+    // All changes are now held in memory until the user manually exports the project.
+    // This prevents browser storage quota errors for large projects.
+
+    // ADDED: Warn user before leaving the page to prevent data loss.
+    // Skip this warning in Electron since it prevents the app from closing.
+    useEffect(() => {
+        // Detect if running in Electron
+        const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+        
+        if (isElectron) {
+            // Skip beforeunload warning in Electron to allow app to close normally
+            return;
+        }
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            // This message is often not displayed by modern browsers, but setting returnValue is necessary to trigger the prompt.
+            e.returnValue = 'You have unsaved changes that will be lost. Are you sure you want to leave?';
+            return e.returnValue;
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, []);
+    
+    useEffect(() => {
+        if (activeCharacterId) {
+            const character = project.characters[activeCharacterId];
+            const firstExprId = character && Object.keys(character.expressions)[0];
+            setSelectedExpressionId(firstExprId || null);
+        } else {
+            setSelectedExpressionId(null);
+        }
+    }, [activeCharacterId, project.characters]);
+
+    const handleTitleChange = (newTitle: string) => {
+        dispatch({ type: 'UPDATE_PROJECT_TITLE', payload: { title: newTitle } });
+    };
+
+    const handleSetActiveScene = (id: VNID) => {
+        setActiveSceneId(id);
+        setSelectedCommandIndex(null);
+        setActiveMenuScreenId(null);
+        setActiveCharacterId(null);
+    }
+    const handleSetActiveMenuScreen = (id: VNID | null) => {
+        setActiveMenuScreenId(id);
+        setSelectedCommandIndex(null); 
+        setSelectedUIElementId(null); 
+        setActiveCharacterId(null);
+    }
+     const handleSetActiveCharacter = (id: VNID | null) => {
+        setActiveCharacterId(id);
+        setActiveMenuScreenId(null);
+        setSelectedCommandIndex(null);
+        setSelectedUIElementId(null);
+    }
+
+    const renderInspector = () => {
+        if (isConfiguringScene) {
+            return <PropertiesInspector
+                activeSceneId={activeSceneId}
+                selectedCommandIndex={null}
+                setSelectedCommandIndex={setSelectedCommandIndex}
+                isConfigScene={true}
+                onCloseSceneConfig={() => setIsConfiguringScene(false)}
+            />;
+        }
+        if (activeCharacterId) {
+            return <CharacterInspector 
+                activeCharacterId={activeCharacterId} 
+                selectedExpressionId={selectedExpressionId}
+                setSelectedExpressionId={setSelectedExpressionId}
+            />;
+        }
+        if (activeMenuScreenId) {
+            if (selectedUIElementId) {
+                return <UIElementInspector screenId={activeMenuScreenId} elementId={selectedUIElementId} setSelectedElementId={setSelectedUIElementId} />;
+            }
+            return <ScreenInspector screenId={activeMenuScreenId} />;
+        }
+        if (selectedVariableId) {
+            return <PropertiesInspector
+                activeSceneId={activeSceneId}
+                selectedCommandIndex={selectedCommandIndex}
+                setSelectedCommandIndex={setSelectedCommandIndex}
+                selectedVariableId={selectedVariableId}
+                setSelectedVariableId={setSelectedVariableId}
+            />;
+        }
+        if (selectedCommandIndex !== null) {
+            return <PropertiesInspector
+                activeSceneId={activeSceneId}
+                selectedCommandIndex={selectedCommandIndex}
+                setSelectedCommandIndex={setSelectedCommandIndex}
+            />;
+        }
+        return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Select an item to see its properties.</p></Panel>
+    }
+
+    // Calculate tab counts
+    const sceneCount = project.scenes ? Object.keys(project.scenes).length : 0;
+    const characterCount = project.characters ? Object.keys(project.characters).length : 0;
+    const uiScreenCount = project.uiScreens ? Object.keys(project.uiScreens).length : 0;
+    const assetCount = (project.backgrounds ? Object.keys(project.backgrounds).length : 0) +
+                      (project.images ? Object.keys(project.images).length : 0) +
+                      (project.audio ? Object.keys(project.audio).length : 0) +
+                      (project.videos ? Object.keys(project.videos).length : 0);
+    const variableCount = project.variables ? Object.keys(project.variables).length : 0;
+
+    const handleTabChange = (tab: NavigationTab) => {
+        setActiveTab(tab);
+        if (tab === 'scenes') {
+            handleSetActiveScene(activeSceneId); // This will clear other active states
+        } else if (tab === 'characters') {
+            // Switch to characters - set first character as active if available
+            const firstCharacterId = project.characters ? (Object.keys(project.characters)[0] as VNID | undefined) : undefined;
+            handleSetActiveCharacter(firstCharacterId || null);
+        } else if (tab === 'ui') {
+            // Switch to UI screens - set first screen as active if available
+            const firstScreenId = project.uiScreens ? (Object.keys(project.uiScreens)[0] as VNID | undefined) : undefined;
+            handleSetActiveMenuScreen(firstScreenId || null);
+        }
+        // For assets, variables, and settings tabs, we don't need to set any active IDs
+    };
+    return (
+        <div className="bg-slate-900 text-slate-100 h-screen flex flex-col">
+            <Header
+                title={project.title}
+                onTitleChange={handleTitleChange}
+                onPlay={() => setIsPlaying(true)}
+                onExit={onExit}
+                navigationTabs={
+                    <NavigationTabs
+                        activeTab={activeTab}
+                        onTabChange={handleTabChange}
+                        sceneCount={sceneCount}
+                        characterCount={characterCount}
+                        uiScreenCount={uiScreenCount}
+                        assetCount={assetCount}
+                        variableCount={variableCount}
+                    />
+                }
+            />
+            <main className="flex-grow flex overflow-hidden">
+                {/* Main Content Area - Full Width Managers */}
+                <div className="flex-1 flex flex-col min-w-0">
+                    {activeTab === 'scenes' ? (
+                        <SceneManager
+                            project={project}
+                            activeSceneId={activeSceneId}
+                            setActiveSceneId={handleSetActiveScene}
+                            selectedCommandIndex={selectedCommandIndex}
+                            setSelectedCommandIndex={setSelectedCommandIndex}
+                            setSelectedVariableId={setSelectedVariableId}
+                            onConfigureScene={() => {
+                                setIsConfiguringScene(true);
+                                setSelectedCommandIndex(null);
+                            }}
+                            isCollapsed={isSceneEditorCollapsed}
+                            onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
+                        />
+                    ) : activeTab === 'characters' ? (
+                        <CharacterManager
+                            project={project}
+                            activeCharacterId={activeCharacterId}
+                            setActiveCharacterId={handleSetActiveCharacter}
+                            selectedExpressionId={selectedExpressionId}
+                            setSelectedExpressionId={setSelectedExpressionId}
+                        />
+                    ) : activeTab === 'ui' ? (
+                        <UIManager
+                            project={project}
+                            activeMenuScreenId={activeMenuScreenId}
+                            setActiveMenuScreenId={handleSetActiveMenuScreen}
+                            selectedUIElementId={selectedUIElementId}
+                            setSelectedUIElementId={setSelectedUIElementId}
+                        />
+                    ) : activeTab === 'assets' ? (
+                        <AssetManager project={project} />
+                    ) : activeTab === 'variables' ? (
+                        <VariableManager project={project} />
+                    ) : activeTab === 'settings' ? (
+                        <SettingsManager project={project} />
+                    ) : null}
+                </div>
+
+                {/* Properties Inspector Sidebar */}
+                {(!isSceneEditorCollapsed || activeCharacterId || activeMenuScreenId) && renderInspector()}
+            </main>
+            {isPlaying && <LivePreview onClose={() => setIsPlaying(false)} />}
+        </div>
+    );
+};
+
+export default VisualNovelEditor;

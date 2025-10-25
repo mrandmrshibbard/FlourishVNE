@@ -1,0 +1,92 @@
+{
+  "name": "flourish-visual-novel-engine",
+  "private": true,
+  "version": "2.0.0",
+  "description": "A browser-based visual novel engine with layered character system",
+  "author": "Your Name",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:standalone": "vite build --config vite.config.standalone.ts",
+    "generate:engine-bundle": "node scripts/generate-engine-bundle.js",
+    "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
+    "build:player": "node scripts/build-player.js",
+    "electron:dev": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:linux": "npm run build && electron-builder --linux",
+    "dist": "npm run build && electron-builder --win --x64"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "jszip": "^3.10.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.flourish.vne",
+    "productName": "Flourish Visual Novel Engine",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "docs/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "docs/Flourish.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Flourish VNE"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "docs/Flourish.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "docs/Flourish.png"
+    }
+  }
+}
