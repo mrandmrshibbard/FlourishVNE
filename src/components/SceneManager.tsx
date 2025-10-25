@@ -5,7 +5,8 @@ import { VNScene } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 import SceneEditor from './SceneEditor';
 import StagingArea from './StagingArea';
-import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon } from './icons';
+import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon, DuplicateIcon } from './icons';
+import { ContextMenu } from './ui/ContextMenu';
 
 interface SceneManagerProps {
     project: VNProject;
@@ -32,6 +33,9 @@ const SceneManager: React.FC<SceneManagerProps> = ({
 }) => {
     const { dispatch } = useProject();
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sceneId: VNID } | null>(null);
+    const [draggedSceneId, setDraggedSceneId] = useState<VNID | null>(null);
+    const [dropTargetId, setDropTargetId] = useState<VNID | null>(null);
 
     const scenesArray = Object.values(project.scenes) as VNScene[];
 
@@ -48,6 +52,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({
         dispatch({ type: 'DELETE_SCENE', payload: { sceneId } });
     };
 
+    const handleDuplicateScene = (sceneId: VNID) => {
+        dispatch({ type: 'DUPLICATE_SCENE', payload: { sceneId } });
+    };
+
     const handleRenameScene = (sceneId: VNID, name: string) => {
         dispatch({ type: 'UPDATE_SCENE', payload: { sceneId, name } });
         setRenamingId(null);
@@ -55,6 +63,49 @@ const SceneManager: React.FC<SceneManagerProps> = ({
 
     const handleSetStartScene = (sceneId: VNID) => {
         dispatch({ type: 'SET_START_SCENE', payload: { sceneId } });
+    };
+
+    const handleDragStart = (sceneId: VNID) => {
+        setDraggedSceneId(sceneId);
+    };
+
+    const handleDragOver = (e: React.DragEvent, sceneId: VNID) => {
+        e.preventDefault();
+        if (draggedSceneId && draggedSceneId !== sceneId) {
+            setDropTargetId(sceneId);
+        }
+    };
+
+    const handleDragLeave = () => {
+        setDropTargetId(null);
+    };
+
+    const handleDrop = (e: React.DragEvent, targetSceneId: VNID) => {
+        e.preventDefault();
+        if (!draggedSceneId || draggedSceneId === targetSceneId) {
+            setDraggedSceneId(null);
+            setDropTargetId(null);
+            return;
+        }
+
+        const sceneIds = scenesArray.map(s => s.id);
+        const fromIndex = sceneIds.indexOf(draggedSceneId);
+        const toIndex = sceneIds.indexOf(targetSceneId);
+
+        if (fromIndex !== -1 && toIndex !== -1) {
+            const newSceneIds = [...sceneIds];
+            newSceneIds.splice(fromIndex, 1);
+            newSceneIds.splice(toIndex, 0, draggedSceneId);
+            dispatch({ type: 'REORDER_SCENES', payload: { sceneIds: newSceneIds } });
+        }
+
+        setDraggedSceneId(null);
+        setDropTargetId(null);
+    };
+
+    const handleContextMenu = (e: React.MouseEvent, sceneId: VNID) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, sceneId });
     };
 
     return (
@@ -76,11 +127,19 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                             isSelected={activeSceneId === scene.id}
                             isStartScene={project.startSceneId === scene.id}
                             isRenaming={renamingId === scene.id}
+                            isDragging={draggedSceneId === scene.id}
+                            isDropTarget={dropTargetId === scene.id}
                             onSelect={() => setActiveSceneId(scene.id)}
                             onStartRenaming={() => setRenamingId(scene.id)}
                             onCommitRename={(name) => handleRenameScene(scene.id, name)}
                             onDelete={() => handleDeleteScene(scene.id)}
+                            onDuplicate={() => handleDuplicateScene(scene.id)}
                             onSetStartScene={() => handleSetStartScene(scene.id)}
+                            onDragStart={() => handleDragStart(scene.id)}
+                            onDragOver={(e) => handleDragOver(e, scene.id)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, scene.id)}
+                            onContextMenu={(e) => handleContextMenu(e, scene.id)}
                         />
                     ))}
                 </div>
@@ -95,6 +154,39 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                     </button>
                 </div>
             </div>
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    onClose={() => setContextMenu(null)}
+                    options={[
+                        {
+                            label: 'Rename',
+                            icon: <PencilIcon className="w-4 h-4" />,
+                            onClick: () => setRenamingId(contextMenu.sceneId)
+                        },
+                        {
+                            label: 'Duplicate',
+                            icon: <DuplicateIcon className="w-4 h-4" />,
+                            onClick: () => handleDuplicateScene(contextMenu.sceneId)
+                        },
+                        {
+                            label: project.startSceneId === contextMenu.sceneId ? 'Start Scene ✓' : 'Set as Start Scene',
+                            icon: <SparkleIcon className="w-4 h-4" />,
+                            onClick: () => handleSetStartScene(contextMenu.sceneId)
+                        },
+                        {
+                            label: 'Delete',
+                            icon: <TrashIcon className="w-4 h-4" />,
+                            onClick: () => handleDeleteScene(contextMenu.sceneId),
+                            disabled: Object.keys(project.scenes).length <= 1,
+                            warning: Object.keys(project.scenes).length <= 1 ? 'Cannot delete the last scene' : undefined
+                        }
+                    ]}
+                />
+            )}
 
             {/* Scene Editor with Staging Area */}
             <div className="flex-1 flex flex-col min-w-0 relative">
@@ -134,11 +226,19 @@ interface SceneItemProps {
     isSelected: boolean;
     isStartScene: boolean;
     isRenaming: boolean;
+    isDragging: boolean;
+    isDropTarget: boolean;
     onSelect: () => void;
     onStartRenaming: () => void;
     onCommitRename: (name: string) => void;
     onDelete: () => void;
+    onDuplicate: () => void;
     onSetStartScene: () => void;
+    onDragStart: () => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDragLeave: () => void;
+    onDrop: (e: React.DragEvent) => void;
+    onContextMenu: (e: React.MouseEvent) => void;
 }
 
 const SceneItem: React.FC<SceneItemProps> = ({
@@ -146,11 +246,19 @@ const SceneItem: React.FC<SceneItemProps> = ({
     isSelected,
     isStartScene,
     isRenaming,
+    isDragging,
+    isDropTarget,
     onSelect,
     onStartRenaming,
     onCommitRename,
     onDelete,
-    onSetStartScene
+    onDuplicate,
+    onSetStartScene,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onContextMenu
 }) => {
     const [renameValue, setRenameValue] = useState(scene.name);
 
@@ -169,10 +277,20 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
     return (
         <div
+            draggable={!isRenaming}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
             onClick={onSelect}
             onDoubleClick={onStartRenaming}
-            className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
-                isSelected
+            onContextMenu={onContextMenu}
+            className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all ${
+                isDragging
+                    ? 'opacity-40'
+                    : isDropTarget
+                    ? 'border-2 border-sky-400 bg-sky-500/10'
+                    : isSelected
                     ? 'bg-sky-500/20 border border-sky-500/50'
                     : 'hover:bg-slate-700'
             }`}
@@ -200,6 +318,14 @@ const SceneItem: React.FC<SceneItemProps> = ({
                 {isStartScene && (
                     <SparkleIcon className="w-4 h-4 text-yellow-400" title="Start Scene" />
                 )}
+
+                <button
+                    onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+                    className="p-1 text-slate-500 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Duplicate Scene"
+                >
+                    <DuplicateIcon className="w-3 h-3" />
+                </button>
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onSetStartScene(); }}

@@ -18,6 +18,18 @@
             overflow: hidden;
             width: 100vw;
             height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        
+        /* Allow text selection in input elements */
+        input, textarea, [contenteditable="true"] {
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
         }
         
         #app {
@@ -273,6 +285,12 @@
             }
             
         })();
+    </script>
+    <script>
+        // Prevent default context menu (right-click menu)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
     </script>
 </body>
 </html>

@@ -10,6 +10,8 @@ export type SceneAction =
     | { type: 'UPDATE_SCENE'; payload: { sceneId: VNID; name: string } }
     | { type: 'UPDATE_SCENE_CONFIG'; payload: { sceneId: VNID; updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId'>> } }
     | { type: 'DELETE_SCENE'; payload: { sceneId: VNID } }
+    | { type: 'DUPLICATE_SCENE'; payload: { sceneId: VNID } }
+    | { type: 'REORDER_SCENES'; payload: { sceneIds: VNID[] } }
     | { type: 'SET_START_SCENE'; payload: { sceneId: VNID } }
     | { type: 'UPDATE_SCENE_COMMANDS'; payload: { sceneId: VNID; commands: VNCommand[] } }
     | { type: 'ADD_COMMAND'; payload: { sceneId: VNID; command: VNCommand } }
@@ -90,6 +92,42 @@ export const sceneReducer = (state: VNProject, action: SceneAction): VNProject =
         ...state,
         scenes: remainingScenes,
         startSceneId: newStartSceneId
+      };
+    }
+
+    case 'DUPLICATE_SCENE': {
+      const { sceneId } = action.payload;
+      const originalScene = state.scenes[sceneId];
+      if (!originalScene) return state;
+
+      const newId = `scene-${generateId()}`;
+      const duplicatedScene: VNScene = {
+        ...originalScene,
+        id: newId,
+        name: `${originalScene.name} (Copy)`,
+        commands: originalScene.commands.map(cmd => ({ ...cmd, id: `cmd-${generateId()}` }))
+      };
+
+      return {
+        ...state,
+        scenes: { ...state.scenes, [newId]: duplicatedScene }
+      };
+    }
+
+    case 'REORDER_SCENES': {
+      const { sceneIds } = action.payload;
+      const newScenes: Record<VNID, VNScene> = {};
+      
+      // Rebuild scenes object in new order
+      sceneIds.forEach(id => {
+        if (state.scenes[id]) {
+          newScenes[id] = state.scenes[id];
+        }
+      });
+
+      return {
+        ...state,
+        scenes: newScenes
       };
     }
 

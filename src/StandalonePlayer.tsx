@@ -24,6 +24,16 @@ const StandalonePlayer: React.FC<StandalonePlayerProps> = ({ project }) => {
         // Perform any necessary initialization
         console.log('[Standalone Player] Loaded project:', project.title);
         setIsReady(true);
+
+        // Prevent default context menu (right-click menu)
+        const preventContextMenu = (e: MouseEvent) => {
+            e.preventDefault();
+        };
+        document.addEventListener('contextmenu', preventContextMenu);
+
+        return () => {
+            document.removeEventListener('contextmenu', preventContextMenu);
+        };
     }, [project]);
 
     const handleSplashClick = () => {
@@ -117,6 +127,20 @@ const StandalonePlayer: React.FC<StandalonePlayerProps> = ({ project }) => {
             background: '#000',
             overflow: 'hidden'
         }}>
+            <style>{`
+                body {
+                    user-select: none;
+                    -webkit-user-select: none;
+                    -moz-user-select: none;
+                    -ms-user-select: none;
+                }
+                input, textarea, [contenteditable="true"] {
+                    user-select: text;
+                    -webkit-user-select: text;
+                    -moz-user-select: text;
+                    -ms-user-select: text;
+                }
+            `}</style>
             <ProjectProvider initialProject={project}>
                 <LivePreview onClose={() => {}} hideCloseButton={true} autoStartMusic={true} />
             </ProjectProvider>
