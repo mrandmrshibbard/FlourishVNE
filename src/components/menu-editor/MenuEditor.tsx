@@ -3,7 +3,7 @@ import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
@@ -114,6 +114,22 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                      {char.name}
                  </span>
              </div>;
+        case UIElementType.TextInput:
+            const input = element as UITextInputElement;
+            return <div className="w-full h-full flex items-center p-2">
+                <input 
+                    type="text" 
+                    placeholder={input.placeholder}
+                    disabled
+                    className="w-full px-3 py-2 rounded border"
+                    style={{
+                        ...fontSettingsToStyle(input.font),
+                        backgroundColor: input.backgroundColor || '#1e293b',
+                        borderColor: input.borderColor || '#475569',
+                        pointerEvents: 'none'
+                    }}
+                />
+            </div>;
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
@@ -197,11 +213,12 @@ const MenuEditor: React.FC<{
                     ))}
                 </div>
             </Panel>
-            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-6 gap-2">
+            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-7 gap-2">
                 <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Button</button>
                 <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Text</button>
                 <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Image</button>
                 <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Character</button>
+                <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Text Input</button>
                 <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Slider</button>
                 <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Toggle</button>
             </div>

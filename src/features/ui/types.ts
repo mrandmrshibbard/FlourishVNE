@@ -36,6 +36,7 @@ export enum UIElementType {
     SettingsSlider = 'SettingsSlider',
     SettingsToggle = 'SettingsToggle',
     CharacterPreview = 'CharacterPreview',
+    TextInput = 'TextInput',
 }
 
 interface BaseUIElement {
@@ -103,9 +104,19 @@ export interface UICharacterPreviewElement extends BaseUIElement {
     layerVariableMap: Record<VNID, VNID>; // layerId -> variableId
 }
 
+export interface UITextInputElement extends BaseUIElement {
+    type: UIElementType.TextInput;
+    placeholder: string;
+    variableId: VNID; // Variable to set with the input value
+    font: VNFontSettings;
+    backgroundColor?: string;
+    borderColor?: string;
+    maxLength?: number;
+}
+
 export type VNUIElement = 
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement;
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement;
 
 export interface VNUIScreen {
     id: VNID;

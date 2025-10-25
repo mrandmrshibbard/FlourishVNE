@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -75,6 +75,21 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 characterId: firstCharId,
                 expressionId: firstExprId,
                 layerVariableMap: {}
+            };
+            return el;
+        }
+        case UIElementType.TextInput: {
+            const firstVarId = Object.keys(project.variables)[0] || '';
+            
+            const el: UITextInputElement = {
+                ...base, name: 'Text Input', type,
+                width: 40, height: 8,
+                placeholder: 'Enter text...',
+                variableId: firstVarId,
+                font: project.ui.dialogueTextFont,
+                backgroundColor: '#1e293b',
+                borderColor: '#475569',
+                maxLength: 100
             };
             return el;
         }

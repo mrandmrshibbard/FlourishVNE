@@ -2,7 +2,7 @@ import React from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
-import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, GameSetting, GameToggleSetting } from '../../features/ui/types';
+import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, GameSetting, GameToggleSetting } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { FormField, TextInput, Select } from '../ui/Form';
@@ -279,6 +279,52 @@ const UIElementInspector: React.FC<{
                             This character has no layers. Add layers to enable variable-driven customization.
                         </p>
                     )}
+                </>
+            }
+            case UIElementType.TextInput: {
+                const el = element as UITextInputElement;
+                return <>
+                    <FormField label="Placeholder Text">
+                        <TextInput value={el.placeholder} onChange={e => updateElement({ placeholder: e.target.value })} />
+                    </FormField>
+                    
+                    <FormField label="Variable to Set">
+                        <Select value={el.variableId} onChange={e => updateElement({ variableId: e.target.value })}>
+                            {Object.keys(project.variables).length === 0 && <option value="">No variables available</option>}
+                            {Object.values(project.variables).map((v: any) => (
+                                <option key={v.id} value={v.id}>{v.name} ({v.type})</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                    
+                    <FormField label="Max Length">
+                        <TextInput 
+                            type="number" 
+                            value={el.maxLength || 100} 
+                            onChange={e => updateElement({ maxLength: parseInt(e.target.value) || 100 })} 
+                        />
+                    </FormField>
+                    
+                    <h4 className="font-bold text-sm mt-3 text-slate-400">Colors</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Background">
+                            <TextInput 
+                                type="color" 
+                                value={el.backgroundColor || '#1e293b'} 
+                                onChange={e => updateElement({ backgroundColor: e.target.value })} 
+                            />
+                        </FormField>
+                        <FormField label="Border">
+                            <TextInput 
+                                type="color" 
+                                value={el.borderColor || '#475569'} 
+                                onChange={e => updateElement({ borderColor: e.target.value })} 
+                            />
+                        </FormField>
+                    </div>
+                    
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
                 </>
             }
             default: return null;

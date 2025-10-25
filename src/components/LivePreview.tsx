@@ -10,7 +10,7 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, GameSetting, GameToggleSetting, UIElementType
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, GameSetting, GameToggleSetting, UIElementType
 } from '../features/ui/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
@@ -754,7 +754,8 @@ const UIScreenRenderer: React.FC<{
     gameSaves: Record<number, GameStateSave>;
     playSound: (soundId: VNID | null) => void;
     variables?: Record<VNID, string | number | boolean>;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {} }) => {
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     
@@ -1090,6 +1091,39 @@ const UIScreenRenderer: React.FC<{
                                 ))
                             )}
                         </div>
+                    </div>
+                );
+            }
+            case UIElementType.TextInput: {
+                const el = element as UITextInputElement;
+                const currentValue = String(variables[el.variableId] || '');
+
+                return (
+                    <div
+                        key={el.id}
+                        style={style}
+                    >
+                        <input
+                            type="text"
+                            value={currentValue}
+                            onChange={(e) => {
+                                onVariableChange?.(el.variableId, e.target.value);
+                            }}
+                            placeholder={el.placeholder}
+                            maxLength={el.maxLength}
+                            className="w-full h-full outline-none"
+                            style={{
+                                backgroundColor: el.backgroundColor || '#1e293b',
+                                color: el.font?.color || '#f1f5f9',
+                                fontSize: `${el.font?.size || 16}px`,
+                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontWeight: el.font?.weight || 'normal',
+                                fontStyle: el.font?.italic ? 'italic' : 'normal',
+                                border: `2px solid ${el.borderColor || '#475569'}`,
+                                borderRadius: '4px',
+                                padding: '8px 12px',
+                            }}
+                        />
                     </div>
                 );
             }
@@ -3075,6 +3109,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
         }
     };
+
+    const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
+        if (playerState) {
+            // In-game: update playerState variables
+            setPlayerState(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    variables: {
+                        ...prev.variables,
+                        [variableId]: value
+                    }
+                };
+            });
+        } else {
+            // Pre-game menu: update menuVariables
+            setMenuVariables(prev => ({
+                ...prev,
+                [variableId]: value
+            }));
+        }
+    };
     
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -3404,6 +3460,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         gameSaves={gameSaves}
                         playSound={playSound}
                         variables={playerState?.variables || menuVariables}
+                        onVariableChange={handleVariableChange}
                     />
                 )}
                 {
@@ -3421,6 +3478,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     gameSaves={gameSaves}
                                     playSound={playSound}
                                     variables={playerState?.variables || menuVariables}
+                                    onVariableChange={handleVariableChange}
                                 />
                             ) : null;
                         })()
