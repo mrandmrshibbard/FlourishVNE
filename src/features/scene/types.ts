@@ -66,6 +66,7 @@ export enum CommandType {
     HideImage = 'HideImage',
     ShowButton = 'ShowButton',
     HideButton = 'HideButton',
+    Group = 'Group', // Visual grouping only, no execution
 }
 
 interface BaseCommand {
@@ -307,13 +308,22 @@ export interface HideButtonCommand extends BaseCommand {
     duration?: number; // in seconds
 }
 
+export interface GroupCommand extends BaseCommand {
+    type: CommandType.Group;
+    name: string;
+    /** IDs of commands contained in this group */
+    commandIds: VNID[];
+    /** Visual state - collapsed or expanded */
+    collapsed?: boolean;
+}
+
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | PlayMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
   | FlashScreenCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
-  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand;
+  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | GroupCommand;
 
 export interface VNScene {
     id: VNID;

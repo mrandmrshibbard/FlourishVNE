@@ -17,7 +17,7 @@ import {
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand,
     PlayMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
-    ShowButtonCommand, HideButtonCommand
+    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -2139,6 +2139,34 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
         lastProcessedCommandRef.current = commandSignature;
 
+        // Special handling for BranchStart - check conditions and skip branch if not met
+        if (command.type === CommandType.BranchStart) {
+            const branchCmd = command as BranchStartCommand;
+            const conditionsMet = evaluateConditions(branchCmd.conditions, playerState.variables);
+            
+            if (!conditionsMet) {
+                // Skip to matching BranchEnd
+                const branchEndIndex = playerState.currentCommands.findIndex((cmd, idx) =>
+                    idx > playerState.currentIndex &&
+                    cmd.type === CommandType.BranchEnd &&
+                    (cmd as BranchEndCommand).branchId === branchCmd.branchId
+                );
+                
+                if (branchEndIndex !== -1) {
+                    // Jump to just after the BranchEnd
+                    setPlayerState(p => p ? { ...p, currentIndex: branchEndIndex + 1 } : null);
+                } else {
+                    // No matching BranchEnd found, just advance
+                    setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                }
+                return;
+            }
+            // If conditions met, continue to execute BranchStart normally (which does nothing)
+            setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            return;
+        }
+
+        // Check conditions for all other commands
         if (!evaluateConditions(command.conditions, playerState.variables)) {
             setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
             return;
@@ -2193,6 +2221,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         let instantAdvance = true;
         (async () => {
             switch (command.type) {
+                case CommandType.Group: {
+                    // Groups are visual only in the editor, skip during execution
+                    break;
+                }
+                case CommandType.BranchStart: {
+                    // Branch conditions already checked above, this is just a marker
+                    // Already advanced, so we should not reach here
+                    break;
+                }
+                case CommandType.BranchEnd: {
+                    // BranchEnd is just a marker, no action needed
+                    break;
+                }
                 case CommandType.Dialogue: {
                     instantAdvance = false;
                     const cmd = command as DialogueCommand;

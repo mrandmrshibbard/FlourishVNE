@@ -213,6 +213,15 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             };
             return command;
         }
+        case CommandType.Group: {
+            const command = {
+                type,
+                name: 'New Group',
+                commandIds: [],
+                collapsed: false,
+            };
+            return command;
+        }
         default: 
             return null;
     }

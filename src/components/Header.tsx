@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlayIcon, ArrowLeftOnRectangleIcon, ArrowDownTrayIcon } from './icons';
+import { PlayIcon, ArrowLeftOnRectangleIcon, ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { exportProject } from '../utils/projectPackager';
 import { GameBuilder } from './GameBuilder';
@@ -14,7 +14,7 @@ const Header: React.FC<{
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
-    const { project } = useProject();
+    const { project, undo, redo, canUndo, canRedo } = useProject();
 
     useEffect(() => {
         setCurrentTitle(title);
@@ -83,6 +83,24 @@ const Header: React.FC<{
                 {navigationTabs}
             </div>
             <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={undo}
+                        disabled={!canUndo}
+                        className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-2 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Undo (Ctrl+Z)"
+                    >
+                        <ArrowUturnLeftIcon />
+                    </button>
+                    <button
+                        onClick={redo}
+                        disabled={!canRedo}
+                        className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-2 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Redo (Ctrl+Shift+Z or Ctrl+Y)"
+                    >
+                        <ArrowUturnRightIcon />
+                    </button>
+                </div>
                 <button
                     onClick={handleExport}
                     className="bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"

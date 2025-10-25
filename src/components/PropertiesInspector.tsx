@@ -385,6 +385,16 @@ const PropertiesInspector: React.FC<{
     };
 
     const handleDelete = () => {
+      // Check if it's a group with commands
+      if (command.type === CommandType.Group) {
+        const groupCmd = command as import('../features/scene/types').GroupCommand;
+        if (groupCmd.commandIds && groupCmd.commandIds.length > 0) {
+          if (!confirm(`This group contains ${groupCmd.commandIds.length} command(s). Deleting it will also remove these commands. Continue?`)) {
+            return;
+          }
+        }
+      }
+      
       dispatch({ type: 'DELETE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex } });
       setSelectedCommandIndex(null);
     }

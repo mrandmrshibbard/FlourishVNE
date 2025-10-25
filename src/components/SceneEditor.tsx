@@ -3,11 +3,11 @@ import ReactDOM from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 // FIX: VNID is not exported from scene/types. Imported from ../types instead.
 import { VNID } from '../types';
-import { CommandType, VNCommand, ShowCharacterCommand, FlashScreenCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, VNScene, BranchStartCommand, BranchEndCommand } from '../features/scene/types';
+import { CommandType, VNCommand, ShowCharacterCommand, FlashScreenCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, VNScene, BranchStartCommand, BranchEndCommand, GroupCommand } from '../features/scene/types';
 import { VNProject } from '../types/project';
 import { VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
-import { PlusIcon, GripVerticalIcon, ChevronDownIcon, Cog6ToothIcon } from './icons';
+import { PlusIcon, GripVerticalIcon, ChevronDownIcon, Cog6ToothIcon, FolderIcon } from './icons';
 import { createCommand } from '../utils/commandFactory';
 import { 
     groupCommandsIntoStacks, 
@@ -18,11 +18,25 @@ import {
 } from '../features/scene/commandStackUtils';
 import { CommandStackRow, DragDropIndicator } from './CommandStackComponents';
 
-const CommandItem: React.FC<{ command: VNCommand; project: VNProject; isSelected: boolean; depth?: number; }> = ({ command, project, isSelected, depth = 0 }) => {
+const CommandItem: React.FC<{ 
+    command: VNCommand, 
+    project: VNProject, 
+    isSelected: boolean, 
+    depth: number, 
+    onToggleCollapse?: () => void,
+    onRename?: (newName: string) => void,
+    collapsedBranches?: Set<string>
+}> = ({ command, project, isSelected, depth, onToggleCollapse, onRename, collapsedBranches }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState('');
     const leftPadding = depth > 0 ? `${depth * 20 + 8}px` : '8px';
     
     const getCommandSummary = () => {
         switch (command.type) {
+            case CommandType.Group:
+                const groupCmd = command as import('../features/scene/types').GroupCommand;
+                const count = groupCmd.commandIds?.length || 0;
+                return `${groupCmd.name} (${count} command${count !== 1 ? 's' : ''})`;
             case CommandType.BranchStart:
                 const branchCmd = command as BranchStartCommand;
                 return `Branch: ${branchCmd.name}`;
@@ -137,18 +151,98 @@ const CommandItem: React.FC<{ command: VNCommand; project: VNProject; isSelected
         return 'var(--bg-tertiary)';
     };
 
+    // Special styling for Groups and Branches
+    const isGroup = command.type === CommandType.Group;
+    const isBranch = command.type === CommandType.BranchStart;
+    const groupCmd = isGroup ? command as GroupCommand : null;
+    const branchCmd = isBranch ? command as BranchStartCommand : null;
+    
+    const groupClasses = isGroup 
+        ? 'bg-amber-500/10 border-dashed border-amber-500' 
+        : '';
+    
+    const branchClasses = isBranch
+        ? 'border-2 border-solid'
+        : '';
+    
+    const branchColor = isBranch ? (branchCmd?.color || '#6366f1') : '';
+    const branchBgColor = isBranch ? `${branchColor}1a` : ''; // 10% opacity
+    
+    const handleStartEdit = ()=> {
+        if (isGroup && groupCmd && onRename) {
+            setEditName(groupCmd.name);
+            setIsEditing(true);
+        }
+    };
+    
+    const handleFinishEdit = () => {
+        if (editName.trim() && onRename) {
+            onRename(editName.trim());
+        }
+        setIsEditing(false);
+    };
+    
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleFinishEdit();
+        } else if (e.key === 'Escape') {
+            setIsEditing(false);
+        }
+    };
+    
     return (
         <div 
-            className={`p-2 border-2 rounded-md flex items-center gap-2 ${isSelected ? 'bg-[var(--bg-tertiary)] ring-2 ring-[var(--accent-cyan)]' : 'bg-[var(--bg-secondary)]'}`}
+            className={`p-2 border-2 rounded-md flex items-center gap-2 ${groupClasses} ${branchClasses} ${isSelected ? 'bg-[var(--bg-tertiary)] ring-2 ring-[var(--accent-cyan)]' : isGroup ? '' : isBranch ? '' : 'bg-[var(--bg-secondary)]'}`}
             style={{ 
                 paddingLeft: leftPadding,
-                borderColor: getBorderColor()
+                borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : getBorderColor(),
+                backgroundColor: isBranch && !isSelected ? branchBgColor : undefined
             }}
         >
+            {(isGroup || isBranch) && onToggleCollapse && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCollapse();
+                    }}
+                    className={`${isGroup ? 'text-amber-500 hover:text-amber-400' : 'hover:opacity-70'} transition-transform flex-shrink-0`}
+                    style={{ 
+                        transform: (isGroup && groupCmd?.collapsed) || (isBranch && branchCmd && collapsedBranches?.has(branchCmd.branchId)) ? 'rotate(-90deg)' : '',
+                        color: isBranch ? branchColor : undefined
+                    }}
+                >
+                    <ChevronDownIcon className="w-4 h-4" />
+                </button>
+            )}
             <span className="cursor-grab text-[var(--text-secondary)]"><GripVerticalIcon/></span>
+            {isGroup && <FolderIcon className="text-amber-500 w-5 h-5 flex-shrink-0" />}
             <div className="flex-grow">
-                <p className="font-bold text-[var(--accent-cyan)] capitalize">{command.type.replace(/([A-Z])/g, ' $1').trim()}</p>
-                <p className="text-sm text-[var(--text-secondary)]">{getCommandSummary()}</p>
+                {isEditing && isGroup ? (
+                    <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onBlur={handleFinishEdit}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                        className="bg-[var(--bg-primary)] text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                ) : (
+                    <>
+                        <p 
+                            className={`font-bold capitalize ${isGroup ? 'text-amber-500' : isBranch ? '' : 'text-[var(--accent-cyan)]'}`}
+                            onDoubleClick={isGroup && onRename ? handleStartEdit : undefined}
+                            style={{ 
+                                cursor: isGroup && onRename ? 'text' : 'default',
+                                color: isBranch ? branchColor : undefined
+                            }}
+                        >
+                            {command.type === CommandType.BranchStart ? 'Branch' : command.type.replace(/([A-Z])/g, ' $1').trim()}
+                        </p>
+                        <p className="text-sm text-[var(--text-secondary)]">{getCommandSummary()}</p>
+                    </>
+                )}
             </div>
         </div>
     );
@@ -205,11 +299,18 @@ const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAd
                 transform: 'translateY(-100%)' // Position above the button
             }}
         >
-            {Object.values(CommandType).map((type: CommandType) => (
-                <button key={type} onClick={() => handleSelect(type)} className="block w-full text-left px-4 py-2 hover:bg-[var(--accent-purple)] capitalize">
-                    {type.replace(/([A-Z])/g, ' $1').trim()}
-                </button>
-            ))}
+            {Object.values(CommandType).filter(type => type !== CommandType.Group && type !== CommandType.BranchEnd).map((type: CommandType) => {
+                // Rename "Branch Start" to just "Branch" in the menu
+                const displayName = type === CommandType.BranchStart 
+                    ? 'Branch' 
+                    : type.replace(/([A-Z])/g, ' $1').trim();
+                
+                return (
+                    <button key={type} onClick={() => handleSelect(type)} className="block w-full text-left px-4 py-2 hover:bg-[var(--accent-purple)] capitalize">
+                        {displayName}
+                    </button>
+                );
+            })}
         </div>
     );
 
@@ -242,15 +343,16 @@ const SceneEditor: React.FC<{
 }> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, setSelectedVariableId, onConfigureScene, className, isCollapsed, onToggleCollapse }) => {
     const { project, dispatch } = useProject();
     const activeScene = project.scenes[activeSceneId];
-    const dragItem = useRef<number | null>(null);
+    const dragItem = useRef<{ id: string; index: number; groupId?: string } | null>(null);
     const dragOverItem = useRef<number | null>(null);
     const [collapsedBranches, setCollapsedBranches] = useState<Set<string>>(new Set());
     const [draggedCommandId, setDraggedCommandId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ commandId: string; position: 'before' | 'inside' | 'after' } | null>(null);
     const [selectedCommands, setSelectedCommands] = useState<Set<string>>(new Set());
+    const [warningModal, setWarningModal] = useState<{ message: string } | null>(null);
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, commandId: string, index: number) => {
-        dragItem.current = index;
+        dragItem.current = { id: commandId, index };
         setDraggedCommandId(commandId);
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', commandId);
@@ -281,38 +383,73 @@ const SceneEditor: React.FC<{
         if (!draggedCommand || !targetCommand || targetIndex === -1 || draggedIndex === -1) return;
 
         if (position === 'inside') {
-            // Stack commands together
-            // Filter out any undefined/null values that might have snuck in
-            const commandsToStack = [targetCommand, draggedCommand].filter(cmd => cmd != null);
-            
-            const validation = canStackCommands(commandsToStack);
-            
-            if (!validation.canStack) {
-                alert(validation.reason || 'Cannot stack these commands');
-                return;
-            }
+            // Check if target is a Group - add command to group instead of stacking
+            if (targetCommand.type === CommandType.Group) {
+                dispatch({
+                    type: 'ADD_COMMAND_TO_GROUP',
+                    payload: {
+                        sceneId: activeSceneId,
+                        groupId: targetCommandId,
+                        commandId: draggedCommandId
+                    }
+                });
+            } else if (targetCommand.type === CommandType.BranchStart) {
+                // Add command to branch - insert before the BranchEnd
+                const branchCmd = targetCommand as BranchStartCommand;
+                const branchEndIndex = activeScene.commands.findIndex((c, i) => 
+                    i > targetIndex && 
+                    c.type === CommandType.BranchEnd && 
+                    (c as BranchEndCommand).branchId === branchCmd.branchId
+                );
+                
+                if (branchEndIndex !== -1) {
+                    // Calculate the correct insertion index
+                    // If dragging from before the BranchEnd, after removal indices shift down
+                    const insertIndex = draggedIndex < branchEndIndex ? branchEndIndex - 1 : branchEndIndex;
+                    
+                    dispatch({ 
+                        type: 'MOVE_COMMAND', 
+                        payload: { 
+                            sceneId: activeSceneId, 
+                            fromIndex: draggedIndex, 
+                            toIndex: insertIndex 
+                        } 
+                    });
+                }
+            } else {
+                // Stack commands together
+                // Filter out any undefined/null values that might have snuck in
+                const commandsToStack = [targetCommand, draggedCommand].filter(cmd => cmd != null);
+                
+                const validation = canStackCommands(commandsToStack);
+                
+                if (!validation.canStack) {
+                    setWarningModal({ message: validation.reason || 'Cannot stack these commands' });
+                    return;
+                }
 
-            // Create stacked commands
-            const existingStackId = targetCommand.modifiers?.stackId;
-            const stackedCommands = stackCommands(commandsToStack, existingStackId);
-            
-            // Update both commands with full command objects
-            dispatch({ 
-                type: 'UPDATE_COMMAND', 
-                payload: { 
-                    sceneId: activeSceneId, 
-                    commandIndex: targetIndex, 
-                    command: stackedCommands[0]
-                } 
-            });
-            dispatch({ 
-                type: 'UPDATE_COMMAND', 
-                payload: { 
-                    sceneId: activeSceneId, 
-                    commandIndex: draggedIndex, 
-                    command: stackedCommands[1]
-                } 
-            });
+                // Create stacked commands
+                const existingStackId = targetCommand.modifiers?.stackId;
+                const stackedCommands = stackCommands(commandsToStack, existingStackId);
+                
+                // Update both commands with full command objects
+                dispatch({ 
+                    type: 'UPDATE_COMMAND', 
+                    payload: { 
+                        sceneId: activeSceneId, 
+                        commandIndex: targetIndex, 
+                        command: stackedCommands[0]
+                    } 
+                });
+                dispatch({ 
+                    type: 'UPDATE_COMMAND', 
+                    payload: { 
+                        sceneId: activeSceneId, 
+                        commandIndex: draggedIndex, 
+                        command: stackedCommands[1]
+                    } 
+                });
+            }
         } else {
             // Move command
             const newIndex = position === 'before' ? targetIndex : targetIndex + 1;
@@ -391,39 +528,52 @@ const SceneEditor: React.FC<{
         let depth = 0;
         const branchStack: Array<{ branchId: string; isCollapsed: boolean }> = [];
 
+        // Build set of command IDs that are inside groups
+        const commandsInGroups = new Set<VNID>();
+        for (const cmd of activeScene.commands) {
+            if (cmd.type === CommandType.Group) {
+                const groupCmd = cmd as GroupCommand;
+                groupCmd.commandIds.forEach(id => commandsInGroups.add(id));
+            }
+        }
+
+        // Build set of command IDs that are inside branches (to hide BranchEnd and contents)
+        const commandsInBranches = new Set<VNID>();
+        for (let i = 0; i < activeScene.commands.length; i++) {
+            const cmd = activeScene.commands[i];
+            if (cmd.type === CommandType.BranchStart) {
+                const branchCmd = cmd as BranchStartCommand;
+                // Find matching BranchEnd and hide everything between (including BranchEnd)
+                for (let j = i + 1; j < activeScene.commands.length; j++) {
+                    const endCmd = activeScene.commands[j];
+                    if (endCmd.type === CommandType.BranchEnd && (endCmd as BranchEndCommand).branchId === branchCmd.branchId) {
+                        // Hide BranchEnd
+                        commandsInBranches.add(endCmd.id);
+                        // Hide all commands between BranchStart and BranchEnd (they'll render inside the branch container)
+                        for (let k = i + 1; k < j; k++) {
+                            commandsInBranches.add(activeScene.commands[k].id);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
         for (let i = 0; i < activeScene.commands.length; i++) {
             const cmd = activeScene.commands[i];
             
-            if (cmd.type === CommandType.BranchStart) {
-                const branchCmd = cmd as BranchStartCommand;
-                const isCollapsed = collapsedBranches.has(branchCmd.branchId);
-                visible.push({ command: cmd, index: i, depth });
-                branchStack.push({ branchId: branchCmd.branchId, isCollapsed });
-                if (!isCollapsed) {
-                    depth++;
-                }
-            } else if (cmd.type === CommandType.BranchEnd) {
-                const branchCmd = cmd as BranchEndCommand;
-                const branch = branchStack.find(b => b.branchId === branchCmd.branchId);
-                
-                if (branch) {
-                    if (!branch.isCollapsed) {
-                        depth = Math.max(0, depth - 1);
-                    }
-                    if (!branch.isCollapsed || branchStack[branchStack.length - 1]?.branchId === branchCmd.branchId) {
-                        visible.push({ command: cmd, index: i, depth });
-                    }
-                    branchStack.pop();
-                } else {
-                    visible.push({ command: cmd, index: i, depth });
-                }
-            } else {
-                // Check if inside a collapsed branch
-                const isInCollapsedBranch = branchStack.some(b => b.isCollapsed);
-                if (!isInCollapsedBranch) {
-                    visible.push({ command: cmd, index: i, depth });
-                }
+            // Skip commands that are inside groups (they'll be rendered within the group)
+            if (commandsInGroups.has(cmd.id)) {
+                continue;
             }
+            
+            // Skip commands that are inside branches (including BranchEnd)
+            if (commandsInBranches.has(cmd.id)) {
+                continue;
+            }
+            
+            // Only show BranchStart commands
+            visible.push({ command: cmd, index: i, depth });
         }
 
         return visible;
@@ -471,16 +621,63 @@ const SceneEditor: React.FC<{
                         </div>
                     </div>
                 )}
-                <div className="flex-grow space-y-2 overflow-y-auto pr-2">
+                <div 
+                    className="flex-grow space-y-2 overflow-y-auto pr-2 relative"
+                    onDragLeave={(e) => {
+                        // Only clear drop target if leaving the main container
+                        if (e.currentTarget === e.target) {
+                            setDropTarget(null);
+                        }
+                    }}
+                >
                     {(() => {
+                        // Build set of command IDs that are inside groups
+                        const commandsInGroups = new Set<VNID>();
+                        for (const cmd of activeScene.commands) {
+                            if (cmd.type === CommandType.Group) {
+                                const groupCmd = cmd as GroupCommand;
+                                groupCmd.commandIds.forEach(id => commandsInGroups.add(id));
+                            }
+                        }
+                        
+                        // Build set of command IDs that are inside branches (to hide BranchEnd and contents)
+                        const commandsInBranches = new Set<VNID>();
+                        for (let i = 0; i < activeScene.commands.length; i++) {
+                            const cmd = activeScene.commands[i];
+                            if (cmd.type === CommandType.BranchStart) {
+                                const branchCmd = cmd as BranchStartCommand;
+                                // Find matching BranchEnd and hide everything between (including BranchEnd)
+                                for (let j = i + 1; j < activeScene.commands.length; j++) {
+                                    const endCmd = activeScene.commands[j];
+                                    if (endCmd.type === CommandType.BranchEnd && (endCmd as BranchEndCommand).branchId === branchCmd.branchId) {
+                                        // Hide BranchEnd
+                                        commandsInBranches.add(endCmd.id);
+                                        // Hide all commands between BranchStart and BranchEnd
+                                        for (let k = i + 1; k < j; k++) {
+                                            commandsInBranches.add(activeScene.commands[k].id);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Filter out commands that are inside groups or branches
+                        const filteredCommands = activeScene.commands.filter(cmd => 
+                            !commandsInGroups.has(cmd.id) && !commandsInBranches.has(cmd.id)
+                        );
+                        
                         // Group commands into stacks for rendering
-                        const commandStacks = groupCommandsIntoStacks(activeScene.commands);
+                        const commandStacks = groupCommandsIntoStacks(filteredCommands);
                         let globalIndex = 0;
 
                         return commandStacks.map((stack) => {
                             const stackStartIndex = globalIndex;
                             const stackCommands = stack.commands;
                             globalIndex += stackCommands.length;
+                            
+                            // Get the real index from the original commands array
+                            const realCommandIndex = activeScene.commands.findIndex(c => c.id === stackCommands[0].id);
 
                             if (stack.isStacked) {
                                 // Render stacked commands horizontally
@@ -526,7 +723,8 @@ const SceneEditor: React.FC<{
                                             commands={stackCommands}
                                             project={project}
                                             selectedCommandIndex={selectedCommandIndex}
-                                            startIndex={stackStartIndex}
+                                            startIndex={realCommandIndex}
+                                            allCommands={activeScene.commands}
                                             onSelectCommand={(idx) => {
                                                 setSelectedCommandIndex(idx);
                                                 setSelectedVariableId(null);
@@ -538,25 +736,15 @@ const SceneEditor: React.FC<{
                             } else {
                                 // Render single command (use legacy CommandItem for now)
                                 const cmd = stackCommands[0];
-                                const index = stackStartIndex;
+                                const index = realCommandIndex;
                                 const isBranchStart = cmd.type === CommandType.BranchStart;
+                                const isGroup = cmd.type === CommandType.Group;
                                 const branchCmd = isBranchStart ? cmd as BranchStartCommand : null;
+                                const groupCmd = isGroup ? cmd as GroupCommand : null;
                                 const isBranchCollapsed = branchCmd ? collapsedBranches.has(branchCmd.branchId) : false;
 
                                 return (
                                     <div key={cmd.id} className="relative">
-                                        {isBranchStart && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (branchCmd) toggleBranchCollapse(branchCmd.branchId);
-                                                }}
-                                                className="absolute left-2 top-1/2 -translate-y-1/2 z-10 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-transform"
-                                                style={{ transform: `translateY(-50%) ${isBranchCollapsed ? 'rotate(-90deg)' : ''}` }}
-                                            >
-                                                <ChevronDownIcon className="w-4 h-4" />
-                                            </button>
-                                        )}
                                         <div
                                             onClick={() => {
                                                 setSelectedCommandIndex(index);
@@ -587,30 +775,300 @@ const SceneEditor: React.FC<{
                                             {dropTarget?.commandId === cmd.id && (
                                                 <DragDropIndicator 
                                                     position={dropTarget.position} 
-                                                    canDrop={dropTarget.position !== 'inside' || canStackCommands([cmd]).canStack}
+                                                    canDrop={dropTarget.position !== 'inside' || (isGroup || isBranchStart ? true : canStackCommands([cmd]).canStack)}
                                                     message={
                                                         dropTarget.position === 'inside' 
-                                                            ? canStackCommands([cmd]).canStack 
-                                                                ? '⊕ Stack Here' 
-                                                                : `❌ ${canStackCommands([cmd]).reason}`
+                                                            ? isGroup 
+                                                                ? '📁 Add to Group'
+                                                                : isBranchStart
+                                                                    ? '🔀 Add to Branch'
+                                                                    : canStackCommands([cmd]).canStack 
+                                                                        ? '⊕ Stack Here' 
+                                                                        : `❌ ${canStackCommands([cmd]).reason}`
                                                             : dropTarget.position === 'before' 
                                                                 ? '⬆ Place Above' 
                                                                 : '⬇ Place Below'
                                                     }
                                                 />
                                             )}
-                                            <CommandItem command={cmd} project={project} isSelected={index === selectedCommandIndex} depth={0} />
+                                            <CommandItem 
+                                                command={cmd} 
+                                                project={project} 
+                                                isSelected={index === selectedCommandIndex} 
+                                                depth={0}
+                                                collapsedBranches={collapsedBranches}
+                                                onToggleCollapse={(isGroup || isBranchStart) ? () => {
+                                                    if (isGroup) {
+                                                        dispatch({
+                                                            type: 'TOGGLE_GROUP_COLLAPSE',
+                                                            payload: {
+                                                                sceneId: activeSceneId,
+                                                                groupId: cmd.id
+                                                            }
+                                                        });
+                                                    } else if (isBranchStart && branchCmd) {
+                                                        toggleBranchCollapse(branchCmd.branchId);
+                                                    }
+                                                } : undefined}
+                                                onRename={isGroup ? (newName: string) => {
+                                                    dispatch({
+                                                        type: 'RENAME_GROUP',
+                                                        payload: {
+                                                            sceneId: activeSceneId,
+                                                            groupId: cmd.id,
+                                                            name: newName
+                                                        }
+                                                    });
+                                                } : undefined}
+                                            />
                                         </div>
+                                        {/* Render branch contents if it's a branch and not collapsed */}
+                                        {isBranchStart && branchCmd && !isBranchCollapsed && (() => {
+                                            // Find all commands between BranchStart and BranchEnd
+                                            const branchStartIndex = activeScene.commands.findIndex(c => c.id === cmd.id);
+                                            const branchEndIndex = activeScene.commands.findIndex((c, i) => 
+                                                i > branchStartIndex && 
+                                                c.type === CommandType.BranchEnd && 
+                                                (c as BranchEndCommand).branchId === branchCmd.branchId
+                                            );
+                                            
+                                            if (branchEndIndex === -1) return null;
+                                            
+                                            const branchCommands = activeScene.commands.slice(branchStartIndex + 1, branchEndIndex);
+                                            const branchColor = branchCmd.color || '#6366f1';
+                                            
+                                            return (
+                                                <div 
+                                                    className="ml-6 mt-2 space-y-2 border-l-2 pl-2 min-h-[40px]" 
+                                                    style={{ borderColor: `${branchColor}4d` }}
+                                                    onDragOver={(e) => {
+                                                        if (branchCommands.length === 0) {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                        }
+                                                    }}
+                                                    onDrop={(e) => {
+                                                        if (branchCommands.length === 0 && draggedCommandId) {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            // Drop into empty branch
+                                                            const draggedIndex = activeScene.commands.findIndex(c => c.id === draggedCommandId);
+                                                            if (draggedIndex !== -1) {
+                                                                const insertIndex = draggedIndex < branchEndIndex ? branchEndIndex - 1 : branchEndIndex;
+                                                                dispatch({ 
+                                                                    type: 'MOVE_COMMAND', 
+                                                                    payload: { 
+                                                                        sceneId: activeSceneId, 
+                                                                        fromIndex: draggedIndex, 
+                                                                        toIndex: insertIndex 
+                                                                    } 
+                                                                });
+                                                                setDropTarget(null);
+                                                                setDraggedCommandId(null);
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    {branchCommands.length === 0 ? (
+                                                        <div className="text-[var(--text-secondary)] text-sm italic py-2">
+                                                            Drag commands here...
+                                                        </div>
+                                                    ) : (
+                                                        branchCommands.map((branchChildCmd) => {
+                                                            const childIndex = activeScene.commands.findIndex(c => c.id === branchChildCmd.id);
+                                                            if (childIndex === -1) return null;
+                                                            return (
+                                                                <div 
+                                                                    key={branchChildCmd.id}
+                                                                    draggable
+                                                                    onDragStart={(e) => handleDragStart(e, branchChildCmd.id, childIndex)}
+                                                                    onDragOver={(e) => {
+                                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                                        const y = e.clientY - rect.top;
+                                                                        // Only allow before/after drops inside branches, not "inside" (no stacking)
+                                                                        if (y < rect.height * 0.5) {
+                                                                            handleDragOver(e, branchChildCmd.id, 'before');
+                                                                        } else {
+                                                                            handleDragOver(e, branchChildCmd.id, 'after');
+                                                                        }
+                                                                    }}
+                                                                    onDragLeave={handleDragLeave}
+                                                                    onDrop={(e) => {
+                                                                        if (dropTarget?.commandId === branchChildCmd.id) {
+                                                                            handleDrop(e, dropTarget.commandId, dropTarget.position);
+                                                                        }
+                                                                    }}
+                                                                    onDragEnd={handleDragEnd}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedCommandIndex(childIndex);
+                                                                        setSelectedVariableId(null);
+                                                                    }}
+                                                                    className="cursor-pointer relative"
+                                                                >
+                                                                    {dropTarget?.commandId === branchChildCmd.id && (
+                                                                        <DragDropIndicator 
+                                                                            position={dropTarget.position} 
+                                                                            canDrop={true}
+                                                                            message={
+                                                                                dropTarget.position === 'before' 
+                                                                                    ? '⬆ Place Above' 
+                                                                                    : '⬇ Place Below'
+                                                                            }
+                                                                        />
+                                                                    )}
+                                                                    <CommandItem 
+                                                                        command={branchChildCmd} 
+                                                                        project={project} 
+                                                                        isSelected={childIndex === selectedCommandIndex} 
+                                                                        depth={1}
+                                                                        collapsedBranches={collapsedBranches}
+                                                                    />
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                        {/* Render group contents if it's a group and not collapsed */}
+                                        {isGroup && groupCmd && !groupCmd.collapsed && (
+                                            <div className="ml-6 mt-2 space-y-2 border-l-2 border-amber-500/30 pl-2">
+                                                {groupCmd.commandIds.map((cmdId, groupIndex) => {
+                                                    const childCmd = activeScene.commands.find(c => c.id === cmdId);
+                                                    const childIndex = activeScene.commands.findIndex(c => c.id === cmdId);
+                                                    if (!childCmd) return null;
+                                                    return (
+                                                        <div 
+                                                            key={cmdId}
+                                                            draggable
+                                                            onDragStart={(e) => {
+                                                                e.stopPropagation();
+                                                                setDraggedCommandId(cmdId);
+                                                                dragItem.current = { id: cmdId, index: groupIndex, groupId: cmd.id };
+                                                            }}
+                                                            onDragOver={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                // Allow reordering within group
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                const y = e.clientY - rect.top;
+                                                                if (y < rect.height / 2) {
+                                                                    setDropTarget({ commandId: cmdId, position: 'before' });
+                                                                } else {
+                                                                    setDropTarget({ commandId: cmdId, position: 'after' });
+                                                                }
+                                                            }}
+                                                            onDrop={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                
+                                                                if (!draggedCommandId || !dragItem.current) return;
+                                                                
+                                                                // Only allow reordering within the same group
+                                                                if (dragItem.current.groupId === cmd.id) {
+                                                                    const draggedGroupIndex = groupCmd.commandIds.indexOf(draggedCommandId);
+                                                                    const targetGroupIndex = groupCmd.commandIds.indexOf(cmdId);
+                                                                    
+                                                                    if (draggedGroupIndex === -1 || targetGroupIndex === -1) return;
+                                                                    
+                                                                    const newCommandIds = [...groupCmd.commandIds];
+                                                                    newCommandIds.splice(draggedGroupIndex, 1);
+                                                                    
+                                                                    const insertIndex = dropTarget?.position === 'before' 
+                                                                        ? targetGroupIndex - (draggedGroupIndex < targetGroupIndex ? 1 : 0)
+                                                                        : targetGroupIndex + (draggedGroupIndex < targetGroupIndex ? 0 : 1);
+                                                                    
+                                                                    newCommandIds.splice(insertIndex, 0, draggedCommandId);
+                                                                    
+                                                                    dispatch({
+                                                                        type: 'REORDER_COMMANDS_IN_GROUP',
+                                                                        payload: {
+                                                                            sceneId: activeSceneId,
+                                                                            groupId: cmd.id,
+                                                                            commandIds: newCommandIds
+                                                                        }
+                                                                    });
+                                                                }
+                                                                
+                                                                setDraggedCommandId(null);
+                                                                dragItem.current = null;
+                                                                setDropTarget(null);
+                                                            }}
+                                                            onDragEnd={(e) => {
+                                                                e.stopPropagation();
+                                                                setDraggedCommandId(null);
+                                                                dragItem.current = null;
+                                                                setDropTarget(null);
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedCommandIndex(childIndex);
+                                                                setSelectedVariableId(null);
+                                                            }}
+                                                            className="cursor-pointer relative"
+                                                        >
+                                                            {dropTarget?.commandId === cmdId && dragItem.current?.groupId === cmd.id && (
+                                                                <DragDropIndicator 
+                                                                    position={dropTarget.position} 
+                                                                    canDrop={true}
+                                                                    message={
+                                                                        dropTarget.position === 'before' 
+                                                                            ? '⬆ Place Above' 
+                                                                            : '⬇ Place Below'
+                                                                    }
+                                                                />
+                                                            )}
+                                                            <CommandItem 
+                                                                command={childCmd} 
+                                                                project={project} 
+                                                                isSelected={childIndex === selectedCommandIndex} 
+                                                                depth={1}
+                                                                collapsedBranches={collapsedBranches}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             }
                         });
                     })()}
                 </div>
-                <div className="pt-4 mt-auto">
+                <div className="pt-4 mt-auto space-y-2">
+                    <button
+                        onClick={() => handleAddCommand(CommandType.Group)}
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                    >
+                        <FolderIcon /> Create Group
+                    </button>
                     <AddCommandMenu onAdd={handleAddCommand}/>
                 </div>
             </div>
+
+            {/* Warning Modal */}
+            {warningModal && (
+                <div 
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                    onClick={() => setWarningModal(null)}
+                >
+                    <div 
+                        className="bg-[var(--bg-secondary)] border-2 border-[var(--accent-cyan)] rounded-lg p-6 max-w-md mx-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">⚠️ Cannot Stack Commands</h3>
+                        <p className="text-[var(--text-secondary)] mb-6">{warningModal.message}</p>
+                        <button
+                            onClick={() => setWarningModal(null)}
+                            className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-white font-bold py-2 px-4 rounded-lg transition-opacity"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
         </Panel>
     );
 };

@@ -148,6 +148,7 @@ interface CommandStackRowProps {
     project: VNProject;
     selectedCommandIndex: number | null;
     startIndex: number;
+    allCommands?: VNCommand[]; // Full command array for proper index calculation
     onSelectCommand: (index: number) => void;
     onUnstackCommand: (commandId: string) => void;
 }
@@ -157,6 +158,7 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
     project,
     selectedCommandIndex,
     startIndex,
+    allCommands,
     onSelectCommand,
     onUnstackCommand,
 }) => {
@@ -180,7 +182,10 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
     return (
         <div className="flex gap-0">
             {commands.map((command, localIndex) => {
-                const globalIndex = startIndex + localIndex;
+                // Calculate the real index from the full command array if available
+                const globalIndex = allCommands 
+                    ? allCommands.findIndex(c => c.id === command.id)
+                    : startIndex + localIndex;
                 
                 return (
                     <div key={command.id} className="flex-1 min-w-0">
