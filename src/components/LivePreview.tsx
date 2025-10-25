@@ -10,7 +10,7 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, GameSetting, GameToggleSetting, UIElementType
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, GameSetting, GameToggleSetting, UIElementType
 } from '../features/ui/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
@@ -723,6 +723,20 @@ const ButtonElement: React.FC<{
     const textStyle = fontSettingsToStyle(element.font);
     const interpolatedText = project ? interpolateVariables(element.text, variables, project) : element.text;
     
+    const handleClick = () => {
+        try { playSound(element.clickSoundId); } catch(e) {}
+        
+        // Execute primary action (backward compatibility)
+        if (element.action) {
+            onAction(element.action);
+        }
+        
+        // Execute additional actions
+        if (element.actions && element.actions.length > 0) {
+            element.actions.forEach(action => onAction(action));
+        }
+    };
+    
     return (
         <button
             key={element.id}
@@ -730,7 +744,7 @@ const ButtonElement: React.FC<{
             className="transition-transform transform hover:scale-105 relative flex items-center justify-center"
             onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
             onMouseLeave={() => setIsHovered(false)}
-            onClick={() => { try { playSound(element.clickSoundId); } catch(e) {} onAction(element.action); }}
+            onClick={handleClick}
         >
             {displayUrl ? (
                 <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
@@ -903,11 +917,27 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.SettingsSlider: {
                 const el = element as UISettingsSliderElement;
-                const settingKey = el.setting === 'textSpeed' ? 'textSpeed' : el.setting;
-                const value = settings[settingKey];
-                const min = el.setting === 'textSpeed' ? 10 : 0;
-                const max = el.setting === 'textSpeed' ? 100 : 1;
-                const step = el.setting === 'textSpeed' ? 1 : 0.01;
+                
+                // Determine the value and range
+                let value: number;
+                let min: number;
+                let max: number;
+                let step: number;
+                
+                if (el.variableId) {
+                    // Variable mode
+                    value = Number(variables[el.variableId]) || (el.minValue ?? 0);
+                    min = el.minValue ?? 0;
+                    max = el.maxValue ?? 100;
+                    step = 1;
+                } else {
+                    // Settings mode (legacy)
+                    const settingKey = el.setting === 'textSpeed' ? 'textSpeed' : el.setting;
+                    value = settings[settingKey];
+                    min = el.setting === 'textSpeed' ? 10 : 0;
+                    max = el.setting === 'textSpeed' ? 100 : 1;
+                    step = el.setting === 'textSpeed' ? 1 : 0.01;
+                }
                 
                 const thumbUrl = el.thumbImage ? getElementAssetUrl(el.thumbImage) : null;
                 const trackUrl = el.trackImage ? getElementAssetUrl(el.trackImage) : null;
@@ -938,7 +968,20 @@ const UIScreenRenderer: React.FC<{
                         max={max} 
                         step={step} 
                         value={value} 
-                        onChange={e => onSettingsChange(el.setting, parseFloat(e.target.value))} 
+                        onChange={e => {
+                            const newValue = parseFloat(e.target.value);
+                            if (el.variableId) {
+                                // Update variable
+                                onVariableChange?.(el.variableId, newValue);
+                            } else {
+                                // Update setting (legacy)
+                                onSettingsChange(el.setting, newValue);
+                            }
+                            // Execute additional actions
+                            if (el.actions && el.actions.length > 0) {
+                                el.actions.forEach(action => onAction(action));
+                            }
+                        }} 
                         style={customSliderStyle}
                         className={thumbUrl || trackUrl ? 'custom-slider' : ''}
                     />
@@ -946,23 +989,59 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.SettingsToggle: {
                 const el = element as UISettingsToggleElement;
-                const isChecked = settings[el.setting];
+                
+                // Determine checked state
+                let isChecked: boolean;
+                if (el.variableId) {
+                    // Variable mode
+                    const currentValue = variables[el.variableId];
+                    if (el.checkedValue !== undefined && el.uncheckedValue !== undefined) {
+                        isChecked = currentValue === el.checkedValue;
+                    } else {
+                        // Default to boolean interpretation
+                        isChecked = Boolean(currentValue);
+                    }
+                } else {
+                    // Settings mode (legacy)
+                    isChecked = settings[el.setting];
+                }
+                
                 const checkboxImage = isChecked ? el.checkedImage : el.uncheckedImage;
                 const imageUrl = checkboxImage ? getElementAssetUrl(checkboxImage) : null;
+                
+                const handleToggle = () => {
+                    if (el.variableId) {
+                        // Update variable
+                        if (el.checkedValue !== undefined && el.uncheckedValue !== undefined) {
+                            const newValue = isChecked ? el.uncheckedValue : el.checkedValue;
+                            onVariableChange?.(el.variableId, newValue);
+                        } else {
+                            // Default boolean toggle
+                            onVariableChange?.(el.variableId, !isChecked);
+                        }
+                    } else {
+                        // Update setting (legacy)
+                        onSettingsChange(el.setting, !isChecked);
+                    }
+                    // Execute additional actions
+                    if (el.actions && el.actions.length > 0) {
+                        el.actions.forEach(action => onAction(action));
+                    }
+                };
                 
                 return <div key={el.id} style={style} className="flex items-center gap-2">
                     {imageUrl ? (
                         <img 
                             src={imageUrl} 
                             alt={isChecked ? 'checked' : 'unchecked'}
-                            onClick={() => onSettingsChange(el.setting, !isChecked)}
+                            onClick={handleToggle}
                             className="h-5 w-5 cursor-pointer object-contain"
                         />
                     ) : (
                         <input 
                             type="checkbox" 
                             checked={isChecked} 
-                            onChange={e => onSettingsChange(el.setting, e.target.checked)} 
+                            onChange={handleToggle} 
                             className="h-5 w-5"
                             style={el.checkboxColor ? { accentColor: el.checkboxColor } : {}}
                         />
@@ -1124,6 +1203,107 @@ const UIScreenRenderer: React.FC<{
                                 padding: '8px 12px',
                             }}
                         />
+                    </div>
+                );
+            }
+            case UIElementType.Dropdown: {
+                const el = element as UIDropdownElement;
+                const currentValue = variables[el.variableId];
+                
+                return (
+                    <div
+                        key={el.id}
+                        style={style}
+                    >
+                        <select
+                            value={String(currentValue ?? el.options[0]?.value ?? '')}
+                            onChange={(e) => {
+                                // Find the selected option to get the proper typed value
+                                const selectedOption = el.options.find(opt => String(opt.value) === e.target.value);
+                                if (selectedOption) {
+                                    onVariableChange?.(el.variableId, selectedOption.value);
+                                    
+                                    // Execute additional actions
+                                    if (el.actions && el.actions.length > 0) {
+                                        el.actions.forEach(action => onAction(action));
+                                    }
+                                }
+                            }}
+                            className="w-full h-full outline-none cursor-pointer"
+                            style={{
+                                backgroundColor: el.backgroundColor || '#1e293b',
+                                color: el.font?.color || '#f1f5f9',
+                                fontSize: `${el.font?.size || 16}px`,
+                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontWeight: el.font?.weight || 'normal',
+                                fontStyle: el.font?.italic ? 'italic' : 'normal',
+                                border: `2px solid ${el.borderColor || '#475569'}`,
+                                borderRadius: '4px',
+                                padding: '8px 12px',
+                            }}
+                            onMouseEnter={(e) => {
+                                if (el.hoverColor) {
+                                    e.currentTarget.style.backgroundColor = el.hoverColor;
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = el.backgroundColor || '#1e293b';
+                            }}
+                        >
+                            {el.options.map(opt => (
+                                <option key={opt.id} value={String(opt.value)}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                );
+            }
+            case UIElementType.Checkbox: {
+                const el = element as UICheckboxElement;
+                const currentValue = variables[el.variableId];
+                
+                // Determine if checkbox is checked based on current variable value
+                const isChecked = currentValue === el.checkedValue;
+                
+                return (
+                    <div
+                        key={el.id}
+                        style={style}
+                        className="flex items-center gap-2 cursor-pointer"
+                        onClick={() => {
+                            // Toggle between checked and unchecked values
+                            const newValue = isChecked ? el.uncheckedValue : el.checkedValue;
+                            onVariableChange?.(el.variableId, newValue);
+                            
+                            // Execute additional actions
+                            if (el.actions && el.actions.length > 0) {
+                                el.actions.forEach(action => onAction(action));
+                            }
+                        }}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}} // Handled by parent div onClick
+                            className="w-5 h-5 cursor-pointer"
+                            style={{
+                                accentColor: el.checkboxColor || '#3b82f6'
+                            }}
+                        />
+                        <span
+                            style={{
+                                color: el.labelColor || '#f1f5f9',
+                                fontSize: `${el.font?.size || 16}px`,
+                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontWeight: el.font?.weight || 'normal',
+                                fontStyle: el.font?.italic ? 'italic' : 'normal',
+                                cursor: 'pointer',
+                                userSelect: 'none'
+                            }}
+                        >
+                            {el.label}
+                        </span>
                     </div>
                 );
             }
@@ -1570,18 +1750,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // --- Audio Management ---
      useEffect(() => {
+        if (playerState?.mode === 'playing') {
+            // Gameplay commands manage music directly; keep menu effect out of the way.
+            return;
+        }
+
         const audio = musicAudioRef.current;
         const isInMenu = playerState?.mode !== 'playing';
 
         if (!isInMenu) {
-            // When leaving menu, stop menu music and ambient noise
-            if (!audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => audio.pause());
-            }
-            const ambientAudio = ambientNoiseAudioRef.current;
-            if (ambientAudio && !ambientAudio.paused) {
-                fadeAudio(ambientAudio, 0, 0.5, () => ambientAudio.pause());
-            }
             return;
         }
         
@@ -1664,14 +1841,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // Ambient Noise Management
     useEffect(() => {
+        if (playerState?.mode === 'playing') {
+            return;
+        }
+
         const audio = ambientNoiseAudioRef.current;
         const isInMenu = playerState?.mode !== 'playing';
 
         if (!isInMenu) {
-            // When leaving menu, stop ambient noise
-            if (audio && !audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => audio.pause());
-            }
             return;
         }
         
@@ -2345,67 +2522,68 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.PlayMusic: {
-                    instantAdvance = false;
                     const cmd = command as PlayMusicCommand;
-                    setPlayerState(p => p ? { 
-                        ...p, 
-                        uiState: { ...p.uiState, isTransitioning: true },
-                            musicState: { audioId: cmd.audioId, loop: cmd.loop, currentTime: 0, isPlaying: true }
-                    } : null);
-
+                    console.log('[PlayMusic] Starting music command', { audioId: cmd.audioId, loop: cmd.loop });
+                    
                     const url = assetResolver(cmd.audioId, 'audio');
-
-                    const onFinish = () => {
-                        setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, isTransitioning: false }, currentIndex: p.currentIndex + 1 } : null);
-                    };
 
                     if (!url) {
                         console.warn(`No audio URL found for audioId: ${cmd.audioId}`);
-                        onFinish();
                         break;
                     }
 
                     const audio = musicAudioRef.current;
-                    audio.loop = cmd.loop;
-                    // Apply per-command volume if provided (0-1), else use global music volume
-                    if (typeof cmd.volume === 'number') audio.volume = Math.max(0, Math.min(1, cmd.volume));
+                    
                     const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
                     const newSrcPath = url ? new URL(url, window.location.href).pathname : null;
                     const isNewTrack = currentSrcPath !== newSrcPath;
                     
-                    const playAndFadeIn = () => {
+                    console.log('[PlayMusic] Audio setup', { isNewTrack, currentSrc: audio.src, newUrl: url, paused: audio.paused });
+                    
+                    // If it's the same track and already playing, just update state and continue
+                    if (!isNewTrack && !audio.paused) {
+                        console.log('[PlayMusic] Same track already playing, updating state only');
+                        setPlayerState(p => p ? { 
+                            ...p, 
+                            musicState: { ...p.musicState, audioId: cmd.audioId, loop: cmd.loop, isPlaying: true }
+                        } : null);
+                        break;
+                    }
+                    
+                    // Update state BEFORE starting playback
+                    setPlayerState(p => p ? { 
+                        ...p, 
+                        musicState: { audioId: cmd.audioId, loop: cmd.loop, currentTime: 0, isPlaying: true }
+                    } : null);
+                    
+                    const startPlayback = () => {
+                        console.log('[PlayMusic] Starting playback');
+                        audio.loop = cmd.loop;
+                        audio.volume = 0; // Start at 0 for fade-in
+                        
                         audio.play().then(() => {
+                            console.log('[PlayMusic] Audio playing, starting fade-in');
                             const target = (typeof cmd.volume === 'number') ? cmd.volume : settings.musicVolume;
-                            fadeAudio(audio, target, cmd.fadeDuration, onFinish);
+                            // Fade in audio in the background
+                            fadeAudio(audio, target, cmd.fadeDuration);
                         }).catch(e => {
-                            console.error("Music play failed, queuing.", e);
+                            console.error("[PlayMusic] Music play failed:", e);
                             queuedMusicRef.current = { url, loop: cmd.loop, fadeDuration: cmd.fadeDuration };
-                            onFinish();
                         });
                     };
 
                     if (isNewTrack) {
-                        fadeAudio(audio, 0, cmd.fadeDuration > 0 ? cmd.fadeDuration / 2 : 0, () => {
-                            audio.src = url;
-                            audio.load();
-
-                            // Use named functions for listeners to ensure they can be removed
-                            const handleCanPlay = () => {
-                                playAndFadeIn();
-                                audio.removeEventListener('error', handleError);
-                            };
-                            const handleError = (e: Event) => {
-                                console.error("Music load failed:", e);
-                                onFinish();
-                                audio.removeEventListener('canplaythrough', handleCanPlay);
-                            };
-                            
-                            audio.addEventListener('canplaythrough', handleCanPlay, { once: true });
-                            audio.addEventListener('error', handleError, { once: true });
-                        });
+                        audio.src = url;
+                        audio.load();
+                        audio.addEventListener('canplaythrough', startPlayback, { once: true });
+                        audio.addEventListener('error', (e) => {
+                            console.error("[PlayMusic] Music load failed:", e);
+                        }, { once: true });
                     } else {
-                        playAndFadeIn();
+                        startPlayback();
                     }
+                    // Let the command advance immediately - music plays in background
+                    console.log('[PlayMusic] Command complete, advancing');
                     break;
                 }
                  case CommandType.StopMusic: {

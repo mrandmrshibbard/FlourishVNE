@@ -37,6 +37,8 @@ export enum UIElementType {
     SettingsToggle = 'SettingsToggle',
     CharacterPreview = 'CharacterPreview',
     TextInput = 'TextInput',
+    Dropdown = 'Dropdown',
+    Checkbox = 'Checkbox',
 }
 
 interface BaseUIElement {
@@ -54,6 +56,7 @@ export interface UIButtonElement extends BaseUIElement {
     text: string;
     font: VNFontSettings;
     action: VNUIAction;
+    actions?: VNUIAction[]; // Multiple actions support
     image: UIAsset | null;
     hoverImage: UIAsset | null;
     clickSoundId: VNID | null;
@@ -86,6 +89,11 @@ export interface UISettingsSliderElement extends BaseUIElement {
     trackColor?: string;
     thumbImage?: UIAsset | null;
     trackImage?: UIAsset | null;
+    // Variable control
+    variableId?: VNID; // Optional: control a variable instead of/in addition to a setting
+    minValue?: number;
+    maxValue?: number;
+    actions?: VNUIAction[]; // Multiple actions on value change
 }
 export type GameToggleSetting = 'enableSkip';
 export interface UISettingsToggleElement extends BaseUIElement {
@@ -96,6 +104,11 @@ export interface UISettingsToggleElement extends BaseUIElement {
     checkedImage?: UIAsset | null;
     uncheckedImage?: UIAsset | null;
     checkboxColor?: string;
+    // Variable control
+    variableId?: VNID; // Optional: control a variable instead of/in addition to a setting
+    checkedValue?: string | number | boolean; // Value when checked
+    uncheckedValue?: string | number | boolean; // Value when unchecked
+    actions?: VNUIAction[]; // Multiple actions on toggle
 }
 export interface UICharacterPreviewElement extends BaseUIElement {
     type: UIElementType.CharacterPreview;
@@ -114,9 +127,38 @@ export interface UITextInputElement extends BaseUIElement {
     maxLength?: number;
 }
 
+export interface DropdownOption {
+    id: VNID;
+    label: string; // Display text
+    value: string | number | boolean; // Actual value to set in variable
+}
+
+export interface UIDropdownElement extends BaseUIElement {
+    type: UIElementType.Dropdown;
+    variableId: VNID; // Variable to set with the selected value
+    options: DropdownOption[]; // List of options
+    font: VNFontSettings;
+    backgroundColor?: string;
+    borderColor?: string;
+    hoverColor?: string;
+    actions?: VNUIAction[]; // Multiple actions on selection change
+}
+
+export interface UICheckboxElement extends BaseUIElement {
+    type: UIElementType.Checkbox;
+    label: string; // Text label next to checkbox
+    variableId: VNID; // Variable to modify
+    checkedValue: string | number | boolean; // Value when checked
+    uncheckedValue: string | number | boolean; // Value when unchecked
+    font: VNFontSettings;
+    checkboxColor?: string; // Color of the checkbox when checked
+    labelColor?: string; // Color of the label text
+    actions?: VNUIAction[]; // Multiple actions on toggle
+}
+
 export type VNUIElement = 
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement;
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement;
 
 export interface VNUIScreen {
     id: VNID;

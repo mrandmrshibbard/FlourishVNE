@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -93,7 +93,80 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
             };
             return el;
         }
-        default:
-            return null;
+        case UIElementType.Dropdown: {
+            const firstVarId = Object.keys(project.variables)[0] || '';
+            const variable = project.variables[firstVarId];
+            
+            // Create default options based on variable type
+            let defaultOptions: DropdownOption[] = [];
+            if (variable) {
+                if (variable.type === 'boolean') {
+                    defaultOptions = [
+                        { id: crypto.randomUUID(), label: 'True', value: true },
+                        { id: crypto.randomUUID(), label: 'False', value: false }
+                    ];
+                } else if (variable.type === 'number') {
+                    defaultOptions = [
+                        { id: crypto.randomUUID(), label: 'Option 1', value: 1 },
+                        { id: crypto.randomUUID(), label: 'Option 2', value: 2 },
+                        { id: crypto.randomUUID(), label: 'Option 3', value: 3 }
+                    ];
+                } else {
+                    // string type
+                    defaultOptions = [
+                        { id: crypto.randomUUID(), label: 'Option 1', value: 'option1' },
+                        { id: crypto.randomUUID(), label: 'Option 2', value: 'option2' },
+                        { id: crypto.randomUUID(), label: 'Option 3', value: 'option3' }
+                    ];
+                }
+            }
+            
+            const el: UIDropdownElement = {
+                ...base, name: 'Dropdown', type,
+                width: 40, height: 8,
+                variableId: firstVarId,
+                options: defaultOptions,
+                font: project.ui.dialogueTextFont,
+                backgroundColor: '#1e293b',
+                borderColor: '#475569',
+                hoverColor: '#334155'
+            };
+            return el;
+        }
+        case UIElementType.Checkbox: {
+            const firstVarId = Object.keys(project.variables)[0] || '';
+            const variable = project.variables[firstVarId];
+            
+            // Set default checked/unchecked values based on variable type
+            let checkedValue: string | number | boolean = true;
+            let uncheckedValue: string | number | boolean = false;
+            
+            if (variable) {
+                if (variable.type === 'boolean') {
+                    checkedValue = true;
+                    uncheckedValue = false;
+                } else if (variable.type === 'number') {
+                    checkedValue = 1;
+                    uncheckedValue = 0;
+                } else {
+                    // string type
+                    checkedValue = 'checked';
+                    uncheckedValue = 'unchecked';
+                }
+            }
+            
+            const el: UICheckboxElement = {
+                ...base, name: 'Checkbox', type,
+                width: 30, height: 6,
+                label: 'Checkbox Label',
+                variableId: firstVarId,
+                checkedValue,
+                uncheckedValue,
+                font: project.ui.dialogueTextFont,
+                checkboxColor: '#3b82f6',
+                labelColor: '#f1f5f9'
+            };
+            return el;
+        }
     }
 };

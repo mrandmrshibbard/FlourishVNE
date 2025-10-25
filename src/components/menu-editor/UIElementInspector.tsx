@@ -2,7 +2,7 @@ import React from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
-import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, GameSetting, GameToggleSetting } from '../../features/ui/types';
+import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, DropdownOption, GameSetting, GameToggleSetting } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { FormField, TextInput, Select } from '../ui/Form';
@@ -84,8 +84,45 @@ const UIElementInspector: React.FC<{
                     </div>
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
                     <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
-                    <h3 className="font-bold my-2 text-slate-400">Action</h3>
+                    <h3 className="font-bold my-2 text-slate-400">Primary Action</h3>
                     <ActionEditor action={el.action} onActionChange={action => updateElement({ action })} />
+                    <h3 className="font-bold my-2 text-slate-400">Additional Actions</h3>
+                    <div className="space-y-2">
+                        {(el.actions || []).map((action, idx) => (
+                            <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-slate-400">Action {idx + 1}</span>
+                                    <button 
+                                        onClick={() => {
+                                            const newActions = (el.actions || []).filter((_, i) => i !== idx);
+                                            updateElement({ actions: newActions });
+                                        }}
+                                        className="p-1 hover:bg-red-600 rounded transition-colors"
+                                        title="Remove Action"
+                                    >
+                                        <TrashIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <ActionEditor 
+                                    action={action} 
+                                    onActionChange={updatedAction => {
+                                        const newActions = [...(el.actions || [])];
+                                        newActions[idx] = updatedAction;
+                                        updateElement({ actions: newActions });
+                                    }} 
+                                />
+                            </div>
+                        ))}
+                        <button 
+                            onClick={() => {
+                                const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
+                                updateElement({ actions: [...(el.actions || []), newAction] });
+                            }}
+                            className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-sm"
+                        >
+                            + Add Action
+                        </button>
+                    </div>
                 </>
             }
             case UIElementType.Text: {
@@ -160,14 +197,75 @@ const UIElementInspector: React.FC<{
             }
             case UIElementType.SettingsSlider: {
                 const el = element as UISettingsSliderElement;
+                const isVariableMode = !!el.variableId;
+                const numberVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'number');
+                
                 return <>
-                    <FormField label="Setting Controlled">
-                        <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameSetting })}>
-                            <option value="musicVolume">Music Volume</option>
-                            <option value="sfxVolume">SFX Volume</option>
-                            <option value="textSpeed">Text Speed</option>
+                    <FormField label="Control Mode">
+                        <Select 
+                            value={isVariableMode ? 'variable' : 'setting'} 
+                            onChange={e => {
+                                if (e.target.value === 'variable') {
+                                    // Switch to variable mode
+                                    const firstVar = numberVariables[0];
+                                    updateElement({ 
+                                        variableId: firstVar?.id || '', 
+                                        minValue: 0, 
+                                        maxValue: 100,
+                                        setting: undefined 
+                                    });
+                                } else {
+                                    // Switch to settings mode
+                                    updateElement({ 
+                                        variableId: undefined, 
+                                        minValue: undefined, 
+                                        maxValue: undefined,
+                                        setting: 'musicVolume' as GameSetting 
+                                    });
+                                }
+                            }}
+                        >
+                            <option value="setting">Game Setting</option>
+                            <option value="variable">Variable</option>
                         </Select>
                     </FormField>
+
+                    {isVariableMode ? (
+                        <>
+                            <FormField label="Variable">
+                                <Select value={el.variableId || ''} onChange={e => updateElement({ variableId: e.target.value })}>
+                                    {numberVariables.length === 0 && <option value="">No number variables available</option>}
+                                    {numberVariables.map(v => (
+                                        <option key={v.id} value={v.id}>{v.name}</option>
+                                    ))}
+                                </Select>
+                            </FormField>
+                            <div className="grid grid-cols-2 gap-2">
+                                <FormField label="Min Value">
+                                    <TextInput 
+                                        type="number" 
+                                        value={el.minValue ?? 0} 
+                                        onChange={e => updateElement({ minValue: parseFloat(e.target.value) || 0 })} 
+                                    />
+                                </FormField>
+                                <FormField label="Max Value">
+                                    <TextInput 
+                                        type="number" 
+                                        value={el.maxValue ?? 100} 
+                                        onChange={e => updateElement({ maxValue: parseFloat(e.target.value) || 100 })} 
+                                    />
+                                </FormField>
+                            </div>
+                        </>
+                    ) : (
+                        <FormField label="Setting Controlled">
+                            <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameSetting })}>
+                                <option value="musicVolume">Music Volume</option>
+                                <option value="sfxVolume">SFX Volume</option>
+                                <option value="textSpeed">Text Speed</option>
+                            </Select>
+                        </FormField>
+                    )}
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Images</h4>
                     <AssetSelector label="Thumb Image" assetType="backgrounds" value={el.thumbImage?.id || null} onChange={id => updateElement({ thumbImage: id ? { type: 'image', id } : null })} />
@@ -182,16 +280,162 @@ const UIElementInspector: React.FC<{
                             <TextInput type="color" value={el.trackColor || '#a855f7'} onChange={e => updateElement({ trackColor: e.target.value })} />
                         </FormField>
                     </div>
+
+                    {isVariableMode && (
+                        <>
+                            <h3 className="font-bold my-2 text-slate-400">Additional Actions</h3>
+                            <div className="space-y-2">
+                                {(el.actions || []).map((action, idx) => (
+                                    <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs text-slate-400">Action {idx + 1}</span>
+                                            <button 
+                                                onClick={() => {
+                                                    const newActions = (el.actions || []).filter((_, i) => i !== idx);
+                                                    updateElement({ actions: newActions });
+                                                }}
+                                                className="p-1 hover:bg-red-600 rounded transition-colors"
+                                                title="Remove Action"
+                                            >
+                                                <TrashIcon className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                        <ActionEditor 
+                                            action={action} 
+                                            onActionChange={updatedAction => {
+                                                const newActions = [...(el.actions || [])];
+                                                newActions[idx] = updatedAction;
+                                                updateElement({ actions: newActions });
+                                            }} 
+                                        />
+                                    </div>
+                                ))}
+                                <button 
+                                    onClick={() => {
+                                        const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
+                                        updateElement({ actions: [...(el.actions || []), newAction] });
+                                    }}
+                                    className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-sm"
+                                >
+                                    + Add Action
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </>
             }
             case UIElementType.SettingsToggle: {
                 const el = element as UISettingsToggleElement;
+                const isVariableMode = !!el.variableId;
+                const allVariables = Object.values(project.variables) as VNVariable[];
+                
                 return <>
-                    <FormField label="Setting Controlled">
-                        <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameToggleSetting })}>
-                            <option value="enableSkip">Enable Skip</option>
+                    <FormField label="Control Mode">
+                        <Select 
+                            value={isVariableMode ? 'variable' : 'setting'} 
+                            onChange={e => {
+                                if (e.target.value === 'variable') {
+                                    // Switch to variable mode
+                                    const firstVar = allVariables[0];
+                                    let checkedVal: string | number | boolean = true;
+                                    let uncheckedVal: string | number | boolean = false;
+                                    if (firstVar?.type === 'number') {
+                                        checkedVal = 1;
+                                        uncheckedVal = 0;
+                                    } else if (firstVar?.type === 'string') {
+                                        checkedVal = 'checked';
+                                        uncheckedVal = 'unchecked';
+                                    }
+                                    updateElement({ 
+                                        variableId: firstVar?.id || '', 
+                                        checkedValue: checkedVal,
+                                        uncheckedValue: uncheckedVal,
+                                        setting: undefined 
+                                    });
+                                } else {
+                                    // Switch to settings mode
+                                    updateElement({ 
+                                        variableId: undefined, 
+                                        checkedValue: undefined,
+                                        uncheckedValue: undefined,
+                                        setting: 'enableSkip' as GameToggleSetting 
+                                    });
+                                }
+                            }}
+                        >
+                            <option value="setting">Game Setting</option>
+                            <option value="variable">Variable</option>
                         </Select>
                     </FormField>
+
+                    {isVariableMode ? (
+                        <>
+                            <FormField label="Variable">
+                                <Select value={el.variableId || ''} onChange={e => {
+                                    const newVarId = e.target.value;
+                                    const newVar = project.variables[newVarId];
+                                    let checkedVal: string | number | boolean = true;
+                                    let uncheckedVal: string | number | boolean = false;
+                                    if (newVar?.type === 'number') {
+                                        checkedVal = 1;
+                                        uncheckedVal = 0;
+                                    } else if (newVar?.type === 'string') {
+                                        checkedVal = 'checked';
+                                        uncheckedVal = 'unchecked';
+                                    }
+                                    updateElement({ 
+                                        variableId: newVarId,
+                                        checkedValue: checkedVal,
+                                        uncheckedValue: uncheckedVal
+                                    });
+                                }}>
+                                    {allVariables.length === 0 && <option value="">No variables available</option>}
+                                    {allVariables.map(v => (
+                                        <option key={v.id} value={v.id}>{v.name} ({v.type})</option>
+                                    ))}
+                                </Select>
+                            </FormField>
+                            
+                            <h3 className="font-bold my-2 text-slate-400">Values</h3>
+                            <FormField label="Checked Value">
+                                <TextInput 
+                                    value={String(el.checkedValue ?? true)}
+                                    onChange={e => {
+                                        const variable = project.variables[el.variableId || ''];
+                                        let newValue: string | number | boolean = e.target.value;
+                                        if (variable?.type === 'number') {
+                                            newValue = isNaN(Number(e.target.value)) ? 0 : Number(e.target.value);
+                                        } else if (variable?.type === 'boolean') {
+                                            newValue = e.target.value.toLowerCase() === 'true';
+                                        }
+                                        updateElement({ checkedValue: newValue });
+                                    }}
+                                />
+                            </FormField>
+                            <FormField label="Unchecked Value">
+                                <TextInput 
+                                    value={String(el.uncheckedValue ?? false)}
+                                    onChange={e => {
+                                        const variable = project.variables[el.variableId || ''];
+                                        let newValue: string | number | boolean = e.target.value;
+                                        if (variable?.type === 'number') {
+                                            newValue = isNaN(Number(e.target.value)) ? 0 : Number(e.target.value);
+                                        } else if (variable?.type === 'boolean') {
+                                            newValue = e.target.value.toLowerCase() === 'true';
+                                        }
+                                        updateElement({ uncheckedValue: newValue });
+                                    }}
+                                />
+                            </FormField>
+                        </>
+                    ) : (
+                        <FormField label="Setting Controlled">
+                            <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameToggleSetting })}>
+                                <option value="enableSkip">Enable Skip</option>
+                            </Select>
+                        </FormField>
+                    )}
+                    
                     <FormField label="Label Text"><TextInput value={el.text} onChange={e => updateElement({ text: e.target.value })} /></FormField>
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Checkbox Images</h4>
@@ -205,6 +449,48 @@ const UIElementInspector: React.FC<{
                     
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
                     <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+
+                    {isVariableMode && (
+                        <>
+                            <h3 className="font-bold my-2 text-slate-400">Additional Actions</h3>
+                            <div className="space-y-2">
+                                {(el.actions || []).map((action, idx) => (
+                                    <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs text-slate-400">Action {idx + 1}</span>
+                                            <button 
+                                                onClick={() => {
+                                                    const newActions = (el.actions || []).filter((_, i) => i !== idx);
+                                                    updateElement({ actions: newActions });
+                                                }}
+                                                className="p-1 hover:bg-red-600 rounded transition-colors"
+                                                title="Remove Action"
+                                            >
+                                                <TrashIcon className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                        <ActionEditor 
+                                            action={action} 
+                                            onActionChange={updatedAction => {
+                                                const newActions = [...(el.actions || [])];
+                                                newActions[idx] = updatedAction;
+                                                updateElement({ actions: newActions });
+                                            }} 
+                                        />
+                                    </div>
+                                ))}
+                                <button 
+                                    onClick={() => {
+                                        const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
+                                        updateElement({ actions: [...(el.actions || []), newAction] });
+                                    }}
+                                    className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-sm"
+                                >
+                                    + Add Action
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </>
             }
             case UIElementType.CharacterPreview: {
@@ -325,6 +611,338 @@ const UIElementInspector: React.FC<{
                     
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
                     <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                </>
+            }
+            case UIElementType.Dropdown: {
+                const el = element as UIDropdownElement;
+                const variable = project.variables[el.variableId];
+                
+                return <>
+                    <h3 className="font-bold my-2 text-slate-400">Variable Settings</h3>
+                    <FormField label="Variable">
+                        <Select value={el.variableId} onChange={e => {
+                            const newVarId = e.target.value as VNID;
+                            const newVariable = project.variables[newVarId];
+                            
+                            // Update variable and reset options based on new variable type
+                            let newOptions: DropdownOption[] = [];
+                            if (newVariable) {
+                                if (newVariable.type === 'boolean') {
+                                    newOptions = [
+                                        { id: crypto.randomUUID(), label: 'True', value: true },
+                                        { id: crypto.randomUUID(), label: 'False', value: false }
+                                    ];
+                                } else if (newVariable.type === 'number') {
+                                    newOptions = [
+                                        { id: crypto.randomUUID(), label: 'Option 1', value: 1 },
+                                        { id: crypto.randomUUID(), label: 'Option 2', value: 2 },
+                                        { id: crypto.randomUUID(), label: 'Option 3', value: 3 }
+                                    ];
+                                } else {
+                                    newOptions = [
+                                        { id: crypto.randomUUID(), label: 'Option 1', value: 'option1' },
+                                        { id: crypto.randomUUID(), label: 'Option 2', value: 'option2' },
+                                        { id: crypto.randomUUID(), label: 'Option 3', value: 'option3' }
+                                    ];
+                                }
+                            }
+                            
+                            updateElement({ variableId: newVarId, options: newOptions });
+                        }}>
+                            <option value="">-- Select Variable --</option>
+                            {Object.values(project.variables).map(v => {
+                                const varItem = v as VNVariable;
+                                return <option key={varItem.id} value={varItem.id}>{varItem.name} ({varItem.type})</option>;
+                            })}
+                        </Select>
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Options {variable && `(${variable.type})`}</h3>
+                    {variable?.type === 'boolean' ? (
+                        <>
+                            <div className="text-sm text-slate-400 mb-2">Customize the display text for true/false values:</div>
+                            {el.options.map((opt, idx) => (
+                                <FormField key={opt.id} label={opt.value === true ? 'True Label' : 'False Label'}>
+                                    <TextInput 
+                                        value={opt.label}
+                                        onChange={e => {
+                                            const newOptions = [...el.options];
+                                            newOptions[idx] = { ...opt, label: e.target.value };
+                                            updateElement({ options: newOptions });
+                                        }}
+                                    />
+                                </FormField>
+                            ))}
+                        </>
+                    ) : (
+                        <div className="space-y-2">
+                            {el.options.map((opt, idx) => (
+                                <div key={opt.id} className="flex gap-2 items-center p-2 bg-slate-800 rounded">
+                                    <div className="flex-grow space-y-1">
+                                        <TextInput 
+                                            placeholder="Label"
+                                            value={opt.label}
+                                            onChange={e => {
+                                                const newOptions = [...el.options];
+                                                newOptions[idx] = { ...opt, label: e.target.value };
+                                                updateElement({ options: newOptions });
+                                            }}
+                                        />
+                                        <TextInput 
+                                            placeholder={variable?.type === 'number' ? 'Value (number)' : 'Value'}
+                                            value={String(opt.value)}
+                                            onChange={e => {
+                                                const newOptions = [...el.options];
+                                                const newValue = variable?.type === 'number' 
+                                                    ? (isNaN(Number(e.target.value)) ? 0 : Number(e.target.value))
+                                                    : e.target.value;
+                                                newOptions[idx] = { ...opt, value: newValue };
+                                                updateElement({ options: newOptions });
+                                            }}
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            const newOptions = el.options.filter((_, i) => i !== idx);
+                                            updateElement({ options: newOptions });
+                                        }}
+                                        className="p-2 hover:bg-red-600 rounded transition-colors"
+                                        title="Remove Option"
+                                    >
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                            {variable?.type !== 'boolean' && (
+                                <button 
+                                    onClick={() => {
+                                        const newOption: DropdownOption = {
+                                            id: crypto.randomUUID(),
+                                            label: `Option ${el.options.length + 1}`,
+                                            value: variable?.type === 'number' ? el.options.length + 1 : `option${el.options.length + 1}`
+                                        };
+                                        updateElement({ options: [...el.options, newOption] });
+                                    }}
+                                    className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                                >
+                                    + Add Option
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    <h3 className="font-bold my-2 text-slate-400">Styling</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Background">
+                            <input 
+                                type="color" 
+                                className="w-full" 
+                                value={el.backgroundColor || '#1e293b'} 
+                                onChange={e => updateElement({ backgroundColor: e.target.value })} 
+                            />
+                        </FormField>
+                        <FormField label="Border">
+                            <input 
+                                type="color" 
+                                className="w-full" 
+                                value={el.borderColor || '#475569'} 
+                                onChange={e => updateElement({ borderColor: e.target.value })} 
+                            />
+                        </FormField>
+                        <FormField label="Hover">
+                            <input 
+                                type="color" 
+                                className="w-full" 
+                                value={el.hoverColor || '#334155'} 
+                                onChange={e => updateElement({ hoverColor: e.target.value })} 
+                            />
+                        </FormField>
+                    </div>
+                    
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                    
+                    <h3 className="font-bold my-2 text-slate-400">Additional Actions</h3>
+                    <p className="text-xs text-slate-400 mb-2">Run these actions when the dropdown value changes</p>
+                    <div className="space-y-2">
+                        {(el.actions || []).map((action, idx) => (
+                            <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-slate-400">Action {idx + 1}</span>
+                                    <button 
+                                        onClick={() => {
+                                            const newActions = (el.actions || []).filter((_, i) => i !== idx);
+                                            updateElement({ actions: newActions });
+                                        }}
+                                        className="p-1 hover:bg-red-600 rounded transition-colors"
+                                        title="Remove Action"
+                                    >
+                                        <TrashIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <ActionEditor 
+                                    action={action} 
+                                    onActionChange={updatedAction => {
+                                        const newActions = [...(el.actions || [])];
+                                        newActions[idx] = updatedAction;
+                                        updateElement({ actions: newActions });
+                                    }} 
+                                />
+                            </div>
+                        ))}
+                        <button 
+                            onClick={() => {
+                                const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
+                                updateElement({ actions: [...(el.actions || []), newAction] });
+                            }}
+                            className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-sm"
+                        >
+                            + Add Action
+                        </button>
+                    </div>
+                </>
+            }
+            case UIElementType.Checkbox: {
+                const el = element as UICheckboxElement;
+                const variable = project.variables[el.variableId];
+                
+                return <>
+                    <h3 className="font-bold my-2 text-slate-400">Label</h3>
+                    <FormField label="Label Text">
+                        <TextInput 
+                            value={el.label}
+                            onChange={e => updateElement({ label: e.target.value })}
+                        />
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Variable Settings</h3>
+                    <FormField label="Variable">
+                        <Select value={el.variableId} onChange={e => {
+                            const newVarId = e.target.value as VNID;
+                            const newVariable = project.variables[newVarId];
+                            
+                            // Update variable and reset values based on new variable type
+                            let checkedValue: string | number | boolean = true;
+                            let uncheckedValue: string | number | boolean = false;
+                            
+                            if (newVariable) {
+                                if (newVariable.type === 'boolean') {
+                                    checkedValue = true;
+                                    uncheckedValue = false;
+                                } else if (newVariable.type === 'number') {
+                                    checkedValue = 1;
+                                    uncheckedValue = 0;
+                                } else {
+                                    checkedValue = 'checked';
+                                    uncheckedValue = 'unchecked';
+                                }
+                            }
+                            
+                            updateElement({ 
+                                variableId: newVarId, 
+                                checkedValue, 
+                                uncheckedValue 
+                            });
+                        }}>
+                            <option value="">-- Select Variable --</option>
+                            {Object.values(project.variables).map(v => {
+                                const varItem = v as VNVariable;
+                                return <option key={varItem.id} value={varItem.id}>{varItem.name} ({varItem.type})</option>;
+                            })}
+                        </Select>
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Values {variable && `(${variable.type})`}</h3>
+                    <FormField label="Checked Value">
+                        <TextInput 
+                            value={String(el.checkedValue)}
+                            onChange={e => {
+                                let newValue: string | number | boolean = e.target.value;
+                                if (variable?.type === 'number') {
+                                    newValue = isNaN(Number(e.target.value)) ? 0 : Number(e.target.value);
+                                } else if (variable?.type === 'boolean') {
+                                    newValue = e.target.value.toLowerCase() === 'true';
+                                }
+                                updateElement({ checkedValue: newValue });
+                            }}
+                        />
+                    </FormField>
+                    <FormField label="Unchecked Value">
+                        <TextInput 
+                            value={String(el.uncheckedValue)}
+                            onChange={e => {
+                                let newValue: string | number | boolean = e.target.value;
+                                if (variable?.type === 'number') {
+                                    newValue = isNaN(Number(e.target.value)) ? 0 : Number(e.target.value);
+                                } else if (variable?.type === 'boolean') {
+                                    newValue = e.target.value.toLowerCase() === 'true';
+                                }
+                                updateElement({ uncheckedValue: newValue });
+                            }}
+                        />
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Styling</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Checkbox Color">
+                            <input 
+                                type="color" 
+                                className="w-full" 
+                                value={el.checkboxColor || '#3b82f6'} 
+                                onChange={e => updateElement({ checkboxColor: e.target.value })} 
+                            />
+                        </FormField>
+                        <FormField label="Label Color">
+                            <input 
+                                type="color" 
+                                className="w-full" 
+                                value={el.labelColor || '#f1f5f9'} 
+                                onChange={e => updateElement({ labelColor: e.target.value })} 
+                            />
+                        </FormField>
+                    </div>
+                    
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                    
+                    <h3 className="font-bold my-2 text-slate-400">Additional Actions</h3>
+                    <p className="text-xs text-slate-400 mb-2">Run these actions when the checkbox is toggled</p>
+                    <div className="space-y-2">
+                        {(el.actions || []).map((action, idx) => (
+                            <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-slate-400">Action {idx + 1}</span>
+                                    <button 
+                                        onClick={() => {
+                                            const newActions = (el.actions || []).filter((_, i) => i !== idx);
+                                            updateElement({ actions: newActions });
+                                        }}
+                                        className="p-1 hover:bg-red-600 rounded transition-colors"
+                                        title="Remove Action"
+                                    >
+                                        <TrashIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <ActionEditor 
+                                    action={action} 
+                                    onActionChange={updatedAction => {
+                                        const newActions = [...(el.actions || [])];
+                                        newActions[idx] = updatedAction;
+                                        updateElement({ actions: newActions });
+                                    }} 
+                                />
+                            </div>
+                        ))}
+                        <button 
+                            onClick={() => {
+                                const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
+                                updateElement({ actions: [...(el.actions || []), newAction] });
+                            }}
+                            className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-sm"
+                        >
+                            + Add Action
+                        </button>
+                    </div>
                 </>
             }
             default: return null;

@@ -3,7 +3,7 @@ import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
@@ -130,6 +130,45 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     }}
                 />
             </div>;
+        case UIElementType.Dropdown:
+            const dropdown = element as UIDropdownElement;
+            return <div className="w-full h-full flex items-center p-2">
+                <select 
+                    disabled
+                    className="w-full px-3 py-2 rounded border"
+                    style={{
+                        ...fontSettingsToStyle(dropdown.font),
+                        backgroundColor: dropdown.backgroundColor || '#1e293b',
+                        borderColor: dropdown.borderColor || '#475569',
+                        pointerEvents: 'none'
+                    }}
+                >
+                    {dropdown.options.map(opt => (
+                        <option key={opt.id} value={String(opt.value)}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+            </div>;
+        case UIElementType.Checkbox:
+            const checkbox = element as UICheckboxElement;
+            return <div className="w-full h-full flex items-center p-2 gap-2">
+                <input 
+                    type="checkbox"
+                    disabled
+                    className="w-5 h-5"
+                    style={{
+                        accentColor: checkbox.checkboxColor || '#3b82f6',
+                        pointerEvents: 'none'
+                    }}
+                />
+                <span style={{
+                    ...fontSettingsToStyle(checkbox.font),
+                    color: checkbox.labelColor || '#f1f5f9'
+                }}>
+                    {checkbox.label}
+                </span>
+            </div>;
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
@@ -213,14 +252,16 @@ const MenuEditor: React.FC<{
                     ))}
                 </div>
             </Panel>
-            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-7 gap-2">
-                <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Button</button>
-                <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Text</button>
-                <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Image</button>
-                <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Character</button>
-                <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Text Input</button>
-                <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Slider</button>
-                <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-bold"><PlusIcon /> Toggle</button>
+            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-9 gap-2">
+                <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
+                <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
+                <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
+                <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
+                <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
+                <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
+                <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
+                <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
+                <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
             </div>
         </div>
     );
