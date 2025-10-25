@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNUIScreen } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
 import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon } from './icons';
+import ConfirmationModal from './ui/ConfirmationModal';
 
 interface UIManagerProps {
     project: VNProject;
@@ -23,6 +24,8 @@ const UIManager: React.FC<UIManagerProps> = ({
 }) => {
     const { dispatch } = useProject();
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
+    const [pendingRestore, setPendingRestore] = useState(false);
+    const [restoreModalOpen, setRestoreModalOpen] = useState(false);
 
     const uiScreensArray = Object.values(project.uiScreens) as VNUIScreen[];
 
@@ -51,6 +54,31 @@ const UIManager: React.FC<UIManagerProps> = ({
     const handleDuplicateUIScreen = (screenId: VNID) => {
         dispatch({ type: 'DUPLICATE_UI_SCREEN', payload: { screenId } });
     };
+
+    const openRestoreModal = () => {
+        setRestoreModalOpen(true);
+    };
+
+    const handleConfirmRestore = () => {
+        setRestoreModalOpen(false);
+        setPendingRestore(true);
+        dispatch({ type: 'RESTORE_DEFAULT_UI_SCREENS' });
+    };
+
+    useEffect(() => {
+        if (!pendingRestore) {
+            return;
+        }
+
+        const newTitleId = project.ui.titleScreenId;
+        if (newTitleId && project.uiScreens[newTitleId]) {
+            setActiveMenuScreenId(newTitleId);
+        } else {
+            setActiveMenuScreenId(null);
+        }
+        setSelectedUIElementId(null);
+        setPendingRestore(false);
+    }, [pendingRestore, project.ui.titleScreenId, project.uiScreens, setActiveMenuScreenId, setSelectedUIElementId]);
 
     return (
         <div className="flex h-full">
@@ -83,13 +111,19 @@ const UIManager: React.FC<UIManagerProps> = ({
                     })}
                 </div>
 
-                <div className="p-2 border-t border-slate-700">
+                <div className="p-2 border-t border-slate-700 space-y-2">
                     <button
                         onClick={addUIScreen}
                         className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
                     >
                         <PlusIcon className="w-4 h-4" />
                         Add UI Screen
+                    </button>
+                    <button
+                        onClick={openRestoreModal}
+                        className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
+                    >
+                        Restore Default Screens
                     </button>
                 </div>
             </div>
@@ -111,6 +145,16 @@ const UIManager: React.FC<UIManagerProps> = ({
                     </div>
                 )}
             </div>
+
+            <ConfirmationModal
+                isOpen={restoreModalOpen}
+                onClose={() => setRestoreModalOpen(false)}
+                onConfirm={handleConfirmRestore}
+                title="Restore Default Screens"
+                confirmLabel="Restore"
+            >
+                Restoring defaults will add brand-new versions of the title, pause, save, load, and settings screens. Your existing custom screens will remain untouched, but the new defaults will become the active selections. Continue?
+            </ConfirmationModal>
         </div>
     );
 };

@@ -6,7 +6,8 @@ const ConfirmationModal: React.FC<{
     onConfirm: () => void;
     title: string;
     children: React.ReactNode;
-}> = ({ isOpen, onClose, onConfirm, title, children }) => {
+    confirmLabel?: string;
+}> = ({ isOpen, onClose, onConfirm, title, children, confirmLabel }) => {
     if (!isOpen) return null;
 
     // Use onClick for the backdrop. The check e.target === e.currentTarget ensures that only
@@ -38,7 +39,7 @@ const ConfirmationModal: React.FC<{
                         onClick={onConfirm} 
                         className="px-4 py-2 rounded-lg bg-[var(--accent-pink)] hover:opacity-80 transition-colors text-white font-semibold"
                     >
-                        Confirm Delete
+                        {confirmLabel || 'Confirm Delete'}
                     </button>
                 </div>
             </div>

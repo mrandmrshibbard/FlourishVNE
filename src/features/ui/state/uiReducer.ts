@@ -3,6 +3,7 @@ import { VNProject } from '../../../types/project';
 // FIX: GoToScreenAction and UIActionType are exported from shared types.
 import { VNFontSettings, VNProjectUI, VNUIScreen, VNUIElement, UIElementType, UIButtonElement } from '../types';
 import { GoToScreenAction, UIActionType } from '../../../types/shared';
+import { createDefaultUIScreens } from '../../../constants';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -20,7 +21,8 @@ export type UIAction =
     | { type: 'DUPLICATE_UI_SCREEN', payload: { screenId: VNID } }
     | { type: 'ADD_UI_ELEMENT', payload: { screenId: VNID, element: VNUIElement } }
     | { type: 'UPDATE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID, updates: Partial<VNUIElement> } }
-    | { type: 'DELETE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID } };
+    | { type: 'DELETE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID } }
+    | { type: 'RESTORE_DEFAULT_UI_SCREENS' };
 
 
 export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
@@ -57,6 +59,25 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
                     [property]: value,
                 }
             }
+        };
+    }
+
+    case 'RESTORE_DEFAULT_UI_SCREENS': {
+        const { screens: defaultScreens, specialIds } = createDefaultUIScreens();
+        return {
+            ...state,
+            uiScreens: {
+                ...state.uiScreens,
+                ...defaultScreens,
+            },
+            ui: {
+                ...state.ui,
+                titleScreenId: specialIds.titleScreenId,
+                settingsScreenId: specialIds.settingsScreenId,
+                saveScreenId: specialIds.saveScreenId,
+                loadScreenId: specialIds.loadScreenId,
+                pauseScreenId: specialIds.pauseScreenId,
+            },
         };
     }
 

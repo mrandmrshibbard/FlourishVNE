@@ -1358,6 +1358,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     
     const musicAudioRef = useRef<HTMLAudioElement>(new Audio());
     const ambientNoiseAudioRef = useRef<HTMLAudioElement>(new Audio());
+    const menuMusicUrlRef = useRef<string | null>(null);
+    const menuAmbientUrlRef = useRef<string | null>(null);
     const audioFadeInterval = useRef<number | null>(null);
     const ambientFadeInterval = useRef<number | null>(null);
     // Stage ref used for measuring pixel size for accurate slide animations
@@ -1513,6 +1515,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             audio.src = '';
         }
 
+        menuMusicUrlRef.current = null;
+
         // Also stop ambient noise
         const ambientAudio = ambientNoiseAudioRef.current;
         if (ambientAudio && !ambientAudio.paused) {
@@ -1523,6 +1527,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         } else if (ambientAudio) {
             ambientAudio.src = '';
         }
+        menuAmbientUrlRef.current = null;
     }, [fadeAudio]);
 
     // --- Save/Load System ---
@@ -1749,170 +1754,180 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [project.scenes, evaluateConditions]);
 
     // --- Audio Management ---
-     useEffect(() => {
-        if (playerState?.mode === 'playing') {
-            // Gameplay commands manage music directly; keep menu effect out of the way.
-            return;
-        }
-
-        const audio = musicAudioRef.current;
-        const isInMenu = playerState?.mode !== 'playing';
-
-        if (!isInMenu) {
-            return;
-        }
-        
-        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
-        if (!activeScreen) {
-            if (!audio.paused) fadeAudio(audio, 0, 0.5, () => audio.pause());
-            return;
-        }
-        
-        const musicInfo = activeScreen.music;
-
-        if (playerState?.mode === 'paused' && musicInfo.policy === 'continue') {
-            return;
-        }
-
-        const newAudioUrl = musicInfo?.audioId ? assetResolver(musicInfo.audioId, 'audio') : null;
-        const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
-        const newSrcPath = newAudioUrl ? new URL(newAudioUrl, window.location.href).pathname : null;
-        
-        if (currentSrcPath !== newSrcPath) {
-            if (!audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => {
-                    if (newAudioUrl) {
-                        console.log(`Playing menu music: ${newAudioUrl}`);
-                        audio.src = newAudioUrl;
-                        audio.load();
-                        audio.loop = true;
-                        audio.play().then(() => {
-                            console.log("Menu music started successfully");
-                            fadeAudio(audio, settings.musicVolume, 0.5);
-                        }).catch(e => {
-                            console.error("Menu music play failed:", e);
-                            // Queue music if autoplay blocked
-                            if (!userGestureDetectedRef.current) {
-                                console.log("Queueing menu music for user gesture");
-                                queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
-                            }
-                            audio.volume = settings.musicVolume;
-                        });
-                    } else {
-                        audio.pause();
-                    }
-                });
-            } else if (newAudioUrl) {
-                console.log(`Starting paused menu music: ${newAudioUrl}`);
-                audio.src = newAudioUrl;
-                audio.load();
-                audio.loop = true;
-                audio.play().then(() => {
-                    console.log("Menu music started successfully");
-                    fadeAudio(audio, settings.musicVolume, 0.5);
-                }).catch(e => {
-                    console.error("Menu music play failed:", e);
-                    // Queue music if autoplay blocked
-                    if (!userGestureDetectedRef.current) {
-                        console.log("Queueing menu music for user gesture");
-                        queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
-                    }
-                    audio.volume = settings.musicVolume;
-                });
-            }
-        } else if (audio.paused && newAudioUrl) {
-            console.log(`Resuming menu music`);
-            audio.play().then(() => {
-                console.log("Menu music resumed successfully");
-                fadeAudio(audio, settings.musicVolume, 0.5);
-            }).catch(e => {
-                console.error("Menu music resume failed:", e);
-                // Queue music if autoplay blocked
-                if (!userGestureDetectedRef.current) {
-                    console.log("Queueing menu music for user gesture");
-                    queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
-                }
-            });
-        }
-
-    }, [screenStack, playerState, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
-    
-    useEffect(() => { if (musicAudioRef.current) musicAudioRef.current.volume = settings.musicVolume; }, [settings.musicVolume]);
-
-    // Ambient Noise Management
     useEffect(() => {
         if (playerState?.mode === 'playing') {
             return;
         }
 
-        const audio = ambientNoiseAudioRef.current;
-        const isInMenu = playerState?.mode !== 'playing';
-
-        if (!isInMenu) {
-            return;
-        }
-        
+        const audio = musicAudioRef.current;
         const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
         if (!activeScreen) {
-            if (!audio.paused) fadeAudio(audio, 0, 0.5, () => audio.pause());
+            if (!audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuMusicUrlRef.current = null;
             return;
         }
-        
-        const ambientInfo = activeScreen.ambientNoise;
 
-        if (playerState?.mode === 'paused' && ambientInfo.policy === 'continue') {
+        const musicInfo = activeScreen.music;
+        if (playerState?.mode === 'paused' && musicInfo.policy === 'continue') {
+            return;
+        }
+
+        const newAudioUrl = musicInfo?.audioId ? assetResolver(musicInfo.audioId, 'audio') : null;
+        const normalize = (value: string | null): string | null => {
+            if (!value) return null;
+            try {
+                return new URL(value, window.location.href).href;
+            } catch (e) {
+                return value;
+            }
+        };
+
+        const currentSrcNormalized = audio.src ? normalize(audio.src) : null;
+        const newSrcNormalized = normalize(newAudioUrl);
+
+        if (!newAudioUrl) {
+            if (!audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuMusicUrlRef.current = null;
+            return;
+        }
+
+        const startPlayback = () => {
+            audio.loop = true;
+            audio.play().then(() => {
+                menuMusicUrlRef.current = newAudioUrl;
+                fadeAudio(audio, settings.musicVolume, 0.5);
+            }).catch(e => {
+                console.error('Menu music play failed:', e);
+                if (!userGestureDetectedRef.current) {
+                    queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
+                }
+            });
+        };
+
+        if (currentSrcNormalized !== newSrcNormalized) {
+            audio.src = newAudioUrl;
+            audio.load();
+            startPlayback();
+        } else if (audio.paused) {
+            startPlayback();
+        } else {
+            menuMusicUrlRef.current = newAudioUrl;
+        }
+
+    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
+    
+    useEffect(() => { if (musicAudioRef.current) musicAudioRef.current.volume = settings.musicVolume; }, [settings.musicVolume]);
+
+    // Ambient Noise Management
+    useEffect(() => {
+        // Only manage ambient audio when NOT actively playing the game
+        const isInActiveGameplay = playerState?.mode === 'playing' && screenStack.length === 0;
+        if (isInActiveGameplay) {
+            return;
+        }
+
+        const audio = ambientNoiseAudioRef.current;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        
+        if (!activeScreen) {
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuAmbientUrlRef.current = null;
+            return;
+        }
+
+        const ambientInfo = activeScreen.ambientNoise;
+        if (playerState?.mode === 'paused' && ambientInfo.policy === 'stop') {
+            // If paused and policy is 'stop', fade out ambient
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
             return;
         }
 
         const newAudioUrl = ambientInfo?.audioId ? assetResolver(ambientInfo.audioId, 'audio') : null;
-        const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
-        const newSrcPath = newAudioUrl ? new URL(newAudioUrl, window.location.href).pathname : null;
-        
-        if (currentSrcPath !== newSrcPath) {
-            if (!audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => {
-                    if (newAudioUrl) {
-                        console.log(`Playing ambient noise: ${newAudioUrl}`);
-                        audio.src = newAudioUrl;
-                        audio.load();
-                        audio.loop = true;
-                        audio.play().then(() => {
-                            console.log("Ambient noise started successfully");
-                            fadeAudio(audio, settings.sfxVolume, 0.5);
-                        }).catch(e => {
-                            console.error("Ambient noise play failed:", e);
-                            audio.volume = settings.sfxVolume;
-                        });
-                    } else {
-                        audio.pause();
-                    }
-                });
-            } else if (newAudioUrl) {
-                console.log(`Starting paused ambient noise: ${newAudioUrl}`);
-                audio.src = newAudioUrl;
-                audio.load();
-                audio.loop = true;
-                audio.play().then(() => {
-                    console.log("Ambient noise started successfully");
-                    fadeAudio(audio, settings.sfxVolume, 0.5);
-                }).catch(e => {
-                    console.error("Ambient noise play failed:", e);
-                    audio.volume = settings.sfxVolume;
-                });
+        const normalize = (value: string | null): string | null => {
+            if (!value) return null;
+            try {
+                return new URL(value, window.location.href).href;
+            } catch (e) {
+                return value;
             }
-        } else if (audio.paused && newAudioUrl) {
-            console.log(`Resuming ambient noise`);
-            audio.play().then(() => {
-                console.log("Ambient noise resumed successfully");
-                fadeAudio(audio, settings.sfxVolume, 0.5);
-            }).catch(e => {
-                console.error("Ambient noise resume failed:", e);
-            });
+        };
+
+        const currentSrcNormalized = audio?.src ? normalize(audio.src) : null;
+        const newSrcNormalized = normalize(newAudioUrl);
+
+        if (!newAudioUrl) {
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuAmbientUrlRef.current = null;
+            return;
         }
 
-    }, [screenStack, playerState, project.uiScreens, assetResolver, settings.sfxVolume, fadeAudio]);
+        const startAmbientPlayback = () => {
+            if (!audio) return;
+            audio.loop = true;
+            audio.volume = 0;
+            audio.play().then(() => {
+                menuAmbientUrlRef.current = newAudioUrl;
+                fadeAudio(audio, settings.sfxVolume, 0.5);
+            }).catch(e => {
+                console.error('[Ambient] Play failed:', e);
+            });
+        };
+
+        if (currentSrcNormalized !== newSrcNormalized) {
+            if (!audio) return;
+            audio.src = newAudioUrl;
+            audio.load();
+            startAmbientPlayback();
+        } else if (audio && audio.paused) {
+            startAmbientPlayback();
+        } else {
+            menuAmbientUrlRef.current = newAudioUrl;
+        }
+
+    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.sfxVolume, fadeAudio]);
     
     useEffect(() => { if (ambientNoiseAudioRef.current) ambientNoiseAudioRef.current.volume = settings.sfxVolume; }, [settings.sfxVolume]);
+
+    useEffect(() => {
+        if (playerState?.mode !== 'playing' || screenStack.length > 0) {
+            return;
+        }
+
+        const normalize = (value: string | null): string | null => {
+            if (!value) return null;
+            try {
+                return new URL(value, window.location.href).href;
+            } catch (e) {
+                return value;
+            }
+        };
+
+        const musicAudio = musicAudioRef.current;
+        if (menuMusicUrlRef.current) {
+            const currentSrc = musicAudio?.src ? normalize(musicAudio.src) : null;
+            const menuSrc = normalize(menuMusicUrlRef.current);
+            if (currentSrc && menuSrc && currentSrc === menuSrc && musicAudio && !musicAudio.paused) {
+                fadeAudio(musicAudio, 0, 0.5, () => musicAudio.pause());
+            }
+            menuMusicUrlRef.current = null;
+        }
+
+        const ambientAudio = ambientNoiseAudioRef.current;
+        if (menuAmbientUrlRef.current && ambientAudio && !ambientAudio.paused) {
+            fadeAudio(ambientAudio, 0, 0.5, () => ambientAudio.pause());
+            menuAmbientUrlRef.current = null;
+        }
+    }, [playerState?.mode, screenStack, fadeAudio]);
 
     // On first user gesture, mark gesture detection and play queued music if any
     useEffect(() => {
