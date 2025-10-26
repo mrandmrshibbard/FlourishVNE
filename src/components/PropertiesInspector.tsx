@@ -768,6 +768,21 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as SetVariableCommand;
                 const variable = project.variables[cmd.variableId];
             
+                // Normalize value if variable type changed
+                React.useEffect(() => {
+                    if (variable) {
+                        if (variable.type === 'boolean' && typeof cmd.value !== 'boolean') {
+                            // Convert non-boolean to boolean
+                            const normalizedValue = String(cmd.value) === 'true' || cmd.value === 1 || String(cmd.value) === '1';
+                            updateCommand({ value: normalizedValue });
+                        } else if (variable.type === 'number' && typeof cmd.value === 'boolean') {
+                            // Convert boolean to number  
+                            const normalizedValue = cmd.value ? 1 : 0;
+                            updateCommand({ value: normalizedValue });
+                        }
+                    }
+                }, [variable?.type, cmd.value]);
+            
                 return <>
                     <FormField label="Variable"><Select value={cmd.variableId} onChange={e => {
                         const newVarId = e.target.value;

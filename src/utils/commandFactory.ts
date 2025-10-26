@@ -79,7 +79,18 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             return command;
         }
         case CommandType.SetVariable: {
-            const command = { type, variableId: firstVarId || '', operator: 'set', value: 0 };
+            const firstVar = project.variables[firstVarId || ''];
+            let defaultValue: string | number | boolean = 0;
+            if (firstVar) {
+                if (firstVar.type === 'boolean') {
+                    defaultValue = false;
+                } else if (firstVar.type === 'number') {
+                    defaultValue = 0;
+                } else {
+                    defaultValue = '';
+                }
+            }
+            const command = { type, variableId: firstVarId || '', operator: 'set', value: defaultValue };
             return command;
         }
         case CommandType.TextInput: {

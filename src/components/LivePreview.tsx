@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { XMarkIcon, FilmIcon } from './icons';
@@ -1395,6 +1395,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Track active one-shot SFX so we can stop them when a scene ends
     const sfxPoolRef = useRef<HTMLAudioElement[]>([]);
     const lastProcessedCommandRef = useRef<{ sceneId: VNID; index: number; commandId: VNID } | null>(null);
+    const activeEffectTimeoutsRef = useRef<number[]>([]);
+    
+    // Use refs for visual effects to avoid triggering command loop re-execution
+    const activeFlashRef = useRef<{ color: string; duration: number; key: number } | null>(null);
+    const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
+    const [flashTrigger, setFlashTrigger] = useState(0);
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
         console.log('[AssetResolver] Called with assetId:', assetId, 'type:', type);
@@ -2171,12 +2177,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
 
         // Check conditions for all other commands
-        if (!evaluateConditions(command.conditions, playerState.variables)) {
+        const conditionsMet = evaluateConditions(command.conditions, playerState.variables);
+        console.log('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'Variables:', playerState.variables);
+        if (!conditionsMet) {
+            console.log('[DEBUG] Skipping command due to failed conditions');
             setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
             return;
         }
 
         const advance = () => {
+            console.log('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
+            // Guard: Don't advance if we've already moved past this command
+            if (lastProcessedCommandRef.current && lastProcessedCommandRef.current.index > playerState.currentIndex) {
+                console.log('[DEBUG advance()] Skipping - already advanced to', lastProcessedCommandRef.current.index);
+                return;
+            }
             const nextIndex = playerState.currentIndex + 1;
             if (nextIndex >= playerState.currentCommands.length) {
                 if (playerState.commandStack.length > 0) {
@@ -2450,7 +2465,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // If there's a transition, wait for it to complete before advancing
                         if (cmd.transition && cmd.transition !== 'instant') {
                             instantAdvance = false;
-                            setTimeout(() => advance(), ((cmd.duration ?? 0.5) * 1000) + 100);
+                            const timeoutId = window.setTimeout(() => {
+                                advance();
+                                activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
+                            }, ((cmd.duration ?? 0.5) * 1000) + 100);
+                            activeEffectTimeoutsRef.current.push(timeoutId);
                         }
                     }
                     break;
@@ -2494,7 +2513,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             };
                         });
                         // Remove character after transition duration, then advance
-                        setTimeout(() => {
+                        const timeoutId = window.setTimeout(() => {
                             setPlayerState(p => {
                                 if (!p) return null;
                                 const { [cmd.characterId]: _, ...remaining } = p.stageState.characters;
@@ -2502,7 +2521,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             });
                             // After removal, advance to next command
                             advance();
+                            activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
                         }, ((cmd.duration ?? 0.5) * 1000) + 100);
+                        activeEffectTimeoutsRef.current.push(timeoutId);
                     } else {
                         // Instant hide - remove immediately
                         setPlayerState(p => {
@@ -2522,6 +2543,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.SetVariable: {
                     const cmd = command as SetVariableCommand;
+                    console.log('[DEBUG SetVariable] Executing - Variable:', cmd.variableId, 'Operator:', cmd.operator, 'Value:', cmd.value, 'Current vars:', playerState.variables);
                     
                     // Calculate and update variable + advance in ONE state update
                     setPlayerState(p => {
@@ -2739,8 +2761,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.ShakeScreen: {
                     const cmd = command as ShakeScreenCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, shake: { active: true, intensity: cmd.intensity }}}} : null);
-                    setTimeout(() => setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, shake: { active: false, intensity: 0 }}}} : null), cmd.duration * 1000);
+                    
+                    // Set shake in ref
+                    activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                    
+                    // Set up timeout to clear shake ref (no re-render needed - CSS animation handles it)
+                    const timeoutId = window.setTimeout(() => {
+                        activeShakeRef.current = null;
+                        activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
+                    }, cmd.duration * 1000);
+                    activeEffectTimeoutsRef.current.push(timeoutId);
+                    
+                    // Let the normal advance() function handle index progression
                     break;
                 }
                 case CommandType.TintScreen: {
@@ -2760,8 +2792,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.FlashScreen: {
                     const cmd = command as FlashScreenCommand;
-                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, flash: { color: cmd.color, duration: cmd.duration }}} : null);
-                    setTimeout(() => setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, flash: null }} : null), cmd.duration * 1000);
+                    
+                    // Set flash in ref with unique key and trigger re-render
+                    activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+                    setFlashTrigger(prev => prev + 1);
+                    
+                    // Let the normal advance() function handle index progression
                     break;
                 }
                 case CommandType.ShowScreen: {
@@ -3179,6 +3215,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setScreenStack([]);
             setHudStack([]);
             
+            // Clear all active effect timeouts (FlashScreen, ShakeScreen, etc.)
+            activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+            activeEffectTimeoutsRef.current = [];
+            
+            // Clear active visual effects
+            activeFlashRef.current = null;
+            setFlashTrigger(0);
+            activeShakeRef.current = null;
+            
             // Clear the last processed command ref to allow new scene commands to execute
             lastProcessedCommandRef.current = null;
             
@@ -3233,6 +3278,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             } else {
                 // Jump to the target scene and reset stage state
                 console.log('Jumping to new scene from existing game state');
+                console.log('[DEBUG Jump] Current variables before jump:', playerState.variables);
                 setPlayerState(p => {
                     if (!p) return null;
                     console.log('Setting new scene:', {
@@ -3240,6 +3286,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         commandCount: targetScene.commands.length,
                         commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
                     });
+                    console.log('[DEBUG Jump] Variables being carried over:', p.variables);
                     return {
                         ...p,
                         currentSceneId: jumpAction.targetSceneId,
@@ -3466,10 +3513,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return presetStyles[position];
             }
         };
-        const shakeClass = state.screen.shake.active ? 'shake' : '';
-        const intensityPx = state.screen.shake.intensity * 1.5;
+        const shakeClass = activeShakeRef.current ? 'shake' : '';
+        const intensityPx = activeShakeRef.current ? activeShakeRef.current.intensity * 1.5 : 0;
         const panZoomStyle: React.CSSProperties = { transform: `scale(${state.screen.zoom}) translate(${state.screen.panX}%, ${state.screen.panY}%)`, transition: `transform ${state.screen.transitionDuration}s ease-in-out`, width: '100%', height: '100%' };
-        const shakeIntensityStyle = (state.screen.shake.active ? { '--shake-intensity-x': `${intensityPx}px`, '--shake-intensity-y': `${intensityPx * 0.7}px`, } : {}) as React.CSSProperties;
+        const shakeIntensityStyle = (activeShakeRef.current ? { '--shake-intensity-x': `${intensityPx}px`, '--shake-intensity-y': `${intensityPx * 0.7}px`, } : {}) as React.CSSProperties;
         const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out`, };
 
         return (
@@ -3647,7 +3694,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {uiState.dialogue && <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />}
             {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} />}
             {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} />}
-            {uiState.flash && <div className="absolute inset-0 z-50" style={{ backgroundColor: uiState.flash.color, animation: `flash-anim ${uiState.flash.duration}s ease-in-out` }}></div>}
+            {activeFlashRef.current && <div 
+                key={activeFlashRef.current.key}
+                className="absolute inset-0 z-50 pointer-events-none" 
+                style={{ backgroundColor: activeFlashRef.current.color, animation: `flash-anim ${activeFlashRef.current.duration}s ease-in-out` }}
+                onAnimationEnd={(e) => {
+                    // Only handle this animation event, not bubbled events from children
+                    if (e.target === e.currentTarget) {
+                        activeFlashRef.current = null;
+                        setFlashTrigger(prev => prev + 1);
+                    }
+                }}
+            ></div>}
         </>
     };
 
