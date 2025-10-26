@@ -382,6 +382,20 @@ const SceneEditor: React.FC<{
         
         if (!draggedCommand || !targetCommand || targetIndex === -1 || draggedIndex === -1) return;
 
+        // Check if command is being dragged from a group
+        const sourceGroupId = (dragItem.current as any).groupId;
+        if (sourceGroupId) {
+            // Remove from source group first
+            dispatch({
+                type: 'REMOVE_COMMAND_FROM_GROUP',
+                payload: {
+                    sceneId: activeSceneId,
+                    groupId: sourceGroupId,
+                    commandId: draggedCommandId
+                }
+            });
+        }
+
         if (position === 'inside') {
             // Check if target is a Group - add command to group instead of stacking
             if (targetCommand.type === CommandType.Group) {
@@ -965,8 +979,8 @@ const SceneEditor: React.FC<{
                                                                 
                                                                 if (!draggedCommandId || !dragItem.current) return;
                                                                 
-                                                                // Only allow reordering within the same group
-                                                                if (dragItem.current.groupId === cmd.id) {
+                                                                // Check if dragging within the same group
+                                                                if ((dragItem.current as any).groupId === cmd.id) {
                                                                     const draggedGroupIndex = groupCmd.commandIds.indexOf(draggedCommandId);
                                                                     const targetGroupIndex = groupCmd.commandIds.indexOf(cmdId);
                                                                     
