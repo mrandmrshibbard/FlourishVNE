@@ -611,7 +611,20 @@ const PropertiesInspector: React.FC<{
                         newAction = { type: UIActionType.JumpToScene, targetSceneId: project.startSceneId };
                     } else {
                         // The type is guaranteed to be SetVariable here.
-                        newAction = { type: UIActionType.SetVariable, variableId: Object.keys(project.variables)[0] || '', operator: 'set', value: '' };
+                        const firstVarId = Object.keys(project.variables)[0] || '';
+                        const firstVar = project.variables[firstVarId];
+                        // Initialize with proper default value based on variable type
+                        let defaultValue: string | number | boolean = '';
+                        if (firstVar) {
+                            if (firstVar.type === 'boolean') {
+                                defaultValue = false;
+                            } else if (firstVar.type === 'number') {
+                                defaultValue = 0;
+                            } else {
+                                defaultValue = '';
+                            }
+                        }
+                        newAction = { type: UIActionType.SetVariable, variableId: firstVarId, operator: 'set', value: defaultValue };
                     }
                     updateOption(optionIndex, { actions: [...(option.actions || []), newAction] });
                 };

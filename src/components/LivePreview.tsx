@@ -1356,6 +1356,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         return initVars;
     });
     
+    // Sync menuVariables when project variables change
+    useEffect(() => {
+        const updatedVars: Record<VNID, string | number | boolean> = {};
+        Object.values(project.variables).forEach((v: any) => {
+            // Keep existing value if it exists, otherwise use default
+            updatedVars[v.id] = menuVariables[v.id] !== undefined ? menuVariables[v.id] : v.defaultValue;
+        });
+        setMenuVariables(updatedVars);
+    }, [project.variables]);
+    
     const musicAudioRef = useRef<HTMLAudioElement>(new Audio());
     const ambientNoiseAudioRef = useRef<HTMLAudioElement>(new Audio());
     const menuMusicUrlRef = useRef<string | null>(null);
@@ -2065,12 +2075,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         const command = playerState.currentCommands[playerState.currentIndex];
         if (!command) { 
-            console.log('End of commands - checking stack', {
-                currentIndex: playerState.currentIndex,
-                totalCommands: playerState.currentCommands.length,
-                sceneId: playerState.currentSceneId,
-                commandStackLength: playerState.commandStack.length
-            });
             if (playerState.commandStack.length > 0) {
                 const popped = playerState.commandStack[playerState.commandStack.length - 1];
                 setPlayerState(p => {
@@ -2518,12 +2522,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.SetVariable: {
                     const cmd = command as SetVariableCommand;
+                    
+                    // Calculate and update variable + advance in ONE state update
                     setPlayerState(p => {
                         if (!p) return null;
+                        
                         const variable = project.variables[cmd.variableId];
                         if (!variable) {
                             console.warn(`SetVariable command failed: Variable with ID ${cmd.variableId} not found.`);
-                            return p; // Return state unchanged
+                            // Still advance even if variable not found
+                            return { ...p, currentIndex: p.currentIndex + 1 };
                         }
                         
                         const currentVal = p.variables[cmd.variableId];
@@ -2535,27 +2543,48 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         } else if (cmd.operator === 'subtract') {
                             newVal = (Number(currentVal) || 0) - (Number(changeValStr) || 0);
                         } else if (cmd.operator === 'random') {
-                            // Generate random number within range (inclusive)
                             const min = cmd.randomMin ?? 0;
                             const max = cmd.randomMax ?? 100;
                             newVal = Math.floor(Math.random() * (max - min + 1)) + min;
-                        } else { // 'set' operator
-                            // Coerce the value to the correct type based on variable definition
-                            switch (variable.type) {
-                                case 'number':
-                                    newVal = Number(changeValStr) || 0;
-                                    break;
-                                case 'boolean':
-                                    newVal = changeValStr.toLowerCase() === 'true';
-                                    break;
-                                case 'string':
-                                default:
-                                    newVal = changeValStr;
-                                    break;
-                            }
+                    } else { // 'set' operator
+                        switch (variable.type) {
+                            case 'number':
+                                newVal = Number(changeValStr) || 0;
+                                break;
+                            case 'boolean':
+                                // Handle various boolean representations - be VERY forgiving
+                                if (typeof cmd.value === 'boolean') {
+                                    newVal = cmd.value;
+                                } else {
+                                    // Convert string/number to boolean
+                                    const normalized = String(cmd.value).trim().toLowerCase();
+                                    if (normalized === 'true' || normalized === '1') {
+                                        newVal = true;
+                                    } else if (normalized === 'false' || normalized === '0' || normalized === '') {
+                                        newVal = false;
+                                    } else {
+                                        // Any other truthy value
+                                        newVal = !!cmd.value;
+                                    }
+                                }
+                                break;
+                            case 'string':
+                            default:
+                                newVal = changeValStr;
+                                break;
                         }
-                        return { ...p, variables: { ...p.variables, [cmd.variableId]: newVal }};
+                    }
+                        
+                        // Update both variable AND index in single state update
+                        return { 
+                            ...p, 
+                            variables: { ...p.variables, [cmd.variableId]: newVal },
+                            currentIndex: p.currentIndex + 1
+                        };
                     });
+                    
+                    // Set instantAdvance to false so advance() doesn't run
+                    instantAdvance = false;
                     break;
                 }
                 case CommandType.TextInput: {
@@ -2970,6 +2999,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null } } : null);
     };
     const handleChoiceSelect = (choice: ChoiceOption) => {
+        console.log('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
         setPlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
@@ -3009,7 +3039,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 newVal = Number(changeValStr) || 0;
                                 break;
                             case 'boolean':
-                                newVal = changeValStr.toLowerCase() === 'true';
+                                // Handle various boolean representations - be VERY forgiving
+                                if (typeof setVarAction.value === 'boolean') {
+                                    newVal = setVarAction.value;
+                                } else {
+                                    // Convert string/number to boolean
+                                    const normalized = String(setVarAction.value).trim().toLowerCase();
+                                    if (normalized === 'true' || normalized === '1') {
+                                        newVal = true;
+                                    } else if (normalized === 'false' || normalized === '0' || normalized === '') {
+                                        newVal = false;
+                                    } else {
+                                        // Any other truthy value
+                                        newVal = !!setVarAction.value;
+                                    }
+                                }
                                 break;
                             case 'string':
                             default:
