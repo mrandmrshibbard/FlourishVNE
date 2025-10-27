@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -165,6 +165,33 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 font: project.ui.dialogueTextFont,
                 checkboxColor: '#3b82f6',
                 labelColor: '#f1f5f9'
+            };
+            return el;
+        }
+        case UIElementType.AssetCycler: {
+            const firstCharId = Object.keys(project.characters)[0] || '';
+            const character = firstCharId ? project.characters[firstCharId] : null;
+            const firstLayerId = character ? Object.keys(character.layers)[0] : '';
+            const layer = firstLayerId && character ? character.layers[firstLayerId] : null;
+            const assetIds = layer ? Object.keys(layer.assets) : [];
+            
+            // Get or create a string variable for storing asset ID
+            const stringVars = Object.values(project.variables).filter(v => v.type === 'string');
+            const firstVarId = stringVars.length > 0 ? stringVars[0].id : Object.keys(project.variables)[0] || '';
+            
+            const el: UIAssetCyclerElement = {
+                ...base, name: 'Asset Cycler', type,
+                width: 40, height: 8,
+                characterId: firstCharId,
+                layerId: firstLayerId,
+                variableId: firstVarId,
+                assetIds: assetIds,
+                label: 'Customize',
+                showAssetName: true,
+                font: project.ui.dialogueTextFont,
+                arrowColor: '#a855f7',
+                arrowSize: 24,
+                backgroundColor: 'rgba(30, 41, 59, 0.8)'
             };
             return el;
         }

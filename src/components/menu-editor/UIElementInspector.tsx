@@ -2,9 +2,9 @@ import React from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
-import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, DropdownOption, GameSetting, GameToggleSetting } from '../../features/ui/types';
+import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption, GameSetting, GameToggleSetting } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
-import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
+import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { FormField, TextInput, Select } from '../ui/Form';
 import { TrashIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
@@ -496,7 +496,7 @@ const UIElementInspector: React.FC<{
             case UIElementType.CharacterPreview: {
                 const el = element as UICharacterPreviewElement;
                 const character = el.characterId ? project.characters[el.characterId] : null;
-                const numberVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'number');
+                const stringVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'string');
                 
                 return <>
                     <FormField label="Character">
@@ -530,7 +530,7 @@ const UIElementInspector: React.FC<{
                         <>
                             <h3 className="font-bold my-2 text-slate-400">Layer Variable Mappings</h3>
                             <p className="text-xs text-slate-400 mb-2">
-                                Map layers to number variables to dynamically control assets. Layers without mappings will use the default expression.
+                                Map layers to string variables containing asset IDs to dynamically control assets. Layers without mappings will use the default expression.
                             </p>
                             
                             {Object.values(character.layers).map((layerUnknown: unknown) => {
@@ -550,7 +550,7 @@ const UIElementInspector: React.FC<{
                                             }}
                                         >
                                             <option value="">None (use default expression)</option>
-                                            {numberVariables.map(v => (
+                                            {stringVariables.map(v => (
                                                 <option key={v.id} value={v.id}>{v.name}</option>
                                             ))}
                                         </Select>
@@ -943,6 +943,205 @@ const UIElementInspector: React.FC<{
                             + Add Action
                         </button>
                     </div>
+                </>
+            }
+            case UIElementType.AssetCycler: {
+                const el = element as UIAssetCyclerElement;
+                const character = project.characters[el.characterId];
+                const layer = character?.layers[el.layerId];
+                
+                return <>
+                    <h3 className="font-bold my-2 text-slate-400">Character & Layer</h3>
+                    <FormField label="Character">
+                        <Select value={el.characterId} onChange={e => {
+                            const charId = e.target.value as VNID;
+                            const char = project.characters[charId];
+                            const firstLayerId = char ? Object.keys(char.layers)[0] : '';
+                            const firstLayer = firstLayerId && char ? char.layers[firstLayerId] : null;
+                            const assetIds = firstLayer ? Object.keys(firstLayer.assets) : [];
+                            
+                            updateElement({ 
+                                characterId: charId,
+                                layerId: firstLayerId,
+                                assetIds
+                            });
+                        }}>
+                            <option value="">-- Select Character --</option>
+                            {Object.values(project.characters).map((c: VNCharacter) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+
+                    <FormField label="Layer">
+                        <Select value={el.layerId} onChange={e => {
+                            const layerId = e.target.value as VNID;
+                            const newLayer = character?.layers[layerId];
+                            const assetIds = newLayer ? Object.keys(newLayer.assets) : [];
+                            
+                            updateElement({ 
+                                layerId,
+                                assetIds
+                            });
+                        }}>
+                            <option value="">-- Select Layer --</option>
+                            {character && Object.values(character.layers).map((l: VNCharacterLayer) => (
+                                <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Assets to Cycle</h3>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {layer && Object.values(layer.assets).map((asset: VNLayerAsset) => {
+                            const isSelected = el.assetIds.includes(asset.id);
+                            return (
+                                <div key={asset.id} className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={e => {
+                                            const newAssetIds = e.target.checked
+                                                ? [...el.assetIds, asset.id]
+                                                : el.assetIds.filter(id => id !== asset.id);
+                                            updateElement({ assetIds: newAssetIds });
+                                        }}
+                                    />
+                                    <span className="text-sm">{asset.name}</span>
+                                </div>
+                            );
+                        })}
+                        {(!layer || Object.keys(layer.assets).length === 0) && (
+                            <div className="text-sm text-slate-500 italic">No assets available</div>
+                        )}
+                    </div>
+
+                    <h3 className="font-bold my-2 text-slate-400">Variable</h3>
+                    <FormField label="Variable to Store Selection">
+                        <Select value={el.variableId} onChange={e => updateElement({ variableId: e.target.value as VNID })}>
+                            <option value="">-- Select Variable --</option>
+                            {Object.values(project.variables).map(v => {
+                                const varItem = v as VNVariable;
+                                return <option key={varItem.id} value={varItem.id}>{varItem.name} ({varItem.type})</option>;
+                            })}
+                        </Select>
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Label & Display</h3>
+                    <FormField label="Label (optional)">
+                        <TextInput 
+                            value={el.label || ''}
+                            onChange={e => updateElement({ label: e.target.value })}
+                            placeholder="e.g., Hair Color"
+                        />
+                    </FormField>
+                    <FormField label="Visible">
+                        <input
+                            type="checkbox"
+                            checked={el.visible !== false}
+                            onChange={e => updateElement({ visible: e.target.checked })}
+                        />
+                    </FormField>
+                    <FormField label="Show Asset Name">
+                        <input
+                            type="checkbox"
+                            checked={el.showAssetName !== false}
+                            onChange={e => updateElement({ showAssetName: e.target.checked })}
+                        />
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Dynamic Filtering (Optional)</h3>
+                    <p className="text-xs text-slate-400 mb-2">
+                        Filter which assets show based on other variables. Use {'{varId}'} in the pattern to insert variable values.
+                    </p>
+                    <FormField label="Filter Variables">
+                        <div className="flex flex-col gap-2">
+                            {(el.filterVariableIds || []).map((varId, index) => (
+                                <div key={index} className="flex gap-2 items-center">
+                                    <Select 
+                                        value={varId} 
+                                        onChange={e => {
+                                            const newIds = [...(el.filterVariableIds || [])];
+                                            newIds[index] = e.target.value as VNID;
+                                            updateElement({ filterVariableIds: newIds });
+                                        }}
+                                        className="flex-1"
+                                    >
+                                        <option value="">-- Select Variable --</option>
+                                        {Object.values(project.variables).filter(v => (v as VNVariable).type === 'string').map(v => {
+                                            const varItem = v as VNVariable;
+                                            return <option key={varItem.id} value={varItem.id}>{varItem.name}</option>;
+                                        })}
+                                    </Select>
+                                    <button
+                                        onClick={() => {
+                                            const newIds = (el.filterVariableIds || []).filter((_, i) => i !== index);
+                                            updateElement({ filterVariableIds: newIds.length > 0 ? newIds : undefined });
+                                        }}
+                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                onClick={() => {
+                                    const newIds = [...(el.filterVariableIds || []), Object.keys(project.variables)[0] || ''];
+                                    updateElement({ filterVariableIds: newIds });
+                                }}
+                                className="px-3 py-1 bg-[var(--accent-purple)] hover:opacity-80 rounded text-sm"
+                            >
+                                + Add Filter Variable
+                            </button>
+                        </div>
+                    </FormField>
+                    <FormField label="Filter Pattern">
+                        <TextInput 
+                            value={el.filterPattern || ''}
+                            onChange={e => updateElement({ filterPattern: e.target.value })}
+                            placeholder="e.g., {var-abc123}_{var-def456}"
+                        />
+                        <div className="text-xs text-slate-400 mt-1">
+                            Use {'{varId}'} to insert variable values. Copy variable IDs from the dropdowns above.
+                            <br />Example: If variables are "slim" and "light", pattern "{'{body_type}'}_{'{skin_tone}'}" matches "slim_light"
+                        </div>
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Styling</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Arrow Color">
+                            <input 
+                                type="color" 
+                                className="w-full" 
+                                value={el.arrowColor || '#a855f7'} 
+                                onChange={e => updateElement({ arrowColor: e.target.value })} 
+                            />
+                        </FormField>
+                        <FormField label="Arrow Size">
+                            <TextInput 
+                                type="number"
+                                value={String(el.arrowSize || 24)}
+                                onChange={e => updateElement({ arrowSize: Number(e.target.value) })}
+                                min="12"
+                                max="48"
+                            />
+                        </FormField>
+                    </div>
+                    <FormField label="Background Color">
+                        <input 
+                            type="color" 
+                            className="w-full" 
+                            value={el.backgroundColor?.replace(/rgba?\([^)]+\)/, '#1e293b') || '#1e293b'} 
+                            onChange={e => {
+                                const hex = e.target.value;
+                                const rgba = `rgba(${parseInt(hex.slice(1,3), 16)}, ${parseInt(hex.slice(3,5), 16)}, ${parseInt(hex.slice(5,7), 16)}, 0.8)`;
+                                updateElement({ backgroundColor: rgba });
+                            }} 
+                        />
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
+                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
                 </>
             }
             default: return null;

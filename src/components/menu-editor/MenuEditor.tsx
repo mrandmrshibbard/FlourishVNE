@@ -3,7 +3,7 @@ import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
@@ -169,6 +169,27 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     {checkbox.label}
                 </span>
             </div>;
+        case UIElementType.AssetCycler:
+            const cycler = element as UIAssetCyclerElement;
+            const cyclerChar = project.characters[cycler.characterId];
+            const cyclerLayer = cyclerChar?.layers[cycler.layerId];
+            const firstAssetId = cycler.assetIds[0];
+            const firstAsset = firstAssetId && cyclerLayer ? cyclerLayer.assets[firstAssetId] : null;
+            
+            return <div className="w-full h-full flex flex-col gap-1 items-center justify-center p-2 rounded" style={{ backgroundColor: cycler.backgroundColor || 'rgba(30, 41, 59, 0.8)' }}>
+                {cycler.label && (
+                    <div style={{...fontSettingsToStyle(cycler.font), fontSize: `${(cycler.font?.size || 16) * 0.8}px`, opacity: 0.8}} className="text-center">
+                        {cycler.label}
+                    </div>
+                )}
+                <div className="flex items-center gap-3 w-full">
+                    <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `${cycler.arrowSize || 24}px` }}>◀</div>
+                    <div className="flex-1 text-center overflow-hidden" style={fontSettingsToStyle(cycler.font)}>
+                        {cycler.showAssetName && firstAsset ? firstAsset.name : `1 / ${cycler.assetIds.length}`}
+                    </div>
+                    <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `${cycler.arrowSize || 24}px` }}>▶</div>
+                </div>
+            </div>;
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
@@ -252,7 +273,7 @@ const MenuEditor: React.FC<{
                     ))}
                 </div>
             </Panel>
-            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-9 gap-2">
+            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-10 gap-2">
                 <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
                 <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
                 <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
@@ -260,6 +281,7 @@ const MenuEditor: React.FC<{
                 <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
                 <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
                 <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
+                <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Cycler</button>
                 <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
                 <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
             </div>

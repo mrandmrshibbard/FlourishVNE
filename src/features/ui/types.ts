@@ -39,6 +39,7 @@ export enum UIElementType {
     TextInput = 'TextInput',
     Dropdown = 'Dropdown',
     Checkbox = 'Checkbox',
+    AssetCycler = 'AssetCycler',
 }
 
 interface BaseUIElement {
@@ -156,9 +157,27 @@ export interface UICheckboxElement extends BaseUIElement {
     actions?: VNUIAction[]; // Multiple actions on toggle
 }
 
+export interface UIAssetCyclerElement extends BaseUIElement {
+    type: UIElementType.AssetCycler;
+    characterId: VNID; // Which character to pull assets from
+    layerId: VNID; // Which layer to cycle assets for
+    variableId: VNID; // Variable to store the selected asset ID
+    assetIds: VNID[]; // List of asset IDs to cycle through
+    label?: string; // Optional label to show above the cycler (e.g., "Hair Color")
+    font: VNFontSettings; // Font for label and current asset name
+    showAssetName?: boolean; // Whether to show the asset name in the middle
+    arrowColor?: string; // Color of arrow buttons
+    arrowSize?: number; // Size of arrows in pixels
+    backgroundColor?: string; // Background color of the cycler
+    visible?: boolean; // Whether the cycler is visible (defaults to true)
+    filterPattern?: string; // Pattern to filter assets (e.g., "{body_type}_{skin_tone}" supports multiple variables)
+    filterVariableId?: VNID; // DEPRECATED: Use filterVariableIds instead
+    filterVariableIds?: VNID[]; // Array of variables to use for filtering (pattern uses {varId} placeholder syntax)
+}
+
 export type VNUIElement = 
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement;
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement;
 
 export interface VNUIScreen {
     id: VNID;
