@@ -30,10 +30,52 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 <div>{txt.text}</div>
             </div>;
         }
-        case UIElementType.Image:
+        case UIElementType.Image: {
             const img = element as UIImageElement;
-            const url = img.image ? (project.backgrounds[img.image.id]?.imageUrl || project.videos[img.image.id]?.videoUrl) : null;
-            return url ? <img src={url} alt="" className="w-full h-full object-contain" /> : <div className="w-full h-full bg-[var(--bg-primary)]/50 flex items-center justify-center text-slate-500">Image/Video</div>;
+            // Support new background property with fallback to old image property
+            const bgType = img.background?.type || (img.image ? img.image.type : null);
+            const bgValue = img.background?.type === 'color' ? img.background.value :
+                           img.background?.type ? img.background.assetId :
+                           img.image?.id || null;
+            
+            // If it's a color background
+            if (bgType === 'color' && typeof bgValue === 'string') {
+                return <div className="w-full h-full" style={{ backgroundColor: bgValue }} />;
+            }
+            
+            // Otherwise it's an image or video asset
+            const url = bgValue ? (
+                bgType === 'video' ? project.videos[bgValue]?.videoUrl : 
+                project.images[bgValue]?.imageUrl || project.backgrounds[bgValue]?.imageUrl
+            ) : null;
+            
+            if (!url) {
+                return <div className="w-full h-full bg-[var(--bg-primary)]/50 flex items-center justify-center text-slate-500">
+                    {bgType === 'color' ? 'Color' : 'Image/Video'}
+                </div>;
+            }
+            
+            const objectFit = img.objectFit || 'contain';
+            
+            if (bgType === 'video') {
+                return <video 
+                    src={url} 
+                    autoPlay 
+                    muted 
+                    loop 
+                    playsInline
+                    className="w-full h-full pointer-events-none" 
+                    style={{ objectFit }}
+                />;
+            }
+            
+            return <img 
+                src={url} 
+                alt="" 
+                className="w-full h-full" 
+                style={{ objectFit }}
+            />;
+        }
         case UIElementType.SaveSlotGrid:
              return <div className="w-full h-full bg-[var(--bg-primary)]/50 border-2 border-dashed border-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-secondary)]">Save/Load Slots</div>;
         case UIElementType.SettingsSlider:
@@ -235,6 +277,18 @@ const MenuEditor: React.FC<{
             setSelectedElementId(newElement.id);
         }
     };
+
+    const handleAddVideoElement = () => {
+        const newElement = createUIElement(UIElementType.Image, project) as UIImageElement;
+        if (newElement) {
+            // Pre-configure as a video element
+            newElement.name = 'Video';
+            newElement.background = { type: 'video', assetId: null };
+            newElement.image = null;
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
+            setSelectedElementId(newElement.id);
+        }
+    };
     
     const getBackground = () => {
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
@@ -273,10 +327,11 @@ const MenuEditor: React.FC<{
                     ))}
                 </div>
             </Panel>
-            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-10 gap-2">
+            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-11 gap-2">
                 <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
                 <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
                 <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
+                <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
                 <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
                 <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
                 <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>

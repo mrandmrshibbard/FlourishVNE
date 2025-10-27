@@ -758,6 +758,25 @@ const ButtonElement: React.FC<{
     );
 };
 
+// --- Helper for Element Transitions ---
+const getTransitionStyle = (
+    transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale',
+    duration?: number,
+    delay?: number
+): React.CSSProperties => {
+    const durationMs = duration || 300;
+    const delayMs = delay || 0;
+    
+    if (!transitionIn || transitionIn === 'none') return {};
+    
+    const transitionProp = `all ${durationMs}ms ease-out ${delayMs}ms`;
+    
+    return {
+        transition: transitionProp,
+        animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`,
+    };
+};
+
 // --- UI Screen Renderer (for menus) ---
 const UIScreenRenderer: React.FC<{
     screenId: VNID;
@@ -769,9 +788,22 @@ const UIScreenRenderer: React.FC<{
     playSound: (soundId: VNID | null) => void;
     variables?: Record<VNID, string | number | boolean>;
     onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange }) => {
+    isClosing?: boolean;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
+    const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
+    
+    // Cleanup video on unmount
+    React.useEffect(() => {
+        return () => {
+            if (backgroundVideoRef.current) {
+                backgroundVideoRef.current.pause();
+                backgroundVideoRef.current.src = '';
+                backgroundVideoRef.current.load();
+            }
+        };
+    }, []);
     
     if (!screen) return <div className="text-red-500">Error: Screen {screenId} not found.</div>;
 
@@ -786,7 +818,7 @@ const UIScreenRenderer: React.FC<{
                     return <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />;
                 }
                 if (screen.background.type === 'video') {
-                    return <video src={url} autoPlay loop muted className="absolute inset-0 w-full h-full object-cover" />;
+                    return <video ref={backgroundVideoRef} src={url} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" />;
                 }
             }
         }
@@ -794,12 +826,17 @@ const UIScreenRenderer: React.FC<{
     };
     
     const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject) => {
+        console.log('🎯 renderElement called:', element.type, element.name, element.id);
+        
+        const transitionStyle = getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay);
+        
         const style: React.CSSProperties = {
             position: 'absolute',
             left: `${element.x}%`, top: `${element.y}%`,
             width: `${element.width}%`, height: `${element.height}%`,
             transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)`,
             overflow: 'hidden', // Prevent content overflow when using cover
+            ...transitionStyle,
         };
 
         const getElementAssetUrl = (image: { type: 'image' | 'video', id: VNID } | null) => {
@@ -827,17 +864,31 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.Image: {
                 const el = element as UIImageElement;
-                const url = getElementAssetUrl(el.image);
-                if (!url) return <div key={el.id} style={style} className="bg-slate-800/50" />;
                 
-                // Check if it's a video
-                const isVideo = el.image?.type === 'video';
+                // Support new background property with fallback to old image property
+                const bgType = el.background?.type || 'image';
+                const bgValue = el.background?.type === 'color' ? el.background.value :
+                               el.background?.type ? el.background.assetId :
+                               el.image?.id || null;
                 
-                // Container keeps absolute positioning but adds overflow hidden
                 const containerStyle: React.CSSProperties = {
                     ...style,
                     overflow: 'hidden',
                 };
+                
+                // If it's a color background
+                if (bgType === 'color' && typeof bgValue === 'string') {
+                    return <div key={el.id} style={{ ...containerStyle, backgroundColor: bgValue }} />;
+                }
+                
+                // Otherwise it's an image or video asset
+                const url = bgValue ? (bgType === 'video' ? project.videos[bgValue]?.videoUrl : assetResolver(bgValue as VNID, 'image')) : null;
+                
+                if (!url || url === '' || url === 'http://localhost:3000/') {
+                    return <div key={el.id} style={containerStyle} className="bg-slate-800/50" />;
+                }
+                
+                const isVideo = bgType === 'video';
                 
                 // Media fills container using object-fit
                 const mediaStyle: React.CSSProperties = {
@@ -848,39 +899,36 @@ const UIScreenRenderer: React.FC<{
                 };
                 
                 if (isVideo) {
-                    // Debug: Log video info with expanded details
-                    console.log('[Video Element] Name:', el.name);
-                    console.log('  Object Fit:', el.objectFit);
-                    console.log('  Element Size:', `${element.width}% x ${element.height}%`);
-                    console.log('  Container Style:', {
-                        position: containerStyle.position,
-                        left: containerStyle.left,
-                        top: containerStyle.top,
-                        width: containerStyle.width,
-                        height: containerStyle.height,
-                        overflow: containerStyle.overflow
-                    });
-                    console.log('  Media Style:', mediaStyle);
-                    
                     return (
                         <div key={el.id} style={containerStyle}>
                             <video 
+                                ref={(videoEl) => {
+                                    if (videoEl && url) {
+                                        // Fix for React Strict Mode calling ref twice with empty src
+                                        // Ensure src is set properly even if it gets reset
+                                        if (!videoEl.src || videoEl.src === 'http://localhost:3000/' || videoEl.src === window.location.href) {
+                                            videoEl.src = url;
+                                        }
+                                        
+                                        // Force play after a brief delay to ensure src is loaded
+                                        setTimeout(() => {
+                                            if (videoEl.readyState >= 2) {  // HAVE_CURRENT_DATA or better
+                                                videoEl.play().catch(error => {
+                                                    console.error('[Video Play Error]', el.name, error);
+                                                });
+                                            } else {
+                                                // Retry if not ready
+                                                setTimeout(() => videoEl.play().catch(() => {}), 500);
+                                            }
+                                        }, 100);
+                                    }
+                                }}
                                 src={url} 
                                 style={mediaStyle}
                                 autoPlay 
                                 loop 
                                 muted 
                                 playsInline
-                                onLoadedData={() => console.log('[Video Loaded]', el.name)}
-                                onError={(e) => {
-                                    console.error('[Video Error]', el.name);
-                                    const video = e.currentTarget;
-                                    console.error('  Error Code:', video.error?.code);
-                                    console.error('  Error Message:', video.error?.message);
-                                    console.error('  Network State:', video.networkState, '(1=LOADING, 2=IDLE, 3=NO_SOURCE)');
-                                    console.error('  Ready State:', video.readyState);
-                                    console.error('  Video src:', video.src);
-                                }}
                             >
                                 <source src={url} type="video/webm" />
                                 <source src={url} type="video/mp4" />
@@ -889,27 +937,12 @@ const UIScreenRenderer: React.FC<{
                         </div>
                     );
                 } else {
-                    // Debug: Log image info
-                    console.log('[Image Element] Name:', el.name);
-                    console.log('  Object Fit:', el.objectFit);
-                    console.log('  Element Size:', `${element.width}% x ${element.height}%`);
-                    console.log('  Container Style:', {
-                        position: containerStyle.position,
-                        left: containerStyle.left,
-                        top: containerStyle.top,
-                        width: containerStyle.width,
-                        height: containerStyle.height,
-                        overflow: containerStyle.overflow
-                    });
-                    console.log('  Media Style:', mediaStyle);
-                    
                     return (
                         <div key={el.id} style={containerStyle}>
                             <img 
                                 src={url} 
                                 alt={el.name} 
                                 style={mediaStyle}
-                                onError={(e) => console.error('[Image Error]', el.name, ':', e)}
                             />
                         </div>
                     );
@@ -1568,8 +1601,18 @@ const UIScreenRenderer: React.FC<{
         }
     }
 
+    // Get screen transition style
+    const transitionType = isClosing ? (screen.transitionOut || 'fade') : (screen.transitionIn || 'fade');
+    const duration = screen.transitionDuration || 300;
+    const screenTransitionStyle: React.CSSProperties = {
+        animation: transitionType !== 'none' ? `screenTransition${transitionType}${isClosing ? 'Out' : ''} ${duration}ms ease-out forwards` : undefined,
+    };
+
+    // Check if dialogue should be shown
+    const shouldShowDialogue = screen.showDialogue && variables;
+
     return (
-        <div className="absolute inset-0 w-full h-full">
+        <div key={`${screenId}-${isClosing ? 'closing' : 'open'}`} className="absolute inset-0 w-full h-full" style={screenTransitionStyle}>
             {getBackgroundElement()}
             {Object.values(screen.elements).map(element => renderElement(element as VNUIElement, variables, project))}
         </div>
@@ -1599,6 +1642,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [screenStack, setScreenStack] = useState<VNID[]>(titleScreenId ? [titleScreenId] : []);
     // hudStack holds screens shown as in-game overlays while in 'playing' mode
     const [hudStack, setHudStack] = useState<VNID[]>([]);
+    // Track screens that are currently closing with transitions
+    const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
     const [settings, setSettings] = useState<GameSettings>(defaultSettings);
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const [gameSaves, setGameSaves] = useState<Record<number, GameStateSave>>({});
@@ -1660,56 +1705,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [flashTrigger, setFlashTrigger] = useState(0);
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
-        console.log('[AssetResolver] Called with assetId:', assetId, 'type:', type);
-        if (!assetId) {
-            console.log('[AssetResolver] No assetId provided, returning null');
-            return null;
-        }
-        let resolvedUrl: string | null = null;
+        if (!assetId) return null;
+        
         switch(type) {
             case 'audio': 
-                resolvedUrl = project.audio[assetId]?.audioUrl || null;
-                console.log('[AssetResolver] Audio asset lookup:', assetId, '→', resolvedUrl);
-                return resolvedUrl;
+                return project.audio[assetId]?.audioUrl || null;
             case 'video': 
-                resolvedUrl = project.videos[assetId]?.videoUrl || null;
-                console.log('[AssetResolver] Video asset lookup:', assetId, '→', resolvedUrl);
-                return resolvedUrl;
+                return project.videos[assetId]?.videoUrl || null;
             case 'image': {
-                // First, check backgrounds, as that's the primary source for UI images
+                // Check backgrounds first (primary source for UI images)
                 if (project.backgrounds[assetId]) {
                     const bg = project.backgrounds[assetId];
-                    resolvedUrl = bg.videoUrl || bg.imageUrl || null;
-                    console.log('[AssetResolver] Background asset lookup:', assetId, '→', resolvedUrl);
-                    return resolvedUrl;
+                    return bg.videoUrl || bg.imageUrl || null;
                 }
-                // Check images
+                // Check images collection
                 if (project.images && project.images[assetId]) {
                     const img = project.images[assetId];
-                    resolvedUrl = img.videoUrl || img.imageUrl || null;
-                    console.log('[AssetResolver] Image asset lookup:', assetId, '→', resolvedUrl);
-                    return resolvedUrl;
+                    return img.videoUrl || img.imageUrl || null;
                 }
-                // As a fallback, check all character assets. This is less efficient but more robust.
+                // Check videos collection as fallback (in case type='image' was passed for a video asset)
+                if (project.videos[assetId]) {
+                    return project.videos[assetId]?.videoUrl || null;
+                }
+                // Check character assets as final fallback
                 for (const charId in project.characters) {
                     const char = project.characters[charId];
-                    // A character's base image ID is the character's ID itself
+                    // Character's base image ID is the character's ID itself
                     if (char.id === assetId) {
-                        resolvedUrl = char.baseVideoUrl || char.baseImageUrl || null;
-                        console.log('[AssetResolver] Character base asset lookup:', assetId, '→', resolvedUrl);
-                        return resolvedUrl;
+                        return char.baseVideoUrl || char.baseImageUrl || null;
                     }
                     for (const layerId in char.layers) {
                         const layer = char.layers[layerId];
                         if (layer.assets[assetId]) {
                             const asset = layer.assets[assetId];
-                            resolvedUrl = asset.videoUrl || asset.imageUrl || null;
-                            console.log('[AssetResolver] Character layer asset lookup:', assetId, '→', resolvedUrl);
-                            return resolvedUrl;
+                            return asset.videoUrl || asset.imageUrl || null;
                         }
                     }
                 }
-                console.log('[AssetResolver] Image asset not found for:', assetId);
                 return null;
             }
         }
@@ -3413,26 +3445,84 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         } else if (action.type === UIActionType.ReturnToPreviousScreen) {
             if (playerState && playerState.mode === 'playing') {
                 if (hudStack.length > 0) {
-                    setHudStack(s => s.slice(0, -1));
-                    // If we're closing the last HUD screen, advance to next command
-                    if (hudStack.length === 1) {
-                        setPlayerState(p => {
-                            if (!p) return null;
-                            // Clear button and image overlays when returning from HUD screen
-                            return {
-                                ...p,
-                                currentIndex: p.currentIndex + 1,
-                                stageState: {
-                                    ...p.stageState,
-                                    buttonOverlays: [],
-                                    imageOverlays: []
-                                }
-                            };
-                        });
+                    const closingScreenId = hudStack[hudStack.length - 1];
+                    const closingScreen = project.uiScreens[closingScreenId];
+                    const transitionDuration = closingScreen?.transitionDuration || 300;
+                    const hasTransition = closingScreen?.transitionOut && closingScreen.transitionOut !== 'none';
+                    
+                    if (hasTransition) {
+                        // Mark screen as closing
+                        setClosingScreens(prev => new Set(prev).add(closingScreenId));
+                        
+                        // Wait for transition to complete before removing from stack
+                        setTimeout(() => {
+                            setHudStack(s => s.slice(0, -1));
+                            setClosingScreens(prev => {
+                                const next = new Set(prev);
+                                next.delete(closingScreenId);
+                                return next;
+                            });
+                            
+                            // If we're closing the last HUD screen, advance to next command
+                            if (hudStack.length === 1) {
+                                setPlayerState(p => {
+                                    if (!p) return null;
+                                    return {
+                                        ...p,
+                                        currentIndex: p.currentIndex + 1,
+                                        stageState: {
+                                            ...p.stageState,
+                                            buttonOverlays: [],
+                                            imageOverlays: []
+                                        }
+                                    };
+                                });
+                            }
+                        }, transitionDuration);
+                    } else {
+                        // No transition, close immediately
+                        setHudStack(s => s.slice(0, -1));
+                        if (hudStack.length === 1) {
+                            setPlayerState(p => {
+                                if (!p) return null;
+                                return {
+                                    ...p,
+                                    currentIndex: p.currentIndex + 1,
+                                    stageState: {
+                                        ...p.stageState,
+                                        buttonOverlays: [],
+                                        imageOverlays: []
+                                    }
+                                };
+                            });
+                        }
                     }
                 }
             } else {
-                if (screenStack.length > 1) setScreenStack(stack => stack.slice(0, -1));
+                if (screenStack.length > 1) {
+                    const closingScreenId = screenStack[screenStack.length - 1];
+                    const closingScreen = project.uiScreens[closingScreenId];
+                    const transitionDuration = closingScreen?.transitionDuration || 300;
+                    const hasTransition = closingScreen?.transitionOut && closingScreen.transitionOut !== 'none';
+                    
+                    if (hasTransition) {
+                        // Mark screen as closing
+                        setClosingScreens(prev => new Set(prev).add(closingScreenId));
+                        
+                        // Wait for transition to complete before removing from stack
+                        setTimeout(() => {
+                            setScreenStack(stack => stack.slice(0, -1));
+                            setClosingScreens(prev => {
+                                const next = new Set(prev);
+                                next.delete(closingScreenId);
+                                return next;
+                            });
+                        }, transitionDuration);
+                    } else {
+                        // No transition, close immediately
+                        setScreenStack(stack => stack.slice(0, -1));
+                    }
+                }
             }
         } else if (action.type === UIActionType.QuitToTitle) {
             stopAndResetMusic();
@@ -3942,13 +4032,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const renderPlayerUI = () => {
         if (!playerState || playerState.mode !== 'playing') return null;
         const { uiState } = playerState;
+        
+        // Check if current HUD screen has showDialogue enabled
+        const currentHudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
+        const currentHudScreen = currentHudScreenId ? project.uiScreens[currentHudScreenId] : null;
+        const shouldShowDialogueOnHud = currentHudScreen?.showDialogue;
+        
         return <>
             {uiState.movieUrl && (
                 <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white" onClick={() => setPlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)}>
                     <video src={uiState.movieUrl} autoPlay className="w-full h-full" onEnded={() => setPlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)} />
                 </div>
             )}
-            {uiState.dialogue && <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />}
+            {/* Show dialogue if: 1) dialogue exists, AND 2) either no HUD screen or HUD screen has showDialogue enabled */}
+            {uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && (
+                <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />
+            )}
             {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} />}
             {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} />}
             {activeFlashRef.current && <div 
@@ -3995,6 +4094,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             ambientFadeInterval.current = null;
         }
         stopAllSfx();
+        
+        // Stop all videos
+        const allVideos = document.querySelectorAll('video');
+        allVideos.forEach(video => {
+            video.pause();
+            video.src = '';
+            video.load();
+        });
+        
         onClose();
     };
 
@@ -4023,6 +4131,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 try { src.stop(); } catch (e) {}
             });
             sfxSourceNodesRef.current = [];
+            
+            // Stop all videos (including background videos on screens)
+            const allVideos = document.querySelectorAll('video');
+            allVideos.forEach(video => {
+                video.pause();
+                video.src = '';
+                video.load();
+            });
         };
     }, []);
 
@@ -4040,6 +4156,76 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     return (
         <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+            <style>{`
+                @keyframes elementTransitionfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes elementTransitionslideUp {
+                    from { opacity: 0; transform: translate(-50%, 20%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionslideDown {
+                    from { opacity: 0; transform: translate(-50%, -70%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionslideLeft {
+                    from { opacity: 0; transform: translate(-20%, -50%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionslideRight {
+                    from { opacity: 0; transform: translate(-80%, -50%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionscale {
+                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                }
+                
+                /* Screen IN transitions */
+                @keyframes screenTransitionfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes screenTransitionslideUp {
+                    from { opacity: 0; transform: translateY(100%); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes screenTransitionslideDown {
+                    from { opacity: 0; transform: translateY(-100%); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes screenTransitionslideLeft {
+                    from { opacity: 0; transform: translateX(100%); }
+                    to { opacity: 1; transform: translateX(0); }
+                }
+                @keyframes screenTransitionslideRight {
+                    from { opacity: 0; transform: translateX(-100%); }
+                    to { opacity: 1; transform: translateX(0); }
+                }
+                
+                /* Screen OUT transitions */
+                @keyframes screenTransitionfadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                @keyframes screenTransitionslideUpOut {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(-100%); }
+                }
+                @keyframes screenTransitionslideDownOut {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(100%); }
+                }
+                @keyframes screenTransitionslideLeftOut {
+                    from { opacity: 1; transform: translateX(0); }
+                    to { opacity: 0; transform: translateX(-100%); }
+                }
+                @keyframes screenTransitionslideRightOut {
+                    from { opacity: 1; transform: translateX(0); }
+                    to { opacity: 0; transform: translateX(100%); }
+                }
+            `}</style>
             <div className="w-full h-full aspect-video relative">
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
@@ -4054,6 +4240,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         playSound={playSound}
                         variables={playerState?.variables || menuVariables}
                         onVariableChange={handleVariableChange}
+                        isClosing={closingScreens.has(currentScreenId)}
                     />
                 )}
                 {
@@ -4072,6 +4259,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     playSound={playSound}
                                     variables={playerState?.variables || menuVariables}
                                     onVariableChange={handleVariableChange}
+                                    isClosing={closingScreens.has(hudScreenId)}
                                 />
                             ) : null;
                         })()

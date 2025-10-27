@@ -23,6 +23,8 @@ const UIElementInspector: React.FC<{
     if (!element) return <Panel title="Properties">Element not found</Panel>;
 
     const updateElement = (updates: Partial<VNUIElement>) => {
+        console.log('[UIElementInspector] Updating element:', elementId, 'with updates:', updates);
+        console.log('[UIElementInspector] Current element before update:', element);
         dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId, elementId, updates }});
     };
     
@@ -46,6 +48,27 @@ const UIElementInspector: React.FC<{
                 <FormField label="Anchor X (0-1)"><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
                 <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
             </div>
+            
+            <h3 className="font-bold mt-3 mb-2 text-slate-400">Element Transition</h3>
+            <div className="grid grid-cols-2 gap-2">
+                <FormField label="Transition In">
+                    <Select value={element.transitionIn || 'fade'} onChange={e => updateElement({ transitionIn: e.target.value as any })}>
+                        <option value="none">None</option>
+                        <option value="fade">Fade</option>
+                        <option value="slideUp">Slide Up</option>
+                        <option value="slideDown">Slide Down</option>
+                        <option value="slideLeft">Slide Left</option>
+                        <option value="slideRight">Slide Right</option>
+                        <option value="scale">Scale</option>
+                    </Select>
+                </FormField>
+                <FormField label="Duration (ms)">
+                    <TextInput type="number" value={element.transitionDuration || 300} onChange={e => updateElement({ transitionDuration: parseInt(e.target.value) || 300 })} />
+                </FormField>
+            </div>
+            <FormField label="Delay (ms)">
+                <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} />
+            </FormField>
         </>
     );
 
@@ -151,36 +174,67 @@ const UIElementInspector: React.FC<{
             }
             case UIElementType.Image: {
                 const el = element as UIImageElement;
+                // Check if this is a video-only element (created by Add Video button)
+                const isVideoOnly = el.name === 'Video' && el.background?.type === 'video';
+                
+                // Determine current background type and value
+                const bgType = el.background?.type || (el.image ? el.image.type : 'image');
+                const bgValue = el.background?.type === 'color' ? el.background.value : 
+                               el.background?.assetId || null;
+                
                 return <>
-                    <FormField label="Asset Type">
-                        <Select 
-                            value={el.image?.type || 'image'} 
-                            onChange={e => {
-                                const newType = e.target.value as 'image'|'video';
-                                // Clear the ID when switching types to avoid mismatched asset types
-                                updateElement({ image: { type: newType, id: '' }});
-                            }}
-                        >
-                            <option value="image">Image</option>
-                            <option value="video">Video</option>
-                        </Select>
-                    </FormField>
-                    <AssetSelector 
-                        label={el.image?.type === 'video' ? 'Video' : 'Image'} 
-                        assetType={el.image?.type === 'video' ? 'videos' : 'backgrounds'} 
-                        value={el.image?.id || null} 
-                        onChange={id => updateElement({ image: id ? { type: el.image?.type || 'image', id } : null })} 
-                    />
-                    <FormField label="Fit Mode">
-                        <Select 
-                            value={el.objectFit || 'contain'} 
-                            onChange={e => updateElement({ objectFit: e.target.value as 'contain' | 'cover' | 'fill' })}
-                        >
-                            <option value="contain">Contain (fit inside, show all)</option>
-                            <option value="cover">Cover (fill entire area)</option>
-                            <option value="fill">Fill (stretch to fit)</option>
-                        </Select>
-                    </FormField>
+                    {/* Only show Background Type dropdown for regular image elements, not video-only elements */}
+                    {!isVideoOnly && (
+                        <FormField label="Background Type">
+                            <Select 
+                                value={bgType} 
+                                onChange={e => {
+                                    const newType = e.target.value as 'color' | 'image' | 'video';
+                                    if (newType === 'color') {
+                                        updateElement({ background: { type: 'color', value: '#000000' }, image: null });
+                                    } else {
+                                        updateElement({ background: { type: newType, assetId: null }, image: null });
+                                    }
+                                }}
+                            >
+                                <option value="color">Color</option>
+                                <option value="image">Image</option>
+                                <option value="video">Video</option>
+                            </Select>
+                        </FormField>
+                    )}
+                    
+                    {bgType === 'color' ? (
+                        <FormField label="Color Value">
+                            <TextInput 
+                                type="color" 
+                                value={typeof bgValue === 'string' && bgValue.startsWith('#') ? bgValue : '#000000'} 
+                                onChange={e => updateElement({ background: { type: 'color', value: e.target.value }, image: null })} 
+                                className="p-1 h-10"
+                            />
+                        </FormField>
+                    ) : (
+                        <AssetSelector 
+                            label={bgType === 'video' ? 'Video Asset' : 'Image Asset'} 
+                            assetType={bgType === 'video' ? 'videos' : 'backgrounds'} 
+                            value={typeof bgValue === 'string' ? bgValue : null} 
+                            onChange={id => updateElement({ background: { type: bgType as 'image' | 'video', assetId: id }, image: null })} 
+                        />
+                    )}
+                    
+                    {bgType !== 'color' && (
+                        <FormField label="Fit Mode">
+                            <Select 
+                                value={el.objectFit || 'contain'} 
+                                onChange={e => updateElement({ objectFit: e.target.value as 'contain' | 'cover' | 'fill' })}
+                            >
+                                <option value="contain">Contain (fit inside, show all)</option>
+                                <option value="cover">Cover (fill entire area)</option>
+                                <option value="fill">Fill (stretch to fit)</option>
+                            </Select>
+                        </FormField>
+                    )}
+                    
                     <p className="text-xs text-slate-400 mt-1">
                         💡 <strong>Cover</strong> mode fills the entire element but may crop edges. Perfect for fullscreen backgrounds!
                     </p>

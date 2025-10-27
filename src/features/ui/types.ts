@@ -50,6 +50,10 @@ interface BaseUIElement {
     anchorX: number; anchorY: number;
     conditions?: VNCondition[];
     disabledConditions?: VNCondition[];
+    // Element-level transitions
+    transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale';
+    transitionDuration?: number; // Duration in milliseconds (default 300)
+    transitionDelay?: number; // Delay before starting transition in milliseconds (default 0)
 }
 
 export interface UIButtonElement extends BaseUIElement {
@@ -73,7 +77,8 @@ export interface UITextElement extends BaseUIElement {
 }
 export interface UIImageElement extends BaseUIElement {
     type: UIElementType.Image;
-    image: UIAsset | null;
+    background?: { type: 'image' | 'video', assetId: VNID } | { type: 'color', value: string }; // Image/video from assets or solid color
+    image: UIAsset | null; // Deprecated, kept for backward compatibility
     objectFit?: 'contain' | 'cover' | 'fill'; // How the image/video should fit in the element
 }
 export interface UISaveSlotGridElement extends BaseUIElement {
@@ -186,4 +191,8 @@ export interface VNUIScreen {
     music: { audioId: VNID | null, policy: 'continue' | 'stop' };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop' };
     elements: Record<VNID, VNUIElement>;
+    transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
+    transitionOut?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
+    transitionDuration?: number; // Duration in milliseconds (default 300)
+    showDialogue?: boolean; // Whether to show the dialogue box on this screen
 }

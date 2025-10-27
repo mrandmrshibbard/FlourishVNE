@@ -79,6 +79,40 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </Select>
                     </FormField>
                 </div>
+
+                <hr className="border-slate-700 my-4" />
+                <h3 className="font-bold mb-2 text-slate-400">Screen Transitions</h3>
+                <div className="grid grid-cols-2 gap-2">
+                    <FormField label="Transition In">
+                        <Select value={screen.transitionIn || 'fade'} onChange={e => updateScreen({ transitionIn: e.target.value as any })}>
+                            <option value="none">None</option>
+                            <option value="fade">Fade</option>
+                            <option value="slideUp">Slide Up</option>
+                            <option value="slideDown">Slide Down</option>
+                            <option value="slideLeft">Slide Left</option>
+                            <option value="slideRight">Slide Right</option>
+                        </Select>
+                    </FormField>
+                    <FormField label="Transition Out">
+                        <Select value={screen.transitionOut || 'fade'} onChange={e => updateScreen({ transitionOut: e.target.value as any })}>
+                            <option value="none">None</option>
+                            <option value="fade">Fade</option>
+                            <option value="slideUp">Slide Up</option>
+                            <option value="slideDown">Slide Down</option>
+                            <option value="slideLeft">Slide Left</option>
+                            <option value="slideRight">Slide Right</option>
+                        </Select>
+                    </FormField>
+                </div>
+                <FormField label="Duration (ms)">
+                    <TextInput type="number" value={screen.transitionDuration || 300} onChange={e => updateScreen({ transitionDuration: parseInt(e.target.value) || 300 })} />
+                </FormField>
+
+                <hr className="border-slate-700 my-4" />
+                <h3 className="font-bold mb-2 text-slate-400">Dialogue Box</h3>
+                <FormField label="Show Dialogue">
+                    <input type="checkbox" checked={screen.showDialogue || false} onChange={e => updateScreen({ showDialogue: e.target.checked })} className="w-5 h-5" />
+                </FormField>
             </div>
         </Panel>
     );
