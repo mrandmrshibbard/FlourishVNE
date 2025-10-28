@@ -24,112 +24,65 @@ import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable } from '../features/variables/types';
 
+// Command Handlers
+import {
+    CommandContext,
+    CommandResult,
+    handleDialogue,
+    handleSetVariable,
+    handleChoice,
+    handleShowCharacter,
+    handleHideCharacter,
+    handleSetBackground,
+    handlePlayMusic,
+    handleStopMusic,
+    handlePlaySoundEffect,
+    handleShowText,
+    handleHideText,
+    handleShowImage,
+    handleHideImage,
+    handleShowButton,
+    handleHideButton,
+    handleJump,
+    handleJumpToLabel,
+    handleLabel,
+    handleBranchStart,
+    handleBranchEnd,
+    handleGroup,
+    handleShakeScreen,
+    handleTintScreen,
+    handlePanZoomScreen,
+    handleResetScreenEffects,
+    handleFlashScreen,
+    handleTextInput,
+} from './live-preview/command-handlers';
+
+// Import extracted types
+import {
+    TextOverlay,
+    ImageOverlay,
+    ButtonOverlay,
+    StageCharacterState,
+    StageState,
+    MusicState,
+    PlayerState,
+    GameSettings,
+} from './live-preview/types/gameState';
+
 type StageSize = { width: number; height: number };
 
-interface TextOverlay {
-    id: VNID;
-    text: string;
-    x: number;
-    y: number;
-    fontSize: number;
-    fontFamily: string;
-    color: string;
-    width?: number;
-    height?: number;
-    textAlign?: 'left' | 'center' | 'right';
-    verticalAlign?: 'top' | 'middle' | 'bottom';
-    transition?: VNTransition;
-    duration?: number;
-    action?: 'show' | 'hide';
-}
+// Import utility functions from extracted modules
+import { getOverlayTransitionClass } from './live-preview/systems/transitionUtils';
+// TODO: Remove duplicate local declarations before uncommenting buildSlideStyle
+// import { buildSlideStyle } from './live-preview/systems/transitionUtils';
 
-interface ImageOverlay {
-    id: VNID;
-    imageUrl?: string;
-    videoUrl?: string;
-    isVideo?: boolean;
-    videoLoop?: boolean;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    rotation: number;
-    opacity: number;
-    scaleX: number;
-    scaleY: number;
-    transition?: VNTransition;
-    duration?: number;
-    action?: 'show' | 'hide';
-}
-
-interface ButtonOverlay {
-    id: VNID;
-    text: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    anchorX: number;
-    anchorY: number;
-    backgroundColor: string;
-    textColor: string;
-    fontSize: number;
-    fontWeight: 'normal' | 'bold';
-    borderRadius: number;
-    imageUrl: string | null;
-    hoverImageUrl: string | null;
-    onClick: VNUIAction;
-    clickSound: VNID | null;
-    waitForClick?: boolean;
-    transition?: VNTransition;
-    duration?: number;
-    action?: 'show' | 'hide';
-}
-
-interface StageCharacterTransition {
-    type: VNTransition;
-    duration: number;
-    startPosition?: VNPosition;
-    endPosition?: VNPosition;
-    action: 'show' | 'hide';
-}
-
-interface StageCharacterState {
-    charId: VNID;
-    position: VNPosition;
-    imageUrls: string[];
-    videoUrls?: string[];
-    isVideo?: boolean;
-    videoLoop?: boolean;
-    transition: StageCharacterTransition | null;
-    expressionId?: VNID; // Track which expression is being used
-    layerVariableBindings?: Record<VNID, VNID>; // layerId -> variableId mappings for dynamic layer assets
-}
-
-interface StageState {
-    backgroundUrl: string | null;
-    backgroundIsVideo?: boolean;
-    backgroundLoop?: boolean;
-    characters: Record<VNID, StageCharacterState>;
-    textOverlays: TextOverlay[];
-    imageOverlays: ImageOverlay[];
-    buttonOverlays: ButtonOverlay[];
-    screen: {
-        shake: { active: boolean; intensity: number };
-        tint: string;
-        zoom: number;
-        panX: number;
-        panY: number;
-        transitionDuration: number;
-    };
-}
-
-interface GameSettings {
-    textSpeed: number;
-    musicVolume: number;
-    sfxVolume: number;
-    enableSkip: boolean;
-}
+// Import renderer components from extracted modules  
+// TODO: Remove duplicate local declarations before uncommenting
+// import { TextOverlayElement } from './live-preview/renderers/TextOverlayRenderer';
+// import { ImageOverlayElement } from './live-preview/renderers/ImageOverlayRenderer';
+// import { ButtonOverlayElement } from './live-preview/renderers/ButtonOverlayRenderer';
+// import { DialogueBox } from './live-preview/renderers/DialogueRenderer';
+// import { ChoiceMenu } from './live-preview/renderers/ChoiceMenuRenderer';
 
 const defaultSettings: GameSettings = {
     textSpeed: 50,
@@ -138,7 +91,8 @@ const defaultSettings: GameSettings = {
     enableSkip: true,
 };
 
-const getOverlayTransitionClass = (transition: VNTransition, isHide: boolean): string => {
+// --- Utility Functions (keeping these until they can be extracted) ---
+const getPositionStyle = (transition: VNTransition, isHide: boolean): string => {
     switch (transition) {
         case 'fade':
             return isHide ? 'transition-fade-out' : 'transition-dissolve';
@@ -480,43 +434,7 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     );
 };
 
-interface MusicState {
-    audioId: VNID | null;
-    loop: boolean;
-    currentTime: number;
-    isPlaying: boolean;
-}
-
-interface PlayerState {
-    mode: 'menu' | 'playing' | 'paused';
-    currentSceneId: VNID;
-    currentCommands: VNCommand[];
-    currentIndex: number;
-    commandStack: Array<{sceneId: VNID, commands: VNCommand[], index: number}>;
-    variables: Record<VNID, string | number | boolean>;
-    stageState: StageState;
-    musicState: MusicState;
-    uiState: {
-        dialogue: {
-            characterName: string;
-            characterColor: string;
-            text: string;
-        } | null;
-        choices: ChoiceOption[] | null;
-        textInput: {
-            variableId: VNID;
-            prompt: string;
-            placeholder: string;
-            maxLength: number;
-        } | null;
-        movieUrl: string | null;
-        isWaitingForInput: boolean;
-        isTransitioning: boolean;
-        transitionElement: React.ReactNode | null;
-        flash: { color: string, duration: number } | null;
-    };
-}
-
+// GameStateSave interface (keeping local as it's not in extracted types)
 interface GameStateSave {
     timestamp: number;
     sceneName: string;
@@ -2399,8 +2317,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     } else {
                         // No valid next scene found, return to title
                         console.log('No valid next scene - returning to title');
-                        stopAndResetMusic();
+                        
+                        // Stop game music and SFX immediately
+                        const audio = musicAudioRef.current;
+                        if (audio) {
+                            audio.pause();
+                            audio.currentTime = 0;
+                            audio.src = '';
+                        }
                         stopAllSfx();
+                        
+                        // Clear player state and return to title screen
                         setPlayerState(null);
                         if (project.ui.titleScreenId) {
                             setScreenStack([project.ui.titleScreenId]);
@@ -2409,8 +2336,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 } else {
                     // This is the last scene or scene not found in list
                     console.log('Last scene completed - returning to title');
-                    stopAndResetMusic();
+                    
+                    // Stop game music and SFX immediately
+                    const audio = musicAudioRef.current;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.src = '';
+                    }
                     stopAllSfx();
+                    
+                    // Clear player state and return to title screen
                     setPlayerState(null);
                     if (project.ui.titleScreenId) {
                         setScreenStack([project.ui.titleScreenId]);
@@ -2511,8 +2447,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                     
                     // No more scenes, return to title
-                    stopAndResetMusic();
+                    // Stop game music and SFX immediately
+                    const audio = musicAudioRef.current;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.src = '';
+                    }
                     stopAllSfx();
+                    
+                    // Clear player state and return to title screen
                     setPlayerState(null);
                     if (project.ui.titleScreenId) {
                         setScreenStack([project.ui.titleScreenId]);
@@ -2526,479 +2470,121 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Check if this command should run asynchronously (in parallel with subsequent commands)
         const shouldRunAsync = command.modifiers?.runAsync === true;
         
+        // Build CommandContext for handlers
+        const commandContext: CommandContext = {
+            project,
+            playerState,
+            assetResolver,
+            getAssetMetadata,
+            musicAudioRef,
+            fadeAudio,
+            playSound,
+            settings,
+            advance,
+            setPlayerState,
+            activeEffectTimeoutsRef,
+        };
+        
         let instantAdvance = true;
         (async () => {
+            // Helper function to apply command result
+            const applyResult = (result: CommandResult) => {
+                if (result.updates) {
+                    setPlayerState(p => {
+                        if (!p) return null;
+                        return {
+                            ...p,
+                            ...(result.updates?.currentSceneId !== undefined ? { currentSceneId: result.updates.currentSceneId } : {}),
+                            ...(result.updates?.currentCommands !== undefined ? { currentCommands: result.updates.currentCommands } : {}),
+                            ...(result.updates?.currentIndex !== undefined ? { currentIndex: result.updates.currentIndex } : {}),
+                            ...(result.updates?.commandStack !== undefined ? { commandStack: result.updates.commandStack } : {}),
+                            ...(result.updates?.variables !== undefined ? { variables: { ...p.variables, ...result.updates.variables } } : {}),
+                            ...(result.updates?.stageState !== undefined ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {}),
+                            ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
+                            ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
+                        };
+                    });
+                }
+                instantAdvance = result.advance;
+                
+                // Handle delay and callback
+                if (result.delay && result.callback) {
+                    const timeoutId = window.setTimeout(result.callback, result.delay);
+                    activeEffectTimeoutsRef.current.push(timeoutId);
+                } else if (result.callback) {
+                    result.callback();
+                }
+            };
+            
             switch (command.type) {
                 case CommandType.Group: {
-                    // Groups are visual only in the editor, skip during execution
+                    const result = handleGroup();
+                    applyResult(result);
                     break;
                 }
                 case CommandType.BranchStart: {
-                    // Branch conditions already checked above, this is just a marker
-                    // Already advanced, so we should not reach here
+                    const result = handleBranchStart();
+                    applyResult(result);
                     break;
                 }
                 case CommandType.BranchEnd: {
-                    // BranchEnd is just a marker, no action needed
+                    const result = handleBranchEnd();
+                    applyResult(result);
                     break;
                 }
                 case CommandType.Dialogue: {
-                    instantAdvance = false;
-                    const cmd = command as DialogueCommand;
-                    const char = cmd.characterId ? project.characters[cmd.characterId] : null;
-                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, dialogue: { text: cmd.text, characterName: char?.name || 'Narrator', characterColor: char?.color || '#FFFFFF' } } } : null);
+                    const result = handleDialogue(command as DialogueCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.SetBackground: {
-                    instantAdvance = false;
-                    const cmd = command as SetBackgroundCommand;
-                    const newUrl = assetResolver(cmd.backgroundId, 'image');
-                    const { isVideo, loop } = getAssetMetadata(cmd.backgroundId, 'image');
-                    const duration = cmd.duration ?? 1;
-
-                    if (!newUrl) {
-                        console.warn(`Background not found: ${cmd.backgroundId}`);
-                        advance();
-                        break;
-                    }
-
-                    // Preload the media to prevent it flashing before the animation starts
-                    const preloadMedia = () => new Promise<void>((resolve, reject) => {
-                        if (isVideo) {
-                            const video = document.createElement('video');
-                            video.src = newUrl;
-                            video.preload = 'auto';
-                            video.onerror = () => reject(new Error(`Failed to load background video: ${newUrl}`));
-                            video.onloadeddata = () => resolve();
-                        } else {
-                            const img = new Image();
-                            img.src = newUrl;
-                            img.onerror = () => reject(new Error(`Failed to load background image: ${newUrl}`));
-                            img.onload = () => resolve();
-                        }
-                    });
-
-                    try {
-                        await preloadMedia();
-                    } catch (error) {
-                        console.error(error);
-                        advance();
-                        break;
-                    }
-
-                    // Media is loaded, now we can start the transition
-                    let transitionElement: React.ReactNode = null;
-                    
-                    if (cmd.transition === 'instant' || !cmd.transition) {
-                        setPlayerState(p => p ? { 
-                            ...p, 
-                            stageState: { ...p.stageState, backgroundUrl: newUrl, backgroundIsVideo: isVideo, backgroundLoop: loop }, 
-                            currentIndex: p.currentIndex + 1 
-                        } : null);
-                        break;
-                    }
-
-                    // Create appropriate transition element based on media type
-                    const MediaElement = isVideo ? 'video' : 'img';
-                    const mediaProps: any = isVideo 
-                        ? { autoPlay: true, muted: true, loop, playsInline: true }
-                        : { alt: '' };
-
-                    if (cmd.transition === 'cross-fade') {
-                        // Start with opacity 0
-                        transitionElement = <MediaElement key={Date.now()} src={newUrl} {...mediaProps} className="absolute inset-0 w-full h-full object-cover z-0" style={{ opacity: 0, transition: `opacity ${duration}s ease-in-out` }} />;
-                        // After a short delay, update to opacity 1 to trigger the CSS transition
-                        setTimeout(() => {
-                            setPlayerState(p => {
-                                if (!p) return null;
-                                const el = <MediaElement key={Date.now()} src={newUrl} {...mediaProps} className="absolute inset-0 w-full h-full object-cover z-0" style={{ opacity: 1, transition: `opacity ${duration}s ease-in-out` }} />;
-                                return { ...p, uiState: { ...p.uiState, transitionElement: el }};
-                            });
-                        }, 50);
-                    } else if (cmd.transition === 'fade') {
-                        // Fade to black, then from black
-                        transitionElement = <div key={Date.now()} className="absolute inset-0 z-0 bg-black" style={{ animation: `dissolve-in ${duration / 2}s forwards` }} />;
-                        setTimeout(() => {
-                            setPlayerState(p => {
-                                if (!p) return null;
-                                const el = <div key={Date.now()+1} className="absolute inset-0 z-0 bg-black" style={{ animation: `fade-out ${duration / 2}s forwards` }} />;
-                                return { ...p, stageState: { ...p.stageState, backgroundUrl: newUrl, backgroundIsVideo: isVideo, backgroundLoop: loop }, uiState: { ...p.uiState, transitionElement: el } };
-                            });
-                        }, duration * 500);
-                    } else {
-                        // Other wipe/slide transitions
-                        let transitionClass = '';
-                        switch(cmd.transition) {
-                            case 'dissolve': transitionClass = 'transition-dissolve'; break;
-                            case 'slide': transitionClass = 'transition-slide-in-right'; break;
-                            case 'iris-in': transitionClass = 'transition-iris-in'; break;
-                            case 'wipe-right': transitionClass = 'transition-wipe-right'; break;
-                        }
-                        transitionElement = <MediaElement key={Date.now()} src={newUrl} {...mediaProps} className={`absolute inset-0 w-full h-full object-cover z-0 transition-base ${transitionClass}`} style={{animationDuration: `${duration}s`}} />;
-                    }
-                    
-                    // Set the initial transition state
-                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, isTransitioning: true, transitionElement } } : null);
-
-                    // Set a timeout to clean up after the transition animation
-                    setTimeout(() => {
-                        setPlayerState(p => {
-                            if (!p) return null;
-                            return {
-                                ...p,
-                                stageState: { ...p.stageState, backgroundUrl: newUrl, backgroundIsVideo: isVideo, backgroundLoop: loop }, // Finalize the background change
-                                uiState: { ...p.uiState, isTransitioning: false, transitionElement: null },
-                                currentIndex: p.currentIndex + 1,
-                            };
-                        });
-                    }, duration * 1000 + 100); // Add a small buffer
+                    const result = await handleSetBackground(command as SetBackgroundCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ShowCharacter: {
-                    const cmd = command as ShowCharacterCommand;
-                    const charData = project.characters[cmd.characterId];
-                    const exprData = charData?.expressions[cmd.expressionId];
-                    if (charData && exprData) {
-                        const imageUrls: string[] = [];
-                        const videoUrls: string[] = [];
-                        let hasVideo = false;
-                        let videoLoop = false;
-                        
-                        // Check base image/video
-                        if (charData.baseVideoUrl) {
-                            videoUrls.push(charData.baseVideoUrl);
-                            hasVideo = true;
-                            videoLoop = !!charData.baseVideoLoop;
-                        } else if (charData.baseImageUrl) {
-                            imageUrls.push(charData.baseImageUrl);
-                        }
-                        
-                        // Build layer variable bindings by checking all number variables
-                        // If a variable name matches a layer name, use it
-                        const layerBindings: Record<VNID, VNID> = {};
-                        Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
-                            // Check if there's a number variable with matching name
-                            const matchingVar = Object.values(project.variables).find((v: any) => 
-                                v.type === 'number' && (
-                                    v.name.toLowerCase().includes(layer.name.toLowerCase()) ||
-                                    layer.name.toLowerCase().includes(v.name.toLowerCase())
-                                )
-                            );
-                            if (matchingVar) {
-                                layerBindings[layer.id] = (matchingVar as any).id;
-                            }
-                        });
-                        
-                        // Merge with existing bindings
-                        const existingChar = playerState?.stageState.characters[cmd.characterId];
-                        const finalBindings = { ...layerBindings, ...(existingChar?.layerVariableBindings || {}) };
-                        
-                        // Check layer assets - respect variable bindings
-                        Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
-                            let asset = null;
-                            
-                            // Check if this layer has a variable binding
-                            const variableId = finalBindings[layer.id];
-                            if (variableId && playerState.variables[variableId] !== undefined) {
-                                // Use variable value as index into layer assets
-                                const index = Number(playerState.variables[variableId]) || 0;
-                                const assetArray = Object.values(layer.assets);
-                                asset = assetArray[index];
-                                console.log(`ShowCharacter: Using variable ${variableId} (value: ${index}) for layer "${layer.name}"`);
-                            } else {
-                                // Use expression configuration
-                                const assetId = exprData.layerConfiguration[layer.id];
-                                if (assetId) {
-                                    asset = layer.assets[assetId];
-                                    console.log(`ShowCharacter: Using expression config for layer "${layer.name}"`);
-                                }
-                            }
-                            
-                            if (asset) {
-                                if (asset.videoUrl) {
-                                    videoUrls.push(asset.videoUrl);
-                                    hasVideo = true;
-                                    videoLoop = videoLoop || !!asset.loop;
-                                } else if (asset.imageUrl) {
-                                    imageUrls.push(asset.imageUrl);
-                                }
-                            }
-                        });
-                        
-                        // For slide transitions, use endPosition if specified, otherwise use position
-                        const finalPosition = cmd.endPosition || cmd.position;
-                        const startPosition = cmd.startPosition;
-                        
-                        // Use the requested transition (slide is now supported)
-                        const requestedTransition = cmd.transition;
-                        
-                        console.log(`ShowCharacter: ${charData.name}, expression: ${exprData.name}, bindings:`, finalBindings, 'variables:', playerState.variables);
-                        
-                        setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, characters: { ...p.stageState.characters, [cmd.characterId]: { 
-                            charId: cmd.characterId, 
-                            position: finalPosition, 
-                            imageUrls, 
-                            videoUrls,
-                            isVideo: hasVideo,
-                            videoLoop,
-                            expressionId: cmd.expressionId,
-                            layerVariableBindings: finalBindings,
-                            transition: requestedTransition && requestedTransition !== 'instant' ? { 
-                                type: requestedTransition, 
-                                duration: cmd.duration ?? 0.5,
-                                startPosition: startPosition,
-                                action: 'show'
-                            } : null 
-                        }}} } : null);
-
-                        // If there's a transition, wait for it to complete before advancing
-                        if (cmd.transition && cmd.transition !== 'instant') {
-                            instantAdvance = false;
-                            const timeoutId = window.setTimeout(() => {
-                                advance();
-                                activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
-                            }, ((cmd.duration ?? 0.5) * 1000) + 100);
-                            activeEffectTimeoutsRef.current.push(timeoutId);
-                        }
-                    }
+                    const result = handleShowCharacter(command as ShowCharacterCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.HideCharacter: {
-                    const cmd = command as HideCharacterCommand;
-                    // Use the requested transition (slide is now supported)
-                    const hideTransitionType = cmd.transition;
-                    if (hideTransitionType && hideTransitionType !== 'instant') {
-                        // Block advancing while hide animation runs
-                        instantAdvance = false;
-                        // Set transition for hide animation, then remove after animation
-                        setPlayerState(p => {
-                            if (!p) return null;
-                            const existingChar = p.stageState.characters[cmd.characterId];
-                            if (!existingChar) return p; // Character not on stage, nothing to do
-                            
-                            // For slide transitions we already remapped to dissolve above; keep position unchanged
-                            const finalPosition = existingChar.position;
-                            const startPosition = undefined;
-                            
-                            return { 
-                                ...p, 
-                                stageState: { 
-                                    ...p.stageState, 
-                                    characters: { 
-                                        ...p.stageState.characters, 
-                                        [cmd.characterId]: { 
-                                            ...existingChar,
-                                            position: finalPosition,
-                                            transition: { 
-                                                type: hideTransitionType, 
-                                                duration: cmd.duration ?? 0.5,
-                                                startPosition: startPosition,
-                                                endPosition: cmd.endPosition,
-                                                action: 'hide'
-                                            } 
-                                        }
-                                    }
-                                }
-                            };
-                        });
-                        // Remove character after transition duration, then advance
-                        const timeoutId = window.setTimeout(() => {
-                            setPlayerState(p => {
-                                if (!p) return null;
-                                const { [cmd.characterId]: _, ...remaining } = p.stageState.characters;
-                                return { ...p, stageState: { ...p.stageState, characters: remaining }};
-                            });
-                            // After removal, advance to next command
-                            advance();
-                            activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
-                        }, ((cmd.duration ?? 0.5) * 1000) + 100);
-                        activeEffectTimeoutsRef.current.push(timeoutId);
-                    } else {
-                        // Instant hide - remove immediately
-                        setPlayerState(p => {
-                            if (!p) return null;
-                            const { [cmd.characterId]: _, ...remaining } = p.stageState.characters;
-                            return { ...p, stageState: { ...p.stageState, characters: remaining }};
-                        });
-                    }
+                    const result = handleHideCharacter(command as HideCharacterCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.Choice: {
-                    instantAdvance = false;
-                    const cmd = command as ChoiceCommand;
-                    const availableChoices = cmd.options.filter(opt => evaluateConditions(opt.conditions, playerState.variables));
-                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, choices: availableChoices }} : null);
+                    const result = handleChoice(command as ChoiceCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.SetVariable: {
-                    const cmd = command as SetVariableCommand;
-                    console.log('[DEBUG SetVariable] Executing - Variable:', cmd.variableId, 'Operator:', cmd.operator, 'Value:', cmd.value, 'Current vars:', playerState.variables);
-                    
-                    // Calculate and update variable + advance in ONE state update
-                    setPlayerState(p => {
-                        if (!p) return null;
-                        
-                        const variable = project.variables[cmd.variableId];
-                        if (!variable) {
-                            console.warn(`SetVariable command failed: Variable with ID ${cmd.variableId} not found.`);
-                            // Still advance even if variable not found
-                            return { ...p, currentIndex: p.currentIndex + 1 };
-                        }
-                        
-                        const currentVal = p.variables[cmd.variableId];
-                        const changeValStr = String(cmd.value);
-                        let newVal: string | number | boolean = cmd.value;
-                        
-                        if (cmd.operator === 'add') {
-                            newVal = (Number(currentVal) || 0) + (Number(changeValStr) || 0);
-                        } else if (cmd.operator === 'subtract') {
-                            newVal = (Number(currentVal) || 0) - (Number(changeValStr) || 0);
-                        } else if (cmd.operator === 'random') {
-                            const min = cmd.randomMin ?? 0;
-                            const max = cmd.randomMax ?? 100;
-                            newVal = Math.floor(Math.random() * (max - min + 1)) + min;
-                    } else { // 'set' operator
-                        switch (variable.type) {
-                            case 'number':
-                                newVal = Number(changeValStr) || 0;
-                                break;
-                            case 'boolean':
-                                // Handle various boolean representations - be VERY forgiving
-                                if (typeof cmd.value === 'boolean') {
-                                    newVal = cmd.value;
-                                } else {
-                                    // Convert string/number to boolean
-                                    const normalized = String(cmd.value).trim().toLowerCase();
-                                    if (normalized === 'true' || normalized === '1') {
-                                        newVal = true;
-                                    } else if (normalized === 'false' || normalized === '0' || normalized === '') {
-                                        newVal = false;
-                                    } else {
-                                        // Any other truthy value
-                                        newVal = !!cmd.value;
-                                    }
-                                }
-                                break;
-                            case 'string':
-                            default:
-                                newVal = changeValStr;
-                                break;
-                        }
-                    }
-                        
-                        // Update both variable AND index in single state update
-                        return { 
-                            ...p, 
-                            variables: { ...p.variables, [cmd.variableId]: newVal },
-                            currentIndex: p.currentIndex + 1
-                        };
-                    });
-                    
-                    // Set instantAdvance to false so advance() doesn't run
-                    instantAdvance = false;
+                    const result = handleSetVariable(command as SetVariableCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.TextInput: {
-                    instantAdvance = false;
-                    const cmd = command as TextInputCommand;
-                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, textInput: { variableId: cmd.variableId, prompt: cmd.prompt, placeholder: cmd.placeholder || '', maxLength: cmd.maxLength || 50 }}} : null);
+                    const result = handleTextInput(command as TextInputCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.Jump: {
-                    const cmd = command as JumpCommand;
-                    const actualSceneId = navigateToScene(cmd.targetSceneId, playerState.variables);
-                    const newScene = project.scenes[actualSceneId];
-                    if (newScene) {
-                        setPlayerState(p => p ? { ...p, currentSceneId: actualSceneId, currentCommands: newScene.commands, currentIndex: 0, commandStack: [] } : null);
-                    } else {
-                        console.error(`Scene not found: ${actualSceneId}`);
-                        advance();
-                    }
-                    instantAdvance = false; // don't auto-advance after a jump
+                    const result = handleJump(command as JumpCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.PlayMusic: {
-                    const cmd = command as PlayMusicCommand;
-                    console.log('[PlayMusic] Starting music command', { audioId: cmd.audioId, loop: cmd.loop });
-                    
-                    const url = assetResolver(cmd.audioId, 'audio');
-
-                    if (!url) {
-                        console.warn(`No audio URL found for audioId: ${cmd.audioId}`);
-                        break;
-                    }
-
-                    const audio = musicAudioRef.current;
-                    
-                    const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
-                    const newSrcPath = url ? new URL(url, window.location.href).pathname : null;
-                    const isNewTrack = currentSrcPath !== newSrcPath;
-                    
-                    console.log('[PlayMusic] Audio setup', { isNewTrack, currentSrc: audio.src, newUrl: url, paused: audio.paused });
-                    
-                    // If it's the same track and already playing, just update state and continue
-                    if (!isNewTrack && !audio.paused) {
-                        console.log('[PlayMusic] Same track already playing, updating state only');
-                        setPlayerState(p => p ? { 
-                            ...p, 
-                            musicState: { ...p.musicState, audioId: cmd.audioId, loop: cmd.loop, isPlaying: true }
-                        } : null);
-                        break;
-                    }
-                    
-                    // Update state BEFORE starting playback
-                    setPlayerState(p => p ? { 
-                        ...p, 
-                        musicState: { audioId: cmd.audioId, loop: cmd.loop, currentTime: 0, isPlaying: true }
-                    } : null);
-                    
-                    const startPlayback = () => {
-                        console.log('[PlayMusic] Starting playback');
-                        audio.loop = cmd.loop;
-                        audio.volume = 0; // Start at 0 for fade-in
-                        
-                        audio.play().then(() => {
-                            console.log('[PlayMusic] Audio playing, starting fade-in');
-                            const target = (typeof cmd.volume === 'number') ? cmd.volume : settings.musicVolume;
-                            // Fade in audio in the background
-                            fadeAudio(audio, target, cmd.fadeDuration);
-                        }).catch(e => {
-                            console.error("[PlayMusic] Music play failed:", e);
-                            queuedMusicRef.current = { url, loop: cmd.loop, fadeDuration: cmd.fadeDuration };
-                        });
-                    };
-
-                    if (isNewTrack) {
-                        audio.src = url;
-                        audio.load();
-                        audio.addEventListener('canplaythrough', startPlayback, { once: true });
-                        audio.addEventListener('error', (e) => {
-                            console.error("[PlayMusic] Music load failed:", e);
-                        }, { once: true });
-                    } else {
-                        startPlayback();
-                    }
-                    // Let the command advance immediately - music plays in background
-                    console.log('[PlayMusic] Command complete, advancing');
+                    const result = handlePlayMusic(command as PlayMusicCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                  case CommandType.StopMusic: {
-                    const cmd = command as StopMusicCommand;
-                    if(musicAudioRef.current) {
-                        fadeAudio(musicAudioRef.current, 0, cmd.fadeDuration, () => {
-                            musicAudioRef.current?.pause();
-                        });
-                    }
-                    setPlayerState(p => p ? { ...p, musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false }} : null);
+                    const result = handleStopMusic(command as StopMusicCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.PlaySoundEffect: {
-                    const pse = command as PlaySoundEffectCommand;
-                    try {
-                        playSound(pse.audioId, pse.volume);
-                    } catch (e) {
-                        console.error('Failed to play sound effect:', e);
-                    }
+                    const result = handlePlaySoundEffect(command as PlaySoundEffectCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.PlayMovie: {
@@ -3102,207 +2688,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.ShowText: {
-                    const cmd = command as ShowTextCommand;
-                    const interpolatedText = interpolateVariables(cmd.text, playerState.variables, project);
-                    const overlay: TextOverlay = {
-                        id: cmd.id,
-                        text: interpolatedText,
-                        x: cmd.x,
-                        y: cmd.y,
-                        fontSize: cmd.fontSize,
-                        fontFamily: cmd.fontFamily,
-                        color: cmd.color,
-                        width: cmd.width,
-                        height: cmd.height,
-                        textAlign: cmd.textAlign,
-                        verticalAlign: cmd.verticalAlign,
-                        transition: cmd.transition !== 'instant' ? cmd.transition : undefined,
-                        duration: cmd.duration,
-                        action: 'show'
-                    };
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, textOverlays: [...p.stageState.textOverlays, overlay] } } : null);
-
-                    // If command specified a non-instant transition, wait for it before advancing
-                    if (cmd.transition && cmd.transition !== 'instant') {
-                        instantAdvance = false;
-                        setTimeout(() => advance(), ((cmd.duration ?? 0.5) * 1000) + 100);
-                    }
+                    const result = handleShowText(command as ShowTextCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ShowImage: {
-                    const cmd = command as ShowImageCommand;
-                    const imageUrl = assetResolver(cmd.imageId, 'image');
-                    const { isVideo, loop } = getAssetMetadata(cmd.imageId, 'image');
-                    if (imageUrl) {
-                        const overlay: ImageOverlay = {
-                            id: cmd.id,
-                            imageUrl: !isVideo ? imageUrl : undefined,
-                            videoUrl: isVideo ? imageUrl : undefined,
-                            isVideo,
-                            videoLoop: loop,
-                            x: cmd.x,
-                            y: cmd.y,
-                            width: cmd.width,
-                            height: cmd.height,
-                            rotation: cmd.rotation,
-                            opacity: cmd.opacity,
-                            scaleX: cmd.scaleX ?? 1,
-                            scaleY: cmd.scaleY ?? 1,
-                            transition: cmd.transition !== 'instant' ? cmd.transition : undefined,
-                            duration: cmd.duration,
-                            action: 'show'
-                        };
-                        setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, imageOverlays: [...p.stageState.imageOverlays, overlay] } } : null);
-
-                        if (cmd.transition && cmd.transition !== 'instant') {
-                            instantAdvance = false;
-                            setTimeout(() => advance(), ((cmd.duration ?? 0.5) * 1000) + 100);
-                        }
-                    } else {
-                        console.warn(`Image not found: ${cmd.imageId}`);
-                    }
+                    const result = handleShowImage(command as ShowImageCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.Label: {
-                    // Do nothing, just a marker
+                    const result = handleLabel(command as LabelCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.JumpToLabel: {
-                    const cmd = command as JumpToLabelCommand;
-                    const labelIndex = playerState.currentCommands.findIndex(c => c.type === CommandType.Label && (c as LabelCommand).labelId === cmd.labelId);
-                    if (labelIndex !== -1) {
-                        setPlayerState(p => p ? { ...p, currentIndex: labelIndex } : null);
-                    } else {
-                        console.warn(`Label not found: ${cmd.labelId}`);
-                        advance();
-                    }
-                    instantAdvance = false; // Don't advance after jump
+                    const result = handleJumpToLabel(command as JumpToLabelCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.HideText: {
-                    const cmd = command as HideTextCommand;
-                    // Find overlay and perform animated hide if transition requested
-                    setPlayerState(p => {
-                        if (!p) return null;
-                        const overlays = p.stageState.textOverlays;
-                        const target = overlays.find(o => o.id === cmd.targetCommandId);
-                        if (!target) return p; // nothing to hide
-
-                        if (cmd.transition && cmd.transition !== 'instant') {
-                            // mark overlay as hiding so render picks up hide class
-                            const updated = overlays.map(o => o.id === cmd.targetCommandId ? { ...o, transition: cmd.transition, duration: cmd.duration, action: 'hide' as const } : o);
-                            // schedule removal after duration
-                            setTimeout(() => {
-                                setPlayerState(inner => inner ? { ...inner, stageState: { ...inner.stageState, textOverlays: inner.stageState.textOverlays.filter(o => o.id !== cmd.targetCommandId) } } : null);
-                                // advance after removal
-                                advance();
-                            }, ((cmd.duration ?? 0.5) * 1000) + 100);
-                            // do not advance now (we'll advance after removal)
-                            instantAdvance = false;
-                            return { ...p, stageState: { ...p.stageState, textOverlays: updated } };
-                        } else {
-                            // instant remove
-                            return { ...p, stageState: { ...p.stageState, textOverlays: overlays.filter(o => o.id !== cmd.targetCommandId) } };
-                        }
-                    });
+                    const result = handleHideText(command as HideTextCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.HideImage: {
-                    const cmd = command as HideImageCommand;
-                    setPlayerState(p => {
-                        if (!p) return null;
-                        const overlays = p.stageState.imageOverlays;
-                        const target = overlays.find(o => o.id === cmd.targetCommandId);
-                        if (!target) return p;
-
-                        if (cmd.transition && cmd.transition !== 'instant') {
-                            const updated = overlays.map(o => o.id === cmd.targetCommandId ? { ...o, transition: cmd.transition, duration: cmd.duration, action: 'hide' as const } : o);
-                            setTimeout(() => {
-                                setPlayerState(inner => inner ? { ...inner, stageState: { ...inner.stageState, imageOverlays: inner.stageState.imageOverlays.filter(o => o.id !== cmd.targetCommandId) } } : null);
-                                advance();
-                            }, ((cmd.duration ?? 0.5) * 1000) + 100);
-                            instantAdvance = false;
-                            return { ...p, stageState: { ...p.stageState, imageOverlays: updated } };
-                        } else {
-                            return { ...p, stageState: { ...p.stageState, imageOverlays: overlays.filter(o => o.id !== cmd.targetCommandId) } };
-                        }
-                    });
+                    const result = handleHideImage(command as HideImageCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ShowButton: {
-                    const cmd = command as ShowButtonCommand;
-                    
-                    // Check show conditions
-                    if (cmd.showConditions && cmd.showConditions.length > 0) {
-                        const conditionsMet = cmd.showConditions.every(cond => evaluateConditions([cond]));
-                        if (!conditionsMet) {
-                            break; // Skip showing button if conditions not met
-                        }
-                    }
-                    
-                    const buttonOverlay: ButtonOverlay = {
-                        id: cmd.id,
-                        text: cmd.text,
-                        x: cmd.x,
-                        y: cmd.y,
-                        width: cmd.width || 20,
-                        height: cmd.height || 8,
-                        anchorX: cmd.anchorX || 0.5,
-                        anchorY: cmd.anchorY || 0.5,
-                        backgroundColor: cmd.backgroundColor || '#6366f1',
-                        textColor: cmd.textColor || '#ffffff',
-                        fontSize: cmd.fontSize || 18,
-                        fontWeight: cmd.fontWeight || 'normal',
-                        borderRadius: cmd.borderRadius || 8,
-                        imageUrl: cmd.image ? assetResolver(cmd.image.id, cmd.image.type) : null,
-                        hoverImageUrl: cmd.hoverImage ? assetResolver(cmd.hoverImage.id, cmd.hoverImage.type) : null,
-                        onClick: cmd.onClick,
-                        clickSound: cmd.clickSound,
-                        waitForClick: cmd.waitForClick,
-                        transition: cmd.transition !== 'instant' ? cmd.transition : undefined,
-                        duration: cmd.duration || 0.3,
-                        action: 'show'
-                    };
-                    
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, buttonOverlays: [...p.stageState.buttonOverlays, buttonOverlay] } } : null);
-
-                    if (cmd.transition && cmd.transition !== 'instant') {
-                        instantAdvance = false;
-                        if (cmd.waitForClick) {
-                            // Has transition AND needs to wait for click
-                            // Set waiting for input IMMEDIATELY to prevent game loop from advancing
-                            setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
-                        } else {
-                            // Just transition, advance after
-                            setTimeout(() => advance(), ((cmd.duration ?? 0.3) * 1000) + 100);
-                        }
-                    } else if (cmd.waitForClick) {
-                        // No transition, but waiting for click - pause immediately
-                        instantAdvance = false;
-                        setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
-                    }
+                    const result = handleShowButton(command as ShowButtonCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.HideButton: {
-                    const cmd = command as HideButtonCommand;
-                    setPlayerState(p => {
-                        if (!p) return null;
-                        const overlays = p.stageState.buttonOverlays;
-                        const target = overlays.find(o => o.id === cmd.targetCommandId);
-                        if (!target) return p;
-
-                        if (cmd.transition && cmd.transition !== 'instant') {
-                            const updated = overlays.map(o => o.id === cmd.targetCommandId ? { ...o, transition: cmd.transition, duration: cmd.duration || 0.3, action: 'hide' as const } : o);
-                            setTimeout(() => {
-                                setPlayerState(inner => inner ? { ...inner, stageState: { ...inner.stageState, buttonOverlays: inner.stageState.buttonOverlays.filter(o => o.id !== cmd.targetCommandId) } } : null);
-                                advance();
-                            }, ((cmd.duration ?? 0.3) * 1000) + 100);
-                            instantAdvance = false;
-                            return { ...p, stageState: { ...p.stageState, buttonOverlays: updated } };
-                        } else {
-                            return { ...p, stageState: { ...p.stageState, buttonOverlays: overlays.filter(o => o.id !== cmd.targetCommandId) } };
-                        }
-                    });
+                    const result = handleHideButton(command as HideButtonCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
             }
@@ -3525,8 +2947,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             }
         } else if (action.type === UIActionType.QuitToTitle) {
-            stopAndResetMusic();
+            // Stop game music and SFX immediately
+            const audio = musicAudioRef.current;
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.src = '';
+            }
             stopAllSfx();
+            
+            // Clear player state and return to title screen
             setPlayerState(null);
             setHudStack([]);
             if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
