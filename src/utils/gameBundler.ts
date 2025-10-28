@@ -569,6 +569,7 @@ function collectAllAssets(project: VNProject): Record<string, string> {
   Object.values(project.characters || {}).forEach(char => {
     addAsset(char.baseImageUrl, `char_${char.id}`);
     addAsset(char.baseVideoUrl, `char_${char.id}`);
+    addAsset(char.fontUrl, `char_${char.id}_font`);
     
     // Collect layer assets
     Object.values(char.layers || {}).forEach(layer => {

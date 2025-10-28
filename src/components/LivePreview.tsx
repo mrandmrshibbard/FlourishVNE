@@ -519,6 +519,21 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         : null;
     const isDialogueBoxVideo = projectUI.dialogueBoxImage?.type === 'video';
 
+    // Get character-specific font if available
+    const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
+    const characterFont = character?.fontFamily;
+    const characterFontSize = character?.fontSize;
+    const characterFontWeight = character?.fontWeight;
+    const characterFontItalic = character?.fontItalic;
+    
+    const dialogueTextStyle = {
+        ...fontSettingsToStyle(projectUI.dialogueTextFont),
+        ...(characterFont ? { fontFamily: characterFont } : {}),
+        ...(characterFontSize ? { fontSize: `${characterFontSize}px` } : {}),
+        ...(characterFontWeight ? { fontWeight: characterFontWeight } : {}),
+        ...(characterFontItalic ? { fontStyle: 'italic' } : {})
+    };
+
     return (
         <div 
             className={`absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer ${dialogueBoxUrl && !isDialogueBoxVideo ? 'dialogue-box-custom bg-black/70' : 'bg-black/70 rounded-lg border-2 border-slate-500'}`} 
@@ -541,7 +556,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                     {dialogue.characterName}
                 </h3>
             )}
-            <p className="leading-relaxed" style={fontSettingsToStyle(projectUI.dialogueTextFont)}>
+            <p className="leading-relaxed" style={dialogueTextStyle}>
                 {displayText}
                 {!hasFinished && <span className="animate-ping">_</span>}
             </p>
@@ -1585,6 +1600,27 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
         setMenuVariables(updatedVars);
     }, [project.variables]);
+    
+    // Load custom character fonts
+    useEffect(() => {
+        const loadCustomFonts = async () => {
+            for (const charId in project.characters) {
+                const char = project.characters[charId];
+                if (char.fontUrl && char.fontFamily) {
+                    try {
+                        // Create @font-face rule for custom font
+                        const fontFace = new FontFace(char.fontFamily, `url(${char.fontUrl})`);
+                        await fontFace.load();
+                        (document as any).fonts.add(fontFace);
+                        console.log(`✓ Loaded custom font: ${char.fontFamily}`);
+                    } catch (error) {
+                        console.error(`Failed to load custom font for ${char.name}:`, error);
+                    }
+                }
+            }
+        };
+        loadCustomFonts();
+    }, [project.characters]);
     
     const musicAudioRef = useRef<HTMLAudioElement>(new Audio());
     const ambientNoiseAudioRef = useRef<HTMLAudioElement>(new Audio());

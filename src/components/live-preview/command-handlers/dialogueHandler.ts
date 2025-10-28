@@ -25,7 +25,8 @@ export const handleDialogue = (
                 dialogue: {
                     text: command.text,
                     characterName: char?.name || 'Narrator',
-                    characterColor: char?.color || '#FFFFFF'
+                    characterColor: char?.color || '#FFFFFF',
+                    characterId: command.characterId || null
                 }
             }
         }

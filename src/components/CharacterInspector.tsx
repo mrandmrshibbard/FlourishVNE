@@ -8,6 +8,25 @@ import { PencilIcon, PlusIcon, TrashIcon, UploadIcon } from './icons';
 import { fileToBase64 } from '../utils/file';
 import ConfirmationModal from './ui/ConfirmationModal';
 
+// Popular fonts for visual novels (matching FontEditor)
+const popularFonts = [
+  'Default (Use Project Settings)',
+  'Poppins, sans-serif',
+  'Arial, sans-serif',
+  'Helvetica, sans-serif',
+  'Verdana, sans-serif',
+  'Times New Roman, serif',
+  'Georgia, serif',
+  'Courier New, monospace',
+  'Pacifico, cursive',
+  'Lato, sans-serif',
+  'Merriweather, serif',
+  'Oswald, sans-serif',
+  'Playfair Display, serif',
+  'Roboto, sans-serif',
+  'Caveat, cursive',
+];
+
 // This is the item in the list of expressions
 const ExpressionItem: React.FC<{
     expr: VNCharacterExpression;
@@ -76,6 +95,7 @@ const CharacterInspector: React.FC<{
     const { project, dispatch } = useProject();
     const character = project.characters[activeCharacterId];
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const fontFileInputRef = useRef<HTMLInputElement>(null);
     const [renamingExprId, setRenamingExprId] = useState<VNID | null>(null);
     const [confirmDeleteExpr, setConfirmDeleteExpr] = useState<VNCharacterExpression | null>(null);
 
@@ -83,7 +103,7 @@ const CharacterInspector: React.FC<{
 
     const selectedExpression = selectedExpressionId ? character.expressions[selectedExpressionId] : null;
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
     };
 
@@ -107,6 +127,26 @@ const CharacterInspector: React.FC<{
                     isBaseVideo: false
                 });
             }
+        }
+    };
+
+    const handleFontUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            // Validate file type
+            if (!file.name.toLowerCase().endsWith('.ttf') && !file.name.toLowerCase().endsWith('.otf')) {
+                alert('Please upload a TTF or OTF font file.');
+                return;
+            }
+            
+            const dataUrl = await fileToBase64(file);
+            const fontName = file.name.replace(/\.(ttf|otf)$/i, '');
+            
+            // Update character with custom font URL and set family name
+            updateCharacter({ 
+                fontUrl: dataUrl,
+                fontFamily: fontName
+            });
         }
     };
 
@@ -147,6 +187,83 @@ const CharacterInspector: React.FC<{
                 <div>
                     <FormField label="Character Name"><TextInput value={character.name} onChange={e => updateCharacter({ name: e.target.value })} /></FormField>
                     <FormField label="Dialogue Color"><TextInput type="color" value={character.color} onChange={e => updateCharacter({ color: e.target.value })} className="p-1 h-10" /></FormField>
+                </div>
+                
+                <div>
+                    <h4 className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Dialogue Font Settings</h4>
+                    <FormField label="Font Family">
+                        <Select 
+                            value={character.fontFamily || ''} 
+                            onChange={e => updateCharacter({ fontFamily: e.target.value || undefined })}
+                        >
+                            {popularFonts.map(fontFamily => (
+                                <option key={fontFamily} value={fontFamily === 'Default (Use Project Settings)' ? '' : fontFamily}>
+                                    {fontFamily.split(',')[0]}
+                                </option>
+                            ))}
+                        </Select>
+                    </FormField>
+                    
+                    <div className="mt-2">
+                        <h5 className="text-xs text-[var(--text-secondary)] mb-1">Custom Font Upload (TTF/OTF)</h5>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => fontFileInputRef.current?.click()} 
+                                className="flex-grow bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] text-sm p-2 rounded-md flex items-center justify-center gap-2"
+                            >
+                                <UploadIcon /> {character.fontUrl ? 'Change Font File...' : 'Upload Font File...'}
+                            </button>
+                            {character.fontUrl && (
+                                <button 
+                                    onClick={() => updateCharacter({ fontUrl: undefined, fontFamily: '' })} 
+                                    className="p-2 bg-red-600/50 hover:bg-red-500 rounded-md"
+                                >
+                                    <TrashIcon />
+                                </button>
+                            )}
+                            <input 
+                                type="file" 
+                                ref={fontFileInputRef} 
+                                onChange={handleFontUpload} 
+                                accept=".ttf,.otf" 
+                                className="hidden" 
+                            />
+                        </div>
+                        {character.fontUrl && (
+                            <p className="text-xs text-[var(--accent-cyan)] mt-1">✓ Custom font loaded: {character.fontFamily}</p>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                        <FormField label="Font Size (px)">
+                            <TextInput 
+                                type="number" 
+                                value={character.fontSize || ''} 
+                                onChange={e => updateCharacter({ fontSize: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                                placeholder="Default"
+                            />
+                        </FormField>
+                        <FormField label="Weight">
+                            <Select 
+                                value={character.fontWeight || 'normal'} 
+                                onChange={e => updateCharacter({ fontWeight: e.target.value as 'normal' | 'bold' })}
+                            >
+                                <option value="normal">Normal</option>
+                                <option value="bold">Bold</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    
+                    <div className="flex items-center mt-2">
+                        <input
+                            type="checkbox"
+                            id="font-italic"
+                            checked={character.fontItalic || false}
+                            onChange={e => updateCharacter({ fontItalic: e.target.checked })}
+                            className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500"
+                        />
+                        <label htmlFor="font-italic" className="ml-2 text-sm">Italic</label>
+                    </div>
                 </div>
                 
                 <div>

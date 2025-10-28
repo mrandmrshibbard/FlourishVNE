@@ -127,6 +127,7 @@ export interface PlayerState {
         dialogue: {
             characterName: string;
             characterColor: string;
+            characterId: VNID | null;
             text: string;
         } | null;
         choices: ChoiceOption[] | null;

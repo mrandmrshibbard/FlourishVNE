@@ -374,6 +374,31 @@ export const exportProject = async (project: VNProject) => {
                 }
             }
 
+            // Handle custom font URL
+            if (character.fontUrl) {
+                if (character.fontUrl.startsWith('data:')) {
+                    const { blob, mimeType } = await dataUrlToBlob(character.fontUrl);
+                    const ext = mimeType === 'font/otf' ? 'otf' : 'ttf';
+                    const filename = `font.${ext}`;
+                    singleCharFolder.file(filename, blob);
+                    character.fontUrl = `assets/characters/${charId}/${filename}`;
+                    addEmbedded('characters', character.fontUrl);
+                } else {
+                    const fetched = await fetchUrlToBlob(character.fontUrl);
+                    if (fetched) {
+                        const { blob } = fetched;
+                        // Determine extension from URL or default to ttf
+                        const ext = character.fontUrl.toLowerCase().endsWith('.otf') ? 'otf' : 'ttf';
+                        const filename = `font.${ext}`;
+                        singleCharFolder.file(filename, blob);
+                        character.fontUrl = `assets/characters/${charId}/${filename}`;
+                        addEmbedded('characters', character.fontUrl);
+                    } else {
+                        addFailure(`characters:${charId}:font`);
+                    }
+                }
+            }
+
             for (const layerId in character.layers) {
                 const layer = character.layers[layerId];
                 const layerFolder = singleCharFolder.folder(layerId);
@@ -612,6 +637,7 @@ export const importProject = async (file: File): Promise<{ project: VNProject; m
 
     for (const char of Object.values(project.characters) as VNCharacter[]) {
         hydrationPromises.push(hydrateAsset(char.baseImageUrl).then(dataUrl => { char.baseImageUrl = dataUrl; }));
+        hydrationPromises.push(hydrateAsset(char.fontUrl).then(dataUrl => { char.fontUrl = dataUrl; }));
         for (const layer of Object.values(char.layers) as VNCharacterLayer[]) {
             for (const asset of Object.values(layer.assets) as VNLayerAsset[]) {
                 hydrationPromises.push(hydrateAsset(asset.imageUrl).then(dataUrl => { asset.imageUrl = dataUrl; }));

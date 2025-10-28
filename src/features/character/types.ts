@@ -23,6 +23,11 @@ export interface VNCharacter {
     id: VNID;
     name: string;
     color: string;
+    fontFamily?: string;
+    fontUrl?: string; // Custom TTF/OTF font file URL
+    fontSize?: number; // Font size override
+    fontWeight?: 'normal' | 'bold';
+    fontItalic?: boolean;
     baseImageUrl?: string | null;
     baseVideoUrl?: string | null;
     isBaseVideo?: boolean;
