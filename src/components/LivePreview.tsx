@@ -1914,23 +1914,58 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Use default value if runtime value is not set
             const effectiveVarValue = varValue !== undefined ? varValue : (projectVar ? projectVar.defaultValue : undefined);
     
+            console.log('[DEBUG evaluateConditions]', {
+                variableId: condition.variableId,
+                operator: condition.operator,
+                conditionValue: condition.value,
+                effectiveVarValue,
+                varValue,
+                defaultValue: projectVar?.defaultValue
+            });
+    
             if (effectiveVarValue === undefined) {
+                console.log('[DEBUG evaluateConditions] Variable undefined, returning false');
                 return false; // condition on non-existent variable is false
             }
             
+            let result = false;
             switch (condition.operator) {
-                case 'is true': return !!effectiveVarValue;
-                case 'is false': return !effectiveVarValue;
-                case '==': return String(effectiveVarValue).toLowerCase() == String(condition.value).toLowerCase();
-                case '!=': return String(effectiveVarValue).toLowerCase() != String(condition.value).toLowerCase();
-                case '>': return Number(effectiveVarValue) > Number(condition.value);
-                case '<': return Number(effectiveVarValue) < Number(condition.value);
-                case '>=': return Number(effectiveVarValue) >= Number(condition.value);
-                case '<=': return Number(effectiveVarValue) <= Number(condition.value);
-                case 'contains': return String(effectiveVarValue).toLowerCase().includes(String(condition.value).toLowerCase());
-                case 'startsWith': return String(effectiveVarValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
-                default: return false;
+                case 'is true': 
+                    result = !!effectiveVarValue;
+                    break;
+                case 'is false': 
+                    result = !effectiveVarValue;
+                    break;
+                case '==': 
+                    result = String(effectiveVarValue).toLowerCase() == String(condition.value).toLowerCase();
+                    break;
+                case '!=': 
+                    result = String(effectiveVarValue).toLowerCase() != String(condition.value).toLowerCase();
+                    break;
+                case '>': 
+                    result = Number(effectiveVarValue) > Number(condition.value);
+                    break;
+                case '<': 
+                    result = Number(effectiveVarValue) < Number(condition.value);
+                    break;
+                case '>=': 
+                    result = Number(effectiveVarValue) >= Number(condition.value);
+                    break;
+                case '<=': 
+                    result = Number(effectiveVarValue) <= Number(condition.value);
+                    break;
+                case 'contains': 
+                    result = String(effectiveVarValue).toLowerCase().includes(String(condition.value).toLowerCase());
+                    break;
+                case 'startsWith': 
+                    result = String(effectiveVarValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+                    break;
+                default: 
+                    result = false;
             }
+            
+            console.log('[DEBUG evaluateConditions] Result:', result);
+            return result;
         });
     }, [project.variables]);
 
@@ -2487,6 +2522,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         
         let instantAdvance = true;
         (async () => {
+            try {
             // Helper function to apply command result
             const applyResult = (result: CommandResult) => {
                 if (result.updates) {
@@ -2730,14 +2766,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             
             // Handle command advancement based on async modifier
+            console.log('[DEBUG] Command execution complete:', command.type, '| shouldRunAsync:', shouldRunAsync, '| instantAdvance:', instantAdvance);
             if (shouldRunAsync) {
                 // Run async: advance immediately, let command complete in background
+                console.log('[DEBUG] Running async - advancing immediately');
                 advance();
             } else if (instantAdvance) {
                 // Normal: advance only if command was instant
+                console.log('[DEBUG] Instant advance - advancing now');
                 advance();
+            } else {
+                console.log('[DEBUG] Waiting for command to handle advancement (callback/user input)');
             }
             // If !shouldRunAsync && !instantAdvance, command will handle advancement itself (e.g., setTimeout)
+            } catch (error) {
+                console.error('[CRITICAL ERROR] Command execution failed:', {
+                    commandType: command.type,
+                    commandId: command.id,
+                    index: playerState.currentIndex,
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                });
+                // Try to advance past the broken command
+                advance();
+            }
         })();
     }, [playerState, project, assetResolver, playSound, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, hudStack]);
 

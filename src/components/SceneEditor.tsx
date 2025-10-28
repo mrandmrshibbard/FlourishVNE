@@ -888,59 +888,86 @@ const SceneEditor: React.FC<{
                                                             Drag commands here...
                                                         </div>
                                                     ) : (
-                                                        branchCommands.map((branchChildCmd) => {
-                                                            const childIndex = activeScene.commands.findIndex(c => c.id === branchChildCmd.id);
-                                                            if (childIndex === -1) return null;
-                                                            return (
-                                                                <div 
-                                                                    key={branchChildCmd.id}
-                                                                    draggable
-                                                                    onDragStart={(e) => handleDragStart(e, branchChildCmd.id, childIndex)}
-                                                                    onDragOver={(e) => {
-                                                                        const rect = e.currentTarget.getBoundingClientRect();
-                                                                        const y = e.clientY - rect.top;
-                                                                        // Only allow before/after drops inside branches, not "inside" (no stacking)
-                                                                        if (y < rect.height * 0.5) {
-                                                                            handleDragOver(e, branchChildCmd.id, 'before');
-                                                                        } else {
-                                                                            handleDragOver(e, branchChildCmd.id, 'after');
-                                                                        }
-                                                                    }}
-                                                                    onDragLeave={handleDragLeave}
-                                                                    onDrop={(e) => {
-                                                                        if (dropTarget?.commandId === branchChildCmd.id) {
-                                                                            handleDrop(e, dropTarget.commandId, dropTarget.position);
-                                                                        }
-                                                                    }}
-                                                                    onDragEnd={handleDragEnd}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setSelectedCommandIndex(childIndex);
-                                                                        setSelectedVariableId(null);
-                                                                    }}
-                                                                    className="cursor-pointer relative"
-                                                                >
-                                                                    {dropTarget?.commandId === branchChildCmd.id && (
-                                                                        <DragDropIndicator 
-                                                                            position={dropTarget.position} 
-                                                                            canDrop={true}
-                                                                            message={
-                                                                                dropTarget.position === 'before' 
-                                                                                    ? '⬆ Place Above' 
-                                                                                    : '⬇ Place Below'
+                                                        <>
+                                                            {branchCommands.map((branchChildCmd) => {
+                                                                const childIndex = activeScene.commands.findIndex(c => c.id === branchChildCmd.id);
+                                                                if (childIndex === -1) return null;
+                                                                return (
+                                                                    <div 
+                                                                        key={branchChildCmd.id}
+                                                                        draggable
+                                                                        onDragStart={(e) => handleDragStart(e, branchChildCmd.id, childIndex)}
+                                                                        onDragOver={(e) => {
+                                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                                            const y = e.clientY - rect.top;
+                                                                            // Only allow before/after drops inside branches, not "inside" (no stacking)
+                                                                            if (y < rect.height * 0.5) {
+                                                                                handleDragOver(e, branchChildCmd.id, 'before');
+                                                                            } else {
+                                                                                handleDragOver(e, branchChildCmd.id, 'after');
                                                                             }
+                                                                        }}
+                                                                        onDragLeave={handleDragLeave}
+                                                                        onDrop={(e) => {
+                                                                            if (dropTarget?.commandId === branchChildCmd.id) {
+                                                                                handleDrop(e, dropTarget.commandId, dropTarget.position);
+                                                                            }
+                                                                        }}
+                                                                        onDragEnd={handleDragEnd}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setSelectedCommandIndex(childIndex);
+                                                                            setSelectedVariableId(null);
+                                                                        }}
+                                                                        className="cursor-pointer relative"
+                                                                    >
+                                                                        {dropTarget?.commandId === branchChildCmd.id && (
+                                                                            <DragDropIndicator 
+                                                                                position={dropTarget.position} 
+                                                                                canDrop={true}
+                                                                                message={
+                                                                                    dropTarget.position === 'before' 
+                                                                                        ? '⬆ Place Above' 
+                                                                                        : '⬇ Place Below'
+                                                                                }
+                                                                            />
+                                                                        )}
+                                                                        <CommandItem 
+                                                                            command={branchChildCmd} 
+                                                                            project={project} 
+                                                                            isSelected={childIndex === selectedCommandIndex} 
+                                                                            depth={1}
+                                                                            collapsedBranches={collapsedBranches}
                                                                         />
-                                                                    )}
-                                                                    <CommandItem 
-                                                                        command={branchChildCmd} 
-                                                                        project={project} 
-                                                                        isSelected={childIndex === selectedCommandIndex} 
-                                                                        depth={1}
-                                                                        collapsedBranches={collapsedBranches}
-                                                                    />
-                                                                </div>
-                                                            );
-                                                        })
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                            {/* Bottom drop zone for branches */}
+                                                            <div
+                                                                className="min-h-[40px] border-2 border-dashed rounded flex items-center justify-center text-[var(--text-secondary)] text-sm"
+                                                                style={{ 
+                                                                    borderColor: `${branchColor}4d`,
+                                                                    opacity: dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? 1 : 0.3
+                                                                }}
+                                                                onDragOver={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setDropTarget({ commandId: `branch-bottom-${branchCmd.branchId}`, position: 'after' });
+                                                                }}
+                                                                onDragLeave={handleDragLeave}
+                                                                onDrop={(e) => {
+                                                                    if (draggedCommandId && branchCommands.length > 0) {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        // Drop after the last command in the branch
+                                                                        const lastBranchCmd = branchCommands[branchCommands.length - 1];
+                                                                        handleDrop(e, lastBranchCmd.id, 'after');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? '⬇ Drop at End' : 'Drop zone'}
+                                                            </div>
+                                                        </>
                                                     )}
                                                 </div>
                                             );
@@ -1043,6 +1070,59 @@ const SceneEditor: React.FC<{
                                                         </div>
                                                     );
                                                 })}
+                                                {/* Bottom drop zone for groups */}
+                                                {groupCmd.commandIds.length > 0 && (
+                                                    <div
+                                                        className="min-h-[40px] border-2 border-dashed border-amber-500/30 rounded flex items-center justify-center text-[var(--text-secondary)] text-sm"
+                                                        style={{ 
+                                                            opacity: dropTarget?.commandId === `group-bottom-${cmd.id}` ? 1 : 0.3
+                                                        }}
+                                                        onDragOver={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            setDropTarget({ commandId: `group-bottom-${cmd.id}`, position: 'after' });
+                                                        }}
+                                                        onDragLeave={handleDragLeave}
+                                                        onDrop={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            
+                                                            if (!draggedCommandId || !dragItem.current) return;
+                                                            
+                                                            // Check if dragging within the same group
+                                                            if ((dragItem.current as any).groupId === cmd.id && groupCmd.commandIds.length > 0) {
+                                                                const draggedGroupIndex = groupCmd.commandIds.indexOf(draggedCommandId);
+                                                                
+                                                                if (draggedGroupIndex === -1) return;
+                                                                
+                                                                const newCommandIds = [...groupCmd.commandIds];
+                                                                newCommandIds.splice(draggedGroupIndex, 1);
+                                                                newCommandIds.push(draggedCommandId); // Add to end
+                                                                
+                                                                dispatch({
+                                                                    type: 'REORDER_COMMANDS_IN_GROUP',
+                                                                    payload: {
+                                                                        sceneId: activeSceneId,
+                                                                        groupId: cmd.id,
+                                                                        commandIds: newCommandIds
+                                                                    }
+                                                                });
+                                                            }
+                                                            
+                                                            setDraggedCommandId(null);
+                                                            dragItem.current = null;
+                                                            setDropTarget(null);
+                                                        }}
+                                                        onDragEnd={(e) => {
+                                                            e.stopPropagation();
+                                                            setDraggedCommandId(null);
+                                                            dragItem.current = null;
+                                                            setDropTarget(null);
+                                                        }}
+                                                    >
+                                                        {dropTarget?.commandId === `group-bottom-${cmd.id}` ? '⬇ Drop at End' : 'Drop zone'}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
