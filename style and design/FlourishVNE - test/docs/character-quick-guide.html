@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Character Creation - Quick Reference</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            padding: 20px;
+            color: #333;
+        }
+        .card {
+            max-width: 700px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 5px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .content {
+            padding: 30px;
+        }
+        .alert {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+            font-size: 1.1em;
+        }
+        .alert strong {
+            color: #856404;
+            font-size: 1.2em;
+        }
+        .step {
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border-left: 5px solid #ff6b6b;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        .step-number {
+            display: inline-block;
+            background: #ff6b6b;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 35px;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 10px;
+        }
+        .step h3 {
+            display: inline-block;
+            color: #ff6b6b;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        .step-detail {
+            margin-top: 10px;
+            padding-left: 45px;
+            color: #555;
+            line-height: 1.8;
+        }
+        .code {
+            background: #2d3748;
+            color: #68d391;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+        }
+        .visual-example {
+            background: #e8f5e9;
+            border: 2px dashed #4caf50;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .visual-example h4 {
+            color: #2e7d32;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        .layer-stack {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .layer-box {
+            background: white;
+            border: 2px solid #4caf50;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 100px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .layer-box strong {
+            display: block;
+            color: #2e7d32;
+            margin-bottom: 5px;
+        }
+        .arrow {
+            font-size: 2em;
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .tips {
+            background: #e3f2fd;
+            border-left: 5px solid #2196f3;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+        .tips h4 {
+            color: #1565c0;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        .tips ul {
+            margin-left: 20px;
+            color: #555;
+        }
+        .tips li {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+        .success-box {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 25px 0;
+        }
+        .success-box h3 {
+            color: #155724;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+        .checklist {
+            background: #fff;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .checklist h4 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        .checklist-item {
+            padding: 10px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 3px solid #6c757d;
+        }
+        .checklist-item input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>👥 Character Creation Guide</h1>
+            <p>The Correct Order, Step by Step</p>
+        </div>
+
+        <div class="content">
+            <div class="alert">
+                <strong>⚠️ Read This First!</strong><br>
+                The Character tab confuses many users because you need to do things in a <strong>specific order</strong>. Skip a step or do them backwards and it won't work. Follow this guide exactly!
+            </div>
+
+            <div class="step">
+                <span class="step-number">1</span>
+                <h3>Create the Character</h3>
+                <div class="step-detail">
+                    <strong>Where:</strong> <span class="code">Resources → Characters</span><br>
+                    <strong>Action:</strong> Click <span class="code">+ Add Character</span><br>
+                    <strong>Name it:</strong> Something like "Emma", "Detective Jones", "Knight"<br>
+                    <strong>✅ Done when:</strong> You see your character name in the list
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">2</span>
+                <h3>Add Expressions</h3>
+                <div class="step-detail">
+                    <strong>Where:</strong> Click your character → <span class="code">Character Editor</span> tab (right side)<br>
+                    <strong>Action:</strong> Click <span class="code">+ Add Expression</span> multiple times<br>
+                    <strong>Common expressions:</strong> "neutral", "happy", "sad", "angry", "surprised", "thinking"<br>
+                    <strong>✅ Done when:</strong> You have 3-6 expressions created
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">3</span>
+                <h3>Create Layers</h3>
+                <div class="step-detail">
+                    <strong>Where:</strong> Still in <span class="code">Character Editor</span> tab<br>
+                    <strong>Action:</strong> Click <span class="code">+ Add Layer</span><br>
+                    <strong>What are layers?</strong> Think of them like layers in Photoshop - they stack on top of each other<br>
+                    <strong>Set Z-Index:</strong> Lower numbers = behind, higher = in front (body = 0, face = 1, hat = 2)<br>
+                    <strong>✅ Done when:</strong> You have all the layers you need (usually 2-4)
+                </div>
+            </div>
+
+            <div class="visual-example">
+                <h4>📚 How Layers Work</h4>
+                <div class="layer-stack">
+                    <div class="layer-box">
+                        <strong>Body</strong>
+                        (Z: 0)
+                    </div>
+                    <span class="arrow">→</span>
+                    <div class="layer-box">
+                        <strong>Face</strong>
+                        (Z: 1)
+                    </div>
+                    <span class="arrow">→</span>
+                    <div class="layer-box">
+                        <strong>Outfit</strong>
+                        (Z: 2)
+                    </div>
+                    <span class="arrow">=</span>
+                    <div class="layer-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <strong>Final Character</strong>
+                    </div>
+                </div>
+                <p style="margin-top: 15px; color: #555;">Layers stack from back to front to create the complete character sprite!</p>
+            </div>
+
+            <div class="step">
+                <span class="step-number">4</span>
+                <h3>Upload Sprites</h3>
+                <div class="step-detail">
+                    <strong>Where:</strong> Still in <span class="code">Character Editor</span>, for EACH layer<br>
+                    <strong>Action:</strong> Click <span class="code">📤 Upload</span> next to each layer<br>
+                    <strong>Upload:</strong> PNG images with transparent backgrounds<br>
+                    <strong>Important:</strong> Upload ALL sprite variations now (happy_face.png, sad_face.png, angry_face.png, etc.)<br>
+                    <strong>✅ Done when:</strong> Every layer has 1+ sprites uploaded
+                </div>
+            </div>
+
+            <div class="step">
+                <span class="step-number">5</span>
+                <h3>Assign Sprites to Expressions</h3>
+                <div class="step-detail">
+                    <strong>Where:</strong> Switch to <span class="code">Character Inspector</span> tab<br>
+                    <strong>Action:</strong> For each expression, click <span class="code">✏️ Edit</span><br>
+                    <strong>Choose:</strong> Which sprite shows for each layer when this expression is active<br>
+                    <strong>Example:</strong> "happy" expression → choose happy_face.png for the face layer<br>
+                    <strong>✅ Done when:</strong> Every expression has sprites assigned to all layers
+                </div>
+            </div>
+
+            <div class="success-box">
+                <h3>🎉 You Did It!</h3>
+                <p>Your character is ready to use! Now you can add it to scenes with the <strong>Show Character</strong> command and switch between expressions!</p>
+            </div>
+
+            <div class="tips">
+                <h4>💡 Pro Tips</h4>
+                <ul>
+                    <li><strong>Reuse sprites:</strong> If the body doesn't change, all expressions can use the same body sprite</li>
+                    <li><strong>Transparent PNGs:</strong> Always use PNG format with transparent backgrounds, not JPG</li>
+                    <li><strong>Same dimensions:</strong> All sprites for a character should be the same size (e.g., 1000x1500px)</li>
+                    <li><strong>Clear naming:</strong> Name sprites descriptively: "emma_body_casual.png", "emma_face_happy.png"</li>
+                    <li><strong>Test early:</strong> Create one expression fully, test it in a scene, then do the rest</li>
+                    <li><strong>Layer count:</strong> Simple characters need 1-2 layers, complex ones might use 4-5</li>
+                </ul>
+            </div>
+
+            
+
+            <div class="alert" style="background: #d1ecf1; border-color: #17a2b8;">
+                <strong>🆘 Still Stuck?</strong><br>
+                If your character isn't showing up in scenes:
+                <ul style="margin: 10px 0 0 20px;">
+                    <li>Check that sprites are assigned in <strong>Character Inspector</strong></li>
+                    <li>Make sure PNG files have transparent backgrounds</li>
+                    <li>Verify z-index values are correct (lower = back, higher = front)</li>
+                    <li>Try creating a simple test character with just 1 layer and 1 expression first</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

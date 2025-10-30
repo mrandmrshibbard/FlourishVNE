@@ -138,19 +138,6 @@ export function handleShowImage(
     return { advance: true };
   }
 
-  // Get hover image if specified
-  let hoverImageUrl: string | undefined;
-  let hoverVideoUrl: string | undefined;
-  if (command.hoverImageId) {
-    const hoverUrl = assetResolver(command.hoverImageId, 'image');
-    const hoverMeta = getAssetMetadata(command.hoverImageId, 'image');
-    if (hoverMeta.isVideo) {
-      hoverVideoUrl = hoverUrl;
-    } else {
-      hoverImageUrl = hoverUrl;
-    }
-  }
-
   const overlay: ImageOverlay = {
     id: command.id,
     imageUrl: !isVideo ? imageUrl : undefined,
@@ -168,24 +155,18 @@ export function handleShowImage(
     transition: command.transition !== 'instant' ? command.transition : undefined,
     duration: command.duration,
     action: 'show',
-    // Interactive properties
-    onClick: command.onClick,
-    hoverImageUrl,
-    hoverVideoUrl,
-    waitForClick: command.waitForClick,
   };
 
   const hasTransition = command.transition && command.transition !== 'instant';
   const delay = hasTransition ? (command.duration ?? 0.5) * 1000 + 100 : 0;
 
   return {
-    advance: !hasTransition && !command.waitForClick,
+    advance: !hasTransition,
     updates: {
       stageState: {
         ...playerState.stageState,
         imageOverlays: [...playerState.stageState.imageOverlays, overlay],
       },
-      ...(command.waitForClick ? { uiState: { ...playerState.uiState, isWaitingForInput: true } } : {}),
     },
     delay,
     callback: hasTransition ? context.advance : undefined,

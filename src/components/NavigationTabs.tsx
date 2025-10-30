@@ -27,70 +27,62 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             id: 'scenes' as NavigationTab,
             label: 'Scenes',
             icon: <BookOpenIcon className="w-4 h-4" />,
-            count: sceneCount,
-            tooltip: 'Create and edit story scenes with dialogue, choices, and commands'
+            count: sceneCount
         },
         {
             id: 'characters' as NavigationTab,
             label: 'Chars',
             icon: <SparkleIcon className="w-4 h-4" />,
-            count: characterCount,
-            tooltip: 'Design characters with layered sprites and expressions'
+            count: characterCount
         },
         {
             id: 'ui' as NavigationTab,
             label: 'UI',
             icon: <BookmarkSquareIcon className="w-4 h-4" />,
-            count: uiScreenCount,
-            tooltip: 'Create menus, title screens, and interactive UI elements'
+            count: uiScreenCount
         },
         {
             id: 'assets' as NavigationTab,
             label: 'Assets',
             icon: <PhotoIcon className="w-4 h-4" />,
-            count: assetCount,
-            tooltip: 'Manage images, audio, and video files'
+            count: assetCount
         },
         {
             id: 'variables' as NavigationTab,
             label: 'Vars',
             icon: <Cog6ToothIcon className="w-4 h-4" />,
-            count: variableCount,
-            tooltip: 'Create and manage story variables and game state'
+            count: variableCount
         },
         {
             id: 'settings' as NavigationTab,
             label: 'Settings',
             icon: <Cog6ToothIcon className="w-4 h-4" />,
-            count: 0,
-            tooltip: 'Configure project settings and preferences'
+            count: 0
         }
     ];
 
     return (
-        <div className="flex items-center gap-2 p-2 panel">
+        <div className="flex items-center gap-1">
             {tabs.map((tab) => (
                 <button
                     key={tab.id}
                     onClick={() => onTabChange(tab.id)}
-                    className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                         activeTab === tab.id
-                            ? 'bg-sky-500 text-white shadow-lg scale-105'
-                            : 'text-slate-300 hover:text-white hover:bg-slate-700 hover:scale-102'
+                            ? 'bg-sky-500 text-white'
+                            : 'text-slate-300 hover:text-white hover:bg-slate-700'
                     }`}
-                    title={tab.tooltip}
+                    title={`${tab.label} (${tab.count})`}
                 >
-                    <span className={activeTab === tab.id ? 'text-white' : 'text-sky-400'}>{tab.icon}</span>
+                    {tab.icon}
                     <span>{tab.label}</span>
-                    {tab.count > 0 && (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                            activeTab === tab.id
-                                ? 'bg-white/20 text-white'
-                                : 'bg-slate-600/70 text-slate-300'
-                        }`}>
-                            {tab.count}
-                        </span>
-                    )}
+                    <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                        activeTab === tab.id
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-600 text-slate-400'
+                    }`}>
+                        {tab.count}
+                    </span>
                 </button>
             ))}
         </div>

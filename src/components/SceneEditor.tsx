@@ -17,7 +17,6 @@ import {
     isCommandStacked
 } from '../features/scene/commandStackUtils';
 import { CommandStackRow, DragDropIndicator } from './CommandStackComponents';
-import { getCommandColorScheme, getCommandLabel } from '../utils/commandColors';
 
 const CommandItem: React.FC<{ 
     command: VNCommand, 
@@ -158,9 +157,6 @@ const CommandItem: React.FC<{
     const groupCmd = isGroup ? command as GroupCommand : null;
     const branchCmd = isBranch ? command as BranchStartCommand : null;
     
-    // Get color scheme for this command type
-    const colors = getCommandColorScheme(command.type);
-    
     const groupClasses = isGroup 
         ? 'bg-amber-500/10 border-dashed border-amber-500' 
         : '';
@@ -196,10 +192,10 @@ const CommandItem: React.FC<{
     
     return (
         <div 
-            className={`py-1 px-2 rounded flex items-center gap-1.5 ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : ''} ${isGroup || isBranch ? '' : `${colors.bg} border ${colors.border} ${colors.hover}`}`}
+            className={`p-2 border-2 rounded-md flex items-center gap-2 ${groupClasses} ${branchClasses} ${isSelected ? 'bg-[var(--bg-tertiary)] ring-2 ring-[var(--accent-cyan)]' : isGroup ? '' : isBranch ? '' : 'bg-[var(--bg-secondary)]'}`}
             style={{ 
                 paddingLeft: leftPadding,
-                borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : undefined,
+                borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : getBorderColor(),
                 backgroundColor: isBranch && !isSelected ? branchBgColor : undefined
             }}
         >
@@ -215,12 +211,12 @@ const CommandItem: React.FC<{
                         color: isBranch ? branchColor : undefined
                     }}
                 >
-                    <ChevronDownIcon className="w-3 h-3" />
+                    <ChevronDownIcon className="w-4 h-4" />
                 </button>
             )}
-            <span className="cursor-grab text-slate-400 flex-shrink-0"><GripVerticalIcon className="w-3 h-3" /></span>
-            {isGroup && <FolderIcon className="text-amber-500 w-4 h-4 flex-shrink-0" />}
-            <div className="flex-1 flex items-center gap-2 min-w-0">
+            <span className="cursor-grab text-[var(--text-secondary)]"><GripVerticalIcon/></span>
+            {isGroup && <FolderIcon className="text-amber-500 w-5 h-5 flex-shrink-0" />}
+            <div className="flex-grow">
                 {isEditing && isGroup ? (
                     <input
                         type="text"
@@ -229,22 +225,22 @@ const CommandItem: React.FC<{
                         onBlur={handleFinishEdit}
                         onKeyDown={handleKeyDown}
                         autoFocus
-                        className="bg-slate-900 text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full text-xs"
+                        className="bg-[var(--bg-primary)] text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full"
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
                     <>
                         <p 
-                            className={`font-bold text-xs flex-shrink-0 ${isGroup ? 'text-amber-500' : isBranch ? '' : colors.text}`}
+                            className={`font-bold capitalize ${isGroup ? 'text-amber-500' : isBranch ? '' : 'text-[var(--accent-cyan)]'}`}
                             onDoubleClick={isGroup && onRename ? handleStartEdit : undefined}
                             style={{ 
                                 cursor: isGroup && onRename ? 'text' : 'default',
                                 color: isBranch ? branchColor : undefined
                             }}
                         >
-                            {getCommandLabel(command.type)}
+                            {command.type === CommandType.BranchStart ? 'Branch' : command.type.replace(/([A-Z])/g, ' $1').trim()}
                         </p>
-                        <p className="text-xs text-slate-400 truncate flex-1">{getCommandSummary()}</p>
+                        <p className="text-sm text-[var(--text-secondary)]">{getCommandSummary()}</p>
                     </>
                 )}
             </div>
@@ -354,139 +350,6 @@ const SceneEditor: React.FC<{
     const [dropTarget, setDropTarget] = useState<{ commandId: string; position: 'before' | 'inside' | 'after' } | null>(null);
     const [selectedCommands, setSelectedCommands] = useState<Set<string>>(new Set());
     const [warningModal, setWarningModal] = useState<{ message: string } | null>(null);
-    const [clipboard, setClipboard] = useState<VNCommand[]>([]);
-    const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
-
-    // Keyboard shortcuts for copy/paste/delete
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore if typing in an input
-            if ((e.target as HTMLElement).tagName === 'INPUT' || 
-                (e.target as HTMLElement).tagName === 'TEXTAREA') {
-                return;
-            }
-
-            // Copy: Ctrl+C
-            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedCommands.size > 0) {
-                e.preventDefault();
-                const commandsToCopy = activeScene.commands.filter(cmd => selectedCommands.has(cmd.id));
-                setClipboard(commandsToCopy);
-                console.log(`Copied ${commandsToCopy.length} command(s)`);
-            }
-
-            // Paste: Ctrl+V
-            if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard.length > 0) {
-                e.preventDefault();
-                handlePaste();
-            }
-
-            // Delete: Delete or Backspace
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCommands.size > 0) {
-                e.preventDefault();
-                handleBatchDelete();
-            }
-
-            // Select All: Ctrl+A
-            if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-                e.preventDefault();
-                const allIds = new Set(activeScene.commands.map(cmd => cmd.id));
-                setSelectedCommands(allIds);
-            }
-
-            // Deselect: Escape
-            if (e.key === 'Escape') {
-                setSelectedCommands(new Set());
-                setLastClickedIndex(null);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedCommands, clipboard, activeScene.commands]);
-
-    const handleCommandClick = (commandId: string, index: number, e: React.MouseEvent) => {
-        if (e.ctrlKey || e.metaKey) {
-            // Ctrl+Click: Toggle selection
-            const newSelection = new Set(selectedCommands);
-            if (newSelection.has(commandId)) {
-                newSelection.delete(commandId);
-            } else {
-                newSelection.add(commandId);
-            }
-            setSelectedCommands(newSelection);
-            setLastClickedIndex(index);
-        } else if (e.shiftKey && lastClickedIndex !== null) {
-            // Shift+Click: Select range
-            const start = Math.min(lastClickedIndex, index);
-            const end = Math.max(lastClickedIndex, index);
-            const newSelection = new Set<string>();
-            for (let i = start; i <= end; i++) {
-                if (activeScene.commands[i]) {
-                    newSelection.add(activeScene.commands[i].id);
-                }
-            }
-            setSelectedCommands(newSelection);
-        } else {
-            // Normal click: Clear selection and select current command
-            setSelectedCommands(new Set([commandId]));
-            setSelectedCommandIndex(index);
-            setSelectedVariableId(null);
-            setLastClickedIndex(index);
-        }
-    };
-
-    const handlePaste = () => {
-        if (clipboard.length === 0) return;
-
-        // Find insertion point (after selected command, or at end if none selected)
-        let insertIndex = activeScene.commands.length;
-        if (selectedCommandIndex !== null) {
-            insertIndex = selectedCommandIndex + 1;
-        }
-
-        // Create copies of commands with new IDs
-        const newCommands = clipboard.map(cmd => ({
-            ...cmd,
-            id: `cmd-${Math.random().toString(36).substr(2, 9)}` as VNID
-        }));
-
-        const updatedCommands = [...activeScene.commands];
-        updatedCommands.splice(insertIndex, 0, ...newCommands);
-
-        dispatch({
-            type: 'UPDATE_SCENE_COMMANDS',
-            payload: {
-                sceneId: activeSceneId,
-                commands: updatedCommands
-            }
-        });
-
-        // Select the newly pasted commands
-        const newIds = new Set(newCommands.map(cmd => cmd.id));
-        setSelectedCommands(newIds);
-        console.log(`Pasted ${newCommands.length} command(s)`);
-    };
-
-    const handleBatchDelete = () => {
-        if (selectedCommands.size === 0) return;
-
-        const confirmMsg = `Delete ${selectedCommands.size} selected command(s)? This cannot be undone.`;
-        if (!confirm(confirmMsg)) return;
-
-        const updatedCommands = activeScene.commands.filter(cmd => !selectedCommands.has(cmd.id));
-
-        dispatch({
-            type: 'UPDATE_SCENE_COMMANDS',
-            payload: {
-                sceneId: activeSceneId,
-                commands: updatedCommands
-            }
-        });
-
-        setSelectedCommands(new Set());
-        setSelectedCommandIndex(null);
-        console.log(`Deleted ${selectedCommands.size} command(s)`);
-    };
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, commandId: string, index: number) => {
         dragItem.current = { id: commandId, index };
@@ -497,9 +360,7 @@ const SceneEditor: React.FC<{
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>, targetCommandId: string, position: 'before' | 'inside' | 'after') => {
         e.preventDefault();
-        // Allow drops from CommandPalette even if draggedCommandId is not set
-        const commandTypeFromPalette = e.dataTransfer.types.includes('commandtype');
-        if (isCollapsed || (!draggedCommandId && !commandTypeFromPalette)) return;
+        if (isCollapsed || !draggedCommandId) return;
         
         setDropTarget({ commandId: targetCommandId, position });
     };
@@ -511,79 +372,6 @@ const SceneEditor: React.FC<{
     
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetCommandId: string, position: 'before' | 'inside' | 'after') => {
         e.preventDefault();
-        
-        // Check if this is a new command from the palette
-        const commandTypeFromPalette = e.dataTransfer.getData('commandType');
-        if (commandTypeFromPalette) {
-            // This is a new command being added from the palette
-            const targetCommand = activeScene.commands.find(cmd => cmd.id === targetCommandId);
-            const targetIndex = activeScene.commands.findIndex(cmd => cmd.id === targetCommandId);
-            
-            if (!targetCommand || targetIndex === -1) return;
-            
-            // Create the new command using the factory
-            const newCommandData = createCommand(commandTypeFromPalette as CommandType, project);
-            if (!newCommandData) return; // Handle null case
-            
-            const newCommand: VNCommand = {
-                ...newCommandData,
-                id: `cmd-${Math.random().toString(36).substring(2, 9)}`
-            } as VNCommand;
-            
-            // Determine where to insert
-            let insertIndex = targetIndex;
-            if (position === 'after') {
-                insertIndex = targetIndex + 1;
-            } else if (position === 'inside') {
-                // If dropping inside a Group or Branch, handle appropriately
-                if (targetCommand.type === CommandType.Group) {
-                    dispatch({
-                        type: 'ADD_COMMAND_TO_GROUP',
-                        payload: {
-                            sceneId: activeSceneId,
-                            groupId: targetCommandId,
-                            commandId: newCommand.id
-                        }
-                    });
-                    // First add the command to the scene
-                    dispatch({
-                        type: 'ADD_COMMAND',
-                        payload: {
-                            sceneId: activeSceneId,
-                            command: newCommand
-                        }
-                    });
-                    return;
-                } else if (targetCommand.type === CommandType.BranchStart) {
-                    // Add before the BranchEnd
-                    const branchCmd = targetCommand as BranchStartCommand;
-                    const branchEndIndex = activeScene.commands.findIndex((c, i) => 
-                        i > targetIndex && 
-                        c.type === CommandType.BranchEnd && 
-                        (c as BranchEndCommand).branchId === branchCmd.branchId
-                    );
-                    if (branchEndIndex !== -1) {
-                        insertIndex = branchEndIndex;
-                    }
-                }
-            }
-            
-            // Insert the command at the specified position
-            const newCommands = [...activeScene.commands];
-            newCommands.splice(insertIndex, 0, newCommand);
-            
-            dispatch({
-                type: 'UPDATE_SCENE_COMMANDS',
-                payload: {
-                    sceneId: activeSceneId,
-                    commands: newCommands
-                }
-            });
-            
-            return;
-        }
-        
-        // Original logic for reordering existing commands
         if (!draggedCommandId || dragItem.current === null) return;
 
         // Find dragged command by ID (not by index, since grouping changes indices)
@@ -591,7 +379,6 @@ const SceneEditor: React.FC<{
         const targetCommand = activeScene.commands.find(cmd => cmd.id === targetCommandId);
         const draggedIndex = activeScene.commands.findIndex(cmd => cmd.id === draggedCommandId);
         const targetIndex = activeScene.commands.findIndex(cmd => cmd.id === targetCommandId);
-
         
         if (!draggedCommand || !targetCommand || targetIndex === -1 || draggedIndex === -1) return;
 
@@ -738,15 +525,6 @@ const SceneEditor: React.FC<{
         }
     };
 
-    const handleInsertTemplate = (templateCommands: Omit<VNCommand, 'id'>[]) => {
-        // Add each command from the template
-        templateCommands.forEach((cmdTemplate) => {
-            const newCommand = { ...cmdTemplate, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
-            dispatch({ type: 'ADD_COMMAND', payload: { sceneId: activeSceneId, command: newCommand } });
-        });
-        setSelectedCommandIndex(activeScene.commands.length + templateCommands.length - 1);
-    };
-
     const toggleBranchCollapse = (branchId: string) => {
         setCollapsedBranches(prev => {
             const newSet = new Set(prev);
@@ -836,8 +614,17 @@ const SceneEditor: React.FC<{
             className={`flex-grow min-h-0 ${className || ''}`} 
             isCollapsed={isCollapsed} 
             onToggleCollapse={onToggleCollapse}
+            rightHeaderContent={
+                <button
+                    onClick={onConfigureScene}
+                    className={`p-1 rounded ${hasConditions ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-secondary)]'} hover:text-[var(--text-primary)]`}
+                    title="Configure Scene Conditions"
+                >
+                    <Cog6ToothIcon className="w-5 h-5" />
+                </button>
+            }
         >
-            <div className="flex flex-col h-full min-h-0">
+            <div className="flex flex-col h-full">
                 {hasConditions && (
                     <div className="mb-2 p-2 bg-[var(--accent-cyan)]/10 border border-[var(--accent-cyan)]/30 rounded-md text-sm">
                         <div className="flex items-center gap-1">
@@ -848,55 +635,8 @@ const SceneEditor: React.FC<{
                         </div>
                     </div>
                 )}
-                {selectedCommands.size > 0 && (
-                    <div className="mb-2 p-2 bg-sky-500/10 border border-sky-500/30 rounded-md text-sm">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-[var(--text-primary)] font-medium">
-                                {selectedCommands.size} command{selectedCommands.size !== 1 ? 's' : ''} selected
-                            </span>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={() => {
-                                        const commandsToCopy = activeScene.commands.filter(cmd => selectedCommands.has(cmd.id));
-                                        setClipboard(commandsToCopy);
-                                    }}
-                                    className="px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded transition-colors"
-                                    title="Copy (Ctrl+C)"
-                                >
-                                    Copy
-                                </button>
-                                {clipboard.length > 0 && (
-                                    <button
-                                        onClick={handlePaste}
-                                        className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded transition-colors"
-                                        title={`Paste ${clipboard.length} command(s) (Ctrl+V)`}
-                                    >
-                                        Paste ({clipboard.length})
-                                    </button>
-                                )}
-                                <button
-                                    onClick={handleBatchDelete}
-                                    className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white text-xs rounded transition-colors"
-                                    title="Delete (Del)"
-                                >
-                                    Delete
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setSelectedCommands(new Set());
-                                        setLastClickedIndex(null);
-                                    }}
-                                    className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white text-xs rounded transition-colors"
-                                    title="Clear selection (Esc)"
-                                >
-                                    Clear
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
                 <div 
-                    className="flex-grow space-y-1 overflow-y-auto pr-2 relative min-h-0"
+                    className="flex-grow space-y-2 overflow-y-auto pr-2 relative"
                     onDragLeave={(e) => {
                         // Only clear drop target if leaving the main container
                         if (e.currentTarget === e.target) {
@@ -1020,7 +760,10 @@ const SceneEditor: React.FC<{
                                 return (
                                     <div key={cmd.id} className="relative">
                                         <div
-                                            onClick={(e) => handleCommandClick(cmd.id, index, e)}
+                                            onClick={() => {
+                                                setSelectedCommandIndex(index);
+                                                setSelectedVariableId(null);
+                                            }}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, cmd.id, index)}
                                             onDragOver={(e) => {
@@ -1041,7 +784,7 @@ const SceneEditor: React.FC<{
                                                 }
                                             }}
                                             onDragEnd={handleDragEnd}
-                                            className={`cursor-pointer ${selectedCommands.has(cmd.id) ? 'ring-2 ring-sky-500 rounded' : ''}`}
+                                            className="cursor-pointer"
                                         >
                                             {dropTarget?.commandId === cmd.id && (
                                                 <DragDropIndicator 
@@ -1387,67 +1130,6 @@ const SceneEditor: React.FC<{
                             }
                         });
                     })()}
-                    
-                    {/* Drop zone for empty scene or end of commands list */}
-                    <div
-                        className="min-h-[100px] border-2 border-dashed rounded-lg flex items-center justify-center text-[var(--text-secondary)] text-sm mt-2 transition-all"
-                        style={{
-                            borderColor: dropTarget?.commandId === 'scene-bottom' ? 'var(--accent-cyan)' : 'var(--border)',
-                            backgroundColor: dropTarget?.commandId === 'scene-bottom' ? 'var(--accent-cyan)/10' : 'transparent',
-                            opacity: dropTarget?.commandId === 'scene-bottom' ? 1 : (activeScene.commands.length === 0 ? 0.5 : 0.3)
-                        }}
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const commandTypeFromPalette = e.dataTransfer.types.includes('commandtype');
-                            if (commandTypeFromPalette || draggedCommandId) {
-                                setDropTarget({ commandId: 'scene-bottom', position: 'after' });
-                            }
-                        }}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            
-                            // Check if dropping from CommandPalette
-                            const commandTypeFromPalette = e.dataTransfer.getData('commandType');
-                            if (commandTypeFromPalette) {
-                                // Create new command at the end
-                                const newCommandData = createCommand(commandTypeFromPalette as CommandType, project);
-                                if (!newCommandData) return;
-                                
-                                const newCommand = {
-                                    ...newCommandData,
-                                    id: `cmd-${Math.random().toString(36).substr(2, 9)}` as VNID
-                                } as VNCommand;
-                                
-                                const commands = [...activeScene.commands, newCommand];
-                                
-                                dispatch({
-                                    type: 'UPDATE_SCENE_COMMANDS',
-                                    payload: {
-                                        sceneId: activeSceneId,
-                                        commands
-                                    }
-                                });
-                                
-                                // Select the newly added command
-                                setSelectedCommandIndex(commands.length - 1);
-                            } else if (draggedCommandId && activeScene.commands.length > 0) {
-                                // Move existing command to end
-                                const lastCmd = activeScene.commands[activeScene.commands.length - 1];
-                                handleDrop(e, lastCmd.id, 'after');
-                            }
-                            
-                            setDropTarget(null);
-                        }}
-                    >
-                        {dropTarget?.commandId === 'scene-bottom' 
-                            ? '⬇ Drop Here' 
-                            : activeScene.commands.length === 0 
-                                ? 'Drag commands here to start' 
-                                : 'Drop zone'}
-                    </div>
                 </div>
                 <div className="pt-4 mt-auto space-y-2">
                     <button

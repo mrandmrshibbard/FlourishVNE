@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Panel from './ui/Panel';
 import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
@@ -39,27 +39,11 @@ const CharacterLayer: React.FC<{
     const inputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        if (isRenaming) {
-            setName(layer.name);
-            requestAnimationFrame(() => {
-                inputRef.current?.focus();
-                inputRef.current?.select();
-            });
-        }
-    }, [isRenaming, layer.name]);
-
     const handleRenameCommit = () => {
-        const trimmed = name.trim();
-        if (trimmed && trimmed !== layer.name) {
-            dispatch({ type: 'UPDATE_CHARACTER_LAYER', payload: { characterId, layerId: layer.id, name: trimmed }});
+        if (name.trim()) {
+            dispatch({ type: 'UPDATE_CHARACTER_LAYER', payload: { characterId, layerId: layer.id, name: name.trim() }});
         }
         setIsRenaming(false);
-    };
-
-    const handleRenameCancel = () => {
-        setIsRenaming(false);
-        setName(layer.name);
     };
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,18 +76,9 @@ const CharacterLayer: React.FC<{
                 {isRenaming ? (
                     <input 
                         ref={inputRef}
-                        type="text" 
-                        value={name} 
-                        onChange={e => setName(e.target.value)} 
+                        type="text" value={name} onChange={e => setName(e.target.value)} 
                         onBlur={handleRenameCommit}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                                handleRenameCommit();
-                            } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                handleRenameCancel();
-                            }
-                        }}
+                        onKeyDown={e => e.key === 'Enter' && handleRenameCommit()}
                         className="bg-slate-900 text-white p-1 rounded-md outline-none ring-2 ring-sky-500"
                     />
                 ) : (
@@ -115,11 +90,11 @@ const CharacterLayer: React.FC<{
                 </div>
             </div>
              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                {Object.values(layer.assets).map((asset: VNLayerAsset) => (
+                {Object.values(layer.assets).map(asset => (
                     <LayerAsset key={asset.id} characterId={characterId} layerId={layer.id} asset={asset}/>
                 ))}
             </div>
-            <button onClick={() => fileInputRef.current?.click()} className="w-full mt-3 btn btn-secondary text-sm p-2 flex items-center justify-center gap-2"><UploadIcon /> Upload Asset</button>
+            <button onClick={() => fileInputRef.current?.click()} className="w-full mt-3 bg-slate-700/50 hover:bg-slate-600/50 text-sm p-2 rounded-md flex items-center justify-center gap-2"><UploadIcon /> Upload Asset</button>
             <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*,video/*" className="hidden"/>
         </div>
     );
@@ -167,7 +142,7 @@ const CharacterEditor: React.FC<{
             </Panel>
             <Panel title="Layers & Assets" className="w-1/2">
                  <div className="flex-grow overflow-y-auto space-y-3 pr-1">
-                    {Object.values(character.layers).map((layer: VNCharacterLayer) => (
+                    {Object.values(character.layers).map(layer => (
                         <CharacterLayer key={layer.id} characterId={character.id} layer={layer}/>
                     ))}
                 </div>

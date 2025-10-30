@@ -10,15 +10,10 @@
  *   node build-player.js --input game_export.zip [--output dist/]
  */
 
-import fs from 'fs';
-import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
@@ -56,7 +51,7 @@ async function build() {
 
         // Step 2: Extract the export ZIP
         console.log('📦 Extracting project data...');
-        const JSZip = (await import('jszip')).default;
+        const JSZip = require('jszip');
         const zipData = fs.readFileSync(inputFile);
         const zip = await JSZip.loadAsync(zipData);
         

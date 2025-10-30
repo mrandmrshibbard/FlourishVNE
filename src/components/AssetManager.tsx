@@ -6,33 +6,23 @@ import { useProject } from '../contexts/ProjectContext';
 import { PlusIcon, TrashIcon, PhotoIcon, MusicalNoteIcon, FilmIcon, PencilIcon } from './icons';
 import { fileToBase64 } from '../utils/file';
 import { AssetType } from '../features/assets/state/assetReducer';
-import Input from './ui/Input';
-import Select from './ui/Select';
-import Button from './ui/Button';
 
 type AssetCategory = 'backgrounds' | 'images' | 'audio' | 'videos';
 
 interface AssetManagerProps {
-    // No longer need project prop - using context directly
+    project: VNProject;
 }
 
-const AssetManager: React.FC<AssetManagerProps> = () => {
-    const { project, dispatch } = useProject();
+const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
+    const { dispatch } = useProject();
     const [selectedAsset, setSelectedAsset] = useState<{ id: string; type: AssetType } | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedFolder, setSelectedFolder] = useState<string>('All');
-    const [assetFolders, setAssetFolders] = useState<Record<string, string>>({});
-    const [showNewFolderInput, setShowNewFolderInput] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
     const [openCategories, setOpenCategories] = useState<Record<AssetCategory, boolean>>({
         backgrounds: true,
         images: false,
         audio: false,
         videos: false,
     });
-    const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
-    const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
 
     const assetCategories: Record<AssetCategory, { label: string; icon: React.ReactNode; accept?: string }> = {
         backgrounds: {
@@ -67,29 +57,7 @@ const AssetManager: React.FC<AssetManagerProps> = () => {
         }
     };
 
-    const getFilteredAssetsForCategory = (category: AssetCategory) => {
-        const assets = getAssetsForCategory(category) as any[];
-        let filtered = assets;
-
-        // Filter by search query
-        if (searchQuery.trim()) {
-            filtered = filtered.filter(asset =>
-                asset.name.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-
-        // Filter by folder
-        if (selectedFolder !== 'All') {
-            filtered = filtered.filter(asset => {
-                const assetKey = `${category}-${asset.id}`;
-                return assetFolders[assetKey] === selectedFolder;
-            });
-        }
-
-        return filtered;
-    };
-
-    const addAsset = (category: AssetCategory, name: string, url: string, folder: string = 'Default') => {
+    const addAsset = (category: AssetCategory, name: string, url: string) => {
         const newAsset = { id: `${category.slice(0, 4)}-${Math.random().toString(36).substring(2, 9)}`, name };
         let payload: any;
 
@@ -113,10 +81,6 @@ const AssetManager: React.FC<AssetManagerProps> = () => {
 
         console.log('[AssetManager] Adding asset:', { category, name, assetId: newAsset.id, payloadKeys: Object.keys(payload) });
         dispatch({ type: 'ADD_ASSET', payload: { assetType: category, asset: payload } });
-
-        // Store folder information
-        const assetKey = `${category}-${newAsset.id}`;
-        setAssetFolders(prev => ({ ...prev, [assetKey]: folder }));
     };
 
     const handleDeleteAsset = (assetType: AssetType, assetId: string) => {
@@ -131,240 +95,39 @@ const AssetManager: React.FC<AssetManagerProps> = () => {
         setRenamingId(null);
     };
 
-    const createFolder = () => {
-        if (newFolderName.trim() && !Array.from(new Set(Object.values(assetFolders))).includes(newFolderName.trim())) {
-            setSelectedFolder(newFolderName.trim());
-            setNewFolderName('');
-            setShowNewFolderInput(false);
-        }
-    };
-
     const toggleCategory = (category: AssetCategory) => {
         setOpenCategories(prev => ({ ...prev, [category]: !prev[category] }));
     };
 
-    const toggleMultiSelect = () => {
-        setIsMultiSelectMode(!isMultiSelectMode);
-        setSelectedAssets(new Set());
-    };
-
-    const toggleAssetSelection = (assetId: string) => {
-        if (!isMultiSelectMode) return;
-        
-        const newSelected = new Set(selectedAssets);
-        if (newSelected.has(assetId)) {
-            newSelected.delete(assetId);
-        } else {
-            newSelected.add(assetId);
-        }
-        setSelectedAssets(newSelected);
-    };
-
-    const selectAllAssets = () => {
-        const allAssetIds = new Set<string>();
-        (['backgrounds', 'images', 'audio', 'videos'] as AssetCategory[]).forEach(category => {
-            getFilteredAssetsForCategory(category).forEach(asset => {
-                allAssetIds.add(asset.id);
-            });
-        });
-        setSelectedAssets(allAssetIds);
-    };
-
-    const clearSelection = () => {
-        setSelectedAssets(new Set());
-    };
-
-    const bulkDeleteAssets = () => {
-        if (selectedAssets.size === 0) return;
-        
-        if (confirm(`Delete ${selectedAssets.size} selected asset(s)? This action cannot be undone.`)) {
-            selectedAssets.forEach(assetId => {
-                // Find which category this asset belongs to
-                let assetType: AssetType | null = null;
-                let category: AssetCategory | null = null;
-                
-                for (const cat of ['backgrounds', 'images', 'audio', 'videos'] as AssetCategory[]) {
-                    const assets = getAssetsForCategory(cat) as any[];
-                    if (assets.some(asset => asset.id === assetId)) {
-                        category = cat;
-                        assetType = cat.slice(0, -1) as AssetType; // Remove 's' from category name
-                        break;
-                    }
-                }
-                
-                if (assetType) {
-                    dispatch({ type: 'DELETE_ASSET', payload: { assetType, assetId } });
-                }
-            });
-            setSelectedAssets(new Set());
-            setSelectedAsset(null);
-        }
-    };
-
-    const bulkMoveAssets = (targetFolder: string) => {
-        if (selectedAssets.size === 0) return;
-        
-        selectedAssets.forEach(assetId => {
-            // Find which category this asset belongs to and update its folder
-            for (const cat of ['backgrounds', 'images', 'audio', 'videos'] as AssetCategory[]) {
-                const assets = getAssetsForCategory(cat) as any[];
-                const asset = assets.find(a => a.id === assetId);
-                if (asset) {
-                    const assetKey = `${cat}-${assetId}`;
-                    setAssetFolders(prev => ({ ...prev, [assetKey]: targetFolder }));
-                    break;
-                }
-            }
-        });
-        setSelectedAssets(new Set());
-    };
-
     return (
-        <div className="flex h-full min-w-[1300px] max-w-[1300px] min-h-[850px] max-h-[850px] gap-4 p-4 overflow-hidden">
+        <div className="flex h-full">
             {/* Asset Categories Sidebar */}
-            <div className="w-80 panel flex flex-col max-h-full">
-                <div className="p-3 border-b-2 border-slate-700 flex-shrink-0">
-                    <h2 className="text-base font-bold text-white flex items-center gap-2">
-                        <PhotoIcon className="w-5 h-5 text-yellow-400" />
+            <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
+                <div className="p-4 border-b border-slate-700">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <PhotoIcon className="w-5 h-5" />
                         Assets
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Import and organize media files</p>
-                    <div className="mt-4 space-y-3">
-                        <Input
-                            placeholder="Search assets..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        <div className="flex gap-2">
-                            <Select
-                                value={selectedFolder}
-                                onChange={(e) => setSelectedFolder(e.target.value)}
-                                options={[
-                                    { value: 'All', label: 'All Folders' },
-                                    { value: 'Default', label: 'Default' },
-                                    ...Array.from(new Set(Object.values(assetFolders))).map(folder => ({
-                                        value: folder,
-                                        label: folder
-                                    }))
-                                ]}
-                                className="flex-1"
-                            />
-                            <Button
-                                onClick={() => setShowNewFolderInput(!showNewFolderInput)}
-                                variant="ghost"
-                                size="sm"
-                                title="Create new folder"
-                            >
-                                <PlusIcon className="w-4 h-4" />
-                            </Button>
-                        </div>
-                        {showNewFolderInput && (
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="Folder name..."
-                                    value={newFolderName}
-                                    onChange={(e) => setNewFolderName(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && createFolder()}
-                                    className="flex-1"
-                                    autoFocus
-                                />
-                                <Button
-                                    onClick={createFolder}
-                                    variant="success"
-                                    size="sm"
-                                >
-                                    Create
-                                </Button>
-                                <Button
-                                    onClick={() => {
-                                        setShowNewFolderInput(false);
-                                        setNewFolderName('');
-                                    }}
-                                    variant="ghost"
-                                    size="sm"
-                                >
-                                    Cancel
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-                    
-                    <div className="flex items-center justify-between mt-3">
-                        <div className="flex gap-2">
-                            <button
-                                onClick={toggleMultiSelect}
-                                className={`px-2 py-1 text-xs rounded ${isMultiSelectMode ? 'bg-sky-500 text-white' : 'bg-slate-600 text-gray-300 hover:bg-slate-500'}`}
-                            >
-                                {isMultiSelectMode ? 'Cancel' : 'Select'}
-                            </button>
-                        </div>
-                    </div>
-                    
-                    {isMultiSelectMode && (
-                        <div className="flex gap-2 mt-2">
-                            <button
-                                onClick={selectAllAssets}
-                                className="px-2 py-1 text-xs bg-slate-600 text-gray-300 hover:bg-slate-500 rounded"
-                            >
-                                All
-                            </button>
-                            <button
-                                onClick={clearSelection}
-                                className="px-2 py-1 text-xs bg-slate-600 text-gray-300 hover:bg-slate-500 rounded"
-                            >
-                                None
-                            </button>
-                            {selectedAssets.size > 0 && (
-                                <>
-                                    <button
-                                        onClick={bulkDeleteAssets}
-                                        className="px-2 py-1 text-xs bg-red-600 text-white hover:bg-red-500 rounded"
-                                    >
-                                        Delete ({selectedAssets.size})
-                                    </button>
-                                    <Select
-                                        value=""
-                                        onChange={(e) => e.target.value && bulkMoveAssets(e.target.value)}
-                                        options={[
-                                            { value: '', label: 'Move to...' },
-                                            { value: 'Default', label: 'Default' },
-                                            ...Array.from(new Set(Object.values(assetFolders))).map(folder => ({
-                                                value: folder,
-                                                label: folder
-                                            }))
-                                        ]}
-                                        className="text-xs"
-                                    />
-                                </>
-                            )}
-                        </div>
-                    )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
-                    {(Object.keys(assetCategories) as AssetCategory[]).map(category => {
-                        const filteredAssets = getFilteredAssetsForCategory(category);
-                        return (
-                            <AssetCategorySection
-                                key={category}
-                                category={category}
-                                assets={filteredAssets}
-                                isOpen={openCategories[category]}
-                                onToggle={() => toggleCategory(category)}
-                                onSelectAsset={(asset) => setSelectedAsset({ id: asset.id, type: category })}
-                                selectedAssetId={selectedAsset?.type === category ? selectedAsset.id : null}
-                                onAddAsset={(name, url) => addAsset(category, name, url, selectedFolder === 'All' ? 'Default' : selectedFolder)}
-                                onDeleteAsset={(assetId) => handleDeleteAsset(category, assetId)}
-                                onRenameAsset={(assetId, name) => handleRenameAsset(category, assetId, name)}
-                                renamingId={renamingId}
-                                setRenamingId={setRenamingId}
-                                isMultiSelectMode={isMultiSelectMode}
-                                selectedAssets={selectedAssets}
-                                onToggleAssetSelection={toggleAssetSelection}
-                                accept={assetCategories[category].accept}
-                            />
-                        );
-                    })}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {(Object.keys(assetCategories) as AssetCategory[]).map(category => (
+                        <AssetCategorySection
+                            key={category}
+                            category={category}
+                            assets={getAssetsForCategory(category)}
+                            isOpen={openCategories[category]}
+                            onToggle={() => toggleCategory(category)}
+                            onSelectAsset={(asset) => setSelectedAsset({ id: asset.id, type: category })}
+                            selectedAssetId={selectedAsset?.type === category ? selectedAsset.id : null}
+                            onAddAsset={(name, url) => addAsset(category, name, url)}
+                            onDeleteAsset={(assetId) => handleDeleteAsset(category, assetId)}
+                            onRenameAsset={(assetId, name) => handleRenameAsset(category, assetId, name)}
+                            renamingId={renamingId}
+                            setRenamingId={setRenamingId}
+                            accept={assetCategories[category].accept}
+                        />
+                    ))}
                 </div>
             </div>
 
@@ -402,9 +165,6 @@ interface AssetCategorySectionProps {
     onRenameAsset: (assetId: string, name: string) => void;
     renamingId: string | null;
     setRenamingId: (id: string | null) => void;
-    isMultiSelectMode: boolean;
-    selectedAssets: Set<string>;
-    onToggleAssetSelection: (assetId: string) => void;
     accept?: string;
 }
 
@@ -420,9 +180,6 @@ const AssetCategorySection: React.FC<AssetCategorySectionProps> = ({
     onRenameAsset,
     renamingId,
     setRenamingId,
-    isMultiSelectMode,
-    selectedAssets,
-    onToggleAssetSelection,
     accept
 }) => {
     const getIcon = (category: AssetCategory) => {
@@ -454,10 +211,7 @@ const AssetCategorySection: React.FC<AssetCategorySectionProps> = ({
                             asset={asset}
                             isSelected={selectedAssetId === asset.id}
                             isRenaming={renamingId === asset.id}
-                            isMultiSelectMode={isMultiSelectMode}
-                            isAssetSelected={selectedAssets.has(asset.id)}
                             onSelect={() => onSelectAsset(asset)}
-                            onToggleSelection={() => onToggleAssetSelection(asset.id)}
                             onStartRenaming={() => setRenamingId(asset.id)}
                             onCommitRename={(name) => onRenameAsset(asset.id, name)}
                             onDelete={() => onDeleteAsset(asset.id)}
@@ -474,10 +228,7 @@ interface AssetItemProps {
     asset: any;
     isSelected: boolean;
     isRenaming: boolean;
-    isMultiSelectMode: boolean;
-    isAssetSelected: boolean;
     onSelect: () => void;
-    onToggleSelection: () => void;
     onStartRenaming: () => void;
     onCommitRename: (name: string) => void;
     onDelete: () => void;
@@ -487,10 +238,7 @@ const AssetItem: React.FC<AssetItemProps> = ({
     asset,
     isSelected,
     isRenaming,
-    isMultiSelectMode,
-    isAssetSelected,
     onSelect,
-    onToggleSelection,
     onStartRenaming,
     onCommitRename,
     onDelete
@@ -523,25 +271,14 @@ const AssetItem: React.FC<AssetItemProps> = ({
 
     return (
         <div
-            onClick={isMultiSelectMode ? onToggleSelection : onSelect}
-            onDoubleClick={isMultiSelectMode ? undefined : onStartRenaming}
+            onClick={onSelect}
+            onDoubleClick={onStartRenaming}
             className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
                 isSelected
                     ? 'bg-sky-500/20 border border-sky-500/50'
-                    : isAssetSelected
-                    ? 'bg-green-500/20 border border-green-500/50'
                     : 'hover:bg-slate-700'
             }`}
         >
-            {isMultiSelectMode && (
-                <input
-                    type="checkbox"
-                    checked={isAssetSelected}
-                    onChange={() => {}} // Handled by onClick
-                    className="w-4 h-4 text-green-600 bg-slate-700 border-slate-500 rounded focus:ring-green-500"
-                    onClick={(e) => e.stopPropagation()}
-                />
-            )}
             {getThumbnail()}
 
             <div className="flex-grow truncate">

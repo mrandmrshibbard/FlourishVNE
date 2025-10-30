@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Novel - Loading...</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        
+        /* Allow text selection in input elements */
+        input, textarea, [contenteditable="true"] {
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+        }
+        
+        #app {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        #loading {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            z-index: 9999;
+        }
+        
+        #loading.hidden {
+            display: none;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Transition Animations */
+        @keyframes dissolve-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+        @keyframes iris-in {
+            from { clip-path: circle(0%); }
+            to { clip-path: circle(150%); }
+        }
+
+        @keyframes iris-out {
+            from { clip-path: circle(150%); }
+            to { clip-path: circle(0%); }
+        }
+
+        @keyframes wipe-right {
+            from { clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%); }
+            to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+        }
+
+        @keyframes wipe-out-right {
+            from { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+            to { clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); }
+        }
+        
+        @keyframes slide-in-left {
+            from { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+            to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+        }
+
+        @keyframes slide-in-right {
+            from { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+            to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+        }
+
+        @keyframes slide-out-left {
+            from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+            to { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+        }
+
+        @keyframes slide-out-right {
+            from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+            to { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+        }
+
+        @keyframes slide {
+            from { 
+                transform: translate3d(calc(-50% + var(--slide-start-px, var(--slide-start-x, 0%))), var(--slide-start-py, var(--slide-start-y, 0%)), 0); 
+            }
+            to { 
+                transform: translate3d(calc(-50% + var(--slide-end-px, var(--slide-end-x, 0%))), var(--slide-end-py, var(--slide-end-y, 0%)), 0); 
+            }
+        }
+
+        @keyframes flash-anim {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 0.9; }
+        }
+
+        @keyframes scroll-up {
+            from { transform: translateY(100%); }
+            to { transform: translateY(-100%); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(var(--shake-intensity-x, 5px), var(--shake-intensity-y, 5px)); }
+            50% { transform: translate(calc(-1 * var(--shake-intensity-x, 5px)), calc(-1 * var(--shake-intensity-y, 5px))); }
+            75% { transform: translate(var(--shake-intensity-x, 5px), calc(-1 * var(--shake-intensity-y, 5px))); }
+        }
+
+        .transition-base {
+            animation-duration: 1s;
+            animation-fill-mode: forwards;
+        }
+        .transition-fast {
+            animation-duration: 0.5s;
+        }
+        .transition-dissolve { animation-name: dissolve-in; }
+        .transition-dissolve-out { animation-name: fade-out; }
+        .transition-fade-out { animation-name: fade-out; }
+        .transition-iris-in { animation-name: iris-in; }
+        .transition-iris-out { animation-name: iris-out; }
+        .transition-wipe-right { animation-name: wipe-right; }
+        .transition-wipe-out-right { animation-name: wipe-out-right; }
+        .transition-slide-in-right { animation-name: slide-in-right; }
+        .transition-slide-in-left { animation-name: slide-in-left; }
+        .transition-slide-out-left { animation-name: slide-out-left; }
+        .transition-slide-out-right { animation-name: slide-out-right; }
+        .transition-slide { animation-name: slide; }
+        .shake { animation: shake 0.2s ease-in-out infinite; }
+        .credits-scroll { animation: scroll-up 20s linear forwards; }
+        
+        #loading p {
+            margin-top: 20px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        #error {
+            display: none;
+            position: fixed;
+            inset: 0;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a2e;
+            color: #ff6b6b;
+            padding: 40px;
+            text-align: center;
+            z-index: 10000;
+        }
+        
+        #error.visible {
+            display: flex;
+        }
+        
+        #error h1 {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        
+        #error p {
+            color: #aaa;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Loading game...</p>
+    </div>
+    
+    <div id="error">
+        <h1>Failed to Load Game</h1>
+        <p id="error-message">An error occurred while loading the game data.</p>
+    </div>
+
+    <!-- Project Data - Will be injected during build -->
+    <script id="game-data" type="application/json">
+    __PROJECT_DATA__
+    </script>
+
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- JSZip (if needed for lazy loading) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Game Engine - Will be bundled/injected during build -->
+    <script>
+    __GAME_ENGINE_CODE__
+    </script>
+
+    <!-- Bootstrap Script -->
+    <script>
+        (function() {
+            'use strict';
+            
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const errorMessageEl = document.getElementById('error-message');
+            
+            function showError(message) {
+                console.error('Game Error:', message);
+                loadingEl.classList.add('hidden');
+                errorEl.classList.add('visible');
+                errorMessageEl.textContent = message;
+            }
+            
+            function hideLoading() {
+                loadingEl.classList.add('hidden');
+            }
+            
+            async function loadGame() {
+                try {
+                    // Get project data from embedded script
+                    const dataScript = document.getElementById('game-data');
+                    if (!dataScript) {
+                        throw new Error('Game data not found. The game may not be properly built.');
+                    }
+                    
+                    const projectData = JSON.parse(dataScript.textContent);
+                    
+                    if (!projectData || !projectData.id) {
+                        throw new Error('Invalid game data format.');
+                    }
+                    
+                    // Update page title
+                    document.title = projectData.title || 'Visual Novel Game';
+                    
+                    // Initialize the game engine
+                    // This assumes GameEngine is exposed globally from the bundled code
+                    if (typeof window.GameEngine === 'undefined') {
+                        throw new Error('Game engine not loaded. Please check the build.');
+                    }
+                    
+                    // Mount the game
+                    window.GameEngine.mount(document.getElementById('app'), projectData);
+                    
+                    hideLoading();
+                    
+                } catch (error) {
+                    showError(error.message || 'Unknown error occurred');
+                }
+            }
+            
+            // Wait for DOM to be ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', loadGame);
+            } else {
+                loadGame();
+            }
+            
+        })();
+    </script>
+    <script>
+        // Prevent default context menu (right-click menu)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>

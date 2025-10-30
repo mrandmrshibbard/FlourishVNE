@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React from 'react';
+import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption, GameSetting, GameToggleSetting } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { FormField, TextInput, Select } from '../ui/Form';
-import { TrashIcon, Cog6ToothIcon } from '../icons';
+import { TrashIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
 import ActionEditor from './ActionEditor';
 import AssetSelector from '../ui/AssetSelector';
@@ -19,44 +20,13 @@ const UIElementInspector: React.FC<{
     const screen = project.uiScreens[screenId];
     const element = screen?.elements[elementId];
 
-    if (!element) return <div className="w-56 p-4 bg-slate-800/50 border-2 border-slate-700 rounded-lg text-white">Element not found</div>;
+    if (!element) return <Panel title="Properties">Element not found</Panel>;
 
-    const pendingUpdateRef = useRef<Partial<VNUIElement> | null>(null);
-    const rafIdRef = useRef<number | null>(null);
-
-    const flushPendingUpdates = useCallback(() => {
-        if (!pendingUpdateRef.current) return;
-
-        const payload = pendingUpdateRef.current;
-        pendingUpdateRef.current = null;
-        rafIdRef.current = null;
-
-        dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId, elementId, updates: payload }});
-    }, [dispatch, screenId, elementId]);
-
-    const updateElement = useCallback((updates: Partial<VNUIElement>) => {
-        pendingUpdateRef.current = {
-            ...(pendingUpdateRef.current || {}),
-            ...updates,
-        };
-
-        if (rafIdRef.current !== null) {
-            return;
-        }
-
-        rafIdRef.current = window.requestAnimationFrame(() => {
-            flushPendingUpdates();
-        });
-    }, [flushPendingUpdates]);
-
-    useEffect(() => {
-        return () => {
-            if (rafIdRef.current !== null) {
-                cancelAnimationFrame(rafIdRef.current);
-            }
-            flushPendingUpdates();
-        };
-    }, [flushPendingUpdates]);
+    const updateElement = (updates: Partial<VNUIElement>) => {
+        console.log('[UIElementInspector] Updating element:', elementId, 'with updates:', updates);
+        console.log('[UIElementInspector] Current element before update:', element);
+        dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId, elementId, updates }});
+    };
     
     const handleDelete = () => {
         dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId, elementId } });
@@ -65,37 +35,40 @@ const UIElementInspector: React.FC<{
 
     const renderCommonProperties = () => (
         <>
-            <div className="mb-3">
-                <h3 className="text-sm font-bold text-purple-400 mb-2 pb-1 border-b border-purple-500/30">Basic</h3>
-                <FormField label="Name"><TextInput value={element.name} onChange={e => updateElement({ name: e.target.value })} /></FormField>
+            <FormField label="Element Name"><TextInput value={element.name} onChange={e => updateElement({ name: e.target.value })} /></FormField>
+            <div className="grid grid-cols-2 gap-2">
                 <FormField label="X %"><TextInput type="number" value={element.x} onChange={e => updateElement({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                 <FormField label="Y %"><TextInput type="number" value={element.y} onChange={e => updateElement({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
                 <FormField label="Width %"><TextInput type="number" value={element.width} onChange={e => updateElement({ width: parseFloat(e.target.value) || 0 })} /></FormField>
                 <FormField label="Height %"><TextInput type="number" value={element.height} onChange={e => updateElement({ height: parseFloat(e.target.value) || 0 })} /></FormField>
-                <FormField label="Anchor X"><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
-                <FormField label="Anchor Y"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <FormField label="Anchor X (0-1)"><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
+                <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
             </div>
             
-            <div className="mb-3">
-                <h3 className="text-sm font-bold text-sky-400 mb-2 pb-1 border-b border-sky-500/30">Transition</h3>
-                <FormField label="In">
+            <h3 className="font-bold mt-3 mb-2 text-slate-400">Element Transition</h3>
+            <div className="grid grid-cols-2 gap-2">
+                <FormField label="Transition In">
                     <Select value={element.transitionIn || 'fade'} onChange={e => updateElement({ transitionIn: e.target.value as any })}>
                         <option value="none">None</option>
                         <option value="fade">Fade</option>
-                        <option value="slideUp">↑ Up</option>
-                        <option value="slideDown">↓ Down</option>
-                        <option value="slideLeft">← Left</option>
-                        <option value="slideRight">→ Right</option>
+                        <option value="slideUp">Slide Up</option>
+                        <option value="slideDown">Slide Down</option>
+                        <option value="slideLeft">Slide Left</option>
+                        <option value="slideRight">Slide Right</option>
                         <option value="scale">Scale</option>
                     </Select>
                 </FormField>
-                <FormField label="Duration">
-                    <TextInput type="number" value={element.transitionDuration || 300} onChange={e => updateElement({ transitionDuration: parseInt(e.target.value) || 300 })} placeholder="ms" />
-                </FormField>
-                <FormField label="Delay">
-                    <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} placeholder="ms" />
+                <FormField label="Duration (ms)">
+                    <TextInput type="number" value={element.transitionDuration || 300} onChange={e => updateElement({ transitionDuration: parseInt(e.target.value) || 300 })} />
                 </FormField>
             </div>
+            <FormField label="Delay (ms)">
+                <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} />
+            </FormField>
         </>
     );
 
@@ -344,7 +317,6 @@ const UIElementInspector: React.FC<{
                                 <option value="musicVolume">Music Volume</option>
                                 <option value="sfxVolume">SFX Volume</option>
                                 <option value="textSpeed">Text Speed</option>
-                                <option value="autoAdvanceDelay">Auto-Advance Delay</option>
                             </Select>
                         </FormField>
                     )}
@@ -514,7 +486,6 @@ const UIElementInspector: React.FC<{
                         <FormField label="Setting Controlled">
                             <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameToggleSetting })}>
                                 <option value="enableSkip">Enable Skip</option>
-                                <option value="autoAdvance">Auto-Advance</option>
                             </Select>
                         </FormField>
                     )}
@@ -1232,24 +1203,18 @@ const UIElementInspector: React.FC<{
     };
 
     return (
-        <div className="bg-slate-800/50 border-2 border-slate-700 rounded-lg flex flex-col flex-shrink-0 shadow-xl overflow-hidden" style={{ width: '224px', maxHeight: '85vh' }}>
-            <div className="p-3 border-b-2 border-slate-700 flex-shrink-0">
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <Cog6ToothIcon className="w-4 h-4 text-purple-400" />
-                    Properties
-                </h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+        <Panel title={`Properties: ${element.type}`} className="w-96 flex-shrink-0">
+            <div className="flex-grow overflow-y-auto pr-1">
                 {renderCommonProperties()}
-                <hr className="border-slate-700 my-2" />
+                <hr className="border-slate-700 my-4" />
                 {renderSpecificProperties()}
             </div>
-             <div className="p-2.5 border-t-2 border-slate-700 flex-shrink-0">
-                <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm">
-                    <TrashIcon className="w-4 h-4" /> Delete
+             <div className="pt-4 mt-auto">
+                <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                    <TrashIcon/> Delete Element
                 </button>
             </div>
-        </div>
+        </Panel>
     );
 };
 

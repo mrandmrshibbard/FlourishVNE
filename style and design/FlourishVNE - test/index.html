@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flourish Visual Novel Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat&family=Lato&family=Merriweather&family=Oswald&family=Pacifico&family=Playfair+Display&family=Poppins:ital,wght@0,400;0,700;1,400&family=Roboto&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg-primary: #1a102c;
+        --bg-secondary: #2a1a45;
+        --bg-tertiary: #4D3273;
+        --accent-pink: #ff00a5;
+        --accent-cyan: #00f2ea;
+        --accent-purple: #8a2be2;
+        --text-primary: #f0e6ff;
+        --text-secondary: #c0b4d4;
+        --font-heading: 'Poppins', sans-serif;
+        --font-body: 'Poppins', sans-serif;
+      }
+      
+      body {
+        overscroll-behavior: none;
+        font-family: var(--font-body);
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      }
+
+      /* Allow text selection in input elements */
+      input, textarea, [contenteditable="true"] {
+        user-select: text;
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+      }
+
+      .font-heading {
+        font-family: var(--font-heading);
+      }
+
+      .btn-primary-gradient {
+        background-image: linear-gradient(to right, var(--accent-pink), var(--accent-purple));
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+      }
+      .btn-primary-gradient:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 15px var(--accent-pink);
+      }
+
+      .focus-glow:focus-within, .focus-glow:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-cyan);
+      }
+
+      @keyframes shake {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(var(--shake-intensity-x, 5px), var(--shake-intensity-y, 5px)); }
+        50% { transform: translate(calc(-1 * var(--shake-intensity-x, 5px)), calc(-1 * var(--shake-intensity-y, 5px))); }
+        75% { transform: translate(var(--shake-intensity-x, 5px), calc(-1 * var(--shake-intensity-y, 5px))); }
+      }
+      .shake {
+        animation: shake 0.2s ease-in-out infinite;
+      }
+
+      /* Transitions */
+      @keyframes dissolve-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+      @keyframes iris-in {
+        from { clip-path: circle(0%); }
+        to { clip-path: circle(150%); }
+      }
+
+      @keyframes iris-out {
+        from { clip-path: circle(150%); }
+        to { clip-path: circle(0%); }
+      }
+
+      @keyframes wipe-right {
+        from { clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%); }
+        to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+      }
+
+      @keyframes wipe-out-right {
+        from { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+        to { clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); }
+      }
+      
+      @keyframes slide-in-left {
+        from { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+        to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+      }
+
+      @keyframes slide-in-right {
+        from { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+        to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+      }
+
+      @keyframes slide-out-left {
+        from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+        to { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+      }
+
+      @keyframes slide-out-right {
+        from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+        to { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+      }
+
+      @keyframes slide {
+        from { 
+          transform: translate3d(calc(-50% + var(--slide-start-px, var(--slide-start-x, 0%))), var(--slide-start-py, var(--slide-start-y, 0%)), 0); 
+        }
+        to { 
+          transform: translate3d(calc(-50% + var(--slide-end-px, var(--slide-end-x, 0%))), var(--slide-end-py, var(--slide-end-y, 0%)), 0); 
+        }
+      }
+
+      @keyframes flash-anim {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 0.9; }
+      }
+
+      .transition-base {
+        animation-duration: 1s;
+        animation-fill-mode: forwards;
+      }
+      .transition-fast {
+        animation-duration: 0.5s;
+      }
+      .transition-dissolve { animation-name: dissolve-in; }
+      .transition-dissolve-out { animation-name: fade-out; }
+      .transition-fade-out { animation-name: fade-out; }
+      .transition-iris-in { animation-name: iris-in; }
+      .transition-iris-out { animation-name: iris-out; }
+      .transition-wipe-right { animation-name: wipe-right; }
+      .transition-wipe-out-right { animation-name: wipe-out-right; }
+      .transition-slide-in-right { animation-name: slide-in-right; }
+      .transition-slide-in-left { animation-name: slide-in-left; }
+      .transition-slide-out-left { animation-name: slide-out-left; }
+      .transition-slide-out-right { animation-name: slide-out-right; }
+      .transition-slide { animation-name: slide; }
+
+      @keyframes scroll-up {
+          from { transform: translateY(100%); }
+          to { transform: translateY(-100%); }
+      }
+      .credits-scroll {
+          animation: scroll-up 20s linear forwards;
+      }
+
+      /* Custom UI styles */
+      .dialogue-box-custom {
+        border-style: solid;
+        border-width: 40px;
+        border-image-slice: 40;
+        border-image-repeat: stretch;
+      }
+
+      .choice-button-custom {
+        border-style: solid;
+        border-width: 20px;
+        border-image-slice: 20;
+        border-image-repeat: stretch;
+      }
+
+      /* Custom range slider styles */
+      input[type=range] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+        width: 100%;
+      }
+      input[type=range]:focus {
+        outline: none;
+      }
+      /* Thumb */
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        margin-top: -6px;
+        background-color: var(--accent-pink);
+        height: 20px;
+        width: 20px;
+        border-radius: 99px;
+      }
+      input[type=range]::-moz-range-thumb {
+        border: none;
+        border-radius: 99px;
+        background-color: var(--accent-pink);
+        height: 20px;
+        width: 20px;
+      }
+      /* Track */
+      input[type=range]::-webkit-slider-runnable-track {
+        background-color: var(--bg-tertiary);
+        border-radius: 0.5rem;
+        height: 8px;
+      }
+       input[type=range]::-moz-range-track {
+        background-color: var(--bg-tertiary);
+        border-radius: 0.5rem;
+        height: 8px;
+      }
+
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-slate-900 text-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+    <script>
+        // Prevent default context menu (right-click menu)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>

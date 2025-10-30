@@ -256,10 +256,6 @@ export interface ShowImageCommand extends BaseCommand {
     scaleY?: number;
     transition: VNTransition;
     duration: number; // in seconds
-    // Interactive properties
-    onClick?: VNUIAction;
-    hoverImageId?: VNID;
-    waitForClick?: boolean;
 }
 
 export interface HideTextCommand extends BaseCommand {

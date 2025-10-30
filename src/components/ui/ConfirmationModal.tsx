@@ -20,24 +20,24 @@ const ConfirmationModal: React.FC<{
 
     return (
         <div 
-            className="modal-overlay" 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70" 
             onClick={handleBackdropClick}
         >
-            <div className="modal-content w-full max-w-md p-6 m-4">
-                <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--text-primary)' }}>{title}</h2>
-                <div className="mb-6" style={{ color: 'var(--text-secondary)' }}>
+            <div className="bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg shadow-xl w-full max-w-md p-6 m-4">
+                <h2 className="text-xl font-bold mb-4">{title}</h2>
+                <div className="text-[var(--text-secondary)] mb-6">
                     {children}
                 </div>
                 <div className="flex justify-end gap-4">
                     <button 
                         onClick={onClose} 
-                        className="btn btn-secondary"
+                        className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] hover:opacity-80 transition-colors font-semibold"
                     >
                         Cancel
                     </button>
                     <button 
                         onClick={onConfirm} 
-                        className="btn btn-danger"
+                        className="px-4 py-2 rounded-lg bg-[var(--accent-pink)] hover:opacity-80 transition-colors text-white font-semibold"
                     >
                         {confirmLabel || 'Confirm Delete'}
                     </button>

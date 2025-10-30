@@ -236,8 +236,7 @@ const PropertiesInspector: React.FC<{
     setSelectedVariableId?: (id: VNID | null) => void;
     isConfigScene?: boolean;
     onCloseSceneConfig?: () => void;
-    showSceneProperties?: boolean;
-}> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, selectedVariableId, setSelectedVariableId, isConfigScene, onCloseSceneConfig, showSceneProperties }) => {
+}> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, selectedVariableId, setSelectedVariableId, isConfigScene, onCloseSceneConfig }) => {
     const { project, dispatch } = useProject();
     const activeScene = project.scenes[activeSceneId];
 
@@ -248,7 +247,7 @@ const PropertiesInspector: React.FC<{
         };
 
         return (
-            <Panel title={`Scene Config: ${activeScene.name}`} className="w-60 min-w-[220px] max-w-[260px] flex-shrink-0">
+            <Panel title={`Scene Config: ${activeScene.name}`} className="w-96 flex-shrink-0">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
                         <div className="mb-4">
@@ -299,7 +298,7 @@ const PropertiesInspector: React.FC<{
     if (selectedVariableId && setSelectedVariableId) {
         const variable = project.variables[selectedVariableId];
         if (!variable) {
-            return <Panel title="Properties" className="w-60 min-w-[220px] max-w-[260px] flex-shrink-0"><p>Variable not found.</p></Panel>;
+            return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Variable not found.</p></Panel>;
         }
 
         const updateVariable = (updates: Partial<VNVariable>) => {
@@ -332,7 +331,7 @@ const PropertiesInspector: React.FC<{
         };
 
         return (
-            <Panel title={`Variable: ${variable.name}`} className="w-60 min-w-[220px] max-w-[260px] flex-shrink-0">
+            <Panel title={`Variable: ${variable.name}`} className="w-96 flex-shrink-0">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
                         <FormField label="Name">
@@ -374,70 +373,7 @@ const PropertiesInspector: React.FC<{
     }
 
     if (selectedCommandIndex === null || !activeScene || !activeScene.commands[selectedCommandIndex]) {
-        if (showSceneProperties && activeScene) {
-            return (
-                <Panel title={`Scene: ${activeScene.name}`} className="w-60 min-w-[220px] max-w-[260px] flex-shrink-0">
-                    <div className="flex flex-col h-full">
-                        <div className="flex-grow overflow-y-auto pr-1">
-                            <div className="mb-4">
-                                <h3 className="font-bold mb-2 text-slate-300">Scene Overview</h3>
-                                <div className="space-y-2 text-sm">
-                                    <p><strong>Name:</strong> {activeScene.name}</p>
-                                    <p><strong>Commands:</strong> {activeScene.commands.length}</p>
-                                    <p><strong>Start Scene:</strong> {project.startSceneId === activeSceneId ? 'Yes' : 'No'}</p>
-                                    {activeScene.conditions && activeScene.conditions.length > 0 && (
-                                        <p><strong>Conditions:</strong> {activeScene.conditions.length}</p>
-                                    )}
-                                </div>
-                            </div>
-                            
-                            {activeScene.conditions && activeScene.conditions.length > 0 && (
-                                <div className="mb-4">
-                                    <h3 className="font-bold mb-2 text-slate-300">Conditions</h3>
-                                    <p className="text-xs text-slate-400 mb-2">
-                                        This scene will only play if all conditions are met.
-                                    </p>
-                                    <div className="space-y-1">
-                                        {activeScene.conditions.map((condition, index) => {
-                                            const variable = project.variables[condition.variableId];
-                                            return (
-                                                <div key={index} className="text-xs p-2 bg-slate-800 rounded">
-                                                    {variable?.name || 'Unknown'} {condition.operator} {String(condition.value)}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            <div className="mb-4">
-                                <h3 className="font-bold mb-2 text-slate-300">Quick Actions</h3>
-                                <div className="space-y-2">
-                                    <button
-                                        onClick={() => onCloseSceneConfig && onCloseSceneConfig()} // This will trigger scene config mode
-                                        className="w-full text-left p-2 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
-                                    >
-                                        Configure Conditions
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const newName = prompt('Enter new scene name:', activeScene.name);
-                                            if (newName && newName.trim()) {
-                                                dispatch({ type: 'UPDATE_SCENE', payload: { sceneId: activeSceneId, name: newName.trim() } });
-                                            }
-                                        }}
-                                        className="w-full text-left p-2 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
-                                    >
-                                        Rename Scene
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </Panel>
-            );
-        }
-        return <Panel title="Properties" className="w-60 min-w-[220px] max-w-[260px] flex-shrink-0"><p>Select a command to edit its properties.</p></Panel>;
+        return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Select a command to edit its properties.</p></Panel>;
     }
     
     const command = activeScene.commands[selectedCommandIndex];
@@ -650,10 +586,11 @@ const PropertiesInspector: React.FC<{
                 };
 
                 const addOption = () => {
+                    const firstSceneId = Object.keys(project.scenes)[0];
                     const newOption: ChoiceOption = {
                         id: generateId(),
                         text: 'New Option',
-                        actions: [],
+                        actions: [{ type: UIActionType.JumpToScene, targetSceneId: firstSceneId || '' }],
                     };
                     updateCommand({ options: [...cmd.options, newOption] });
                 };
@@ -707,45 +644,30 @@ const PropertiesInspector: React.FC<{
                         } : { ...opt, id: opt.id || generateId(), actions: opt.actions || [] };
 
                         return (
-                            <div key={migratedOpt.id} className="p-3 border border-slate-700 rounded-md mb-2 bg-slate-800/30">
+                            <div key={migratedOpt.id} className="p-2 border border-slate-700 rounded-md mb-2">
                                <FormField label={`Option ${i+1} Text`}><TextInput value={migratedOpt.text} onChange={e => updateOption(i, { text: e.target.value })}/></FormField>
                                <h4 className="font-bold text-sm mt-3 mb-1 text-slate-400">Conditions</h4>
                                <p className="text-xs text-slate-500 mb-2">This option will only be shown if all conditions are met.</p>
                                <ConditionsEditor conditions={migratedOpt.conditions} project={project} onChange={(cs) => updateOption(i, { conditions: cs })}/>
                                
                                 <h4 className="font-bold text-sm mt-3 mb-1 text-slate-400">Actions</h4>
-                                <div className="space-y-2">
+                                <div className="space-y-2 pl-2 border-l-2 border-slate-600">
                                     {(migratedOpt.actions || []).map((action, actionIndex) => (
-                                        <div key={actionIndex} className="p-3 bg-slate-900/50 border border-slate-700 rounded-md">
+                                        <div key={actionIndex} className="p-2 bg-slate-800 rounded-md">
                                             {action.type === UIActionType.JumpToScene ? (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <p className="text-sm font-semibold text-slate-300">Jump to Scene</p>
-                                                        <button 
-                                                            onClick={() => removeAction(i, actionIndex)} 
-                                                            className="text-red-400 hover:text-red-300 hover:bg-red-900/30 p-1.5 rounded transition-colors flex-shrink-0"
-                                                            title="Remove jump action"
-                                                        >
-                                                            <XMarkIcon className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                    <FormField label="Target Scene">
+                                                <FormField label="Jump to Scene">
+                                                    <div className="flex items-center gap-2">
                                                         <Select value={action.targetSceneId} onChange={e => updateAction(i, actionIndex, { targetSceneId: e.target.value })}>
                                                             {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                         </Select>
-                                                    </FormField>
-                                                </div>
+                                                        <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
+                                                    </div>
+                                                </FormField>
                                             ) : action.type === UIActionType.SetVariable ? (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <p className="text-sm font-semibold text-slate-300">Set Variable</p>
-                                                        <button 
-                                                            onClick={() => removeAction(i, actionIndex)} 
-                                                            className="text-red-400 hover:text-red-300 hover:bg-red-900/30 p-1.5 rounded transition-colors flex-shrink-0"
-                                                            title="Remove variable action"
-                                                        >
-                                                            <XMarkIcon className="w-4 h-4" />
-                                                        </button>
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <p className="text-sm font-semibold">Set Variable</p>
+                                                        <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
                                                     </div>
                                                     {(() => {
                                                         const actionAsSetVar = action as SetVariableAction;
@@ -1261,7 +1183,7 @@ const PropertiesInspector: React.FC<{
         }
     };
 
-    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-60 min-w-[220px] max-w-[260px] flex-shrink-0">
+    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-96 flex-shrink-0">
         <div className="flex flex-col h-full">
             <div className="flex-grow overflow-y-auto pr-1">
                 {renderProperties()}

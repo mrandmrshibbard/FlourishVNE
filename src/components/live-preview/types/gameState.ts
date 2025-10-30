@@ -6,7 +6,6 @@ import React from 'react';
 import { VNID, VNPosition, VNTransition } from '../../../types';
 import { VNCommand } from '../../../features/scene/types';
 import { ChoiceOption } from '../../../features/scene/types';
-import { VNUIAction } from '../../../types/shared';
 
 export type StageSize = { width: number; height: number };
 
@@ -44,11 +43,6 @@ export interface ImageOverlay {
     transition?: VNTransition;
     duration?: number;
     action?: 'show' | 'hide';
-    // Interactive properties
-    onClick?: VNUIAction;
-    hoverImageUrl?: string;
-    hoverVideoUrl?: string;
-    waitForClick?: boolean;
 }
 
 export interface ButtonOverlay {
@@ -129,16 +123,6 @@ export interface PlayerState {
     variables: Record<VNID, string | number | boolean>;
     stageState: StageState;
     musicState: MusicState;
-    dialogueHistory: Array<{
-        characterName: string;
-        characterColor: string;
-        text: string;
-        timestamp: number;
-    }>;
-    choiceHistory: Array<{
-        choiceText: string;
-        timestamp: number;
-    }>;
     uiState: {
         dialogue: {
             characterName: string;
@@ -180,8 +164,6 @@ export interface GameSettings {
     musicVolume: number;
     sfxVolume: number;
     enableSkip: boolean;
-    autoAdvance: boolean;
-    autoAdvanceDelay: number; // in seconds
 }
 
 export const defaultSettings: GameSettings = {
@@ -189,6 +171,4 @@ export const defaultSettings: GameSettings = {
     musicVolume: 0.8,
     sfxVolume: 0.8,
     enableSkip: true,
-    autoAdvance: false,
-    autoAdvanceDelay: 3,
 };

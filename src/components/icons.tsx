@@ -145,49 +145,10 @@ export const ChevronDownIcon = ({ className, title, ...props }: React.SVGProps<S
     </svg>
 );
 
-export const ChevronRightIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
-        {title && <title>{title}</title>}
-        <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-    </svg>
-);
-
 export const FolderIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
         {title && <title>{title}</title>}
         <path d="M3.75 3A1.75 1.75 0 002 4.75v10.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 15.25v-8.5A1.75 1.75 0 0016.25 5h-4.836a.25.25 0 01-.177-.073L9.823 3.513A1.75 1.75 0 008.586 3H3.75z" />
-    </svg>
-);
-
-// User/People icon for Characters
-export const UserIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
-        {title && <title>{title}</title>}
-        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-    </svg>
-);
-
-// Users/Group icon for Characters (alternative)
-export const UsersIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
-        {title && <title>{title}</title>}
-        <path d="M7 8a3 3 0 100-6 3 3 0 000 6zM14.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 017 18a9.953 9.953 0 01-5.385-1.572zM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 00-1.588-3.755 4.502 4.502 0 015.874 2.636.818.818 0 01-.36.98A7.465 7.465 0 0114.5 16z" />
-    </svg>
-);
-
-// Window/Screen icon for UI
-export const WindowIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
-        {title && <title>{title}</title>}
-        <path fillRule="evenodd" d="M2 4.75A2.75 2.75 0 014.75 2h10.5A2.75 2.75 0 0118 4.75v10.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25V4.75zm11 1.5a.75.75 0 011.5 0v8a.75.75 0 01-1.5 0v-8zm-5-.75a.75.75 0 00-.75.75v8a.75.75 0 001.5 0v-8a.75.75 0 00-.75-.75zm-2.75.75a.75.75 0 011.5 0v8a.75.75 0 01-1.5 0v-8z" clipRule="evenodd" />
-    </svg>
-);
-
-// Code brackets icon for Variables
-export const CodeBracketIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
-        {title && <title>{title}</title>}
-        <path fillRule="evenodd" d="M6.28 5.22a.75.75 0 010 1.06L2.56 10l3.72 3.72a.75.75 0 01-1.06 1.06L.97 10.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 0zm7.44 0a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 010-1.06zM11.377 2.011a.75.75 0 01.612.867l-2.5 14.5a.75.75 0 01-1.478-.255l2.5-14.5a.75.75 0 01.866-.612z" clipRule="evenodd" />
     </svg>
 );
 
