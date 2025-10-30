@@ -14,9 +14,11 @@ interface GameBuilderProps {
 }
 
 type BuildStep = 'idle' | 'building' | 'success' | 'error';
+type BuildType = 'web' | 'desktop';
 
 export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) => {
   const [buildStep, setBuildStep] = useState<BuildStep>('idle');
+  const [buildType, setBuildType] = useState<BuildType>('web');
   const [progress, setProgress] = useState<BuildProgress>({
     step: 'prepare',
     progress: 0,
@@ -33,9 +35,26 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
       setBuildStep('building');
       setError('');
       
-      const blob = await buildStandaloneGame(project, (prog) => {
-        setProgress(prog);
-      });
+      let blob: Blob;
+      
+      if (buildType === 'desktop') {
+        // Import the desktop build function dynamically
+        const { buildDesktopGame } = await import('../utils/desktopGameBundler');
+        blob = await buildDesktopGame(project, (prog) => {
+          setProgress(prog);
+        });
+        
+        // Desktop builds save the file directly via Electron,
+        // so we don't need to download the blob
+        if (blob.size === 0) {
+          setBuildStep('success');
+          return;
+        }
+      } else {
+        blob = await buildStandaloneGame(project, (prog) => {
+          setProgress(prog);
+        });
+      }
       
       setGameBlob(blob);
       setBuildSize(blob.size / (1024 * 1024)); // Convert to MB
@@ -73,19 +92,74 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
         <div style={styles.content}>
           {buildStep === 'idle' && (
             <>
+              <div style={styles.buildTypeSelector}>
+                <h3 style={styles.selectorTitle}>Choose Build Type:</h3>
+                <div style={styles.buildTypes}>
+                  <button
+                    onClick={() => setBuildType('web')}
+                    style={{
+                      ...styles.buildTypeButton,
+                      ...(buildType === 'web' ? styles.buildTypeButtonActive : {})
+                    }}
+                  >
+                    <div style={styles.buildTypeIcon}>🌐</div>
+                    <div style={styles.buildTypeName}>Web Build</div>
+                    <div style={styles.buildTypeDesc}>
+                      Play in browser • itch.io ready • No saves persist
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setBuildType('desktop')}
+                    style={{
+                      ...styles.buildTypeButton,
+                      ...(buildType === 'desktop' ? styles.buildTypeButtonActive : {})
+                    }}
+                  >
+                    <div style={styles.buildTypeIcon}>💾</div>
+                    <div style={styles.buildTypeName}>Desktop Build</div>
+                    <div style={styles.buildTypeDesc}>
+                      Windows/Mac/Linux • Save progress • Offline play
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div style={styles.infoBox}>
-                <h3 style={styles.infoTitle}>What is this?</h3>
+                <h3 style={styles.infoTitle}>
+                  {buildType === 'web' ? '🌐 Web Build' : '💾 Desktop Build'}
+                </h3>
+                {buildType === 'web' ? (
+                  <>
+                    <p style={styles.infoText}>
+                      This creates a <strong>browser-based game</strong> that you can:
+                    </p>
+                    <ul style={styles.list}>
+                      <li>✅ Upload to <strong>itch.io</strong> (easiest!)</li>
+                      <li>✅ Share on any web host (Netlify, GitHub Pages, etc.)</li>
+                      <li>✅ Send to friends as a ZIP file</li>
+                      <li>✅ Play offline in any browser</li>
+                      <li>⚠️ Note: Progress won't save (browser limitation)</li>
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <p style={styles.infoText}>
+                      This creates a <strong>standalone desktop app</strong> with:
+                    </p>
+                    <ul style={styles.list}>
+                      <li>💾 Full save/load system (10 save slots)</li>
+                      <li>🔄 Auto-save functionality</li>
+                      <li>📁 Persistent progress storage</li>
+                      <li>🖥️ Works on Windows, Mac, and Linux</li>
+                      <li>📦 Requires Electron (included in build)</li>
+                    </ul>
+                    <p style={styles.warningText}>
+                      ⚠️ Desktop builds are larger (~200MB) due to Electron framework
+                    </p>
+                  </>
+                )}
                 <p style={styles.infoText}>
-                  This creates a <strong>complete, playable game</strong> that you can:
-                </p>
-                <ul style={styles.list}>
-                  <li>✅ Upload to <strong>itch.io</strong> (easiest!)</li>
-                  <li>✅ Share on any web host (Netlify, GitHub Pages, etc.)</li>
-                  <li>✅ Send to friends as a ZIP file</li>
-                  <li>✅ Play offline in any browser</li>
-                </ul>
-                <p style={styles.infoText}>
-                  <strong>No coding required!</strong> Just download and upload.
+                  <strong>No coding required!</strong> Just download and distribute.
                 </p>
               </div>
 
@@ -105,7 +179,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
               </div>
 
               <button onClick={handleBuild} style={styles.buildButton}>
-                🚀 Build My Game
+                {buildType === 'web' ? '🌐 Build Web Game' : '💾 Build Desktop App'}
               </button>
 
               <div style={styles.helpBox}>
@@ -138,47 +212,99 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
           {buildStep === 'success' && (
             <div style={styles.successContainer}>
               <div style={styles.successIcon}>✅</div>
-              <h3 style={styles.successTitle}>Game Built Successfully!</h3>
+              <h3 style={styles.successTitle}>
+                {buildType === 'web' ? 'Web Game Built Successfully!' : 'Desktop App Built Successfully!'}
+              </h3>
               <p style={styles.successText}>
-                Your game is ready to share with the world!
+                {buildType === 'web' 
+                  ? 'Your game is ready to share on the web!'
+                  : 'Your desktop game with save system is ready!'}
               </p>
 
-              <div style={styles.buildInfo}>
-                <div style={styles.buildStat}>
-                  <strong>File Size:</strong> {buildSize.toFixed(1)} MB
-                </div>
-                <div style={styles.buildStat}>
-                  <strong>Format:</strong> HTML5 (ZIP)
-                </div>
-              </div>
+              {buildType === 'web' && (
+                <>
+                  <div style={styles.buildInfo}>
+                    <div style={styles.buildStat}>
+                      <strong>File Size:</strong> {buildSize.toFixed(1)} MB
+                    </div>
+                    <div style={styles.buildStat}>
+                      <strong>Format:</strong> HTML5 (ZIP)
+                    </div>
+                  </div>
 
-              <button onClick={handleDownload} style={styles.downloadButton}>
-                ⬇️ Download Game ZIP
-              </button>
+                  <button onClick={handleDownload} style={styles.downloadButton}>
+                    ⬇️ Download Web Game ZIP
+                  </button>
+                </>
+              )}
+              
+              {buildType === 'desktop' && (
+                <div style={styles.successMessage}>
+                  <p style={{ fontSize: '16px', color: '#10b981', margin: '16px 0' }}>
+                    ✅ Executable saved successfully!
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#94a3b8' }}>
+                    Check the location you selected to find your game's executable file.
+                  </p>
+                </div>
+              )}
 
               <div style={styles.nextSteps}>
                 <h4 style={styles.nextStepsTitle}>What's Next?</h4>
-                <ol style={styles.nextStepsList}>
-                  <li>
-                    <strong>Upload to itch.io (Recommended):</strong>
-                    <br />
-                    Go to <a href="https://itch.io/game/new" target="_blank" rel="noopener noreferrer" style={styles.link}>itch.io/game/new</a>
-                    <br />
-                    Choose "HTML" as the upload type
-                    <br />
-                    Upload the ZIP file you just downloaded
-                    <br />
-                    Check "This file will be played in the browser"
-                    <br />
-                    Publish!
-                  </li>
-                  <li>
-                    <strong>Or host yourself:</strong> Unzip and upload the contents to any web host
-                  </li>
-                  <li>
-                    <strong>Or share offline:</strong> Send the ZIP to friends - they can unzip and open index.html
-                  </li>
-                </ol>
+                {buildType === 'web' ? (
+                  <ol style={styles.nextStepsList}>
+                    <li>
+                      <strong>Upload to itch.io (Recommended):</strong>
+                      <br />
+                      Go to <a href="https://itch.io/game/new" target="_blank" rel="noopener noreferrer" style={styles.link}>itch.io/game/new</a>
+                      <br />
+                      Choose "HTML" as the upload type
+                      <br />
+                      Upload the ZIP file you just downloaded
+                      <br />
+                      Check "This file will be played in the browser"
+                      <br />
+                      Publish!
+                    </li>
+                    <li>
+                      <strong>Or host yourself:</strong> Unzip and upload the contents to any web host
+                    </li>
+                    <li>
+                      <strong>Or share offline:</strong> Send the ZIP to friends - they can unzip and open index.html
+                    </li>
+                  </ol>
+                ) : (
+                  <ol style={styles.nextStepsList}>
+                    <li>
+                      <strong>Test Your Game:</strong> Double-click the executable to test your game
+                      <br />
+                      • Windows: .exe file
+                      <br />
+                      • Mac: .app or .dmg file
+                      <br />
+                      • Linux: .AppImage file
+                    </li>
+                    <li>
+                      <strong>Distribute:</strong> Share the executable with players!
+                      <br />
+                      They just download and run - no installation needed
+                    </li>
+                    <li>
+                      <strong>Save System:</strong> Your game includes:
+                      <br />
+                      • Automatic file-based saves (persistent between sessions)
+                      <br />
+                      • Players' progress is saved to their computer
+                      <br />
+                      • Works offline with no server needed
+                    </li>
+                    <li>
+                      <strong>Note:</strong> The executable is platform-specific
+                      <br />
+                      Build on Windows for .exe, Mac for .app, Linux for .AppImage
+                    </li>
+                  </ol>
+                )}
               </div>
 
               <button onClick={handleReset} style={styles.resetButton}>
@@ -489,5 +615,56 @@ const styles = {
     borderRadius: '8px',
     fontSize: '18px',
     cursor: 'pointer'
+  },
+  buildTypeSelector: {
+    marginBottom: '20px'
+  },
+  selectorTitle: {
+    margin: '0 0 15px 0',
+    color: '#fff',
+    fontSize: '18px',
+    textAlign: 'center' as const
+  },
+  buildTypes: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '15px'
+  },
+  buildTypeButton: {
+    padding: '20px',
+    background: '#2a2a2a',
+    border: '2px solid #444',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    textAlign: 'center' as const
+  },
+  buildTypeButtonActive: {
+    background: '#667eea',
+    borderColor: '#764ba2',
+    transform: 'scale(1.05)'
+  },
+  buildTypeIcon: {
+    fontSize: '48px',
+    marginBottom: '10px'
+  },
+  buildTypeName: {
+    color: '#fff',
+    fontSize: '18px',
+    fontWeight: 'bold' as const,
+    marginBottom: '8px'
+  },
+  buildTypeDesc: {
+    color: '#999',
+    fontSize: '12px',
+    lineHeight: '1.4'
+  },
+  warningText: {
+    color: '#ff9800',
+    fontSize: '14px',
+    marginTop: '10px',
+    padding: '10px',
+    background: '#2a2a2a',
+    borderRadius: '6px'
   }
 };

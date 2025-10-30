@@ -8,6 +8,8 @@ import { VNVariable } from '../features/variables/types';
 export interface VNProject {
     id: VNID;
     title: string;
+    description?: string;
+    author?: string;
     startSceneId: VNID;
     scenes: Record<VNID, VNScene>;
     characters: Record<VNID, VNCharacter>;

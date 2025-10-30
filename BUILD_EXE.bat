@@ -3,26 +3,20 @@ echo ====================================
 echo  Flourish VNE - Build Desktop App
 echo ====================================
 echo.
-echo This will build the Windows .exe file.
-echo The process takes 2-5 minutes.
+echo This will build the complete Windows .exe file.
+echo The process includes:
+echo - Building standalone game engine
+echo - Generating engine bundle
+echo - Building React app
+echo - Packaging Electron app
+echo.
+echo Estimated time: 3-7 minutes
 echo.
 pause
 
 echo.
-echo [Step 1/2] Building React app...
-call npm run build
-
-if errorlevel 1 (
-    echo.
-    echo ERROR: React build failed!
-    echo Make sure you ran 'npm install' first.
-    pause
-    exit /b 1
-)
-
-echo.
-echo [Step 2/2] Packaging Electron app...
-call npm run electron:build:win
+echo Building complete application with all dependencies...
+call npm run dist
 
 if errorlevel 1 (
     echo.

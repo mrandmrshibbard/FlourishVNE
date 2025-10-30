@@ -14,12 +14,13 @@
     "generate:engine-bundle": "node scripts/generate-engine-bundle.js",
     "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
     "build:player": "node scripts/build-player.js",
-    "electron:dev": "npm run build && electron .",
-    "electron:build": "npm run build && electron-builder",
-    "electron:build:win": "npm run build && electron-builder --win",
-    "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:linux": "npm run build && electron-builder --linux",
-    "dist": "npm run build && electron-builder --win --x64"
+    "build:full": "npm run build:engine && npm run build",
+    "electron:dev": "npm run build:full && electron .",
+    "electron:build": "npm run build:full && electron-builder",
+    "electron:build:win": "npm run build:full && electron-builder --win",
+    "electron:build:mac": "npm run build:full && electron-builder --mac",
+    "electron:build:linux": "npm run build:full && electron-builder --linux",
+    "dist": "npm run build:full && electron-builder --win --x64"
   },
   "dependencies": {
     "jszip": "^3.10.1",

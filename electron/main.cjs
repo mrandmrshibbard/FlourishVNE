@@ -1,5 +1,8 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const { execSync } = require('child_process');
+const os = require('os');
 
 let mainWindow;
 
@@ -14,6 +17,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false, // Allow loading external resources (CDNs)
+      preload: path.join(__dirname, 'preload.cjs')
     },
     backgroundColor: '#1a102c',
     title: 'Flourish Visual Novel Engine',
@@ -130,3 +134,198 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+// IPC Handler: Build Desktop Game with Electron Builder
+ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
+  try {
+    // Create temporary build directory
+    const tempDir = path.join(os.tmpdir(), 'flourish-game-build-' + Date.now());
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    // Write all game files
+    for (const [filename, content] of Object.entries(gameFiles)) {
+      const filePath = path.join(tempDir, filename);
+      const dir = path.dirname(filePath);
+      
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      if (content instanceof Buffer) {
+        fs.writeFileSync(filePath, content);
+      } else {
+        fs.writeFileSync(filePath, content, 'utf8');
+      }
+    }
+
+    // Install dependencies
+    event.sender.send('build-progress', { 
+      step: 'install', 
+      progress: 30, 
+      message: 'Installing dependencies...' 
+    });
+    
+    try {
+      execSync('npm install', { cwd: tempDir, stdio: 'ignore' });
+    } catch (err) {
+      throw new Error('Failed to install dependencies: ' + err.stderr?.toString() || err.message);
+    }
+
+    // Run electron-builder directly
+    event.sender.send('build-progress', { 
+      step: 'build', 
+      progress: 60, 
+      message: 'Building executable...' 
+    });
+    
+    const platform = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux';
+    const platformFlag = `--${platform}`;
+    
+    // Use node_modules/.bin/electron-builder directly
+    const builderPath = path.join(tempDir, 'node_modules', '.bin', 'electron-builder');
+    const builderCmd = process.platform === 'win32' ? `"${builderPath}.cmd"` : builderPath;
+    
+    try {
+      const output = execSync(`${builderCmd} ${platformFlag}`, { 
+        cwd: tempDir, 
+        encoding: 'utf8',
+        env: { ...process.env, CI: 'true' }
+      });
+      console.log('Build output:', output);
+    } catch (err) {
+      console.error('Build error:', err);
+      const stderr = err.stderr || '';
+      const stdout = err.stdout || '';
+      const message = err.message || '';
+      throw new Error('Electron builder failed: ' + (stderr || stdout || message));
+    }
+
+    // Find the built executable
+    const distDir = path.join(tempDir, 'dist');
+    
+    if (!fs.existsSync(distDir)) {
+      throw new Error('Dist directory not found after build');
+    }
+    
+    const files = fs.readdirSync(distDir);
+    console.log('Files in dist directory:', files);
+    
+    let exePath;
+    let fullExePath;
+    let isDirectory = false;
+    
+    if (platform === 'win') {
+      // For portable build, look for .exe file directly in dist
+      exePath = files.find(f => f.endsWith('.exe') && !f.includes('Setup'));
+      if (exePath) {
+        fullExePath = path.join(distDir, exePath);
+      } else {
+        // Look for win-unpacked folder
+        const unpackedDir = files.find(f => f.includes('win-unpacked'));
+        if (unpackedDir) {
+          fullExePath = path.join(distDir, unpackedDir);
+          exePath = unpackedDir;
+          isDirectory = true;
+        }
+      }
+    } else if (platform === 'mac') {
+      // For mac dir build, look for .app folder
+      exePath = files.find(f => f.endsWith('.app'));
+      if (exePath) {
+        fullExePath = path.join(distDir, exePath);
+        isDirectory = true;
+      }
+    } else {
+      // For linux dir build, look for AppImage or unpacked folder
+      exePath = files.find(f => f.endsWith('.AppImage'));
+      if (exePath) {
+        fullExePath = path.join(distDir, exePath);
+      } else {
+        // Look for unpacked folder
+        const unpackedDir = files.find(f => f.includes('linux-unpacked'));
+        if (unpackedDir) {
+          fullExePath = path.join(distDir, unpackedDir);
+          exePath = unpackedDir;
+          isDirectory = true;
+        }
+      }
+    }
+
+    if (!fullExePath || !fs.existsSync(fullExePath)) {
+      console.error('Available files:', files);
+      throw new Error('Built executable not found. Available files: ' + files.join(', '));
+    }
+
+    // Ask user where to save
+    let savePath;
+    if (isDirectory) {
+      // For directories, use folder selection dialog
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Choose Where to Save Game Folder',
+        defaultPath: app.getPath('downloads'),
+        properties: ['openDirectory', 'createDirectory']
+      });
+      
+      if (result.filePaths && result.filePaths.length > 0) {
+        savePath = path.join(result.filePaths[0], exePath);
+      }
+    } else {
+      // For single files, use save dialog
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save Desktop Game',
+        defaultPath: path.join(app.getPath('downloads'), exePath),
+        filters: [
+          { name: 'Executable', extensions: [exePath.split('.').pop()] }
+        ]
+      });
+      savePath = result.filePath;
+    }
+
+    if (savePath) {
+      if (isDirectory) {
+        // Copy entire directory recursively
+        fs.cpSync(fullExePath, savePath, { recursive: true });
+      } else {
+        // Copy single file
+        fs.copyFileSync(fullExePath, savePath);
+      }
+      
+      // Clean up temp directory with retry logic
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
+          break;
+        } catch (err) {
+          retries--;
+          if (retries === 0) {
+            console.warn('Failed to clean up temp directory:', err);
+            // Don't throw - build succeeded even if cleanup failed
+          } else {
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+      }
+      
+      return { success: true, path: savePath };
+    }
+
+    // Clean up temp directory
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
+    } catch (err) {
+      console.warn('Failed to clean up temp directory:', err);
+    }
+    
+    return { success: false, error: 'User cancelled' };
+    
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message,
+      details: error.stack 
+    };
+  }
+});
+

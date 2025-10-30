@@ -51,4 +51,10 @@ fs.writeFileSync(outputPath, output, 'utf-8');
 
 console.log(`✓ Generated ${outputPath}`);
 console.log(`✓ Bundle size: ${engineSize} KB`);
+
+// Also copy game-engine.js to public folder for runtime access
+const publicPath = path.join(__dirname, '../public/game-engine.js');
+fs.copyFileSync(enginePath, publicPath);
+console.log(`✓ Copied to ${publicPath}`);
+
 console.log('✅ Done!');

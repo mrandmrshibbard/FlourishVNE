@@ -101,7 +101,7 @@ export async function buildStandaloneGame(
 /**
  * Generates a self-contained HTML file with the game engine embedded
  */
-function generateStandaloneHTML(project: VNProject): string {
+export function generateStandaloneHTML(project: VNProject): string {
   // Inline the minimal game engine code
   const gameEngineCode = getMinimalGameEngine();
   const projectData = JSON.stringify(project);
@@ -541,7 +541,7 @@ function getMinimalGameEngine(): string {
  * Collects all asset URLs from the project
  * Returns a map of filename -> data URL
  */
-function collectAllAssets(project: VNProject): Record<string, string> {
+export function collectAllAssets(project: VNProject): Record<string, string> {
   const assets: Record<string, string> = {};
   let assetCounter = 0;
 
@@ -694,7 +694,7 @@ function collectAllAssets(project: VNProject): Record<string, string> {
 /**
  * Converts a data URL to a Blob
  */
-function dataURLToBlob(dataUrl: string): Blob {
+export function dataURLToBlob(dataUrl: string): Blob {
   const parts = dataUrl.split(',');
   const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
   const bstr = atob(parts[1]);
