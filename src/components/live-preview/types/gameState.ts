@@ -123,6 +123,7 @@ export interface PlayerState {
     variables: Record<VNID, string | number | boolean>;
     stageState: StageState;
     musicState: MusicState;
+    history: HistoryEntry[];
     uiState: {
         dialogue: {
             characterName: string;
@@ -142,6 +143,7 @@ export interface PlayerState {
         isTransitioning: boolean;
         transitionElement: React.ReactNode | null;
         flash: { color: string, duration: number } | null;
+        showHistory: boolean;
     };
 }
 
@@ -159,11 +161,22 @@ export interface GameStateSave {
     }
 }
 
+export interface HistoryEntry {
+    timestamp: number;
+    type: 'dialogue' | 'choice';
+    characterName?: string;
+    characterColor?: string;
+    text: string;
+    choiceText?: string; // For tracking which choice was selected
+}
+
 export interface GameSettings {
     textSpeed: number;
     musicVolume: number;
     sfxVolume: number;
     enableSkip: boolean;
+    autoAdvance: boolean;
+    autoAdvanceDelay: number; // in seconds
 }
 
 export const defaultSettings: GameSettings = {
@@ -171,4 +184,6 @@ export const defaultSettings: GameSettings = {
     musicVolume: 0.8,
     sfxVolume: 0.8,
     enableSkip: true,
+    autoAdvance: false,
+    autoAdvanceDelay: 3,
 };

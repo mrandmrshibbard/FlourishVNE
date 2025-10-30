@@ -67,6 +67,7 @@ import {
     MusicState,
     PlayerState,
     GameSettings,
+    HistoryEntry,
 } from './live-preview/types/gameState';
 
 type StageSize = { width: number; height: number };
@@ -89,6 +90,8 @@ const defaultSettings: GameSettings = {
     musicVolume: 0.8,
     sfxVolume: 0.8,
     enableSkip: true,
+    autoAdvance: false,
+    autoAdvanceDelay: 3,
 };
 
 // --- Utility Functions (keeping these until they can be extracted) ---
@@ -1875,7 +1878,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 commandStack: saveData.playerStateData.commandStack || [],
                 variables: saveData.playerStateData.variables,
                 stageState: saveData.playerStateData.stageState,
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null },
+                history: [],
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
@@ -1932,7 +1936,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             commandStack: [],
             variables: initialVariables,
             stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5 } },
-            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null },
+            history: [],
+            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
         });
         setScreenStack([]);
@@ -2831,13 +2836,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // --- Input & Action Handlers ---
     const handleDialogueAdvance = () => {
-        setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null } } : null);
+        setPlayerState(p => {
+            if (!p || !p.uiState.dialogue) return p;
+            
+            // Add dialogue to history
+            const historyEntry: HistoryEntry = {
+                timestamp: Date.now(),
+                type: 'dialogue',
+                characterName: p.uiState.dialogue.characterName,
+                characterColor: p.uiState.dialogue.characterColor,
+                text: p.uiState.dialogue.text,
+            };
+            
+            return {
+                ...p,
+                currentIndex: p.currentIndex + 1,
+                history: [...p.history, historyEntry],
+                uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null }
+            };
+        });
     };
     const handleChoiceSelect = (choice: ChoiceOption) => {
         console.log('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
         setPlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
+            
+            // Add choice to history
+            const historyEntry: HistoryEntry = {
+                timestamp: Date.now(),
+                type: 'choice',
+                text: `Choice: ${choice.text}`,
+                choiceText: choice.text,
+            };
+            newState.history = [...newState.history, historyEntry];
             
             const actions = choice.actions || [];
             if (!choice.actions && choice.targetSceneId) {
@@ -3324,7 +3356,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && playerState) {
+            if (!playerState) return;
+            
+            // Spacebar to advance dialogue
+            if (e.key === ' ' && playerState.mode === 'playing' && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
+                e.preventDefault();
+                handleDialogueAdvance();
+                return;
+            }
+            
+            // H key to toggle history
+            if ((e.key === 'h' || e.key === 'H') && playerState.mode === 'playing' && !playerState.uiState.textInput) {
+                e.preventDefault();
+                setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
+                return;
+            }
+            
+            if (e.key === 'Escape') {
+                // Close history if open
+                if (playerState.uiState.showHistory) {
+                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
+                    return;
+                }
+                
                 if (playerState.mode === 'playing') {
                     // PAUSE THE GAME
                     setPlayerState(p => p ? { ...p, mode: 'paused' } : null);
@@ -3352,7 +3406,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [playerState, project.ui.pauseScreenId, screenStack]);
+    }, [playerState, project.ui.pauseScreenId, screenStack, handleDialogueAdvance]);
+
+    // Auto-advance effect
+    useEffect(() => {
+        if (!settings.autoAdvance || !playerState || playerState.mode !== 'playing') return;
+        if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
+        
+        const timer = setTimeout(() => {
+            handleDialogueAdvance();
+        }, settings.autoAdvanceDelay * 1000);
+        
+        return () => clearTimeout(timer);
+    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, handleDialogueAdvance]);
 
 
     // --- Stage Rendering ---
@@ -3384,8 +3450,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const shakeIntensityStyle = (activeShakeRef.current ? { '--shake-intensity-x': `${intensityPx}px`, '--shake-intensity-y': `${intensityPx * 0.7}px`, } : {}) as React.CSSProperties;
         const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out`, };
 
+        const handleStageClick = () => {
+            // Only advance if dialogue is showing and not waiting for choice or text input
+            if (playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+                handleDialogueAdvance();
+            }
+        };
+
         return (
-            <div ref={stageRef} className="w-full h-full relative overflow-hidden bg-black">
+            <div 
+                ref={stageRef} 
+                className="w-full h-full relative overflow-hidden bg-black"
+                onClick={handleStageClick}
+                style={{ cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default' }}
+            >
                 <div style={panZoomStyle}>
                     <div className={`w-full h-full ${shakeClass} z-10`} style={shakeIntensityStyle}>
                         {state.backgroundUrl && (
@@ -3547,6 +3625,55 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         );
     };
 
+    // History component
+    const HistoryPanel: React.FC<{ history: HistoryEntry[], onClose: () => void }> = ({ history, onClose }) => {
+        return (
+            <div className="absolute inset-0 bg-black/90 z-50 flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-600">
+                    <h2 className="text-white text-2xl font-bold">Dialogue History</h2>
+                    <button 
+                        onClick={onClose}
+                        className="text-white hover:text-slate-300 text-sm px-4 py-2 bg-slate-700 rounded"
+                    >
+                        Close (ESC / H)
+                    </button>
+                </div>
+                
+                {/* History content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {history.length === 0 ? (
+                        <p className="text-slate-400 text-center mt-8">No dialogue history yet.</p>
+                    ) : (
+                        history.map((entry, index) => (
+                            <div 
+                                key={index}
+                                className={`p-3 rounded ${entry.type === 'choice' ? 'bg-blue-900/30 border-l-4 border-blue-500' : 'bg-slate-800/50'}`}
+                            >
+                                {entry.type === 'dialogue' && entry.characterName && (
+                                    <div 
+                                        className="font-bold mb-1"
+                                        style={{ color: entry.characterColor || '#fff' }}
+                                    >
+                                        {entry.characterName}
+                                    </div>
+                                )}
+                                <div className="text-white">
+                                    {entry.text}
+                                </div>
+                                {entry.type === 'choice' && (
+                                    <div className="text-blue-300 text-sm mt-1 italic">
+                                        Selected choice
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     const renderPlayerUI = () => {
         if (!playerState || playerState.mode !== 'playing') return null;
         const { uiState } = playerState;
@@ -3557,6 +3684,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const shouldShowDialogueOnHud = currentHudScreen?.showDialogue;
         
         return <>
+            {uiState.showHistory && (
+                <HistoryPanel 
+                    history={playerState.history} 
+                    onClose={() => setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)} 
+                />
+            )}
             {uiState.movieUrl && (
                 <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white" onClick={() => setPlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)}>
                     <video src={uiState.movieUrl} autoPlay className="w-full h-full" onEnded={() => setPlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)} />

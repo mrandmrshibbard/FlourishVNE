@@ -1975,7 +1975,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
-    enableSkip: true
+    enableSkip: true,
+    autoAdvance: false,
+    autoAdvanceDelay: 3
   };
   const buildSlideStyle = (x, _y, action, stageSize) => {
     const horizontalBias = x <= 50 ? -60 : 60;
@@ -3428,7 +3430,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
           commandStack: saveData.playerStateData.commandStack || [],
           variables: saveData.playerStateData.variables,
           stageState: saveData.playerStateData.stageState,
-          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null },
+          history: [],
+          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false },
           musicState: saveData.playerStateData.musicState
         });
         setScreenStack([]);
@@ -3484,7 +3487,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
         commandStack: [],
         variables: initialVariables,
         stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5 } },
-        uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null },
+        history: [],
+        uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false },
         musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false }
       });
       setScreenStack([]);
@@ -4246,7 +4250,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       })();
     }, [playerState, project, assetResolver, playSound, evaluateConditions2, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, hudStack]);
     const handleDialogueAdvance = () => {
-      setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null } } : null);
+      setPlayerState((p) => {
+        if (!p || !p.uiState.dialogue) return p;
+        const historyEntry = {
+          timestamp: Date.now(),
+          type: "dialogue",
+          characterName: p.uiState.dialogue.characterName,
+          characterColor: p.uiState.dialogue.characterColor,
+          text: p.uiState.dialogue.text
+        };
+        return {
+          ...p,
+          currentIndex: p.currentIndex + 1,
+          history: [...p.history, historyEntry],
+          uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null }
+        };
+      });
     };
     const handleChoiceSelect = (choice) => {
       var _a;
@@ -4254,6 +4273,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       setPlayerState((p) => {
         if (!p) return null;
         let newState = { ...p };
+        const historyEntry = {
+          timestamp: Date.now(),
+          type: "choice",
+          text: `Choice: ${choice.text}`,
+          choiceText: choice.text
+        };
+        newState.history = [...newState.history, historyEntry];
         const actions = choice.actions || [];
         if (!choice.actions && choice.targetSceneId) {
           actions.push({ type: UIActionType.JumpToScene, targetSceneId: choice.targetSceneId });
@@ -4671,7 +4697,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
     };
     React2.useEffect(() => {
       const handleKeyDown = (e) => {
-        if (e.key === "Escape" && playerState) {
+        if (!playerState) return;
+        if (e.key === " " && playerState.mode === "playing" && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
+          e.preventDefault();
+          handleDialogueAdvance();
+          return;
+        }
+        if ((e.key === "h" || e.key === "H") && playerState.mode === "playing" && !playerState.uiState.textInput) {
+          e.preventDefault();
+          setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
+          return;
+        }
+        if (e.key === "Escape") {
+          if (playerState.uiState.showHistory) {
+            setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
+            return;
+          }
           if (playerState.mode === "playing") {
             setPlayerState((p) => p ? { ...p, mode: "paused" } : null);
             if (musicAudioRef.current && !musicAudioRef.current.paused) {
@@ -4695,7 +4736,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       };
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [playerState, project.ui.pauseScreenId, screenStack]);
+    }, [playerState, project.ui.pauseScreenId, screenStack, handleDialogueAdvance]);
+    React2.useEffect(() => {
+      if (!settings.autoAdvance || !playerState || playerState.mode !== "playing") return;
+      if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
+      const timer = setTimeout(() => {
+        handleDialogueAdvance();
+      }, settings.autoAdvanceDelay * 1e3);
+      return () => clearTimeout(timer);
+    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, handleDialogueAdvance]);
     const renderStage = () => {
       if (!playerState) return null;
       const state = playerState.stageState;
@@ -4721,141 +4770,189 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       const panZoomStyle = { transform: `scale(${state.screen.zoom}) translate(${state.screen.panX}%, ${state.screen.panY}%)`, transition: `transform ${state.screen.transitionDuration}s ease-in-out`, width: "100%", height: "100%" };
       const shakeIntensityStyle = activeShakeRef.current ? { "--shake-intensity-x": `${intensityPx}px`, "--shake-intensity-y": `${intensityPx * 0.7}px` } : {};
       const tintStyle = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out` };
-      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: stageRef, className: "w-full h-full relative overflow-hidden bg-black", children: [
-        /* @__PURE__ */ jsxRuntime2.jsx("div", { style: panZoomStyle, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: `w-full h-full ${shakeClass} z-10`, style: shakeIntensityStyle, children: [
-          state.backgroundUrl && (state.backgroundIsVideo ? /* @__PURE__ */ jsxRuntime2.jsx(
-            "video",
+      const handleStageClick = () => {
+        if (playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+          handleDialogueAdvance();
+        }
+      };
+      return /* @__PURE__ */ jsxRuntime2.jsxs(
+        "div",
+        {
+          ref: stageRef,
+          className: "w-full h-full relative overflow-hidden bg-black",
+          onClick: handleStageClick,
+          style: { cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? "pointer" : "default" },
+          children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: panZoomStyle, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: `w-full h-full ${shakeClass} z-10`, style: shakeIntensityStyle, children: [
+              state.backgroundUrl && (state.backgroundIsVideo ? /* @__PURE__ */ jsxRuntime2.jsx(
+                "video",
+                {
+                  src: state.backgroundUrl,
+                  autoPlay: true,
+                  muted: true,
+                  loop: state.backgroundLoop,
+                  playsInline: true,
+                  className: "absolute w-full h-full object-cover"
+                }
+              ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: state.backgroundUrl, alt: "background", className: "absolute w-full h-full object-cover" })),
+              playerState == null ? void 0 : playerState.uiState.transitionElement,
+              Object.values(state.characters).map((char) => {
+                var _a;
+                let transitionClass = "";
+                let animationDuration = "1s";
+                let slideStyle = {};
+                let positionStyle = getPositionStyle2(char.position);
+                if (!char.transition || char.transition.type !== "slide") {
+                  positionStyle = { ...positionStyle, transform: "translate3d(-50%, 0, 0)" };
+                }
+                if (char.transition) {
+                  const isHideTransition = char.transition.action === "hide";
+                  switch (char.transition.type) {
+                    case "fade":
+                      transitionClass = isHideTransition ? "transition-fade-out" : "transition-dissolve";
+                      break;
+                    case "dissolve":
+                      transitionClass = isHideTransition ? "transition-dissolve-out" : "transition-dissolve";
+                      break;
+                    case "slide":
+                      transitionClass = "transition-slide";
+                      const startPos = char.transition.startPosition || char.position;
+                      const endPos = char.transition.endPosition || char.position;
+                      let startOffsetX = 0;
+                      let startOffsetY = 0;
+                      if (typeof startPos === "object" && typeof endPos === "object") {
+                        startOffsetX = startPos.x - endPos.x;
+                        startOffsetY = startPos.y - endPos.y;
+                      } else {
+                        const startPreset = typeof startPos === "string" ? startPos : "center";
+                        const endPreset = typeof endPos === "string" ? endPos : "center";
+                        const presetCoords = {
+                          "left": { x: 25, y: 10 },
+                          "center": { x: 50, y: 10 },
+                          "right": { x: 75, y: 10 },
+                          "off-left": { x: -25, y: 10 },
+                          "off-right": { x: 125, y: 10 }
+                        };
+                        const startCoords = presetCoords[startPreset];
+                        const endCoords = presetCoords[endPreset];
+                        startOffsetX = startCoords.x - endCoords.x;
+                        startOffsetY = startCoords.y - endCoords.y;
+                      }
+                      if (startOffsetX === 0 && ((_a = char.transition) == null ? void 0 : _a.action) === "show") {
+                        let endX = 50;
+                        if (typeof endPos === "object") endX = endPos.x;
+                        else if (typeof endPos === "string") {
+                          const presetMap = { left: 25, center: 50, right: 75, "off-left": -25, "off-right": 125 };
+                          endX = presetMap[endPos] ?? 50;
+                        }
+                        startOffsetX = endX <= 50 ? -60 : 60;
+                      }
+                      slideStyle = {
+                        "--slide-start-x": `${startOffsetX}%`,
+                        "--slide-start-y": `${startOffsetY}%`,
+                        "--slide-end-x": `0%`,
+                        "--slide-end-y": `0%`
+                      };
+                      if (stageSize && stageSize.width > 0) {
+                        const pxStartX = startOffsetX / 100 * stageSize.width;
+                        const pxStartY = startOffsetY / 100 * stageSize.height;
+                        slideStyle["--slide-start-px"] = `${pxStartX}px`;
+                        slideStyle["--slide-end-px"] = `0px`;
+                        slideStyle["--slide-start-py"] = `${pxStartY}px`;
+                        slideStyle["--slide-end-py"] = `0px`;
+                      }
+                      break;
+                    case "iris-in":
+                      transitionClass = isHideTransition ? "transition-iris-out" : "transition-iris-in";
+                      break;
+                    case "wipe-right":
+                      transitionClass = isHideTransition ? "transition-wipe-out-right" : "transition-wipe-right";
+                      break;
+                  }
+                  animationDuration = `${char.transition.duration}s`;
+                }
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: `absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`, style: { ...positionStyle, animationDuration, ...slideStyle }, children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+                  "video",
+                  {
+                    src: url,
+                    autoPlay: true,
+                    muted: true,
+                    loop: char.videoLoop,
+                    playsInline: true,
+                    className: "absolute top-0 left-0 w-full h-full object-contain",
+                    style: { zIndex: index }
+                  },
+                  index
+                )) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+                  "img",
+                  {
+                    src: url,
+                    alt: "",
+                    className: "absolute top-0 left-0 w-full h-full object-contain",
+                    style: { zIndex: index }
+                  },
+                  index
+                )) }, char.charId);
+              }),
+              state.textOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(TextOverlayElement, { overlay, stageSize }, overlay.id)),
+              state.imageOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(ImageOverlayElement, { overlay, stageSize }, overlay.id)),
+              state.buttonOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
+                ButtonOverlayElement,
+                {
+                  overlay,
+                  onAction: handleUIAction,
+                  playSound,
+                  onAdvance: overlay.waitForClick ? () => {
+                    setPlayerState((p) => {
+                      if (!p) return null;
+                      return {
+                        ...p,
+                        currentIndex: p.currentIndex + 1,
+                        uiState: { ...p.uiState, isWaitingForInput: false }
+                      };
+                    });
+                  } : void 0
+                },
+                overlay.id
+              ))
+            ] }) }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: tintStyle })
+          ]
+        }
+      );
+    };
+    const HistoryPanel = ({ history, onClose: onClose2 }) => {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 bg-black/90 z-50 flex flex-col", children: [
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center justify-between p-4 border-b border-slate-600", children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-white text-2xl font-bold", children: "Dialogue History" }),
+          /* @__PURE__ */ jsxRuntime2.jsx(
+            "button",
             {
-              src: state.backgroundUrl,
-              autoPlay: true,
-              muted: true,
-              loop: state.backgroundLoop,
-              playsInline: true,
-              className: "absolute w-full h-full object-cover"
+              onClick: onClose2,
+              className: "text-white hover:text-slate-300 text-sm px-4 py-2 bg-slate-700 rounded",
+              children: "Close (ESC / H)"
             }
-          ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: state.backgroundUrl, alt: "background", className: "absolute w-full h-full object-cover" })),
-          playerState == null ? void 0 : playerState.uiState.transitionElement,
-          Object.values(state.characters).map((char) => {
-            var _a;
-            let transitionClass = "";
-            let animationDuration = "1s";
-            let slideStyle = {};
-            let positionStyle = getPositionStyle2(char.position);
-            if (!char.transition || char.transition.type !== "slide") {
-              positionStyle = { ...positionStyle, transform: "translate3d(-50%, 0, 0)" };
-            }
-            if (char.transition) {
-              const isHideTransition = char.transition.action === "hide";
-              switch (char.transition.type) {
-                case "fade":
-                  transitionClass = isHideTransition ? "transition-fade-out" : "transition-dissolve";
-                  break;
-                case "dissolve":
-                  transitionClass = isHideTransition ? "transition-dissolve-out" : "transition-dissolve";
-                  break;
-                case "slide":
-                  transitionClass = "transition-slide";
-                  const startPos = char.transition.startPosition || char.position;
-                  const endPos = char.transition.endPosition || char.position;
-                  let startOffsetX = 0;
-                  let startOffsetY = 0;
-                  if (typeof startPos === "object" && typeof endPos === "object") {
-                    startOffsetX = startPos.x - endPos.x;
-                    startOffsetY = startPos.y - endPos.y;
-                  } else {
-                    const startPreset = typeof startPos === "string" ? startPos : "center";
-                    const endPreset = typeof endPos === "string" ? endPos : "center";
-                    const presetCoords = {
-                      "left": { x: 25, y: 10 },
-                      "center": { x: 50, y: 10 },
-                      "right": { x: 75, y: 10 },
-                      "off-left": { x: -25, y: 10 },
-                      "off-right": { x: 125, y: 10 }
-                    };
-                    const startCoords = presetCoords[startPreset];
-                    const endCoords = presetCoords[endPreset];
-                    startOffsetX = startCoords.x - endCoords.x;
-                    startOffsetY = startCoords.y - endCoords.y;
-                  }
-                  if (startOffsetX === 0 && ((_a = char.transition) == null ? void 0 : _a.action) === "show") {
-                    let endX = 50;
-                    if (typeof endPos === "object") endX = endPos.x;
-                    else if (typeof endPos === "string") {
-                      const presetMap = { left: 25, center: 50, right: 75, "off-left": -25, "off-right": 125 };
-                      endX = presetMap[endPos] ?? 50;
-                    }
-                    startOffsetX = endX <= 50 ? -60 : 60;
-                  }
-                  slideStyle = {
-                    "--slide-start-x": `${startOffsetX}%`,
-                    "--slide-start-y": `${startOffsetY}%`,
-                    "--slide-end-x": `0%`,
-                    "--slide-end-y": `0%`
-                  };
-                  if (stageSize && stageSize.width > 0) {
-                    const pxStartX = startOffsetX / 100 * stageSize.width;
-                    const pxStartY = startOffsetY / 100 * stageSize.height;
-                    slideStyle["--slide-start-px"] = `${pxStartX}px`;
-                    slideStyle["--slide-end-px"] = `0px`;
-                    slideStyle["--slide-start-py"] = `${pxStartY}px`;
-                    slideStyle["--slide-end-py"] = `0px`;
-                  }
-                  break;
-                case "iris-in":
-                  transitionClass = isHideTransition ? "transition-iris-out" : "transition-iris-in";
-                  break;
-                case "wipe-right":
-                  transitionClass = isHideTransition ? "transition-wipe-out-right" : "transition-wipe-right";
-                  break;
-              }
-              animationDuration = `${char.transition.duration}s`;
-            }
-            return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: `absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`, style: { ...positionStyle, animationDuration, ...slideStyle }, children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
-              "video",
-              {
-                src: url,
-                autoPlay: true,
-                muted: true,
-                loop: char.videoLoop,
-                playsInline: true,
-                className: "absolute top-0 left-0 w-full h-full object-contain",
-                style: { zIndex: index }
-              },
-              index
-            )) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
-              "img",
-              {
-                src: url,
-                alt: "",
-                className: "absolute top-0 left-0 w-full h-full object-contain",
-                style: { zIndex: index }
-              },
-              index
-            )) }, char.charId);
-          }),
-          state.textOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(TextOverlayElement, { overlay, stageSize }, overlay.id)),
-          state.imageOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(ImageOverlayElement, { overlay, stageSize }, overlay.id)),
-          state.buttonOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
-            ButtonOverlayElement,
-            {
-              overlay,
-              onAction: handleUIAction,
-              playSound,
-              onAdvance: overlay.waitForClick ? () => {
-                setPlayerState((p) => {
-                  if (!p) return null;
-                  return {
-                    ...p,
-                    currentIndex: p.currentIndex + 1,
-                    uiState: { ...p.uiState, isWaitingForInput: false }
-                  };
-                });
-              } : void 0
-            },
-            overlay.id
-          ))
-        ] }) }),
-        /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 pointer-events-none", style: tintStyle })
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "flex-1 overflow-y-auto p-4 space-y-3", children: history.length === 0 ? /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-slate-400 text-center mt-8", children: "No dialogue history yet." }) : history.map((entry, index) => /* @__PURE__ */ jsxRuntime2.jsxs(
+          "div",
+          {
+            className: `p-3 rounded ${entry.type === "choice" ? "bg-blue-900/30 border-l-4 border-blue-500" : "bg-slate-800/50"}`,
+            children: [
+              entry.type === "dialogue" && entry.characterName && /* @__PURE__ */ jsxRuntime2.jsx(
+                "div",
+                {
+                  className: "font-bold mb-1",
+                  style: { color: entry.characterColor || "#fff" },
+                  children: entry.characterName
+                }
+              ),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-white", children: entry.text }),
+              entry.type === "choice" && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-blue-300 text-sm mt-1 italic", children: "Selected choice" })
+            ]
+          },
+          index
+        )) })
       ] });
     };
     const renderPlayerUI = () => {
@@ -4865,6 +4962,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       const currentHudScreen = currentHudScreenId ? project.uiScreens[currentHudScreenId] : null;
       const shouldShowDialogueOnHud = currentHudScreen == null ? void 0 : currentHudScreen.showDialogue;
       return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+        uiState.showHistory && /* @__PURE__ */ jsxRuntime2.jsx(
+          HistoryPanel,
+          {
+            history: playerState.history,
+            onClose: () => setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)
+          }
+        ),
         uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white", onClick: () => setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null), children: /* @__PURE__ */ jsxRuntime2.jsx("video", { src: uiState.movieUrl, autoPlay: true, className: "w-full h-full", onEnded: () => setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null) }) }),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsx(DialogueBox, { dialogue: uiState.dialogue, settings, projectUI: project.ui, onFinished: handleDialogueAdvance, variables: playerState.variables, project }),
         uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(ChoiceMenu, { choices: uiState.choices, projectUI: project.ui, onSelect: handleChoiceSelect, variables: playerState.variables, project }),
