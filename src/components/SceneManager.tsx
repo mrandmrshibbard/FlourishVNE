@@ -5,6 +5,7 @@ import { VNScene } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 import SceneEditor from './SceneEditor';
 import StagingArea from './StagingArea';
+import CommandPalette from './CommandPalette';
 import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon, DuplicateIcon } from './icons';
 import { ContextMenu } from './ui/ContextMenu';
 
@@ -109,49 +110,57 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     };
 
     return (
-        <div className="flex h-full">
-            {/* Scene List Sidebar */}
-            <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
-                <div className="p-4 border-b border-slate-700">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <BookOpenIcon className="w-5 h-5" />
-                        Scenes
-                    </h2>
+        <div className="flex h-full overflow-hidden">
+            {/* Left Sidebar - Scene List (2/3) + Command Palette (1/3) */}
+            <div className="w-64 min-w-[240px] max-w-[280px] panel border-r-2 border-slate-700 flex flex-col flex-shrink-0">
+                {/* Scene List - 2/3 */}
+                <div className="flex-[2] flex flex-col border-b-2 border-slate-700 min-h-0">
+                    <div className="px-1.5 py-1 border-b border-slate-700 flex-shrink-0">
+                        <h2 className="text-xs font-bold text-white flex items-center gap-1">
+                            <BookOpenIcon className="w-3 h-3" />
+                            Scenes
+                        </h2>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto px-1.5 py-1 space-y-0.5 min-h-0">
+                        {scenesArray.map(scene => (
+                            <SceneItem
+                                key={scene.id}
+                                scene={scene}
+                                isSelected={activeSceneId === scene.id}
+                                isStartScene={project.startSceneId === scene.id}
+                                isRenaming={renamingId === scene.id}
+                                isDragging={draggedSceneId === scene.id}
+                                isDropTarget={dropTargetId === scene.id}
+                                onSelect={() => setActiveSceneId(scene.id)}
+                                onStartRenaming={() => setRenamingId(scene.id)}
+                                onCommitRename={(name) => handleRenameScene(scene.id, name)}
+                                onDelete={() => handleDeleteScene(scene.id)}
+                                onDuplicate={() => handleDuplicateScene(scene.id)}
+                                onSetStartScene={() => handleSetStartScene(scene.id)}
+                                onDragStart={() => handleDragStart(scene.id)}
+                                onDragOver={(e) => handleDragOver(e, scene.id)}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, scene.id)}
+                                onContextMenu={(e) => handleContextMenu(e, scene.id)}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="px-1.5 py-1 border-t border-slate-700 flex-shrink-0">
+                        <button
+                            onClick={addScene}
+                            className="w-full bg-sky-500 hover:bg-sky-600 text-white py-1 px-1.5 rounded text-xs flex items-center justify-center gap-1 font-bold transition-colors"
+                        >
+                            <PlusIcon className="w-3 h-3" />
+                            Add
+                        </button>
+                    </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                    {scenesArray.map(scene => (
-                        <SceneItem
-                            key={scene.id}
-                            scene={scene}
-                            isSelected={activeSceneId === scene.id}
-                            isStartScene={project.startSceneId === scene.id}
-                            isRenaming={renamingId === scene.id}
-                            isDragging={draggedSceneId === scene.id}
-                            isDropTarget={dropTargetId === scene.id}
-                            onSelect={() => setActiveSceneId(scene.id)}
-                            onStartRenaming={() => setRenamingId(scene.id)}
-                            onCommitRename={(name) => handleRenameScene(scene.id, name)}
-                            onDelete={() => handleDeleteScene(scene.id)}
-                            onDuplicate={() => handleDuplicateScene(scene.id)}
-                            onSetStartScene={() => handleSetStartScene(scene.id)}
-                            onDragStart={() => handleDragStart(scene.id)}
-                            onDragOver={(e) => handleDragOver(e, scene.id)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, scene.id)}
-                            onContextMenu={(e) => handleContextMenu(e, scene.id)}
-                        />
-                    ))}
-                </div>
-
-                <div className="p-2 border-t border-slate-700">
-                    <button
-                        onClick={addScene}
-                        className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
-                    >
-                        <PlusIcon className="w-4 h-4" />
-                        Add Scene
-                    </button>
+                {/* Command Palette - 1/3 */}
+                <div className="flex-[1] flex flex-col min-h-0">
+                    <CommandPalette onDragStart={(commandType) => console.log('Dragging:', commandType)} />
                 </div>
             </div>
 
@@ -188,33 +197,34 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                 />
             )}
 
-            {/* Scene Editor with Staging Area */}
-            <div className="flex-1 flex flex-col min-w-0 relative">
-                <div 
-                    className="absolute top-0 left-0 right-0 transition-all duration-300 ease-in-out"
-                    style={{ height: isCollapsed ? 'calc(100% - 44px)' : '0%' }}
-                >
-                    <StagingArea
-                        project={project}
-                        activeSceneId={activeSceneId}
-                        selectedCommandIndex={selectedCommandIndex}
-                        className="h-full w-full"
-                    />
+            {/* Center - Staging Area (top) + Scene Editor (bottom) - Always visible */}
+            <div className="flex-1 flex flex-col min-w-[600px] panel border-r-2">
+                {/* Staging Area - Top - 50% */}
+                <div className="flex-[3] flex flex-col border-b-2 border-slate-700 min-h-0">
+                    <div className="flex-1 p-2 overflow-hidden min-h-0">
+                        <StagingArea
+                            project={project}
+                            activeSceneId={activeSceneId}
+                            selectedCommandIndex={selectedCommandIndex}
+                            className="h-full w-full border-2 border-slate-700 rounded-lg"
+                        />
+                    </div>
                 </div>
-                <div 
-                    className="absolute bottom-0 left-0 right-0 transition-all duration-300 ease-in-out z-30"
-                    style={{ height: isCollapsed ? '44px' : '100%' }}
-                >
-                    <SceneEditor
-                        activeSceneId={activeSceneId}
-                        selectedCommandIndex={selectedCommandIndex}
-                        setSelectedCommandIndex={setSelectedCommandIndex}
-                        setSelectedVariableId={setSelectedVariableId}
-                        onConfigureScene={onConfigureScene}
-                        isCollapsed={isCollapsed}
-                        onToggleCollapse={onToggleCollapse}
-                        className="h-full"
-                    />
+
+                {/* Scene Editor - Bottom - 50% */}
+                <div className="flex-[3] flex flex-col overflow-hidden min-h-0">
+                    <div className="flex-1 overflow-y-auto min-h-0">
+                        <SceneEditor
+                            activeSceneId={activeSceneId}
+                            selectedCommandIndex={selectedCommandIndex}
+                            setSelectedCommandIndex={setSelectedCommandIndex}
+                            setSelectedVariableId={setSelectedVariableId}
+                            onConfigureScene={onConfigureScene}
+                            isCollapsed={false}
+                            onToggleCollapse={onToggleCollapse}
+                            className="h-full"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
@@ -285,7 +295,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
             onClick={onSelect}
             onDoubleClick={onStartRenaming}
             onContextMenu={onContextMenu}
-            className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all ${
+            className={`group flex items-center gap-1 px-1 py-1 rounded cursor-pointer transition-all ${
                 isDragging
                     ? 'opacity-40'
                     : isDropTarget
@@ -295,9 +305,9 @@ const SceneItem: React.FC<SceneItemProps> = ({
                     : 'hover:bg-slate-700'
             }`}
         >
-            <BookOpenIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <BookOpenIcon className="w-3 h-3 text-slate-400 flex-shrink-0" />
 
-            <div className="flex-grow truncate">
+            <div className="flex-1 min-w-0 overflow-hidden">
                 {isRenaming ? (
                     <input
                         type="text"
@@ -305,23 +315,23 @@ const SceneItem: React.FC<SceneItemProps> = ({
                         onChange={e => setRenameValue(e.target.value)}
                         onBlur={handleRenameBlur}
                         onKeyDown={handleRenameKeyDown}
-                        className="w-full bg-slate-900 text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
+                        className="w-full bg-slate-900 text-white px-1 py-0.5 rounded text-xs outline-none ring-1 ring-sky-500"
                         onClick={e => e.stopPropagation()}
                         autoFocus
                     />
                 ) : (
-                    <span className="text-sm">{scene.name}</span>
+                    <span className="text-xs block overflow-hidden text-ellipsis whitespace-nowrap" title={scene.name}>{scene.name}</span>
                 )}
             </div>
 
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-0.5 flex-shrink-0">
                 {isStartScene && (
-                    <SparkleIcon className="w-4 h-4 text-yellow-400" title="Start Scene" />
+                    <SparkleIcon className="w-3 h-3 text-yellow-400" title="Start Scene" />
                 )}
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-                    className="p-1 text-slate-500 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-0.5 text-slate-500 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Duplicate Scene"
                 >
                     <DuplicateIcon className="w-3 h-3" />
@@ -329,7 +339,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onSetStartScene(); }}
-                    className={`p-1 rounded text-xs transition-colors ${
+                    className={`p-0.5 rounded transition-colors ${
                         isStartScene
                             ? 'text-yellow-400 hover:text-yellow-300'
                             : 'text-slate-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100'
@@ -341,7 +351,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                    className="p-1 text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-0.5 text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Rename"
                 >
                     <PencilIcon className="w-3 h-3" />
@@ -349,7 +359,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-0.5 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Delete"
                 >
                     <TrashIcon className="w-3 h-3" />

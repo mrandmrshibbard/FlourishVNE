@@ -11,9 +11,9 @@ const Panel: React.FC<{
 }> = ({ title, children, className, style, isCollapsed, onToggleCollapse, rightHeaderContent }) => (
     <div className={`bg-[var(--bg-secondary)] rounded-lg shadow-lg flex flex-col ${className}`} style={style}>
         <div 
-            className={`bg-[var(--bg-tertiary)] p-2 rounded-t-lg text-[var(--text-secondary)] flex items-center justify-between ${onToggleCollapse ? 'cursor-pointer hover:bg-[var(--accent-purple)] hover:text-[var(--text-primary)]' : ''}`}
+            className={`bg-[var(--bg-tertiary)] px-2 py-1 rounded-t-lg text-[var(--text-secondary)] flex items-center justify-between ${onToggleCollapse ? 'cursor-pointer hover:bg-[var(--accent-purple)] hover:text-[var(--text-primary)]' : ''}`}
         >
-            <h2 className="font-bold" onClick={onToggleCollapse}>{title}</h2>
+            <h2 className="font-bold text-xs" onClick={onToggleCollapse}>{title}</h2>
             <div className="flex items-center gap-2">
                 {rightHeaderContent}
                 {onToggleCollapse && (
@@ -26,7 +26,7 @@ const Panel: React.FC<{
             </div>
         </div>
         {!isCollapsed && (
-            <div className="p-2 flex-grow flex flex-col overflow-hidden">{children}</div>
+            <div className="p-1 flex-grow flex flex-col overflow-hidden">{children}</div>
         )}
     </div>
 );

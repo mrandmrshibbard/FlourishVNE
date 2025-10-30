@@ -64,7 +64,7 @@ const PositionInputs: React.FC<{
                         <option value="custom">Custom Coordinates</option>
                     </Select>
                     {showCustom && (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-1">
                             <FormField label="X (%)">
                                 <TextInput 
                                     type="number" 
@@ -152,11 +152,11 @@ const ConditionsEditor: React.FC<{
     };
 
     if (!hasVariables) {
-        return <p className="text-sm text-slate-500">No variables defined to create conditions.</p>;
+        return <p className="text-xs text-slate-500">No variables defined to create conditions.</p>;
     }
 
     if (!conditions && !isRequired) {
-        return <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-sm">Add Condition</button>;
+        return <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs">Add Condition</button>;
     }
 
     return (
@@ -167,7 +167,7 @@ const ConditionsEditor: React.FC<{
                 const valueIsHidden = condition.operator === 'is true' || condition.operator === 'is false';
 
                 return (
-                    <div key={index} className="p-2 border border-slate-700 rounded-md">
+                    <div key={index} className="p-1 border border-slate-700 rounded-md">
                         <div className="flex gap-1 items-start">
                             <div className="flex-grow space-y-1">
                                 <FormField label="Variable">
@@ -200,7 +200,7 @@ const ConditionsEditor: React.FC<{
                     </div>
                 );
             })}
-             <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-sm mt-2 flex items-center gap-1"><PlusIcon className="w-4 h-4"/>Add Condition</button>
+             <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs mt-2 flex items-center gap-1"><PlusIcon className="w-4 h-4"/>Add Condition</button>
         </div>
     );
 }
@@ -210,7 +210,7 @@ const TransitionFields: React.FC<{
     duration: number;
     onUpdate: (updates: { transition?: VNTransition; duration?: number }) => void;
 }> = ({ transition, duration, onUpdate }) => (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-2 gap-1">
         <FormField label="Transition">
             <Select value={transition} onChange={e => onUpdate({ transition: e.target.value as VNTransition })}>
                 <option value="fade">Fade</option>
@@ -247,12 +247,12 @@ const PropertiesInspector: React.FC<{
         };
 
         return (
-            <Panel title={`Scene Config: ${activeScene.name}`} className="w-96 flex-shrink-0">
+            <Panel title={`Scene Config: ${activeScene.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
                         <div className="mb-4">
                             <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Scene Conditions</h3>
-                            <p className="text-sm text-[var(--text-secondary)] mb-3">
+                            <p className="text-xs text-[var(--text-secondary)] mb-3">
                                 This scene will only play if all conditions are met. If conditions fail, the scene will be skipped.
                             </p>
                             <ConditionsEditor 
@@ -284,7 +284,7 @@ const PropertiesInspector: React.FC<{
                     <div className="pt-4 mt-auto">
                         <button 
                             onClick={onCloseSceneConfig} 
-                            className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-black font-bold py-2 px-4 rounded-lg transition-colors"
+                            className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-black font-bold py-1 px-2 rounded-lg transition-colors"
                         >
                             Done
                         </button>
@@ -298,7 +298,7 @@ const PropertiesInspector: React.FC<{
     if (selectedVariableId && setSelectedVariableId) {
         const variable = project.variables[selectedVariableId];
         if (!variable) {
-            return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Variable not found.</p></Panel>;
+            return <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0"><p>Variable not found.</p></Panel>;
         }
 
         const updateVariable = (updates: Partial<VNVariable>) => {
@@ -331,7 +331,7 @@ const PropertiesInspector: React.FC<{
         };
 
         return (
-            <Panel title={`Variable: ${variable.name}`} className="w-96 flex-shrink-0">
+            <Panel title={`Variable: ${variable.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
                         <FormField label="Name">
@@ -356,14 +356,14 @@ const PropertiesInspector: React.FC<{
                                 <TextInput value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value })} />
                             )}
                         </FormField>
-                        <div className="text-sm text-slate-400 mt-2">
+                        <div className="text-xs text-slate-400 mt-2">
                             <p><strong>Type:</strong> {variable.type}</p>
                             <p><strong>Current Value:</strong> {String(variable.defaultValue)}</p>
                             <p className="mt-2">The default value is used when the game starts. You can change the variable's value during gameplay using Set Variable commands.</p>
                         </div>
                     </div>
                     <div className="pt-4 mt-auto">
-                        <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                        <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded-lg flex items-center justify-center gap-1 transition-colors">
                             <TrashIcon/> Delete Variable
                         </button>
                     </div>
@@ -373,7 +373,7 @@ const PropertiesInspector: React.FC<{
     }
 
     if (selectedCommandIndex === null || !activeScene || !activeScene.commands[selectedCommandIndex]) {
-        return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Select a command to edit its properties.</p></Panel>;
+        return <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0"><p>Select a command to edit its properties.</p></Panel>;
     }
     
     const command = activeScene.commands[selectedCommandIndex];
@@ -408,7 +408,7 @@ const PropertiesInspector: React.FC<{
                         <TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value })} />
                     </FormField>
                     <FormField label="Branch Color">
-                        <div className="flex gap-2 items-center">
+                        <div className="flex gap-1 items-center">
                             <input 
                                 type="color" 
                                 value={cmd.color} 
@@ -475,7 +475,7 @@ const PropertiesInspector: React.FC<{
                             {Object.values(project.backgrounds).map((b: VNBackground) => <option key={b.id} value={b.id}>{b.name}</option>)}
                         </Select>
                     </FormField>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Transition">
                             <Select value={cmd.transition} onChange={e => updateCommand({ transition: e.target.value as VNTransition })}>
                                 <option value="fade">Fade (to black)</option>
@@ -532,7 +532,7 @@ const PropertiesInspector: React.FC<{
                         />
                     )}
                     
-                     <div className="grid grid-cols-2 gap-2">
+                     <div className="grid grid-cols-2 gap-1">
                         <FormField label="Transition"><Select value={cmd.transition} onChange={e => updateCommand({ transition: e.target.value as VNTransition })}>
                             <option value="fade">Fade</option>
                             <option value="dissolve">Dissolve</option>
@@ -554,7 +554,7 @@ const PropertiesInspector: React.FC<{
                         {Object.keys(project.characters).length === 0 && <option disabled>No characters defined</option>}
                         {Object.values(project.characters).map((c: VNCharacter) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Select></FormField>
-                     <div className="grid grid-cols-2 gap-2">
+                     <div className="grid grid-cols-2 gap-1">
                         <FormField label="Transition"><Select value={cmd.transition} onChange={e => updateCommand({ transition: e.target.value as VNTransition })}>
                             <option value="fade">Fade</option>
                             <option value="dissolve">Dissolve</option>
@@ -644,19 +644,19 @@ const PropertiesInspector: React.FC<{
                         } : { ...opt, id: opt.id || generateId(), actions: opt.actions || [] };
 
                         return (
-                            <div key={migratedOpt.id} className="p-2 border border-slate-700 rounded-md mb-2">
+                            <div key={migratedOpt.id} className="p-1 border border-slate-700 rounded-md mb-2">
                                <FormField label={`Option ${i+1} Text`}><TextInput value={migratedOpt.text} onChange={e => updateOption(i, { text: e.target.value })}/></FormField>
-                               <h4 className="font-bold text-sm mt-3 mb-1 text-slate-400">Conditions</h4>
+                               <h4 className="font-bold text-xs mt-3 mb-1 text-slate-400">Conditions</h4>
                                <p className="text-xs text-slate-500 mb-2">This option will only be shown if all conditions are met.</p>
                                <ConditionsEditor conditions={migratedOpt.conditions} project={project} onChange={(cs) => updateOption(i, { conditions: cs })}/>
                                
-                                <h4 className="font-bold text-sm mt-3 mb-1 text-slate-400">Actions</h4>
+                                <h4 className="font-bold text-xs mt-3 mb-1 text-slate-400">Actions</h4>
                                 <div className="space-y-2 pl-2 border-l-2 border-slate-600">
                                     {(migratedOpt.actions || []).map((action, actionIndex) => (
-                                        <div key={actionIndex} className="p-2 bg-slate-800 rounded-md">
+                                        <div key={actionIndex} className="p-1 bg-slate-800 rounded-md">
                                             {action.type === UIActionType.JumpToScene ? (
                                                 <FormField label="Jump to Scene">
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-1">
                                                         <Select value={action.targetSceneId} onChange={e => updateAction(i, actionIndex, { targetSceneId: e.target.value })}>
                                                             {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                         </Select>
@@ -666,7 +666,7 @@ const PropertiesInspector: React.FC<{
                                             ) : action.type === UIActionType.SetVariable ? (
                                                 <div className="space-y-1">
                                                     <div className="flex justify-between items-center">
-                                                        <p className="text-sm font-semibold">Set Variable</p>
+                                                        <p className="text-xs font-semibold">Set Variable</p>
                                                         <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
                                                     </div>
                                                     {(() => {
@@ -687,7 +687,7 @@ const PropertiesInspector: React.FC<{
                                                                         {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
                                                                     </Select>
                                                                 </FormField>
-                                                                <div className="grid grid-cols-2 gap-2">
+                                                                <div className="grid grid-cols-2 gap-1">
                                                                     <FormField label="Operator">
                                                                         <Select value={actionAsSetVar.operator} onChange={e => updateAction(i, actionIndex, { operator: e.target.value as VNSetVariableOperator })}>
                                                                             <option value="set">Set (=)</option>
@@ -715,16 +715,16 @@ const PropertiesInspector: React.FC<{
                                             ) : null}
                                         </div>
                                     ))}
-                                    <div className="flex gap-2 pt-1">
+                                    <div className="flex gap-1 pt-1">
                                        <button onClick={() => addAction(i, UIActionType.JumpToScene)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">Add Jump</button>
                                        <button onClick={() => addAction(i, UIActionType.SetVariable)} disabled={Object.keys(project.variables).length === 0} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed">Add Set Variable</button>
                                     </div>
                                 </div>
-                               <button onClick={() => removeOption(i)} className="text-red-400 hover:text-red-300 text-sm mt-3">Remove Option</button>
+                               <button onClick={() => removeOption(i)} className="text-red-400 hover:text-red-300 text-xs mt-3">Remove Option</button>
                             </div>
                         )
                     })}
-                    <button onClick={addOption} className="text-sky-400 hover:text-sky-300 mt-2 flex items-center gap-1 text-sm"><PlusIcon className="w-4 h-4"/>Add Option</button>
+                    <button onClick={addOption} className="text-sky-400 hover:text-sky-300 mt-2 flex items-center gap-1 text-xs"><PlusIcon className="w-4 h-4"/>Add Option</button>
                 </div>
             }
             case CommandType.PlayMusic: {
@@ -735,7 +735,7 @@ const PropertiesInspector: React.FC<{
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select></FormField>
                     <FormField label="Fade Duration (seconds)"><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>
-                    <div className="flex items-center gap-2"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" /> <label>Loop</label></div>
+                    <div className="flex items-center gap-1"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" /> <label>Loop</label></div>
                 </>;
             }
             case CommandType.StopMusic: {
@@ -758,7 +758,7 @@ const PropertiesInspector: React.FC<{
                             {Object.values(project.videos).map((v: VNVideo) => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </Select>
                     </FormField>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-1 mt-2">
                         <input id="waits-for-completion" type="checkbox" checked={cmd.waitsForCompletion} onChange={e => updateCommand({ waitsForCompletion: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" /> 
                         <label htmlFor="waits-for-completion">Wait for completion</label>
                     </div>
@@ -805,7 +805,7 @@ const PropertiesInspector: React.FC<{
                     </Select></FormField>
                     
                     {cmd.operator === 'random' && variable?.type === 'number' ? (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-1">
                             <FormField label="Min Value">
                                 <TextInput type="number" value={String(cmd.randomMin ?? 0)} onChange={e => updateCommand({ randomMin: parseFloat(e.target.value) || 0 })}/>
                             </FormField>
@@ -847,7 +847,7 @@ const PropertiesInspector: React.FC<{
                     <FormField label="Target Scene"><Select value={cmd.targetSceneId} onChange={e => updateCommand({ targetSceneId: e.target.value })}>
                          {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select></FormField>
-                    {!project.scenes[cmd.targetSceneId] && <p className="text-red-500 text-sm">Warning: Target scene not found.</p>}
+                    {!project.scenes[cmd.targetSceneId] && <p className="text-red-500 text-xs">Warning: Target scene not found.</p>}
                 </>;
             }
             case CommandType.Wait: {
@@ -855,9 +855,9 @@ const PropertiesInspector: React.FC<{
                 return <>
                     <FormField label="Duration (seconds)"><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/></FormField>
                     <FormField label="Allow input to advance">
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1">
                             <input type="checkbox" checked={!!cmd.waitForInput} onChange={e => updateCommand({ waitForInput: e.target.checked })} />
-                            <span className="text-sm text-slate-300">User input (click / Enter / Space) will advance early</span>
+                            <span className="text-xs text-slate-300">User input (click / Enter / Space) will advance early</span>
                         </label>
                     </FormField>
                 </>;
@@ -951,22 +951,22 @@ const PropertiesInspector: React.FC<{
                     <FormField label="Text">
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                         <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Max Width (px, optional)"><TextInput type="number" value={cmd.width || ''} onChange={e => updateCommand({ width: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></FormField>
                         <FormField label="Max Height (px, optional)"><TextInput type="number" value={cmd.height || ''} onChange={e => updateCommand({ height: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></FormField>
                     </div>
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Styling</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Styling</h4>
                     <FormField label="Font Family"><TextInput value={cmd.fontFamily} onChange={e => updateCommand({ fontFamily: e.target.value })} placeholder="e.g., Arial, sans-serif" /></FormField>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                          <FormField label="Font Size (px)"><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 16 })} /></FormField>
                         <FormField label="Color"><TextInput type="color" value={cmd.color} onChange={e => updateCommand({ color: e.target.value })} className="p-1 h-10" /></FormField>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Text Align">
                             <Select value={cmd.textAlign || 'left'} onChange={e => updateCommand({ textAlign: e.target.value as any })}>
                                 <option value="left">Left</option>
@@ -983,7 +983,7 @@ const PropertiesInspector: React.FC<{
                         </FormField>
                     </div>
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Animation</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                 </>;
             }
@@ -991,15 +991,15 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as ShowImageCommand;
                 return <>
                     <AssetSelector label="Image" assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || ''})} />
-                     <div className="grid grid-cols-2 gap-2">
+                     <div className="grid grid-cols-2 gap-1">
                         <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                         <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
-                     <div className="grid grid-cols-2 gap-2">
+                     <div className="grid grid-cols-2 gap-1">
                         <FormField label="Width (px)"><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseInt(e.target.value, 10) || 0 })} /></FormField>
                         <FormField label="Height (px)"><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseInt(e.target.value, 10) || 0 })} /></FormField>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Scale X"><TextInput type="number" step="0.1" value={cmd.scaleX ?? 1} onChange={e => updateCommand({ scaleX: parseFloat(e.target.value) || 1 })} /></FormField>
                         <FormField label="Scale Y"><TextInput type="number" step="0.1" value={cmd.scaleY ?? 1} onChange={e => updateCommand({ scaleY: parseFloat(e.target.value) || 1 })} /></FormField>
                     </div>
@@ -1010,7 +1010,7 @@ const PropertiesInspector: React.FC<{
                         <input type="range" min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} />
                     </FormField>
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Animation</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                 </>;
             }
@@ -1033,7 +1033,7 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                         <hr className="border-slate-700 my-2" />
-                        <h4 className="font-bold text-sm mb-2 text-slate-400">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
@@ -1058,7 +1058,7 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                         <hr className="border-slate-700 my-2" />
-                        <h4 className="font-bold text-sm mb-2 text-slate-400">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
@@ -1068,30 +1068,30 @@ const PropertiesInspector: React.FC<{
                 return <>
                     <FormField label="Button Text"><TextInput value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} /></FormField>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                         <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Width (%)"><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 20 })} /></FormField>
                         <FormField label="Height (%)"><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 8 })} /></FormField>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Anchor X (0-1)"><TextInput type="number" step="0.1" value={cmd.anchorX} onChange={e => updateCommand({ anchorX: parseFloat(e.target.value) || 0.5 })} /></FormField>
                         <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={cmd.anchorY} onChange={e => updateCommand({ anchorY: parseFloat(e.target.value) || 0.5 })} /></FormField>
                     </div>
                     
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Styling</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Styling</h4>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Background"><TextInput type="color" value={cmd.backgroundColor} onChange={e => updateCommand({ backgroundColor: e.target.value })} /></FormField>
                         <FormField label="Text Color"><TextInput type="color" value={cmd.textColor} onChange={e => updateCommand({ textColor: e.target.value })} /></FormField>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1">
                         <FormField label="Font Size"><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 18 })} /></FormField>
                         <FormField label="Font Weight">
                             <Select value={cmd.fontWeight} onChange={e => updateCommand({ fontWeight: e.target.value as 'normal' | 'bold' })}>
@@ -1104,7 +1104,7 @@ const PropertiesInspector: React.FC<{
                     <FormField label="Border Radius (px)"><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
                     
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Images (Optional)</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Images (Optional)</h4>
                     
                     <AssetSelector label="Button Image" assetType="images" value={cmd.image?.id || null} allowVideo onChange={id => {
                         if (id) {
@@ -1123,10 +1123,10 @@ const PropertiesInspector: React.FC<{
                     }} />
                     
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">On Click Action</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">On Click Action</h4>
                     
                     <FormField label="Wait for Click">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                             <input 
                                 type="checkbox" 
                                 checked={cmd.waitForClick || false} 
@@ -1142,11 +1142,11 @@ const PropertiesInspector: React.FC<{
                     <AssetSelector label="Click Sound" assetType="audio" value={cmd.clickSound} onChange={id => updateCommand({ clickSound: id })} />
                     
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Animation</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     
                     <hr className="border-slate-700 my-2" />
-                    <h4 className="font-bold text-sm mb-2 text-slate-400">Show Conditions</h4>
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Show Conditions</h4>
                     <p className="text-xs text-slate-400 mb-2">Button will only show if these conditions are met.</p>
                     <ConditionsEditor
                         conditions={cmd.showConditions || []}
@@ -1174,7 +1174,7 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                         <hr className="border-slate-700 my-2" />
-                        <h4 className="font-bold text-sm mb-2 text-slate-400">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
@@ -1183,7 +1183,7 @@ const PropertiesInspector: React.FC<{
         }
     };
 
-    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-96 flex-shrink-0">
+    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0">
         <div className="flex flex-col h-full">
             <div className="flex-grow overflow-y-auto pr-1">
                 {renderProperties()}
@@ -1194,7 +1194,7 @@ const PropertiesInspector: React.FC<{
                     
                     {/* Run Async Checkbox */}
                     <div className="mb-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-1 cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={command.modifiers?.runAsync || false}
@@ -1213,7 +1213,7 @@ const PropertiesInspector: React.FC<{
                                 }}
                                 className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
                             />
-                            <span className={`text-sm ${!canRunAsync(command.type) ? 'text-slate-500' : 'text-slate-300'}`}>
+                            <span className={`text-xs ${!canRunAsync(command.type) ? 'text-slate-500' : 'text-slate-300'}`}>
                                 Run Async (Parallel) {command.modifiers?.runAsync && '✨'}
                             </span>
                         </label>
@@ -1273,9 +1273,9 @@ const PropertiesInspector: React.FC<{
                     />
                 </>
             </div>
-            <div className="pt-4 mt-auto">
-                <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
-                    <TrashIcon/> Delete Command
+            <div className="pt-2 mt-auto">
+                <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-[10px] flex items-center justify-center gap-1 transition-colors">
+                    <TrashIcon className="w-3 h-3" /> Delete
                 </button>
             </div>
         </div>
@@ -1283,3 +1283,6 @@ const PropertiesInspector: React.FC<{
 };
 
 export default PropertiesInspector;
+
+
+

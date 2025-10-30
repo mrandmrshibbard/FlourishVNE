@@ -49,14 +49,14 @@ const Header: React.FC<{
     
     return (
         <>
-        <header className="bg-[var(--bg-secondary)] p-2 flex items-center shadow-md z-10">
-            <div className="flex items-center gap-4">
+        <header className="bg-[var(--bg-secondary)] px-1 py-0.5 flex items-center shadow-sm z-10 border-b border-slate-700">
+            <div className="flex items-center gap-1">
                 <button 
                     onClick={onExit}
-                    className="bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                    className="bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] text-white font-bold px-3 py-1.5 rounded flex items-center gap-0.5 transition-colors text-xs"
                     title="Back to Project Hub"
                 >
-                    <ArrowLeftOnRectangleIcon />
+                    <ArrowLeftOnRectangleIcon className="w-3.5 h-3.5" />
                     Exit
                 </button>
                 {isEditing ? (
@@ -66,12 +66,12 @@ const Header: React.FC<{
                         onChange={(e) => setCurrentTitle(e.target.value)}
                         onBlur={handleTitleBlur}
                         onKeyDown={handleTitleKeyDown}
-                        className="font-heading bg-[var(--bg-primary)] text-2xl font-bold text-[var(--accent-cyan)] p-1 rounded-md outline-none ring-2 ring-[var(--accent-cyan)]"
+                        className="font-heading bg-[var(--bg-primary)] text-xs font-bold text-[var(--accent-cyan)] py-0.5 px-1 rounded outline-none ring-1 ring-[var(--accent-cyan)]"
                         autoFocus
                     />
                 ) : (
                     <h1 
-                        className="font-heading text-2xl font-bold text-[var(--text-primary)] cursor-pointer hover:bg-[var(--bg-tertiary)] p-1 rounded-md"
+                        className="font-heading text-xs font-bold text-[var(--text-primary)] cursor-pointer hover:bg-[var(--bg-tertiary)] py-0.5 px-1 rounded"
                         onClick={() => setIsEditing(true)}
                         title="Click to edit project title"
                     >
@@ -82,45 +82,45 @@ const Header: React.FC<{
             <div className="flex-1 flex justify-center">
                 {navigationTabs}
             </div>
-            <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                     <button
                         onClick={undo}
                         disabled={!canUndo}
-                        className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-2 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-1.5 rounded flex items-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Undo (Ctrl+Z)"
                     >
-                        <ArrowUturnLeftIcon />
+                        <ArrowUturnLeftIcon className="w-3.5 h-3.5" />
                     </button>
                     <button
                         onClick={redo}
                         disabled={!canRedo}
-                        className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-2 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-1.5 rounded flex items-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Redo (Ctrl+Shift+Z or Ctrl+Y)"
                     >
-                        <ArrowUturnRightIcon />
+                        <ArrowUturnRightIcon className="w-3.5 h-3.5" />
                     </button>
                 </div>
                 <button
                     onClick={handleExport}
-                    className="bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                    className="bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] text-white font-bold px-3 py-1.5 rounded flex items-center gap-0.5 transition-colors text-xs"
                     title="Export Project as .zip"
                 >
-                    <ArrowDownTrayIcon />
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                     Export
                 </button>
                 <button
                     onClick={() => setShowBuilder(true)}
-                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-all"
+                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold px-3 py-1.5 rounded flex items-center gap-0.5 transition-all text-xs"
                     title="Build standalone game (no coding required!)"
                 >
-                    🎮 Build Game
+                    🎮 Build
                 </button>
                 <button
                     onClick={onPlay}
-                    className="btn-primary-gradient text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2"
+                    className="btn-primary-gradient text-white font-bold px-3 py-1.5 rounded flex items-center justify-center gap-0.5 text-xs"
                 >
-                    <PlayIcon />
+                    <PlayIcon className="w-3.5 h-3.5" />
                     Play
                 </button>
             </div>

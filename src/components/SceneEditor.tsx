@@ -9,6 +9,7 @@ import { VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
 import { PlusIcon, GripVerticalIcon, ChevronDownIcon, Cog6ToothIcon, FolderIcon } from './icons';
 import { createCommand } from '../utils/commandFactory';
+import { getCommandColor } from './CommandPalette';
 import { 
     groupCommandsIntoStacks, 
     stackCommands, 
@@ -190,12 +191,15 @@ const CommandItem: React.FC<{
         }
     };
     
+    // Get command color from palette
+    const commandColor = !isGroup && !isBranch ? getCommandColor(command.type) : '';
+    
     return (
         <div 
-            className={`p-2 border-2 rounded-md flex items-center gap-2 ${groupClasses} ${branchClasses} ${isSelected ? 'bg-[var(--bg-tertiary)] ring-2 ring-[var(--accent-cyan)]' : isGroup ? '' : isBranch ? '' : 'bg-[var(--bg-secondary)]'}`}
+            className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : ''} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-slate-700'}`}
             style={{ 
                 paddingLeft: leftPadding,
-                borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : getBorderColor(),
+                borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : undefined,
                 backgroundColor: isBranch && !isSelected ? branchBgColor : undefined
             }}
         >
@@ -211,12 +215,12 @@ const CommandItem: React.FC<{
                         color: isBranch ? branchColor : undefined
                     }}
                 >
-                    <ChevronDownIcon className="w-4 h-4" />
+                    <ChevronDownIcon className="w-3 h-3" />
                 </button>
             )}
-            <span className="cursor-grab text-[var(--text-secondary)]"><GripVerticalIcon/></span>
-            {isGroup && <FolderIcon className="text-amber-500 w-5 h-5 flex-shrink-0" />}
-            <div className="flex-grow">
+            <span className="cursor-grab text-slate-400 flex-shrink-0"><GripVerticalIcon className="w-3 h-3" /></span>
+            {isGroup && <FolderIcon className="text-amber-500 w-4 h-4 flex-shrink-0" />}
+            <div className="flex-1 flex items-center gap-2 min-w-0">
                 {isEditing && isGroup ? (
                     <input
                         type="text"
@@ -225,13 +229,13 @@ const CommandItem: React.FC<{
                         onBlur={handleFinishEdit}
                         onKeyDown={handleKeyDown}
                         autoFocus
-                        className="bg-[var(--bg-primary)] text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full"
+                        className="bg-slate-900 text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full text-xs"
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
                     <>
                         <p 
-                            className={`font-bold capitalize ${isGroup ? 'text-amber-500' : isBranch ? '' : 'text-[var(--accent-cyan)]'}`}
+                            className={`font-bold text-xs flex-shrink-0 ${isGroup ? 'text-amber-500' : isBranch ? '' : 'text-[var(--accent-cyan)]'}`}
                             onDoubleClick={isGroup && onRename ? handleStartEdit : undefined}
                             style={{ 
                                 cursor: isGroup && onRename ? 'text' : 'default',
@@ -240,7 +244,7 @@ const CommandItem: React.FC<{
                         >
                             {command.type === CommandType.BranchStart ? 'Branch' : command.type.replace(/([A-Z])/g, ' $1').trim()}
                         </p>
-                        <p className="text-sm text-[var(--text-secondary)]">{getCommandSummary()}</p>
+                        <p className="text-xs text-slate-400 truncate flex-1">{getCommandSummary()}</p>
                     </>
                 )}
             </div>
@@ -291,7 +295,7 @@ const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAd
     const dropdownContent = isOpen && dropdownPosition && (
         <div
             ref={dropdownRef}
-            className="fixed bg-[var(--bg-secondary)] rounded-md shadow-lg z-50 border border-[var(--bg-tertiary)] max-h-60 overflow-y-auto"
+            className="fixed bg-[var(--bg-secondary)] rounded shadow-lg z-50 border border-[var(--bg-tertiary)] max-h-48 overflow-y-auto"
             style={{
                 top: dropdownPosition.top,
                 left: dropdownPosition.left,
@@ -306,7 +310,7 @@ const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAd
                     : type.replace(/([A-Z])/g, ' $1').trim();
                 
                 return (
-                    <button key={type} onClick={() => handleSelect(type)} className="block w-full text-left px-4 py-2 hover:bg-[var(--accent-purple)] capitalize">
+                    <button key={type} onClick={() => handleSelect(type)} className="block w-full text-left px-2 py-1 hover:bg-[var(--accent-purple)] capitalize text-[10px]">
                         {displayName}
                     </button>
                 );
@@ -320,9 +324,9 @@ const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAd
                 <button
                     ref={buttonRef}
                     onClick={handleButtonClick}
-                    className="btn-primary-gradient w-full text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2"
+                    className="btn-primary-gradient w-full text-white font-bold py-1 px-2 rounded text-[10px] flex items-center justify-center gap-1"
                 >
-                    <PlusIcon /> Add Command
+                    <PlusIcon className="w-3 h-3" /> Add
                 </button>
             </div>
             {ReactDOM.createPortal(dropdownContent, document.body)}
@@ -360,7 +364,15 @@ const SceneEditor: React.FC<{
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>, targetCommandId: string, position: 'before' | 'inside' | 'after') => {
         e.preventDefault();
-        if (isCollapsed || !draggedCommandId) return;
+        e.stopPropagation();
+        
+        // Check if dragging from palette
+        const paletteCommandType = e.dataTransfer.types.includes('application/vn-command-type');
+        
+        if (isCollapsed || (!draggedCommandId && !paletteCommandType)) return;
+        
+        // Set drop effect
+        e.dataTransfer.dropEffect = paletteCommandType ? 'copy' : 'move';
         
         setDropTarget({ commandId: targetCommandId, position });
     };
@@ -372,6 +384,57 @@ const SceneEditor: React.FC<{
     
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetCommandId: string, position: 'before' | 'inside' | 'after') => {
         e.preventDefault();
+        e.stopPropagation();
+        
+        // Check if dropping a command from palette
+        const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
+        if (paletteCommandType) {
+            // Create new command from palette
+            const newCommandData = createCommand(paletteCommandType as CommandType, project);
+            if (!newCommandData) {
+                setDropTarget(null);
+                return;
+            }
+            
+            // Generate ID for the new command
+            const newCommand = { ...newCommandData, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
+            
+            const targetIndex = activeScene.commands.findIndex(cmd => cmd.id === targetCommandId);
+            
+            if (targetIndex !== -1) {
+                // Add command first
+                dispatch({
+                    type: 'ADD_COMMAND',
+                    payload: {
+                        sceneId: activeSceneId,
+                        command: newCommand
+                    }
+                });
+                
+                // Then move it to the correct position
+                const newCommandIndex = activeScene.commands.length; // It will be at the end initially
+                const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+                
+                if (insertIndex !== newCommandIndex) {
+                    setTimeout(() => {
+                        dispatch({
+                            type: 'MOVE_COMMAND',
+                            payload: {
+                                sceneId: activeSceneId,
+                                fromIndex: newCommandIndex,
+                                toIndex: insertIndex
+                            }
+                        });
+                        setSelectedCommandIndex(insertIndex);
+                    }, 0);
+                } else {
+                    setSelectedCommandIndex(insertIndex);
+                }
+            }
+            setDropTarget(null);
+            return;
+        }
+        
         if (!draggedCommandId || dragItem.current === null) return;
 
         // Find dragged command by ID (not by index, since grouping changes indices)
@@ -1130,15 +1193,81 @@ const SceneEditor: React.FC<{
                             }
                         });
                     })()}
-                </div>
-                <div className="pt-4 mt-auto space-y-2">
-                    <button
-                        onClick={() => handleAddCommand(CommandType.Group)}
-                        className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                    
+                    {/* Bottom Drop Zone */}
+                    <div
+                        className="min-h-[60px] flex-1 border-2 border-dashed rounded mt-2 flex items-center justify-center transition-all"
+                        style={{
+                            borderColor: dropTarget?.commandId === 'scene-bottom' ? 'var(--accent-cyan)' : 'var(--border)',
+                            backgroundColor: dropTarget?.commandId === 'scene-bottom' ? 'var(--accent-cyan)/10' : 'transparent',
+                            opacity: dropTarget?.commandId === 'scene-bottom' ? 1 : (activeScene.commands.length === 0 ? 0.5 : 0.3)
+                        }}
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            // Check if dragging from palette
+                            const paletteCommandType = e.dataTransfer.types.includes('application/vn-command-type');
+                            if (paletteCommandType || draggedCommandId) {
+                                e.dataTransfer.dropEffect = paletteCommandType ? 'copy' : 'move';
+                                setDropTarget({ commandId: 'scene-bottom', position: 'after' });
+                            }
+                        }}
+                        onDragLeave={(e) => {
+                            e.preventDefault();
+                            if (e.currentTarget === e.target) {
+                                setDropTarget(null);
+                            }
+                        }}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            // Check if dropping a command from palette
+                            const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
+                            if (paletteCommandType) {
+                                const newCommandData = createCommand(paletteCommandType as CommandType, project);
+                                if (newCommandData) {
+                                    const newCommand = { ...newCommandData, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
+                                    dispatch({
+                                        type: 'ADD_COMMAND',
+                                        payload: {
+                                            sceneId: activeSceneId,
+                                            command: newCommand
+                                        }
+                                    });
+                                    setSelectedCommandIndex(activeScene.commands.length);
+                                }
+                            } else if (draggedCommandId && dragItem.current) {
+                                // Move existing command to bottom
+                                const draggedIndex = activeScene.commands.findIndex(c => c.id === draggedCommandId);
+                                if (draggedIndex !== -1 && draggedIndex !== activeScene.commands.length - 1) {
+                                    dispatch({
+                                        type: 'MOVE_COMMAND',
+                                        payload: {
+                                            sceneId: activeSceneId,
+                                            fromIndex: draggedIndex,
+                                            toIndex: activeScene.commands.length - 1
+                                        }
+                                    });
+                                    setSelectedCommandIndex(activeScene.commands.length - 1);
+                                }
+                            }
+                            
+                            setDropTarget(null);
+                            setDraggedCommandId(null);
+                            dragItem.current = null;
+                        }}
                     >
-                        <FolderIcon /> Create Group
-                    </button>
-                    <AddCommandMenu onAdd={handleAddCommand}/>
+                        <p className="text-slate-500 text-xs italic">
+                            {dropTarget?.commandId === 'scene-bottom' 
+                                ? '⬇ Drop here to add command' 
+                                : activeScene.commands.length === 0 
+                                    ? 'Drag commands here to start' 
+                                    : 'Drop zone'
+                            }
+                        </p>
+                    </div>
                 </div>
             </div>
 

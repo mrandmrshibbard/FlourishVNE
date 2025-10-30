@@ -76,6 +76,36 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         }
     }, [activeCharacterId, project.characters]);
 
+    // Add keyboard navigation for tabs (1-6 keys)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Don't trigger if user is typing in an input field
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+
+            // Map number keys 1-6 to tabs
+            const tabMap: Record<string, NavigationTab> = {
+                '1': 'scenes',
+                '2': 'characters',
+                '3': 'ui',
+                '4': 'assets',
+                '5': 'variables',
+                '6': 'settings'
+            };
+
+            const newTab = tabMap[e.key];
+            if (newTab) {
+                e.preventDefault();
+                setActiveTab(newTab);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const handleTitleChange = (newTitle: string) => {
         dispatch({ type: 'UPDATE_PROJECT_TITLE', payload: { title: newTitle } });
     };
@@ -138,7 +168,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 setSelectedCommandIndex={setSelectedCommandIndex}
             />;
         }
-        return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Select an item to see its properties.</p></Panel>
+        // Always show properties panel for scenes tab, even if nothing selected
+        if (activeTab === 'scenes') {
+            return <Panel title="Properties" className="w-48 min-w-[180px] max-w-[200px] flex-shrink-0">
+                <p className="text-xs text-slate-400">Select a command to edit properties.</p>
+            </Panel>;
+        }
+        return null; // Other tabs handle their own inspectors internally
     }
 
     // Calculate tab counts
@@ -228,8 +264,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                     ) : null}
                 </div>
 
-                {/* Properties Inspector Sidebar */}
-                {(!isSceneEditorCollapsed || activeCharacterId || activeMenuScreenId) && renderInspector()}
+                {/* Properties Inspector Sidebar - Always Visible */}
+                {renderInspector()}
             </main>
             {isPlaying && <LivePreview onClose={() => setIsPlaying(false)} />}
         </div>

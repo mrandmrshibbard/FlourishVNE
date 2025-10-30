@@ -371,11 +371,12 @@ const StagingArea: React.FC<{
     
     return (
         <Panel title="Staging Area" className={className} style={style}>
-            <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden aspect-video">
-                {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute w-full h-full object-cover" />}
+            <div className="w-full h-full flex items-center justify-center p-2">
+                <div className="relative bg-slate-900/50 rounded-md overflow-hidden" style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}>
+                    {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
                 {Object.values(stageState.characters).map((char) => (
-                    <div key={char.charId} className="absolute h-[90%] w-auto aspect-[3/4]" style={getPositionStyle(char.position)}>
-                        {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute top-0 left-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
+                    <div key={char.charId} className="absolute w-auto aspect-[3/4]" style={{ ...getPositionStyle(char.position), height: '90%', bottom: '0', top: 'auto' }}>
+                        {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
                     </div>
                 ))}
                 {stageState.textOverlays.map(o => (
@@ -465,6 +466,7 @@ const StagingArea: React.FC<{
                     <button onClick={() => setShowCommandIndicators(s => !s)} className={`p-2 rounded-full ${showCommandIndicators ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Command Indicators"><PhotoIcon /></button>
                     <button onClick={() => setShowVariableState(s => !s)} className={`p-2 rounded-full ${showVariableState ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Variable State"><Cog6ToothIcon /></button>
                  </div>
+                </div>
             </div>
         </Panel>
     );
