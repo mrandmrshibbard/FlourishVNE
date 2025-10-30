@@ -22,12 +22,13 @@ import { CommandStackRow, DragDropIndicator } from './CommandStackComponents';
 const CommandItem: React.FC<{ 
     command: VNCommand, 
     project: VNProject, 
-    isSelected: boolean, 
+    isSelected: boolean,
+    isInMultiSelection?: boolean,
     depth: number, 
     onToggleCollapse?: () => void,
     onRename?: (newName: string) => void,
     collapsedBranches?: Set<string>
-}> = ({ command, project, isSelected, depth, onToggleCollapse, onRename, collapsedBranches }) => {
+}> = ({ command, project, isSelected, isInMultiSelection, depth, onToggleCollapse, onRename, collapsedBranches }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState('');
     const leftPadding = depth > 0 ? `${depth * 20 + 8}px` : '8px';
@@ -194,9 +195,12 @@ const CommandItem: React.FC<{
     // Get command color from palette
     const commandColor = !isGroup && !isBranch ? getCommandColor(command.type) : '';
     
+    // Multi-selection styling
+    const multiSelectClass = isInMultiSelection ? 'ring-1 ring-sky-400 bg-sky-500/10' : '';
+    
     return (
         <div 
-            className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : ''} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-slate-700'}`}
+            className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : multiSelectClass} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-slate-700'}`}
             style={{ 
                 paddingLeft: leftPadding,
                 borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : undefined,
@@ -354,6 +358,97 @@ const SceneEditor: React.FC<{
     const [dropTarget, setDropTarget] = useState<{ commandId: string; position: 'before' | 'inside' | 'after' } | null>(null);
     const [selectedCommands, setSelectedCommands] = useState<Set<string>>(new Set());
     const [warningModal, setWarningModal] = useState<{ message: string } | null>(null);
+    const [clipboard, setClipboard] = useState<VNCommand[]>([]);
+    const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check if we're in an input/textarea
+            if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') {
+                return;
+            }
+
+            // Copy (Ctrl+C)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedCommands.size > 0) {
+                e.preventDefault();
+                const commandsToCopy = activeScene.commands.filter(cmd => selectedCommands.has(cmd.id));
+                setClipboard(commandsToCopy);
+            }
+
+            // Paste (Ctrl+V)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard.length > 0) {
+                e.preventDefault();
+                const insertIndex = selectedCommandIndex !== null ? selectedCommandIndex + 1 : activeScene.commands.length;
+                
+                clipboard.forEach((cmd, i) => {
+                    const newCommand = { 
+                        ...cmd, 
+                        id: `cmd-${Math.random().toString(36).substring(2, 9)}` 
+                    };
+                    
+                    setTimeout(() => {
+                        dispatch({
+                            type: 'ADD_COMMAND',
+                            payload: {
+                                sceneId: activeSceneId,
+                                command: newCommand as VNCommand
+                            }
+                        });
+                        
+                        if (i === 0) {
+                            // Move first pasted command to insertion point
+                            const newCommandIndex = activeScene.commands.length;
+                            setTimeout(() => {
+                                dispatch({
+                                    type: 'MOVE_COMMAND',
+                                    payload: {
+                                        sceneId: activeSceneId,
+                                        fromIndex: newCommandIndex,
+                                        toIndex: insertIndex + i
+                                    }
+                                });
+                            }, 10);
+                        }
+                    }, i * 20);
+                });
+                
+                setSelectedCommandIndex(insertIndex);
+                setSelectedCommands(new Set());
+            }
+
+            // Delete selected commands (Delete key)
+            if (e.key === 'Delete' && selectedCommands.size > 0) {
+                e.preventDefault();
+                selectedCommands.forEach(cmdId => {
+                    const index = activeScene.commands.findIndex(c => c.id === cmdId);
+                    if (index !== -1) {
+                        dispatch({
+                            type: 'DELETE_COMMAND',
+                            payload: { sceneId: activeSceneId, commandIndex: index }
+                        });
+                    }
+                });
+                setSelectedCommands(new Set());
+                setSelectedCommandIndex(null);
+            }
+
+            // Select All (Ctrl+A)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+                e.preventDefault();
+                const allIds = new Set(activeScene.commands.map(cmd => cmd.id));
+                setSelectedCommands(allIds);
+            }
+
+            // Deselect All (Escape)
+            if (e.key === 'Escape') {
+                setSelectedCommands(new Set());
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeScene, selectedCommands, selectedCommandIndex, clipboard, dispatch, activeSceneId]);
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, commandId: string, index: number) => {
         dragItem.current = { id: commandId, index };
@@ -823,7 +918,27 @@ const SceneEditor: React.FC<{
                                 return (
                                     <div key={cmd.id} className="relative">
                                         <div
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                if (e.shiftKey && lastSelectedIndex !== null) {
+                                                    // Shift-click: select range
+                                                    const start = Math.min(lastSelectedIndex, index);
+                                                    const end = Math.max(lastSelectedIndex, index);
+                                                    const rangeIds = activeScene.commands.slice(start, end + 1).map(c => c.id);
+                                                    setSelectedCommands(new Set([...selectedCommands, ...rangeIds]));
+                                                } else if (e.ctrlKey || e.metaKey) {
+                                                    // Ctrl-click: toggle selection
+                                                    const newSelected = new Set(selectedCommands);
+                                                    if (newSelected.has(cmd.id)) {
+                                                        newSelected.delete(cmd.id);
+                                                    } else {
+                                                        newSelected.add(cmd.id);
+                                                    }
+                                                    setSelectedCommands(newSelected);
+                                                } else {
+                                                    // Regular click: select single
+                                                    setSelectedCommands(new Set([cmd.id]));
+                                                }
+                                                setLastSelectedIndex(index);
                                                 setSelectedCommandIndex(index);
                                                 setSelectedVariableId(null);
                                             }}
@@ -871,7 +986,8 @@ const SceneEditor: React.FC<{
                                             <CommandItem 
                                                 command={cmd} 
                                                 project={project} 
-                                                isSelected={index === selectedCommandIndex} 
+                                                isSelected={index === selectedCommandIndex}
+                                                isInMultiSelection={selectedCommands.has(cmd.id) && selectedCommands.size > 1}
                                                 depth={0}
                                                 collapsedBranches={collapsedBranches}
                                                 onToggleCollapse={(isGroup || isBranchStart) ? () => {

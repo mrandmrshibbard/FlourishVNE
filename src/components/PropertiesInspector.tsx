@@ -247,7 +247,7 @@ const PropertiesInspector: React.FC<{
         };
 
         return (
-            <Panel title={`Scene Config: ${activeScene.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0">
+            <Panel title={`Scene Config: ${activeScene.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
                         <div className="mb-4">
@@ -298,7 +298,13 @@ const PropertiesInspector: React.FC<{
     if (selectedVariableId && setSelectedVariableId) {
         const variable = project.variables[selectedVariableId];
         if (!variable) {
-            return <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0"><p>Variable not found.</p></Panel>;
+            return (
+                <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
+                    <div className="flex items-center justify-center h-full text-slate-500 text-xs italic">
+                        <p>Variable not found.</p>
+                    </div>
+                </Panel>
+            );
         }
 
         const updateVariable = (updates: Partial<VNVariable>) => {
@@ -331,7 +337,7 @@ const PropertiesInspector: React.FC<{
         };
 
         return (
-            <Panel title={`Variable: ${variable.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0">
+            <Panel title={`Variable: ${variable.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
                         <FormField label="Name">
@@ -373,7 +379,13 @@ const PropertiesInspector: React.FC<{
     }
 
     if (selectedCommandIndex === null || !activeScene || !activeScene.commands[selectedCommandIndex]) {
-        return <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0"><p>Select a command to edit its properties.</p></Panel>;
+        return (
+            <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
+                <div className="flex items-center justify-center h-full text-slate-500 text-xs italic">
+                    <p>Select a command to edit its properties.</p>
+                </div>
+            </Panel>
+        );
     }
     
     const command = activeScene.commands[selectedCommandIndex];
@@ -1183,7 +1195,7 @@ const PropertiesInspector: React.FC<{
         }
     };
 
-    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0">
+    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
         <div className="flex flex-col h-full">
             <div className="flex-grow overflow-y-auto pr-1">
                 {renderProperties()}
