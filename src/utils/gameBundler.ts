@@ -201,7 +201,7 @@ function generateStandaloneHTML(project: VNProject): string {
       --accent-purple: #8a2be2;
       --text-primary: #f0e6ff;
       --text-secondary: #c0b4d4;
-      --font-heading: 'Pacifico', cursive;
+      --font-heading: 'Poppins', sans-serif;
       --font-body: 'Poppins', sans-serif;
     }
     

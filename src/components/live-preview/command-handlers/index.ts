@@ -14,3 +14,6 @@ export * from './overlayHandler';
 export * from './controlFlowHandler';
 export * from './effectsHandler';
 export * from './textInputHandler';
+export * from './waitHandler';
+export * from './screenHandler';
+export * from './movieHandler';

@@ -11,13 +11,11 @@ const popularFonts = [
   'Times New Roman, serif',
   'Georgia, serif',
   'Courier New, monospace',
-  'Pacifico, cursive',
   'Lato, sans-serif',
   'Merriweather, serif',
   'Oswald, sans-serif',
   'Playfair Display, serif',
   'Roboto, sans-serif',
-  'Caveat, cursive',
 ];
 
 const FontEditor: React.FC<{

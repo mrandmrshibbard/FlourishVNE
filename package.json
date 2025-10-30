@@ -14,6 +14,7 @@
     "generate:engine-bundle": "node scripts/generate-engine-bundle.js",
     "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
     "build:player": "node scripts/build-player.js",
+    "build:desktop-game": "node scripts/build-desktop-game.js",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder",
     "electron:build:win": "npm run build && electron-builder --win",

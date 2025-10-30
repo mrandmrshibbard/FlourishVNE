@@ -87,7 +87,7 @@ export interface UISaveSlotGridElement extends BaseUIElement {
     font: VNFontSettings;
     emptySlotText: string;
 }
-export type GameSetting = 'musicVolume' | 'sfxVolume' | 'textSpeed';
+export type GameSetting = 'musicVolume' | 'sfxVolume' | 'textSpeed' | 'autoAdvanceDelay';
 export interface UISettingsSliderElement extends BaseUIElement {
     type: UIElementType.SettingsSlider;
     setting: GameSetting;
@@ -101,7 +101,7 @@ export interface UISettingsSliderElement extends BaseUIElement {
     maxValue?: number;
     actions?: VNUIAction[]; // Multiple actions on value change
 }
-export type GameToggleSetting = 'enableSkip';
+export type GameToggleSetting = 'enableSkip' | 'autoAdvance';
 export interface UISettingsToggleElement extends BaseUIElement {
     type: UIElementType.SettingsToggle;
     setting: GameToggleSetting;

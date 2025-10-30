@@ -37,17 +37,18 @@ const VariableManager: React.FC<VariableManagerProps> = ({ project }) => {
     };
 
     return (
-        <div className="flex h-full">
+        <div className="flex h-full min-w-[1100px] max-w-[1100px] min-h-[750px] max-h-[750px] gap-4 p-4 overflow-hidden">
             {/* Variables List Sidebar */}
-            <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
-                <div className="p-4 border-b border-slate-700">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Cog6ToothIcon className="w-5 h-5" />
+            <div className="w-80 panel flex flex-col max-h-full">
+                <div className="p-3 border-b-2 border-slate-700 flex-shrink-0">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Cog6ToothIcon className="w-5 h-5 text-cyan-400" />
                         Variables
                     </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Track game state and player choices</p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
                     {variablesArray.map(variable => (
                         <VariableItem
                             key={variable.id}
@@ -62,12 +63,12 @@ const VariableManager: React.FC<VariableManagerProps> = ({ project }) => {
                     ))}
                 </div>
 
-                <div className="p-2 border-t border-slate-700">
+                <div className="p-3 border-t-2 border-slate-700 flex-shrink-0">
                     <button
                         onClick={addVariable}
-                        className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
+                        className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3 px-4 rounded-md flex items-center justify-center gap-2 font-bold text-sm transition-colors shadow-lg"
                     >
-                        <PlusIcon className="w-4 h-4" />
+                        <PlusIcon className="w-5 h-5" />
                         Add Variable
                     </button>
                 </div>
@@ -235,16 +236,19 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
     };
 
     return (
-        <div className="flex-1 p-4 overflow-y-auto">
-            <h3 className="text-xl font-bold text-white mb-4">{variable.name}</h3>
+        <div className="flex-1 p-4 overflow-y-auto panel">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Cog6ToothIcon className="w-6 h-6 text-cyan-400" />
+                {variable.name}
+            </h3>
 
-            <div className="space-y-4">
+            <div className="space-y-4 max-w-2xl">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
+                    <label className="form-label">Type</label>
                     <select
                         value={variable.type}
                         onChange={(e) => handleTypeChange(e.target.value as 'number' | 'string' | 'boolean')}
-                        className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="number">Number</option>
                         <option value="string">String</option>
@@ -253,12 +257,12 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Default Value</label>
+                    <label className="form-label">Default Value</label>
                     {variable.type === 'boolean' ? (
                         <select
                             value={variable.defaultValue ? 'true' : 'false'}
                             onChange={(e) => handleDefaultValueChange(e.target.value === 'true')}
-                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         >
                             <option value="false">False</option>
                             <option value="true">True</option>
@@ -268,14 +272,14 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                             type="number"
                             value={variable.defaultValue}
                             onChange={(e) => handleDefaultValueChange(parseFloat(e.target.value) || 0)}
-                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         />
                     ) : (
                         <input
                             type="text"
                             value={variable.defaultValue}
                             onChange={(e) => handleDefaultValueChange(e.target.value)}
-                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         />
                     )}
                 </div>

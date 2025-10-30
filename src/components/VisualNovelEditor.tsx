@@ -20,10 +20,11 @@ import UIManager from './UIManager';
 import AssetManager from './AssetManager';
 import VariableManager from './VariableManager';
 import SettingsManager from './SettingsManager';
+import OnboardingModal from './ui/OnboardingModal';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 
 
-const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: string | null; isChildWindow?: boolean }> = ({ onExit, initialTab, isChildWindow = false }) => {
     const { project, dispatch } = useProject();
     const [activeSceneId, setActiveSceneId] = useState<VNID>(project.startSceneId);
     const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
@@ -33,20 +34,24 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     const [selectedExpressionId, setSelectedExpressionId] = useState<VNID | null>(null);
     const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [activeTab, setActiveTab] = useState<NavigationTab>('scenes');
+    const [activeTab, setActiveTab] = useState<NavigationTab>(initialTab as NavigationTab || 'scenes');
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
     const [isConfiguringScene, setIsConfiguringScene] = useState(false);
+    const [showOnboarding, setShowOnboarding] = useState(false);
+    
+    // Detect if running in Electron
+    const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 
-    // REMOVED: The useEffect hook for saving the project has been removed.
-    // All changes are now held in memory until the user manually exports the project.
-    // This prevents browser storage quota errors for large projects.
+    // Sync project changes to localStorage for child windows in Electron
+    useEffect(() => {
+        if (isElectron) {
+            localStorage.setItem('flourish-active-project', JSON.stringify(project));
+        }
+    }, [project, isElectron]);
 
     // ADDED: Warn user before leaving the page to prevent data loss.
     // Skip this warning in Electron since it prevents the app from closing.
     useEffect(() => {
-        // Detect if running in Electron
-        const isElectron = navigator.userAgent.toLowerCase().includes('electron');
-        
         if (isElectron) {
             // Skip beforeunload warning in Electron to allow app to close normally
             return;
@@ -64,17 +69,81 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, []);
+    }, [isElectron]);
+    
+    // Listen for Electron IPC messages
+    useEffect(() => {
+        if (!isElectron || !(window as any).electronAPI) return;
+        
+        const electronAPI = (window as any).electronAPI;
+        
+        electronAPI.onSwitchTab((tab: NavigationTab) => {
+            setActiveTab(tab);
+        });
+        
+        electronAPI.onTriggerPlay(() => {
+            setIsPlaying(true);
+        });
+        
+        return () => {
+            if (electronAPI.removeAllListeners) {
+                electronAPI.removeAllListeners('switch-tab');
+                electronAPI.removeAllListeners('trigger-play');
+            }
+        };
+    }, [isElectron]);
+    
+    // Listen for storage changes from other windows (for syncing project data)
+    useEffect(() => {
+        if (!isElectron || isChildWindow) return; // Don't sync if this IS a child window
+        
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'flourish-active-project' && e.newValue) {
+                try {
+                    const updatedProject = JSON.parse(e.newValue);
+                    // Only reload if project ID matches but content differs
+                    if (updatedProject.id === project.id && JSON.stringify(updatedProject) !== JSON.stringify(project)) {
+                        // Instead of reloading, just log - the useEffect on line 46 will handle the sync
+                        console.log('[VisualNovelEditor] Project updated from child window');
+                    }
+                } catch (error) {
+                    console.error('Failed to sync project update:', error);
+                }
+            }
+        };
+        
+        window.addEventListener('storage', handleStorageChange);
+        
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, [isElectron, isChildWindow, project]);
+    
+    // Add Escape key handler for child windows
+    useEffect(() => {
+        if (!isChildWindow) return;
+        
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                window.close();
+            }
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isChildWindow]);
     
     useEffect(() => {
-        if (activeCharacterId) {
-            const character = project.characters[activeCharacterId];
-            const firstExprId = character && Object.keys(character.expressions)[0];
-            setSelectedExpressionId(firstExprId || null);
-        } else {
-            setSelectedExpressionId(null);
+        // Check if user has seen onboarding before
+        const hasSeenOnboarding = localStorage.getItem('flourish-onboarding-seen');
+        if (!hasSeenOnboarding) {
+            // Delay showing onboarding to let the app load first
+            const timer = setTimeout(() => {
+                setShowOnboarding(true);
+            }, 1000);
+            return () => clearTimeout(timer);
         }
-    }, [activeCharacterId, project.characters]);
+    }, []);
 
     const handleTitleChange = (newTitle: string) => {
         dispatch({ type: 'UPDATE_PROJECT_TITLE', payload: { title: newTitle } });
@@ -100,6 +169,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     }
 
     const renderInspector = () => {
+        // Only render inspector for scenes tab
+        // Other managers (UI, Characters, Assets, Variables, Settings) handle their own layout internally
+        if (activeTab === 'ui' || activeTab === 'characters' || activeTab === 'assets' || activeTab === 'variables' || activeTab === 'settings') {
+            return null;
+        }
+        
         if (isConfiguringScene) {
             return <PropertiesInspector
                 activeSceneId={activeSceneId}
@@ -108,19 +183,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 isConfigScene={true}
                 onCloseSceneConfig={() => setIsConfiguringScene(false)}
             />;
-        }
-        if (activeCharacterId) {
-            return <CharacterInspector 
-                activeCharacterId={activeCharacterId} 
-                selectedExpressionId={selectedExpressionId}
-                setSelectedExpressionId={setSelectedExpressionId}
-            />;
-        }
-        if (activeMenuScreenId) {
-            if (selectedUIElementId) {
-                return <UIElementInspector screenId={activeMenuScreenId} elementId={selectedUIElementId} setSelectedElementId={setSelectedUIElementId} />;
-            }
-            return <ScreenInspector screenId={activeMenuScreenId} />;
         }
         if (selectedVariableId) {
             return <PropertiesInspector
@@ -138,7 +200,16 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 setSelectedCommandIndex={setSelectedCommandIndex}
             />;
         }
-        return <Panel title="Properties" className="w-96 flex-shrink-0"><p>Select an item to see its properties.</p></Panel>
+        // Show scene properties when in scenes tab and no specific item selected
+        if (activeTab === 'scenes' && selectedCommandIndex === null && !isConfiguringScene) {
+            return <PropertiesInspector
+                activeSceneId={activeSceneId}
+                selectedCommandIndex={null}
+                setSelectedCommandIndex={setSelectedCommandIndex}
+                showSceneProperties={true}
+            />;
+        }
+        return <Panel title="Properties" className="w-80 flex-shrink-0"><p className="text-slate-400 text-sm">Select an item to see its properties.</p></Panel>
     }
 
     // Calculate tab counts
@@ -167,71 +238,136 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         // For assets, variables, and settings tabs, we don't need to set any active IDs
     };
     return (
-        <div className="bg-slate-900 text-slate-100 h-screen flex flex-col">
-            <Header
-                title={project.title}
-                onTitleChange={handleTitleChange}
-                onPlay={() => setIsPlaying(true)}
-                onExit={onExit}
-                navigationTabs={
-                    <NavigationTabs
-                        activeTab={activeTab}
-                        onTabChange={handleTabChange}
-                        sceneCount={sceneCount}
-                        characterCount={characterCount}
-                        uiScreenCount={uiScreenCount}
-                        assetCount={assetCount}
-                        variableCount={variableCount}
-                    />
-                }
-            />
-            <main className="flex-grow flex overflow-hidden">
-                {/* Main Content Area - Full Width Managers */}
-                <div className="flex-1 flex flex-col min-w-0">
-                    {activeTab === 'scenes' ? (
-                        <SceneManager
-                            project={project}
-                            activeSceneId={activeSceneId}
-                            setActiveSceneId={handleSetActiveScene}
-                            selectedCommandIndex={selectedCommandIndex}
-                            setSelectedCommandIndex={setSelectedCommandIndex}
-                            setSelectedVariableId={setSelectedVariableId}
-                            onConfigureScene={() => {
-                                setIsConfiguringScene(true);
-                                setSelectedCommandIndex(null);
-                            }}
-                            isCollapsed={isSceneEditorCollapsed}
-                            onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
+        <div className="bg-slate-900 text-slate-100 h-screen flex flex-col min-w-[1200px] overflow-x-auto border-4 border-slate-700/50">
+            {!isChildWindow && (
+                <>
+                    {!isElectron && (
+                        <Header
+                            title={project.title}
+                            onTitleChange={handleTitleChange}
+                            onPlay={() => setIsPlaying(true)}
+                            onExit={onExit}
                         />
-                    ) : activeTab === 'characters' ? (
-                        <CharacterManager
-                            project={project}
-                            activeCharacterId={activeCharacterId}
-                            setActiveCharacterId={handleSetActiveCharacter}
-                            selectedExpressionId={selectedExpressionId}
-                            setSelectedExpressionId={setSelectedExpressionId}
+                    )}
+                    {isElectron && (
+                        <Header
+                            title={project.title}
+                            onTitleChange={handleTitleChange}
+                            onPlay={() => setIsPlaying(true)}
+                            onExit={onExit}
                         />
-                    ) : activeTab === 'ui' ? (
-                        <UIManager
-                            project={project}
-                            activeMenuScreenId={activeMenuScreenId}
-                            setActiveMenuScreenId={handleSetActiveMenuScreen}
-                            selectedUIElementId={selectedUIElementId}
-                            setSelectedUIElementId={setSelectedUIElementId}
-                        />
-                    ) : activeTab === 'assets' ? (
-                        <AssetManager project={project} />
-                    ) : activeTab === 'variables' ? (
-                        <VariableManager project={project} />
-                    ) : activeTab === 'settings' ? (
-                        <SettingsManager project={project} />
-                    ) : null}
+                    )}
+                </>
+            )}
+            <main className="flex-grow flex gap-4 p-4">
+                {/* Main Content Area - Always show SceneManager in Electron, tabs in browser */}
+                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                    {isElectron ? (
+                        // In Electron: Always show scenes unless this is a child window with different tab
+                        activeTab === 'scenes' ? (
+                            <SceneManager
+                                project={project}
+                                activeSceneId={activeSceneId}
+                                setActiveSceneId={handleSetActiveScene}
+                                selectedCommandIndex={selectedCommandIndex}
+                                setSelectedCommandIndex={setSelectedCommandIndex}
+                                setSelectedVariableId={setSelectedVariableId}
+                                onConfigureScene={() => {
+                                    setIsConfiguringScene(true);
+                                    setSelectedCommandIndex(null);
+                                }}
+                                isCollapsed={isSceneEditorCollapsed}
+                                onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
+                            />
+                        ) : activeTab === 'characters' ? (
+                            <CharacterManager
+                                project={project}
+                                activeCharacterId={activeCharacterId}
+                                setActiveCharacterId={handleSetActiveCharacter}
+                                selectedExpressionId={selectedExpressionId}
+                                setSelectedExpressionId={setSelectedExpressionId}
+                            />
+                        ) : activeTab === 'ui' ? (
+                            <UIManager
+                                project={project}
+                                activeMenuScreenId={activeMenuScreenId}
+                                setActiveMenuScreenId={handleSetActiveMenuScreen}
+                                selectedUIElementId={selectedUIElementId}
+                                setSelectedUIElementId={setSelectedUIElementId}
+                            />
+                        ) : activeTab === 'assets' ? (
+                            <AssetManager />
+                        ) : activeTab === 'variables' ? (
+                            <VariableManager project={project} />
+                        ) : activeTab === 'settings' ? (
+                            <SettingsManager project={project} />
+                        ) : null
+                    ) : (
+                        // In Browser: Show tab navigation with all managers
+                        <>
+                            <NavigationTabs
+                                activeTab={activeTab}
+                                onTabChange={handleTabChange}
+                                sceneCount={sceneCount}
+                                characterCount={characterCount}
+                                uiScreenCount={uiScreenCount}
+                                assetCount={assetCount}
+                                variableCount={variableCount}
+                            />
+                            {activeTab === 'scenes' ? (
+                                <SceneManager
+                                    project={project}
+                                    activeSceneId={activeSceneId}
+                                    setActiveSceneId={handleSetActiveScene}
+                                    selectedCommandIndex={selectedCommandIndex}
+                                    setSelectedCommandIndex={setSelectedCommandIndex}
+                                    setSelectedVariableId={setSelectedVariableId}
+                                    onConfigureScene={() => {
+                                        setIsConfiguringScene(true);
+                                        setSelectedCommandIndex(null);
+                                    }}
+                                    isCollapsed={isSceneEditorCollapsed}
+                                    onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
+                                />
+                            ) : activeTab === 'characters' ? (
+                                <CharacterManager
+                                    project={project}
+                                    activeCharacterId={activeCharacterId}
+                                    setActiveCharacterId={handleSetActiveCharacter}
+                                    selectedExpressionId={selectedExpressionId}
+                                    setSelectedExpressionId={setSelectedExpressionId}
+                                />
+                            ) : activeTab === 'ui' ? (
+                                <UIManager
+                                    project={project}
+                                    activeMenuScreenId={activeMenuScreenId}
+                                    setActiveMenuScreenId={handleSetActiveMenuScreen}
+                                    selectedUIElementId={selectedUIElementId}
+                                    setSelectedUIElementId={setSelectedUIElementId}
+                                />
+                            ) : activeTab === 'assets' ? (
+                                <AssetManager />
+                            ) : activeTab === 'variables' ? (
+                                <VariableManager project={project} />
+                            ) : activeTab === 'settings' ? (
+                                <SettingsManager project={project} />
+                            ) : null}
+                        </>
+                    )}
                 </div>
 
                 {/* Properties Inspector Sidebar */}
-                {(!isSceneEditorCollapsed || activeCharacterId || activeMenuScreenId) && renderInspector()}
+                {renderInspector()}
             </main>
             {isPlaying && <LivePreview onClose={() => setIsPlaying(false)} />}
+            <OnboardingModal
+                isOpen={showOnboarding}
+                onClose={() => setShowOnboarding(false)}
+                onComplete={() => {
+                    localStorage.setItem('flourish-onboarding-seen', 'true');
+                    setShowOnboarding(false);
+                }}
+            />
         </div>
     );
 };

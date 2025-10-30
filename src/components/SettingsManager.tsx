@@ -30,25 +30,26 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     ];
 
     return (
-        <div className="flex h-full">
+        <div className="flex h-full min-w-[900px] max-w-[900px] min-h-[700px] max-h-[700px] gap-4 p-4 overflow-hidden">
             {/* Settings Sidebar */}
-            <div className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
-                <div className="p-4 border-b border-slate-700">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Cog6ToothIcon className="w-5 h-5" />
+            <div className="w-64 panel flex flex-col max-h-full">
+                <div className="p-3 border-b-2 border-slate-700 flex-shrink-0">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Cog6ToothIcon className="w-5 h-5 text-red-400" />
                         Settings
                     </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Configure project properties</p>
                 </div>
 
-                <div className="flex-1 p-2 space-y-1">
+                <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
                     {sections.map(section => (
                         <button
                             key={section.id}
                             onClick={() => setActiveSection(section.id)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
+                            className={`w-full flex items-center gap-2 p-2.5 rounded-lg text-sm text-left transition-all ${
                                 activeSection === section.id
-                                    ? 'bg-sky-500/20 border border-sky-500/50 text-sky-300'
-                                    : 'hover:bg-slate-700 text-slate-300'
+                                    ? 'bg-sky-500/20 border-2 border-sky-500/50 text-sky-300 shadow-lg scale-[1.02]'
+                                    : 'hover:bg-slate-700 text-slate-300 border-2 border-transparent'
                             }`}
                         >
                             <section.icon className="w-5 h-5 flex-shrink-0" />
@@ -89,22 +90,22 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate }) 
 
             <div className="space-y-6 max-w-md">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Project Title</label>
+                    <label className="form-label">Project Title</label>
                     <input
                         type="text"
                         value={project.title}
                         onChange={(e) => onUpdate({ title: e.target.value })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                         placeholder="Enter project title"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Starting Scene</label>
+                    <label className="form-label">Starting Scene</label>
                     <select
                         value={project.startSceneId}
                         onChange={(e) => onUpdate({ startSceneId: e.target.value })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         {Object.values(project.scenes || {}).map((scene: any) => (
                             <option key={scene.id} value={scene.id}>
@@ -161,7 +162,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
             <div className="space-y-6 max-w-md">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Dialogue Box Image</label>
+                    <label className="form-label">Dialogue Box Image</label>
                     <select
                         value={project.ui.dialogueBoxImage?.id || ''}
                         onChange={(e) => {
@@ -174,7 +175,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null
                             });
                         }}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-505"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allImages.map(image => (
@@ -186,7 +187,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Choice Button Image</label>
+                    <label className="form-label">Choice Button Image</label>
                     <select
                         value={project.ui.choiceButtonImage?.id || ''}
                         onChange={(e) => {
@@ -196,7 +197,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 choiceButtonImage: asset ? { type: 'image', id: asset.id } : null
                             });
                         }}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allImages.map(image => (
@@ -236,7 +237,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                             type="text"
                             value={font.family}
                             onChange={(e) => updateFont(fontKey, { family: e.target.value })}
-                            className="w-full bg-slate-800 text-white p-2 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         />
                     </div>
 
@@ -246,7 +247,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                             type="number"
                             value={font.size}
                             onChange={(e) => updateFont(fontKey, { size: parseInt(e.target.value) })}
-                            className="w-full bg-slate-800 text-white p-2 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         />
                     </div>
 
@@ -256,7 +257,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                             type="color"
                             value={font.color}
                             onChange={(e) => updateFont(fontKey, { color: e.target.value })}
-                            className="w-full bg-slate-800 text-white p-2 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         />
                     </div>
 
@@ -265,7 +266,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                         <select
                             value={font.weight}
                             onChange={(e) => updateFont(fontKey, { weight: e.target.value as 'normal' | 'bold' })}
-                            className="w-full bg-slate-800 text-white p-2 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="form-input"
                         >
                             <option value="normal">Normal</option>
                             <option value="bold">Bold</option>
@@ -336,11 +337,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
 
             <div className="space-y-6 max-w-md">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Title Screen</label>
+                    <label className="form-label">Title Screen</label>
                     <select
                         value={project.ui.titleScreenId || ''}
                         onChange={(e) => onUpdate({ titleScreenId: e.target.value || null })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allScreens.map(screen => (
@@ -352,11 +353,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Settings Screen</label>
+                    <label className="form-label">Settings Screen</label>
                     <select
                         value={project.ui.settingsScreenId || ''}
                         onChange={(e) => onUpdate({ settingsScreenId: e.target.value || null })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allScreens.map(screen => (
@@ -368,11 +369,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Save Screen</label>
+                    <label className="form-label">Save Screen</label>
                     <select
                         value={project.ui.saveScreenId || ''}
                         onChange={(e) => onUpdate({ saveScreenId: e.target.value || null })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allScreens.map(screen => (
@@ -384,11 +385,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Load Screen</label>
+                    <label className="form-label">Load Screen</label>
                     <select
                         value={project.ui.loadScreenId || ''}
                         onChange={(e) => onUpdate({ loadScreenId: e.target.value || null })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allScreens.map(screen => (
@@ -400,11 +401,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Pause Screen</label>
+                    <label className="form-label">Pause Screen</label>
                     <select
                         value={project.ui.pauseScreenId || ''}
                         onChange={(e) => onUpdate({ pauseScreenId: e.target.value || null })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allScreens.map(screen => (
@@ -416,11 +417,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Game HUD Screen</label>
+                    <label className="form-label">Game HUD Screen</label>
                     <select
                         value={project.ui.gameHudScreenId || ''}
                         onChange={(e) => onUpdate({ gameHudScreenId: e.target.value || null })}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="form-input"
                     >
                         <option value="">None</option>
                         {allScreens.map(screen => (

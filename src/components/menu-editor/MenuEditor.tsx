@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useCallback, memo } from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
@@ -10,7 +10,7 @@ import { createUIElement } from '../../utils/uiElementFactory';
 import { fontSettingsToStyle } from '../../utils/styleUtils';
 import { PlusIcon } from '../icons';
 
-const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
+const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = memo(({ element, project }) => {
     switch (element.type) {
         case UIElementType.Button:
             const btn = element as UIButtonElement;
@@ -64,8 +64,9 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     muted 
                     loop 
                     playsInline
+                    preload="auto"
                     className="w-full h-full pointer-events-none" 
-                    style={{ objectFit }}
+                    style={{ objectFit, willChange: 'auto' }}
                 />;
             }
             
@@ -137,8 +138,9 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                              muted 
                              loop 
                              playsInline
+                             preload="auto"
                              className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none" 
-                             style={{ zIndex: i }}
+                             style={{ zIndex: i, willChange: 'auto' }}
                          />
                      ))
                  ) : (
@@ -235,7 +237,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
-}
+});
 
 
 const MenuEditor: React.FC<{ 
@@ -266,9 +268,9 @@ const MenuEditor: React.FC<{
 
     if (!screen) return <Panel title="Menu Editor">Screen not found</Panel>;
 
-    const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
+    const handleUpdateElement = useCallback((elementId: VNID, updates: Partial<VNUIElement>) => {
         dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
-    };
+    }, [dispatch, activeScreenId]);
     
     const handleAddElement = (type: UIElementType) => {
         const newElement = createUIElement(type, project);
@@ -290,55 +292,82 @@ const MenuEditor: React.FC<{
         }
     };
     
-    const getBackground = () => {
+    const getBackgroundStyle = () => {
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
-        if (screen.background.assetId) {
-             const url = screen.background.type === 'image' 
-                ? project.backgrounds[screen.background.assetId]?.imageUrl
-                : project.videos[screen.background.assetId]?.videoUrl;
+        if (screen.background.type === 'image' && screen.background.assetId) {
+            const url = project.backgrounds[screen.background.assetId]?.imageUrl;
             if (url) return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' };
         }
         return {};
     };
 
+    const getBackgroundVideo = () => {
+        if (screen.background.type === 'video' && screen.background.assetId) {
+            return project.videos[screen.background.assetId]?.videoUrl;
+        }
+        return null;
+    };
+
     return (
         <div className="flex-grow flex flex-col gap-4 min-h-0">
-            <Panel title={`Editing Menu: ${screen.name}`} className="flex-grow">
-                <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden aspect-video" ref={stageRef}
-                    onMouseDown={() => setSelectedElementId(null)}
-                    style={getBackground()}
-                >
-                    {stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => (
-                        <ResizableDraggable
-                            key={element.id}
-                            x={element.x} y={element.y}
-                            width={element.width} height={element.height}
-                            anchorX={element.anchorX} anchorY={element.anchorY}
-                            parentSize={stageSize}
-                            isSelected={selectedElementId === element.id}
-                            onSelect={(e) => {
-                                e.stopPropagation();
-                                setSelectedElementId(element.id);
-                            }}
-                            onUpdate={updates => handleUpdateElement(element.id, updates)}
-                        >
-                            <UIElementRenderer element={element} project={project} />
-                        </ResizableDraggable>
-                    ))}
+            <Panel title={`Editing Menu: ${screen.name}`} className="flex-shrink-0" style={{ height: '60vh' }}>
+                <div className="w-full h-full flex flex-col items-center justify-center px-2 py-1">
+                    <div className="w-full bg-slate-900/50 rounded-md relative overflow-hidden border-2 border-slate-700/50 shadow-inner aspect-video max-h-full" ref={stageRef}
+                        onMouseDown={() => setSelectedElementId(null)}
+                        style={getBackgroundStyle()}
+                    >
+                        {getBackgroundVideo() && (
+                            <video
+                                src={getBackgroundVideo()!}
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                preload="auto"
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                                style={{ zIndex: 0, willChange: 'auto' }}
+                            />
+                        )}
+                        {stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => (
+                            <ResizableDraggable
+                                key={element.id}
+                                x={element.x} y={element.y}
+                                width={element.width} height={element.height}
+                                anchorX={element.anchorX} anchorY={element.anchorY}
+                                parentSize={stageSize}
+                                isSelected={selectedElementId === element.id}
+                                onSelect={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedElementId(element.id);
+                                }}
+                                onUpdate={updates => handleUpdateElement(element.id, updates)}
+                            >
+                                <UIElementRenderer element={element} project={project} />
+                            </ResizableDraggable>
+                        ))}
+                    </div>
                 </div>
             </Panel>
-            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-11 gap-2">
-                <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
-                <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
-                <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
-                <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
-                <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
-                <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
-                <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
-                <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
-                <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Cycler</button>
-                <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
-                <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
+            <div className="flex-shrink-0">
+                <div className="bg-slate-800/50 border-2 border-slate-700 rounded-lg p-5 shadow-xl">
+                    <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <PlusIcon className="w-5 h-5 text-purple-400" />
+                        Add UI Element
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-6 lg:grid-cols-11 gap-3">
+                        <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Button</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Text</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Image</span></button>
+                        <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Video</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Character</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Text Input</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Dropdown</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Checkbox</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Cycler</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Slider</span></button>
+                        <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-90 py-3 px-3 rounded-lg flex flex-col items-center justify-center gap-1.5 font-semibold text-xs shadow-lg border border-purple-400/30 transition-all hover:scale-105 hover:shadow-xl min-h-[60px]"><PlusIcon className="w-4 h-4 flex-shrink-0" /><span className="text-center leading-tight">Toggle</span></button>
+                    </div>
+                </div>
             </div>
         </div>
     );

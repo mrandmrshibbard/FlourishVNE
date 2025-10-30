@@ -43,6 +43,8 @@ export interface CommandResult {
         musicState?: Partial<MusicState>;
         uiState?: Partial<PlayerState['uiState']>;
         variables?: Record<VNID, string | number | boolean>;
+        dialogueHistory?: PlayerState['dialogueHistory'];
+        choiceHistory?: PlayerState['choiceHistory'];
         currentIndex?: number;
         currentSceneId?: VNID;
         currentCommands?: any[];

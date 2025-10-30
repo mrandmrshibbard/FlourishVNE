@@ -4,6 +4,8 @@ import { VNProject } from '../types/project';
 import { VNUIScreen } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
+import UIElementInspector from './menu-editor/UIElementInspector';
+import ScreenInspector from './menu-editor/ScreenInspector';
 import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon } from './icons';
 import ConfirmationModal from './ui/ConfirmationModal';
 
@@ -81,17 +83,17 @@ const UIManager: React.FC<UIManagerProps> = ({
     }, [pendingRestore, project.ui.titleScreenId, project.uiScreens, setActiveMenuScreenId, setSelectedUIElementId]);
 
     return (
-        <div className="flex h-full">
-            {/* UI Screen List Sidebar */}
-            <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
-                <div className="p-4 border-b border-slate-700">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <BookmarkSquareIcon className="w-5 h-5" />
-                        UI Screens
+        <div className="flex h-full min-w-[1500px] max-w-[1500px] min-h-[850px] max-h-[850px] gap-6 p-4 overflow-hidden">
+            {/* UI Screens List Sidebar */}
+            <div className="w-48 panel flex flex-col flex-shrink-0 max-h-full">
+                <div className="p-3 border-b-2 border-slate-700 flex-shrink-0">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <BookmarkSquareIcon className="w-4 h-4 text-purple-400" />
+                        Screens
                     </h2>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
                     {uiScreensArray.map(screen => {
                         const isSpecial = specialScreenIds.includes(screen.id);
                         return (
@@ -111,19 +113,19 @@ const UIManager: React.FC<UIManagerProps> = ({
                     })}
                 </div>
 
-                <div className="p-2 border-t border-slate-700 space-y-2">
+                <div className="p-3 border-t-2 border-slate-700 space-y-2 flex-shrink-0 panel-header">
                     <button
                         onClick={addUIScreen}
-                        className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
+                        className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] border border-purple-400/50"
                     >
                         <PlusIcon className="w-4 h-4" />
-                        Add UI Screen
+                        Add
                     </button>
                     <button
                         onClick={openRestoreModal}
-                        className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
+                        className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 hover:text-red-200 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs transition-all border-2 border-red-500/30 hover:border-red-500/50 hover:scale-[1.02]"
                     >
-                        Restore Default Screens
+                        Restore Defaults
                     </button>
                 </div>
             </div>
@@ -145,6 +147,19 @@ const UIManager: React.FC<UIManagerProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Properties Inspector */}
+            {activeMenuScreenId && (
+                selectedUIElementId ? (
+                    <UIElementInspector 
+                        screenId={activeMenuScreenId} 
+                        elementId={selectedUIElementId} 
+                        setSelectedElementId={setSelectedUIElementId} 
+                    />
+                ) : (
+                    <ScreenInspector screenId={activeMenuScreenId} />
+                )
+            )}
 
             <ConfirmationModal
                 isOpen={restoreModalOpen}
@@ -201,15 +216,15 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
         <div
             onClick={onSelect}
             onDoubleClick={!isSpecial ? onStartRenaming : undefined}
-            className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
+            className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all ${
                 isSelected
-                    ? 'bg-sky-500/20 border border-sky-500/50'
-                    : 'hover:bg-slate-700'
+                    ? 'bg-sky-500/20 border border-sky-500/50 shadow-md'
+                    : 'hover:bg-slate-700/70 border border-transparent'
             }`}
         >
-            <BookmarkSquareIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <BookmarkSquareIcon className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-sky-400' : 'text-slate-400'}`} />
 
-            <div className="flex-grow truncate">
+            <div className="flex-grow truncate min-w-0">
                 {isRenaming && !isSpecial ? (
                     <input
                         type="text"
@@ -217,23 +232,23 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                         onChange={e => setRenameValue(e.target.value)}
                         onBlur={handleRenameBlur}
                         onKeyDown={handleRenameKeyDown}
-                        className="w-full bg-slate-900 text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
+                        className="w-full bg-slate-900 text-white py-1 px-1.5 rounded text-xs outline-none ring-2 ring-sky-500"
                         onClick={e => e.stopPropagation()}
                         autoFocus
                     />
                 ) : (
-                    <span className="text-sm">{screen.name}</span>
+                    <span className="text-xs font-medium">{screen.name}</span>
                 )}
             </div>
 
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                 {isSpecial && (
-                    <LockClosedIcon className="w-4 h-4 text-slate-500" title="This screen is essential and cannot be deleted or renamed." />
+                    <LockClosedIcon className="w-3 h-3 text-yellow-500/70 opacity-100" title="Essential screen" />
                 )}
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-                    className="p-1 text-sky-400 hover:text-sky-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                    className="p-1 text-sky-400 hover:text-sky-300 bg-slate-700 hover:bg-slate-600 rounded transition-all"
                     title="Duplicate"
                 >
                     <DuplicateIcon className="w-3 h-3" />
@@ -243,7 +258,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     <>
                         <button
                             onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                            className="p-1 text-slate-400 hover:text-sky-400 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                            className="p-1 text-slate-400 hover:text-sky-400 bg-slate-700 hover:bg-slate-600 rounded transition-all"
                             title="Rename"
                         >
                             <PencilIcon className="w-3 h-3" />
@@ -251,7 +266,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                            className="p-1 text-slate-400 hover:text-red-400 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                            className="p-1 text-slate-400 hover:text-red-400 bg-slate-700 hover:bg-slate-600 rounded transition-all"
                             title="Delete"
                         >
                             <TrashIcon className="w-3 h-3" />

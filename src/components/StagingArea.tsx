@@ -168,7 +168,7 @@ const StagingArea: React.FC<{
         let currentVariables: StageState['variables'] = {};
 
         // Initialize variables with project defaults
-        Object.values(project.variables).forEach(v => {
+        Object.values(project.variables).forEach((v: any) => {
             currentVariables[v.id] = v.defaultValue;
         });
 
@@ -371,11 +371,12 @@ const StagingArea: React.FC<{
     
     return (
         <Panel title="Staging Area" className={className} style={style}>
-            <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden aspect-video">
-                {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute w-full h-full object-cover" />}
-                {Object.values(stageState.characters).map((char) => (
+            <div className="w-full h-full flex flex-col px-2 py-1">
+                <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden">
+                    {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute w-full h-full object-cover" />}
+                {Object.values(stageState.characters).map((char: any) => (
                     <div key={char.charId} className="absolute h-[90%] w-auto aspect-[3/4]" style={getPositionStyle(char.position)}>
-                        {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute top-0 left-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
+                        {char.imageUrls.map((url: string, index: number) => <img key={index} src={url} alt="" className="absolute top-0 left-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
                     </div>
                 ))}
                 {stageState.textOverlays.map(o => (
@@ -462,9 +463,10 @@ const StagingArea: React.FC<{
                 )}
 
                  <div className="absolute top-2 right-2 flex flex-col gap-2 z-50">
-                    <button onClick={() => setShowCommandIndicators(s => !s)} className={`p-2 rounded-full ${showCommandIndicators ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Command Indicators"><PhotoIcon /></button>
+                     <button onClick={() => setShowCommandIndicators(s => !s)} className={`p-2 rounded-full ${showCommandIndicators ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Command Indicators"><PhotoIcon /></button>
                     <button onClick={() => setShowVariableState(s => !s)} className={`p-2 rounded-full ${showVariableState ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Variable State"><Cog6ToothIcon /></button>
                  </div>
+                </div>
             </div>
         </Panel>
     );

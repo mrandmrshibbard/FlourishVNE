@@ -19,6 +19,7 @@ export const ProjectContext = createContext<{
 } | null>(null);
 
 const MAX_HISTORY = 50; // Keep last 50 states
+const STORAGE_DEBOUNCE_MS = 300; // Debounce localStorage writes
 
 export const ProjectProvider: React.FC<{
   children: React.ReactNode;
@@ -30,14 +31,54 @@ export const ProjectProvider: React.FC<{
     future: []
   });
 
+  const storageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced localStorage save
+  const saveToLocalStorage = useCallback((project: VNProject) => {
+    const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+    if (!isElectron) return;
+
+    // Clear existing timeout
+    if (storageTimeoutRef.current) {
+      clearTimeout(storageTimeoutRef.current);
+    }
+
+    // Set new timeout
+    storageTimeoutRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem('flourish-active-project', JSON.stringify(project));
+      } catch (error) {
+        console.error('[ProjectContext] Failed to save to localStorage:', error);
+      }
+    }, STORAGE_DEBOUNCE_MS);
+  }, []);
+
+  // Sync with external project updates (for child windows syncing with main window)
+  useEffect(() => {
+    // Only update if the project has actually changed
+    const initialStr = JSON.stringify(initialProject);
+    const currentStr = JSON.stringify(history.present);
+    
+    if (initialStr !== currentStr) {
+      setHistory({
+        past: [],
+        present: initialProject,
+        future: []
+      });
+    }
+  }, [initialProject]); // Don't include history.present to avoid circular updates
+
   const dispatchWithHistory = useCallback((action: ProjectAction) => {
     setHistory(prev => {
       const newPresent = rootReducer(prev.present, action);
-      
-      // Don't add to history if state didn't change
-      if (JSON.stringify(newPresent) === JSON.stringify(prev.present)) {
+
+      // Skip history update if reducers returned the same reference
+      if (newPresent === prev.present) {
         return prev;
       }
+
+      // Debounced save to localStorage for cross-window sync (Electron only)
+      saveToLocalStorage(newPresent);
 
       return {
         past: [...prev.past.slice(-MAX_HISTORY + 1), prev.present],
@@ -45,7 +86,7 @@ export const ProjectProvider: React.FC<{
         future: [] // Clear future when new action is performed
       };
     });
-  }, []);
+  }, [saveToLocalStorage]);
 
   const undo = useCallback(() => {
     setHistory(prev => {

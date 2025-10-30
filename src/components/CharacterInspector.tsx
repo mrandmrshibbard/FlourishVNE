@@ -18,13 +18,11 @@ const popularFonts = [
   'Times New Roman, serif',
   'Georgia, serif',
   'Courier New, monospace',
-  'Pacifico, cursive',
   'Lato, sans-serif',
   'Merriweather, serif',
   'Oswald, sans-serif',
   'Playfair Display, serif',
   'Roboto, sans-serif',
-  'Caveat, cursive',
 ];
 
 // This is the item in the list of expressions
@@ -78,9 +76,9 @@ const ExpressionItem: React.FC<{
                     onClick={e => e.stopPropagation()} className="h-8 text-sm"
                 />
             ) : (<span className="truncate">{expr.name}</span>)}
-            <div className="flex items-center flex-shrink-0">
-                <button onClick={(e) => { e.stopPropagation(); onStartRename(); }} className="text-slate-500 hover:text-[var(--accent-cyan)] p-1 opacity-0 group-hover:opacity-100 transition-opacity"><PencilIcon className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }} className="text-slate-500 hover:text-[var(--accent-pink)] p-1 opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon className="w-4 h-4" /></button>
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+                <button onClick={(e) => { e.stopPropagation(); onStartRename(); }} className="text-slate-500 hover:text-[var(--accent-cyan)] p-1 transition-opacity"><PencilIcon className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }} className="text-slate-400 hover:text-red-400 p-1 transition-colors"><TrashIcon className="w-4 h-4" /></button>
             </div>
         </div>
     );
@@ -182,8 +180,8 @@ const CharacterInspector: React.FC<{
     };
 
     return (
-        <Panel title={`Properties: ${character.name}`} className="w-96 flex-shrink-0">
-            <div className="flex-grow overflow-y-auto pr-1 space-y-4">
+        <Panel title={`Properties: ${character.name}`} className="w-80 flex-shrink-0">
+            <div className="flex-grow overflow-y-auto pr-1 space-y-3">
                 <div>
                     <FormField label="Character Name"><TextInput value={character.name} onChange={e => updateCharacter({ name: e.target.value })} /></FormField>
                     <FormField label="Dialogue Color"><TextInput type="color" value={character.color} onChange={e => updateCharacter({ color: e.target.value })} className="p-1 h-10" /></FormField>

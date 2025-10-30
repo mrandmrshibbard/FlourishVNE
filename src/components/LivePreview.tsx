@@ -17,7 +17,7 @@ import {
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand,
     PlayMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
-    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand
+    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, ShowScreenCommand
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -55,6 +55,9 @@ import {
     handleResetScreenEffects,
     handleFlashScreen,
     handleTextInput,
+    handleWait,
+    handleShowScreen,
+    handlePlayMovie,
 } from './live-preview/command-handlers';
 
 // Import extracted types
@@ -89,6 +92,8 @@ const defaultSettings: GameSettings = {
     musicVolume: 0.8,
     sfxVolume: 0.8,
     enableSkip: true,
+    autoAdvance: false,
+    autoAdvanceDelay: 3,
 };
 
 // --- Utility Functions (keeping these until they can be extracted) ---
@@ -337,9 +342,15 @@ const ButtonOverlayElement: React.FC<{
     );
 };
 
-const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSize }> = ({ overlay, stageSize }) => {
+const ImageOverlayElement: React.FC<{ 
+    overlay: ImageOverlay; 
+    stageSize: StageSize;
+    onAction?: (action: VNUIAction) => void;
+    onAdvance?: () => void;
+}> = ({ overlay, stageSize, onAction, onAdvance }) => {
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
     const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
+    const [isHovered, setIsHovered] = useState(false);
     const timeoutRef = useRef<number | null>(null);
 
     useEffect(() => {
@@ -376,6 +387,18 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
         };
     }, [overlay.id, overlay.transition, overlay.action]);
 
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent stage click handler from firing
+        
+        if (overlay.onClick && onAction) {
+            onAction(overlay.onClick);
+        }
+        
+        if (overlay.waitForClick && onAdvance) {
+            onAdvance();
+        }
+    };
+
     const applyTransition = playTransition && overlay.transition && overlay.transition !== 'instant';
     const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
     const animDuration = `${overlay.duration ?? 0.5}s`;
@@ -388,6 +411,7 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
         width: `${overlay.width}px`,
         height: `${overlay.height}px`,
         ...(isSlideTransition ? {} : { transform: 'translate(-50%, -50%)' }),
+        ...(overlay.onClick ? { cursor: 'pointer' } : {}),
     };
 
     // Only pre-hide if we're showing WITH a transition that hasn't started yet
@@ -410,11 +434,23 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
         ...(isSlideTransition ? slideStyle : {}),
     } as React.CSSProperties;
 
+    // Determine which image/video to show based on hover state
+    const currentImageUrl = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
+    const currentVideoUrl = isHovered && overlay.hoverVideoUrl ? overlay.hoverVideoUrl : overlay.videoUrl;
+    const isCurrentlyVideo = currentVideoUrl !== undefined;
+
     return (
-        <div className={className} style={style}>
-            {overlay.isVideo && overlay.videoUrl ? (
+        <div 
+            className={className} 
+            style={style}
+            onClick={overlay.onClick || overlay.waitForClick ? handleClick : undefined}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
+            {isCurrentlyVideo && currentVideoUrl ? (
                 <video 
-                    src={overlay.videoUrl} 
+                    key={currentVideoUrl} // Force re-render when URL changes
+                    src={currentVideoUrl} 
                     autoPlay 
                     muted 
                     loop={overlay.videoLoop} 
@@ -424,9 +460,9 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
                 />
             ) : (
                 <img 
-                    src={overlay.imageUrl} 
+                    src={currentImageUrl} 
                     alt="" 
-                    className="absolute inset-0 w-full h-full object-contain" 
+                    className="absolute inset-0 w-full h-full object-contain transition-opacity duration-200" 
                     style={imageStyle} 
                 />
             )}
@@ -581,6 +617,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                 return (
                     <button 
                         key={index} 
+                        data-choice="true"
                         onClick={() => onSelect(choice)}
                         className={`px-8 py-4 relative ${choiceButtonUrl && !isChoiceButtonVideo ? 'choice-button-custom bg-slate-800/80 hover:bg-slate-700/90' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500 rounded-lg'}`}
                         style={choiceButtonUrl && !isChoiceButtonVideo ? { borderImageSource: `url(${choiceButtonUrl})`, ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont)}
@@ -635,6 +672,81 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                         Submit
                     </button>
                 </form>
+            </div>
+        </div>
+    );
+};
+
+const HistoryViewer: React.FC<{
+    dialogueHistory: PlayerState['dialogueHistory'];
+    choiceHistory: PlayerState['choiceHistory'];
+    onClose: () => void;
+}> = ({ dialogueHistory, choiceHistory, onClose }) => {
+    // Merge and sort by timestamp
+    const allEntries = [
+        ...dialogueHistory.map(d => ({ ...d, type: 'dialogue' as const })),
+        ...choiceHistory.map(c => ({ ...c, type: 'choice' as const }))
+    ].sort((a, b) => a.timestamp - b.timestamp);
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 rounded-lg border-2 border-slate-600 w-full max-w-2xl max-h-[80vh] flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                    <h2 className="text-xl font-bold text-white">Dialogue History & Log</h2>
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-slate-800 rounded-full transition-colors"
+                        title="Close"
+                    >
+                        <XMarkIcon className="w-6 h-6 text-white" />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {allEntries.length === 0 ? (
+                        <p className="text-slate-400 text-center py-8">No dialogue history yet</p>
+                    ) : (
+                        allEntries.map((entry, index) => (
+                            <div
+                                key={index}
+                                className={`p-3 rounded-lg ${
+                                    entry.type === 'dialogue'
+                                        ? 'bg-slate-800 border-l-4'
+                                        : 'bg-sky-900/30 border-l-4 border-sky-500'
+                                }`}
+                                style={
+                                    entry.type === 'dialogue'
+                                        ? { borderLeftColor: entry.characterColor }
+                                        : undefined
+                                }
+                            >
+                                {entry.type === 'dialogue' ? (
+                                    <>
+                                        <div
+                                            className="font-bold mb-1"
+                                            style={{ color: entry.characterColor }}
+                                        >
+                                            {entry.characterName}
+                                        </div>
+                                        <div className="text-white">{entry.text}</div>
+                                    </>
+                                ) : (
+                                    <div className="text-sky-300 flex items-center gap-2">
+                                        <span className="text-xl">→</span>
+                                        <span className="font-medium">{entry.choiceText}</span>
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-700 text-center text-slate-400 text-sm">
+                    {allEntries.length} {allEntries.length === 1 ? 'entry' : 'entries'} recorded
+                </div>
             </div>
         </div>
     );
@@ -898,11 +1010,24 @@ const UIScreenRenderer: React.FC<{
                     step = 1;
                 } else {
                     // Settings mode (legacy)
-                    const settingKey = el.setting === 'textSpeed' ? 'textSpeed' : el.setting;
+                    const settingKey = el.setting;
                     value = settings[settingKey];
-                    min = el.setting === 'textSpeed' ? 10 : 0;
-                    max = el.setting === 'textSpeed' ? 100 : 1;
-                    step = el.setting === 'textSpeed' ? 1 : 0.01;
+                    
+                    // Set appropriate ranges for each setting
+                    if (el.setting === 'textSpeed') {
+                        min = 10;
+                        max = 100;
+                        step = 1;
+                    } else if (el.setting === 'autoAdvanceDelay') {
+                        min = 1;
+                        max = 10;
+                        step = 0.5;
+                    } else {
+                        // Volume settings
+                        min = 0;
+                        max = 1;
+                        step = 0.01;
+                    }
                 }
                 
                 const thumbUrl = el.thumbImage ? getElementAssetUrl(el.thumbImage) : null;
@@ -1581,6 +1706,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const [gameSaves, setGameSaves] = useState<Record<number, GameStateSave>>({});
     const [isJustLoaded, setIsJustLoaded] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     
     // Menu variables: used for UI screens before game starts (e.g., character customization)
     const [menuVariables, setMenuVariables] = useState<Record<VNID, string | number | boolean>>(() => {
@@ -1934,6 +2060,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5 } },
             uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
+            dialogueHistory: [],
+            choiceHistory: [],
         });
         setScreenStack([]);
         setHudStack([]);
@@ -2574,6 +2702,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...(result.updates?.stageState !== undefined ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {}),
                             ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
                             ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
+                            ...(result.updates?.dialogueHistory !== undefined ? { dialogueHistory: result.updates.dialogueHistory } : {}),
+                            ...(result.updates?.choiceHistory !== undefined ? { choiceHistory: result.updates.choiceHistory } : {}),
                         };
                     });
                 }
@@ -2660,103 +2790,59 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.PlayMovie: {
-                    instantAdvance = false;
-                    setPlayerState(p => p ? {...p, uiState: {...p.uiState, isWaitingForInput: true, movieUrl: assetResolver((command as PlayMovieCommand).videoId, 'video')}} : null);
+                    const result = handlePlayMovie(command as PlayMovieCommand, commandContext, assetResolver);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.Wait: {
-                    instantAdvance = false;
-                    const cmd = command as any;
-                    const durationMs = ((cmd.duration ?? 1) * 1000);
-
-                    // If waitForInput is enabled, allow user input (click or key) to advance early
-                    if (cmd.waitForInput) {
-                        // Don't set isWaitingForInput - it blocks the game loop
-                        // Instead, just set up listeners that will call advance() directly
-                        let timeoutId: number | null = window.setTimeout(() => {
-                            // timeout elapsed, advance
-                            advance();
-                            removeListeners();
-                        }, durationMs);
-
-                        const onUserAdvance = () => {
-                            if (timeoutId) {
-                                clearTimeout(timeoutId);
-                                timeoutId = null;
-                            }
-                            advance();
-                            removeListeners();
-                        };
-
-                        const keyHandler = (e: KeyboardEvent) => {
-                            if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') onUserAdvance();
-                        };
-                        const clickHandler = () => onUserAdvance();
-
-                        const removeListeners = () => {
-                            window.removeEventListener('keydown', keyHandler);
-                            window.removeEventListener('click', clickHandler);
-                        };
-
-                        window.addEventListener('keydown', keyHandler);
-                        window.addEventListener('click', clickHandler);
-                    } else {
-                        // No user input allowed, just wait for duration
-                        setTimeout(() => advance(), durationMs);
-                    }
+                    const result = handleWait(command as WaitCommand, commandContext, advance);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ShakeScreen: {
-                    const cmd = command as ShakeScreenCommand;
+                    const result = handleShakeScreen(command as ShakeScreenCommand, commandContext);
                     
-                    // Set shake in ref
-                    activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                    // Set shake in ref for CSS animation
+                    activeShakeRef.current = { intensity: (command as ShakeScreenCommand).intensity, duration: (command as ShakeScreenCommand).duration };
                     
-                    // Set up timeout to clear shake ref (no re-render needed - CSS animation handles it)
+                    // Clear shake after duration
                     const timeoutId = window.setTimeout(() => {
                         activeShakeRef.current = null;
                         activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
-                    }, cmd.duration * 1000);
+                    }, (command as ShakeScreenCommand).duration * 1000);
                     activeEffectTimeoutsRef.current.push(timeoutId);
                     
-                    // Let the normal advance() function handle index progression
+                    applyResult(result);
                     break;
                 }
                 case CommandType.TintScreen: {
-                    const cmd = command as TintScreenCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration }}} : null);
+                    const result = handleTintScreen(command as TintScreenCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.PanZoomScreen: {
-                     const cmd = command as PanZoomScreenCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration }}} : null);
+                    const result = handlePanZoomScreen(command as PanZoomScreenCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ResetScreenEffects: {
-                    const cmd = command as ResetScreenEffectsCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration }}} : null);
+                    const result = handleResetScreenEffects(command as ResetScreenEffectsCommand, commandContext);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.FlashScreen: {
-                    const cmd = command as FlashScreenCommand;
+                    const result = handleFlashScreen(command as FlashScreenCommand, commandContext);
                     
                     // Set flash in ref with unique key and trigger re-render
-                    activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+                    activeFlashRef.current = { color: (command as FlashScreenCommand).color, duration: (command as FlashScreenCommand).duration, key: Date.now() };
                     setFlashTrigger(prev => prev + 1);
                     
-                    // Let the normal advance() function handle index progression
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ShowScreen: {
-                    instantAdvance = false; // Pause execution when showing a screen/menu
-                    const cmd = command as any;
-                    // If we're in-playing, treat this as a HUD/in-game overlay
-                    if (playerState && playerState.mode === 'playing') {
-                        setHudStack(s => [...s, cmd.screenId]);
-                    } else {
-                        // Otherwise push onto the normal screen stack (menus/title/pause)
-                        setScreenStack(s => [...s, cmd.screenId]);
-                    }
+                    const result = handleShowScreen(command as ShowScreenCommand, commandContext, setHudStack, setScreenStack);
+                    applyResult(result);
                     break;
                 }
                 case CommandType.ShowText: {
@@ -2838,6 +2924,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setPlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
+            
+            // Record choice in history
+            newState.choiceHistory = [
+                ...p.choiceHistory,
+                {
+                    choiceText: choice.text,
+                    timestamp: Date.now()
+                }
+            ];
             
             const actions = choice.actions || [];
             if (!choice.actions && choice.targetSceneId) {
@@ -2932,6 +3027,109 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             uiState: { ...p.uiState, isWaitingForInput: false, textInput: null } 
         } : null);
     };
+
+    // Spacebar to advance dialogue/movie, H for history
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Only respond when playing
+            if (playerState?.mode !== 'playing') return;
+
+            // Don't respond if typing in an input field
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            // H key to toggle history viewer
+            if (e.code === 'KeyH' && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                setShowHistory(prev => !prev);
+                return;
+            }
+
+            // Escape key to close history viewer
+            if (e.code === 'Escape' && showHistory) {
+                e.preventDefault();
+                setShowHistory(false);
+                return;
+            }
+
+            // Don't advance if choices are shown (user needs to click a choice)
+            if (playerState.uiState.choices) {
+                return;
+            }
+
+            // Spacebar to advance
+            if (e.code === 'Space') {
+                e.preventDefault();
+
+                // Advance dialogue
+                if (playerState.uiState.dialogue && playerState.uiState.isWaitingForInput) {
+                    handleDialogueAdvance();
+                }
+                // Advance movie
+                else if (playerState.uiState.movieUrl) {
+                    setPlayerState(p => p ? {
+                        ...p, 
+                        currentIndex: p.currentIndex + 1, 
+                        uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}
+                    } : null);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [playerState, showHistory]);
+
+    // Click anywhere to advance dialogue/movie (except on buttons/choices)
+    const handleStageClick = (e: React.MouseEvent) => {
+        if (!playerState || playerState.mode !== 'playing') return;
+
+        // Check if clicking on an interactive element
+        const target = e.target as HTMLElement;
+        const isButton = target.tagName === 'BUTTON' || target.closest('button') !== null;
+        const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+        const isChoice = target.closest('[data-choice]') !== null;
+
+        // Don't advance if clicking on interactive elements
+        if (isButton || isInput || isChoice) {
+            return;
+        }
+
+        // Don't advance if choices are shown
+        if (playerState.uiState.choices) {
+            return;
+        }
+
+        // Advance dialogue
+        if (playerState.uiState.dialogue && playerState.uiState.isWaitingForInput) {
+            handleDialogueAdvance();
+        }
+        // Advance movie
+        else if (playerState.uiState.movieUrl) {
+            setPlayerState(p => p ? {
+                ...p, 
+                currentIndex: p.currentIndex + 1, 
+                uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}
+            } : null);
+        }
+    };
+
+    // Auto-advance dialogue timer
+    useEffect(() => {
+        if (!settings.autoAdvance || playerState?.mode !== 'playing') return;
+        if (!playerState?.uiState.dialogue || !playerState?.uiState.isWaitingForInput) return;
+        
+        // Don't auto-advance if choices are shown
+        if (playerState.uiState.choices) return;
+
+        const timerId = window.setTimeout(() => {
+            handleDialogueAdvance();
+        }, settings.autoAdvanceDelay * 1000);
+
+        return () => clearTimeout(timerId);
+    }, [playerState?.uiState.dialogue, playerState?.uiState.isWaitingForInput, settings.autoAdvance, settings.autoAdvanceDelay, playerState?.mode]);
 
     const handleUIAction = (action: VNUIAction) => {
         console.log('handleUIAction called with:', action.type, action);
@@ -3385,7 +3583,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out`, };
 
         return (
-            <div ref={stageRef} className="w-full h-full relative overflow-hidden bg-black">
+            <div ref={stageRef} className="w-full h-full relative overflow-hidden bg-black" onClick={handleStageClick}>
                 <div style={panZoomStyle}>
                     <div className={`w-full h-full ${shakeClass} z-10`} style={shakeIntensityStyle}>
                         {state.backgroundUrl && (
@@ -3520,7 +3718,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             <TextOverlayElement key={overlay.id} overlay={overlay} stageSize={stageSize} />
                         ))}
                         {state.imageOverlays.map((overlay: ImageOverlay) => (
-                            <ImageOverlayElement key={overlay.id} overlay={overlay} stageSize={stageSize} />
+                            <ImageOverlayElement 
+                                key={overlay.id} 
+                                overlay={overlay} 
+                                stageSize={stageSize}
+                                onAction={handleUIAction}
+                                onAdvance={overlay.waitForClick ? () => {
+                                    setPlayerState(p => {
+                                        if (!p) return null;
+                                        return {
+                                            ...p,
+                                            currentIndex: p.currentIndex + 1,
+                                            uiState: { ...p.uiState, isWaitingForInput: false }
+                                        };
+                                    });
+                                } : undefined}
+                            />
                         ))}
                         {state.buttonOverlays.map((overlay: ButtonOverlay) => (
                             <ButtonOverlayElement 
@@ -3784,6 +3997,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     )
                 }
                 {renderPlayerUI()}
+                
+                {/* History Viewer Modal */}
+                {showHistory && playerState && (
+                    <HistoryViewer
+                        dialogueHistory={playerState.dialogueHistory}
+                        choiceHistory={playerState.choiceHistory}
+                        onClose={() => setShowHistory(false)}
+                    />
+                )}
             </div>
             {!hideCloseButton && (
                 <button onClick={handleClose} className="absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50">

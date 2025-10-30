@@ -8,6 +8,7 @@ import {
     isCommandStacked 
 } from '../features/scene/commandStackUtils';
 import { GripVerticalIcon, XMarkIcon, SparkleIcon } from './icons';
+import { getCommandColorScheme, getCommandLabel } from '../utils/commandColors';
 
 interface CommandStackItemProps {
     command: VNCommand;
@@ -68,15 +69,16 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
     const canBeAsync = canRunAsync(command.type);
     const hasWarning = hasUnpredictableAsyncBehavior(command.type);
     const warning = getAsyncWarning(command.type);
+    const colors = getCommandColorScheme(command.type);
 
     return (
         <div className="relative group">
             <div
                 onClick={onSelect}
                 className={`
-                    relative flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all
-                    ${isSelected ? 'bg-sky-500/20 ring-2 ring-sky-500' : 'bg-slate-700 hover:bg-slate-600'}
-                    ${isStacked ? 'border-2 border-purple-500' : 'border border-slate-600'}
+                    relative flex items-center gap-1.5 py-1 px-2 rounded cursor-pointer transition-all
+                    ${isSelected ? 'ring-2 ring-sky-500' : colors.hover}
+                    ${colors.bg} border ${colors.border}
                     ${isFirstInStack && !isLastInStack ? 'rounded-r-none border-r-0' : ''}
                     ${isLastInStack && !isFirstInStack ? 'rounded-l-none border-l-0' : ''}
                     ${!isFirstInStack && !isLastInStack && isStacked ? 'rounded-none border-x-0' : ''}
@@ -84,33 +86,31 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
             >
                 {/* Drag Handle */}
                 <span className="cursor-grab text-slate-400 flex-shrink-0">
-                    <GripVerticalIcon className="w-4 h-4" />
+                    <GripVerticalIcon className="w-3 h-3" />
                 </span>
 
-                {/* Command Content */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                        <p className="text-xs font-bold text-sky-400 truncate">
-                            {command.type.replace(/([A-Z])/g, ' $1').trim()}
-                        </p>
-                        {isAsync && canBeAsync && (
-                            <span 
-                                className="text-xs bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1"
-                                onMouseEnter={() => hasWarning && setShowWarning(true)}
-                                onMouseLeave={() => setShowWarning(false)}
-                                title={isAsync ? 'Runs in parallel' : undefined}
-                            >
-                                <SparkleIcon className="w-3 h-3" />
-                                {hasWarning && '⚠'}
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-xs text-slate-400 truncate">{getCommandSummary()}</p>
+                {/* Command Content - Full Width */}
+                <div className="flex-1 flex items-center gap-2 min-w-0">
+                    <p className={`text-xs font-bold ${colors.text} flex-shrink-0`}>
+                        {getCommandLabel(command.type)}
+                    </p>
+                    <p className="text-xs text-slate-400 truncate flex-1">{getCommandSummary()}</p>
+                    {isAsync && canBeAsync && (
+                        <span 
+                            className="text-xs bg-purple-500/30 text-purple-300 px-1 py-0.5 rounded flex items-center gap-0.5 flex-shrink-0"
+                            onMouseEnter={() => hasWarning && setShowWarning(true)}
+                            onMouseLeave={() => setShowWarning(false)}
+                            title={isAsync ? 'Runs in parallel' : undefined}
+                        >
+                            <SparkleIcon className="w-2.5 h-2.5" />
+                            {hasWarning && '⚠'}
+                        </span>
+                    )}
                 </div>
 
                 {/* Stack Size Badge */}
                 {isStacked && isFirstInStack && stackSize && stackSize > 1 && (
-                    <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center z-10">
+                    <div className="absolute -top-1.5 -right-1.5 bg-purple-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center z-10">
                         {stackSize}
                     </div>
                 )}
