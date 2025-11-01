@@ -1944,6 +1944,41 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setHudStack([]);
     }, [project, stopAndResetMusic, menuVariables]);
 
+    // Helper function to get asset name from ID
+    const getAssetNameFromId = useCallback((assetId: string): string | null => {
+        // Search through all asset types to find the asset name
+        
+        // Check backgrounds
+        const background = project.backgrounds[assetId];
+        if (background) return background.name;
+        
+        // Check images  
+        const image = project.images[assetId];
+        if (image) return image.name;
+        
+        // Check videos
+        const video = project.videos[assetId];
+        if (video) return video.name;
+        
+        // Check audio
+        const audio = project.audio[assetId];
+        if (audio) return audio.name;
+        
+        // Check character layers
+        for (const character of Object.values(project.characters) as VNCharacter[]) {
+            if (character && character.layers) {
+                for (const layer of Object.values(character.layers) as VNCharacterLayer[]) {
+                    if (layer && layer.assets) {
+                        const asset = layer.assets[assetId];
+                        if (asset) return asset.name;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }, [project]);
+
     const evaluateConditions = useCallback((conditions: VNCondition[] | undefined, variables: PlayerState['variables']): boolean => {
         if (!conditions || conditions.length === 0) {
             return true;
@@ -1970,6 +2005,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             
             let result = false;
+            
+            // For string comparisons, also check if we're comparing against an asset name when variable contains an asset ID
+            const stringVarValue = String(effectiveVarValue);
+            const stringCondValue = String(condition.value);
+            let assetName: string | null = null;
+            
+            // If variable contains an asset ID, try to get the asset name for comparison
+            if (stringVarValue.startsWith('asset-')) {
+                assetName = getAssetNameFromId(stringVarValue);
+                console.log('[DEBUG evaluateConditions] Variable contains asset ID, resolved name:', assetName);
+            }
+            
             switch (condition.operator) {
                 case 'is true': 
                     result = !!effectiveVarValue;
@@ -1978,10 +2025,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     result = !effectiveVarValue;
                     break;
                 case '==': 
-                    result = String(effectiveVarValue).toLowerCase() == String(condition.value).toLowerCase();
+                    // Check direct match OR asset name match
+                    result = stringVarValue.toLowerCase() === stringCondValue.toLowerCase() ||
+                             (assetName && assetName.toLowerCase() === stringCondValue.toLowerCase());
                     break;
                 case '!=': 
-                    result = String(effectiveVarValue).toLowerCase() != String(condition.value).toLowerCase();
+                    // Check direct match OR asset name match (inverted)
+                    result = stringVarValue.toLowerCase() !== stringCondValue.toLowerCase() &&
+                             (!assetName || assetName.toLowerCase() !== stringCondValue.toLowerCase());
                     break;
                 case '>': 
                     result = Number(effectiveVarValue) > Number(condition.value);
@@ -1996,10 +2047,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     result = Number(effectiveVarValue) <= Number(condition.value);
                     break;
                 case 'contains': 
-                    result = String(effectiveVarValue).toLowerCase().includes(String(condition.value).toLowerCase());
+                    // Check if either the asset ID or asset name contains the value
+                    result = stringVarValue.toLowerCase().includes(stringCondValue.toLowerCase()) ||
+                             (assetName && assetName.toLowerCase().includes(stringCondValue.toLowerCase()));
                     break;
                 case 'startsWith': 
-                    result = String(effectiveVarValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+                    // Check if either the asset ID or asset name starts with the value
+                    result = stringVarValue.toLowerCase().startsWith(stringCondValue.toLowerCase()) ||
+                             (assetName && assetName.toLowerCase().startsWith(stringCondValue.toLowerCase()));
                     break;
                 default: 
                     result = false;
@@ -2008,7 +2063,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             console.log('[DEBUG evaluateConditions] Result:', result);
             return result;
         });
-    }, [project.variables]);
+    }, [project.variables, getAssetNameFromId]);
 
     // Helper function to navigate to a scene with condition checking
     const navigateToScene = useCallback((targetSceneId: VNID, variables: PlayerState['variables']): VNID => {
@@ -3140,6 +3195,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     currentIndex: 0,
                     commandStack: [],
                     variables: initialVariables,
+                    history: [],
                     stageState: { 
                         backgroundUrl: null, 
                         characters: {}, 

@@ -98,6 +98,8 @@ const StagingArea: React.FC<{
 }> = ({ project, activeSceneId, selectedCommandIndex, className, style }) => {
     const [showCommandIndicators, setShowCommandIndicators] = React.useState(true);
     const [showVariableState, setShowVariableState] = React.useState(false);
+    const stageRef = React.useRef<HTMLDivElement>(null);
+    const [stageSize, setStageSize] = React.useState({ width: 1280, height: 720 }); // Default 16:9 at 720p
     const [stageState, setStageState] = React.useState<StageState>({
         backgroundUrl: null,
         characters: {},
@@ -118,6 +120,21 @@ const StagingArea: React.FC<{
         commandIndicator: null,
         variables: {},
     });
+
+    // Track stage size for proper scaling
+    React.useEffect(() => {
+        if (!stageRef.current) return;
+        
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                setStageSize({ width, height });
+            }
+        });
+        
+        observer.observe(stageRef.current);
+        return () => observer.disconnect();
+    }, []);
 
     React.useEffect(() => {
         const scene = project.scenes[activeSceneId];
@@ -369,10 +386,27 @@ const StagingArea: React.FC<{
         </div>
     );
     
+    // Convert pixel values to percentages based on reference resolution (1280x720)
+    const REFERENCE_WIDTH = 1280;
+    const REFERENCE_HEIGHT = 720;
+    
+    const pxToPercentWidth = (px: number) => (px / REFERENCE_WIDTH) * 100;
+    const pxToPercentHeight = (px: number) => (px / REFERENCE_HEIGHT) * 100;
+    
+    // Scale font size based on stage size
+    const scaleFontSize = (fontSize: number) => {
+        const scale = stageSize.width / REFERENCE_WIDTH;
+        return fontSize * scale;
+    };
+
     return (
         <Panel title="Staging Area" className={className} style={style}>
             <div className="w-full h-full flex items-center justify-center p-2">
-                <div className="relative bg-slate-900/50 rounded-md overflow-hidden" style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}>
+                <div 
+                    ref={stageRef}
+                    className="relative bg-slate-900/50 rounded-md overflow-hidden" 
+                    style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}
+                >
                     {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
                 {Object.values(stageState.characters).map((char) => (
                     <div key={char.charId} className="absolute w-auto aspect-[3/4]" style={{ ...getPositionStyle(char.position), height: '90%', bottom: '0', top: 'auto' }}>
@@ -381,55 +415,68 @@ const StagingArea: React.FC<{
                 ))}
                 {stageState.textOverlays.map(o => (
                      <div key={o.id} style={{
-                        position: 'absolute', left: `${o.x}%`, top: `${o.y}%`,
-                        width: o.width ? `${o.width}px` : 'auto', height: o.height ? `${o.height}px` : 'auto',
-                        transform: 'translate(-50%, -50%)', ...fontSettingsToStyle({ family: o.fontFamily, size: o.fontSize, color: o.color, weight: 'normal', italic: false }),
+                        position: 'absolute', 
+                        left: `${o.x}%`, 
+                        top: `${o.y}%`,
+                        width: o.width ? `${pxToPercentWidth(o.width)}%` : 'auto', 
+                        height: o.height ? `${pxToPercentHeight(o.height)}%` : 'auto',
+                        transform: 'translate(-50%, -50%)', 
+                        ...fontSettingsToStyle({ family: o.fontFamily, size: o.fontSize, color: o.color, weight: 'normal', italic: false }),
+                        fontSize: `${scaleFontSize(o.fontSize)}px`,
                         textAlign: o.textAlign,
                      }}>{o.text}</div>
                 ))}
                  {stageState.imageOverlays.map(o => (
                      <div key={o.id} style={{
-                         position: 'absolute', left: `${o.x}%`, top: `${o.y}%`,
-                         width: `${o.width}px`, height: `${o.height}px`,
+                         position: 'absolute', 
+                         left: `${o.x}%`, 
+                         top: `${o.y}%`,
+                         width: `${pxToPercentWidth(o.width)}%`, 
+                         height: `${pxToPercentHeight(o.height)}%`,
                          transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX}, ${o.scaleY})`,
                          opacity: o.opacity,
                      }}>
                         <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />
                      </div>
                 ))}
-                {stageState.buttonOverlays.map(btn => (
-                    <div key={btn.id} style={{
-                        position: 'absolute',
-                        left: `${btn.x}%`,
-                        top: `${btn.y}%`,
-                        width: `${btn.width}%`,
-                        height: `${btn.height}%`,
-                        transform: 'translate(-50%, -50%)',
-                    }}>
-                        {btn.imageUrl ? (
-                            <div className="w-full h-full relative">
-                                <img src={btn.imageUrl} alt="" className="w-full h-full object-cover" style={{ borderRadius: `${btn.borderRadius}px` }} />
-                                <div className="absolute inset-0 flex items-center justify-center" style={{
+                {stageState.buttonOverlays.map(btn => {
+                    const scaledBorderRadius = btn.borderRadius * (stageSize.width / REFERENCE_WIDTH);
+                    const scaledButtonFontSize = scaleFontSize(btn.fontSize);
+                    
+                    return (
+                        <div key={btn.id} style={{
+                            position: 'absolute',
+                            left: `${btn.x}%`,
+                            top: `${btn.y}%`,
+                            width: `${btn.width}%`,
+                            height: `${btn.height}%`,
+                            transform: 'translate(-50%, -50%)',
+                        }}>
+                            {btn.imageUrl ? (
+                                <div className="w-full h-full relative">
+                                    <img src={btn.imageUrl} alt="" className="w-full h-full object-cover" style={{ borderRadius: `${scaledBorderRadius}px` }} />
+                                    <div className="absolute inset-0 flex items-center justify-center" style={{
+                                        color: btn.textColor,
+                                        fontSize: `${scaledButtonFontSize}px`,
+                                        fontWeight: btn.fontWeight,
+                                    }}>
+                                        {btn.text}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center cursor-pointer" style={{
+                                    backgroundColor: btn.backgroundColor,
                                     color: btn.textColor,
-                                    fontSize: `${btn.fontSize}px`,
+                                    fontSize: `${scaledButtonFontSize}px`,
                                     fontWeight: btn.fontWeight,
+                                    borderRadius: `${scaledBorderRadius}px`,
                                 }}>
                                     {btn.text}
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center cursor-pointer" style={{
-                                backgroundColor: btn.backgroundColor,
-                                color: btn.textColor,
-                                fontSize: `${btn.fontSize}px`,
-                                fontWeight: btn.fontWeight,
-                                borderRadius: `${btn.borderRadius}px`,
-                            }}>
-                                {btn.text}
-                            </div>
-                        )}
-                    </div>
-                ))}
+                            )}
+                        </div>
+                    );
+                })}
 
                 {currentDialogue && renderDialogueBox(currentDialogue)}
                 {currentChoices && renderChoiceMenu(currentChoices)}

@@ -586,6 +586,41 @@ const PropertiesInspector: React.FC<{
             case CommandType.Choice: {
                 const cmd = command as ChoiceCommand;
 
+                // Auto-fix broken boolean values in SetVariable actions
+                React.useEffect(() => {
+                    let needsUpdate = false;
+                    const fixedOptions = cmd.options.map(opt => {
+                        const fixedActions = (opt.actions || []).map(action => {
+                            if (action.type === UIActionType.SetVariable) {
+                                const setVarAction = action as SetVariableAction;
+                                const variable = project.variables[setVarAction.variableId];
+                                
+                                // Fix boolean variables with string values
+                                if (variable?.type === 'boolean' && typeof setVarAction.value !== 'boolean') {
+                                    needsUpdate = true;
+                                    // Convert string to proper boolean
+                                    const strValue = String(setVarAction.value).trim().toLowerCase();
+                                    const boolValue = strValue === 'true' || strValue === '1' ? true : false;
+                                    return { ...setVarAction, value: boolValue };
+                                }
+                                
+                                // Fix number variables with string values
+                                if (variable?.type === 'number' && typeof setVarAction.value === 'string') {
+                                    needsUpdate = true;
+                                    return { ...setVarAction, value: parseFloat(setVarAction.value) || 0 };
+                                }
+                            }
+                            return action;
+                        });
+                        return { ...opt, actions: fixedActions };
+                    });
+                    
+                    if (needsUpdate) {
+                        console.log('[AUTO-FIX] Correcting boolean/number values in choice actions');
+                        updateCommand({ options: fixedOptions });
+                    }
+                }, [cmd.options, project.variables]);
+
                 const updateOption = (index: number, updatedProps: Partial<ChoiceOption>) => {
                     const newOptions = [...cmd.options];
                     const oldOption = newOptions[index];
@@ -691,10 +726,25 @@ const PropertiesInspector: React.FC<{
                                                                         const newVarId = e.target.value;
                                                                         const newVar = project.variables[newVarId];
                                                                         let newOperator = actionAsSetVar.operator;
+                                                                        let newValue = actionAsSetVar.value;
+                                                                        
+                                                                        // Reset operator if switching to non-number variable
                                                                         if (newVar?.type !== 'number' && (actionAsSetVar.operator === 'add' || actionAsSetVar.operator === 'subtract')) {
                                                                             newOperator = 'set';
                                                                         }
-                                                                        updateAction(i, actionIndex, { variableId: newVarId, operator: newOperator });
+                                                                        
+                                                                        // Reset value to match new variable type
+                                                                        if (newVar) {
+                                                                            if (newVar.type === 'boolean') {
+                                                                                newValue = false;
+                                                                            } else if (newVar.type === 'number') {
+                                                                                newValue = 0;
+                                                                            } else {
+                                                                                newValue = '';
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        updateAction(i, actionIndex, { variableId: newVarId, operator: newOperator, value: newValue });
                                                                     }}>
                                                                         {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
                                                                     </Select>
@@ -714,7 +764,7 @@ const PropertiesInspector: React.FC<{
                                                                                 <option value="false">False</option>
                                                                             </Select>
                                                                         ) : variable?.type === 'number' ? (
-                                                                            <TextInput type="number" value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: e.target.value })}/>
+                                                                            <TextInput type="number" value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: parseFloat(e.target.value) || 0 })}/>
                                                                         ) : (
                                                                             <TextInput value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: e.target.value })}/>
                                                                         )}

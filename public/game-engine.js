@@ -1015,6 +1015,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
     }
     return context;
   };
+  const getAssetNameFromId = (assetId, project) => {
+    const background = project.backgrounds[assetId];
+    if (background) return background.name;
+    const image = project.images[assetId];
+    if (image) return image.name;
+    const video = project.videos[assetId];
+    if (video) return video.name;
+    const audio = project.audio[assetId];
+    if (audio) return audio.name;
+    for (const character of Object.values(project.characters)) {
+      for (const layer of Object.values(character.layers)) {
+        const asset = layer.assets[assetId];
+        if (asset) return asset.name;
+      }
+    }
+    return null;
+  };
   const interpolateVariables = (text, variables, project) => {
     if (!text) return text;
     let result = text.replace(/\{([^}]+)\}/g, (match, placeholder) => {
@@ -1022,12 +1039,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       const variableByName = Object.values(project.variables).find((v) => v.name === trimmedPlaceholder);
       if (variableByName) {
         const value = variables[variableByName.id];
-        return value !== void 0 ? String(value) : match;
+        if (value !== void 0) {
+          const stringValue = String(value);
+          if (stringValue.startsWith("asset-")) {
+            const assetName = getAssetNameFromId(stringValue, project);
+            return assetName || stringValue;
+          }
+          return stringValue;
+        }
+        return match;
       }
       const variableById = project.variables[trimmedPlaceholder];
       if (variableById) {
         const value = variables[variableById.id];
-        return value !== void 0 ? String(value) : match;
+        if (value !== void 0) {
+          const stringValue = String(value);
+          if (stringValue.startsWith("asset-")) {
+            const assetName = getAssetNameFromId(stringValue, project);
+            return assetName || stringValue;
+          }
+          return stringValue;
+        }
+        return match;
       }
       return match;
     });
@@ -1187,37 +1220,68 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
     } else if (charData.baseImageUrl) {
       imageUrls.push(charData.baseImageUrl);
     }
-    const layerBindings = {};
+    const finalBindings = {};
+    const existingChar = playerState == null ? void 0 : playerState.stageState.characters[command.characterId];
     Object.values(charData.layers).forEach((layer) => {
-      const matchingVar = Object.values(project.variables).find(
-        (v) => v.type === "number" && (v.name.toLowerCase().includes(layer.name.toLowerCase()) || layer.name.toLowerCase().includes(v.name.toLowerCase()))
-      );
-      if (matchingVar) {
-        layerBindings[layer.id] = matchingVar.id;
+      const exprAssetId = exprData.layerConfiguration[layer.id];
+      if (exprAssetId) {
+        console.log(`ShowCharacter: Skipping auto-binding for layer "${layer.name}" - expression has configured outfit`);
+        return;
+      }
+      let boundVarId = null;
+      const existingVarId = existingChar == null ? void 0 : existingChar.layerVariableBindings[layer.id];
+      if (existingVarId) {
+        const existingValue = String(playerState.variables[existingVarId] || "");
+        if (existingValue && existingValue in layer.assets) {
+          boundVarId = existingVarId;
+          console.log(`ShowCharacter: Keeping existing binding for layer "${layer.name}" to variable ${existingVarId}`);
+        }
+      }
+      if (!boundVarId) {
+        const matchingVars = Object.entries(project.variables).filter(([varId, v]) => {
+          if (v.type !== "string") return false;
+          const varValue = String(playerState.variables[varId] || "");
+          if (!varValue) return false;
+          return varValue in layer.assets;
+        });
+        const matchingVar = matchingVars[matchingVars.length - 1];
+        if (matchingVar) {
+          const [varId, varData] = matchingVar;
+          boundVarId = varId;
+          console.log(`ShowCharacter: Auto-bound layer "${layer.name}" to variable "${varData.name}" (contains asset ID from this layer)`);
+        }
+      }
+      if (boundVarId) {
+        finalBindings[layer.id] = boundVarId;
       }
     });
-    const existingChar = playerState == null ? void 0 : playerState.stageState.characters[command.characterId];
-    const finalBindings = {
-      ...layerBindings,
-      ...(existingChar == null ? void 0 : existingChar.layerVariableBindings) || {}
-    };
     Object.values(charData.layers).forEach((layer) => {
       let asset = null;
-      const variableId = finalBindings[layer.id];
-      if (variableId && playerState.variables[variableId] !== void 0) {
-        const index = Number(playerState.variables[variableId]) || 0;
-        const assetArray = Object.values(layer.assets);
-        asset = assetArray[index];
+      const exprAssetId = exprData.layerConfiguration[layer.id];
+      if (exprAssetId) {
+        asset = layer.assets[exprAssetId];
         console.log(
-          `ShowCharacter: Using variable ${variableId} (value: ${index}) for layer "${layer.name}"`
+          `ShowCharacter: Using expression config for layer "${layer.name}" (asset: ${exprAssetId})`
         );
       } else {
-        const assetId = exprData.layerConfiguration[layer.id];
-        if (assetId) {
-          asset = layer.assets[assetId];
-          console.log(
-            `ShowCharacter: Using expression config for layer "${layer.name}"`
-          );
+        const variableId = finalBindings[layer.id];
+        if (variableId && playerState.variables[variableId] !== void 0) {
+          const varValue = playerState.variables[variableId];
+          const variable = project.variables[variableId];
+          if ((variable == null ? void 0 : variable.type) === "number") {
+            const index = Number(varValue) || 0;
+            const assetArray = Object.values(layer.assets);
+            asset = assetArray[index];
+            console.log(
+              `ShowCharacter: Using variable ${variableId} (index: ${index}) for layer "${layer.name}"`
+            );
+          } else {
+            const assetId = String(varValue);
+            asset = assetId ? layer.assets[assetId] : null;
+            console.log(
+              `ShowCharacter: Using variable ${variableId} (assetId: ${assetId}) for layer "${layer.name}"`
+            );
+          }
         }
       }
       if (asset) {
@@ -3494,6 +3558,27 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
       setScreenStack([]);
       setHudStack([]);
     }, [project, stopAndResetMusic, menuVariables]);
+    const getAssetNameFromId2 = React2.useCallback((assetId) => {
+      const background = project.backgrounds[assetId];
+      if (background) return background.name;
+      const image = project.images[assetId];
+      if (image) return image.name;
+      const video = project.videos[assetId];
+      if (video) return video.name;
+      const audio = project.audio[assetId];
+      if (audio) return audio.name;
+      for (const character of Object.values(project.characters)) {
+        if (character && character.layers) {
+          for (const layer of Object.values(character.layers)) {
+            if (layer && layer.assets) {
+              const asset = layer.assets[assetId];
+              if (asset) return asset.name;
+            }
+          }
+        }
+      }
+      return null;
+    }, [project]);
     const evaluateConditions2 = React2.useCallback((conditions, variables) => {
       if (!conditions || conditions.length === 0) {
         return true;
@@ -3515,6 +3600,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
           return false;
         }
         let result = false;
+        const stringVarValue = String(effectiveVarValue);
+        const stringCondValue = String(condition.value);
+        let assetName = null;
+        if (stringVarValue.startsWith("asset-")) {
+          assetName = getAssetNameFromId2(stringVarValue);
+          console.log("[DEBUG evaluateConditions] Variable contains asset ID, resolved name:", assetName);
+        }
         switch (condition.operator) {
           case "is true":
             result = !!effectiveVarValue;
@@ -3523,10 +3615,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
             result = !effectiveVarValue;
             break;
           case "==":
-            result = String(effectiveVarValue).toLowerCase() == String(condition.value).toLowerCase();
+            result = stringVarValue.toLowerCase() === stringCondValue.toLowerCase() || assetName && assetName.toLowerCase() === stringCondValue.toLowerCase();
             break;
           case "!=":
-            result = String(effectiveVarValue).toLowerCase() != String(condition.value).toLowerCase();
+            result = stringVarValue.toLowerCase() !== stringCondValue.toLowerCase() && (!assetName || assetName.toLowerCase() !== stringCondValue.toLowerCase());
             break;
           case ">":
             result = Number(effectiveVarValue) > Number(condition.value);
@@ -3541,10 +3633,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
             result = Number(effectiveVarValue) <= Number(condition.value);
             break;
           case "contains":
-            result = String(effectiveVarValue).toLowerCase().includes(String(condition.value).toLowerCase());
+            result = stringVarValue.toLowerCase().includes(stringCondValue.toLowerCase()) || assetName && assetName.toLowerCase().includes(stringCondValue.toLowerCase());
             break;
           case "startsWith":
-            result = String(effectiveVarValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+            result = stringVarValue.toLowerCase().startsWith(stringCondValue.toLowerCase()) || assetName && assetName.toLowerCase().startsWith(stringCondValue.toLowerCase());
             break;
           default:
             result = false;
@@ -3552,7 +3644,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
         console.log("[DEBUG evaluateConditions] Result:", result);
         return result;
       });
-    }, [project.variables]);
+    }, [project.variables, getAssetNameFromId2]);
     const navigateToScene = React2.useCallback((targetSceneId, variables) => {
       let sceneToPlay = targetSceneId;
       let attempts = 0;
@@ -4503,6 +4595,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2) {
             currentIndex: 0,
             commandStack: [],
             variables: initialVariables,
+            history: [],
             stageState: {
               backgroundUrl: null,
               characters: {},

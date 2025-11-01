@@ -33,28 +33,52 @@ export function handleShowCharacter(
     imageUrls.push(charData.baseImageUrl);
   }
 
-  // Build layer variable bindings by checking all number variables
-  // If a variable name matches a layer name, use it
-  const layerBindings: Record<VNID, VNID> = {};
+  // Build layer variable bindings by finding which variables contain asset IDs from which layers
+  // This allows automatic binding based on the actual data, not variable names
+  const finalBindings: Record<VNID, VNID> = {};
+  
+  // Use existing bindings if the character is already on stage
+  const existingChar = playerState?.stageState.characters[command.characterId];
+  
+  // For each layer, determine the best variable binding
   Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
-    // Check if there's a number variable with matching name
-    const matchingVar = Object.values(project.variables).find(
-      (v: any) =>
-        v.type === 'number' &&
-        (v.name.toLowerCase().includes(layer.name.toLowerCase()) ||
-          layer.name.toLowerCase().includes(v.name.toLowerCase()))
-    );
-    if (matchingVar) {
-      layerBindings[layer.id] = (matchingVar as any).id;
+    let boundVarId: VNID | null = null;
+    
+    // First check if existing binding is still valid (variable value is still an asset in this layer)
+    const existingVarId = existingChar?.layerVariableBindings[layer.id];
+    if (existingVarId) {
+      const existingValue = String(playerState.variables[existingVarId] || '');
+      if (existingValue && existingValue in layer.assets) {
+        boundVarId = existingVarId;
+        console.log(`ShowCharacter: Keeping existing binding for layer "${layer.name}" to variable ${existingVarId}`);
+      }
+    }
+    
+    // If no valid existing binding, find a new one
+    // Use findLast to prefer variables defined later (typically the filtered result variable)
+    if (!boundVarId) {
+      const matchingVars = Object.entries(project.variables).filter(([varId, v]: [string, any]) => {
+        if (v.type !== 'string') return false;
+        const varValue = String(playerState.variables[varId] || '');
+        if (!varValue) return false;
+        // Check if this variable's value is an asset ID in this layer
+        return varValue in layer.assets;
+      });
+      
+      // Prefer the last matching variable (typically the final filtered result)
+      const matchingVar = matchingVars[matchingVars.length - 1];
+      
+      if (matchingVar) {
+        const [varId, varData] = matchingVar;
+        boundVarId = varId;
+        console.log(`ShowCharacter: Auto-bound layer "${layer.name}" to variable "${varData.name}" (contains asset ID from this layer)`);
+      }
+    }
+    
+    if (boundVarId) {
+      finalBindings[layer.id] = boundVarId;
     }
   });
-
-  // Merge with existing bindings
-  const existingChar = playerState?.stageState.characters[command.characterId];
-  const finalBindings = {
-    ...layerBindings,
-    ...(existingChar?.layerVariableBindings || {}),
-  };
 
   // Check layer assets - respect variable bindings
   Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
@@ -63,13 +87,26 @@ export function handleShowCharacter(
     // Check if this layer has a variable binding
     const variableId = finalBindings[layer.id];
     if (variableId && playerState.variables[variableId] !== undefined) {
-      // Use variable value as index into layer assets
-      const index = Number(playerState.variables[variableId]) || 0;
-      const assetArray = Object.values(layer.assets);
-      asset = assetArray[index];
-      console.log(
-        `ShowCharacter: Using variable ${variableId} (value: ${index}) for layer "${layer.name}"`
-      );
+      const varValue = playerState.variables[variableId];
+      const variable = project.variables[variableId];
+      
+      // Support both index-based (number) and ID-based (string) variables
+      if (variable?.type === 'number') {
+        // Use variable value as index into layer assets (for cyclers)
+        const index = Number(varValue) || 0;
+        const assetArray = Object.values(layer.assets);
+        asset = assetArray[index];
+        console.log(
+          `ShowCharacter: Using variable ${variableId} (index: ${index}) for layer "${layer.name}"`
+        );
+      } else {
+        // Use variable value as asset ID directly (for string variables)
+        const assetId = String(varValue);
+        asset = assetId ? layer.assets[assetId] : null;
+        console.log(
+          `ShowCharacter: Using variable ${variableId} (assetId: ${assetId}) for layer "${layer.name}"`
+        );
+      }
     } else {
       // Use expression configuration
       const assetId = exprData.layerConfiguration[layer.id];
