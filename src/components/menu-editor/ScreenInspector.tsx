@@ -47,7 +47,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             <TextInput type="color" value={screen.background.value} onChange={e => updateScreen({ background: { type: 'color', value: e.target.value }})} className="p-1 h-10"/>
                         </FormField>
                     ) : (
-                         <AssetSelector label="Asset" assetType={screen.background.type === 'image' ? 'backgrounds' : 'videos'} value={screen.background.assetId} 
+                         <AssetSelector label="Asset" assetType={screen.background.type === 'image' ? 'images' : 'videos'} allowVideo value={screen.background.assetId} 
                             onChange={id => {
                                 if (screen.background.type !== 'color') {
                                     updateScreen({ background: { type: screen.background.type, assetId: id }});

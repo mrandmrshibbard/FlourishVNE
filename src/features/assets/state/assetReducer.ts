@@ -54,11 +54,16 @@ export const assetReducer = (state: VNProject, action: AssetAction): VNProject =
             const newScenes = JSON.parse(JSON.stringify(state.scenes));
             for (const sceneId in newScenes) {
                 newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd: VNCommand) => {
+                    // Backgrounds can be used in SetBackground commands
                     if (assetType === 'backgrounds' && cmd.type === CommandType.SetBackground && cmd.backgroundId === assetId) {
                         return { ...cmd, backgroundId: fallbackId };
                     }
+                    // Images can be used in both ShowImage and SetBackground commands
                     if (assetType === 'images' && cmd.type === CommandType.ShowImage && (cmd as ShowImageCommand).imageId === assetId) {
                         return { ...cmd, imageId: fallbackId };
+                    }
+                    if (assetType === 'images' && cmd.type === CommandType.SetBackground && cmd.backgroundId === assetId) {
+                        return { ...cmd, backgroundId: fallbackId };
                     }
                     if (assetType === 'audio' && (cmd.type === CommandType.PlayMusic || cmd.type === CommandType.PlaySoundEffect) && cmd.audioId === assetId) {
                         return { ...cmd, audioId: fallbackId };

@@ -62,6 +62,7 @@ export interface ButtonOverlay {
     imageUrl: string | null;
     hoverImageUrl: string | null;
     onClick: import('../../../types/shared').VNUIAction;
+    actions?: import('../../../types/shared').VNUIAction[]; // Multiple actions support
     clickSound: VNID | null;
     waitForClick?: boolean;
     transition?: VNTransition;
@@ -144,6 +145,7 @@ export interface PlayerState {
         transitionElement: React.ReactNode | null;
         flash: { color: string, duration: number } | null;
         showHistory: boolean;
+        screenSceneId: VNID | null; // Track which scene a UI screen was opened from
     };
 }
 

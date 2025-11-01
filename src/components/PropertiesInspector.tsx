@@ -483,8 +483,17 @@ const PropertiesInspector: React.FC<{
                 return <>
                     <FormField label="Background">
                         <Select value={cmd.backgroundId} onChange={e => updateCommand({ backgroundId: e.target.value })}>
-                             {Object.keys(project.backgrounds).length === 0 && <option disabled>No backgrounds uploaded</option>}
-                            {Object.values(project.backgrounds).map((b: VNBackground) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                             {Object.keys(project.backgrounds).length === 0 && Object.keys(project.images).length === 0 && <option disabled>No backgrounds or images uploaded</option>}
+                            {Object.keys(project.backgrounds).length > 0 && (
+                                <optgroup label="Backgrounds">
+                                    {Object.values(project.backgrounds).map((b: VNBackground) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </optgroup>
+                            )}
+                            {Object.keys(project.images).length > 0 && (
+                                <optgroup label="Images">
+                                    {Object.values(project.images).map((img: VNImage) => <option key={img.id} value={img.id}>{img.name}</option>)}
+                                </optgroup>
+                            )}
                         </Select>
                     </FormField>
                     <div className="grid grid-cols-2 gap-1">
@@ -1052,7 +1061,7 @@ const PropertiesInspector: React.FC<{
             case CommandType.ShowImage: {
                 const cmd = command as ShowImageCommand;
                 return <>
-                    <AssetSelector label="Image" assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || ''})} />
+                    <AssetSelector label="Image" assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || ''})} allowVideo />
                      <div className="grid grid-cols-2 gap-1">
                         <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                         <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
@@ -1199,7 +1208,46 @@ const PropertiesInspector: React.FC<{
                         </div>
                     </FormField>
                     
+                    <h4 className="font-bold text-xs mb-2 mt-2 text-slate-400">Primary Action</h4>
                     <ActionEditor action={cmd.onClick} onActionChange={action => updateCommand({ onClick: action })} />
+                    
+                    <h4 className="font-bold text-xs mb-2 mt-2 text-slate-400">Additional Actions</h4>
+                    <div className="space-y-2">
+                        {(cmd.actions || []).map((action, idx) => (
+                            <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-slate-400">Action {idx + 1}</span>
+                                    <button 
+                                        onClick={() => {
+                                            const newActions = (cmd.actions || []).filter((_, i) => i !== idx);
+                                            updateCommand({ actions: newActions });
+                                        }}
+                                        className="p-1 hover:bg-red-600 rounded transition-colors"
+                                        title="Remove Action"
+                                    >
+                                        <TrashIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <ActionEditor 
+                                    action={action} 
+                                    onActionChange={updatedAction => {
+                                        const newActions = [...(cmd.actions || [])];
+                                        newActions[idx] = updatedAction;
+                                        updateCommand({ actions: newActions });
+                                    }} 
+                                />
+                            </div>
+                        ))}
+                        <button 
+                            onClick={() => {
+                                const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
+                                updateCommand({ actions: [...(cmd.actions || []), newAction] });
+                            }}
+                            className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-xs"
+                        >
+                            + Add Action
+                        </button>
+                    </div>
                     
                     <AssetSelector label="Click Sound" assetType="audio" value={cmd.clickSound} onChange={id => updateCommand({ clickSound: id })} />
                     

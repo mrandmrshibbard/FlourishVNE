@@ -30,7 +30,7 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             return command;
         }
         case CommandType.SetBackground: {
-            const command = { type, backgroundId: firstBgId || '', transition: 'fade', duration: 1 };
+            const command = { type, backgroundId: firstBgId || firstImageId || '', transition: 'fade', duration: 1 };
             return command;
         }
         case CommandType.ShowCharacter: {

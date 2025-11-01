@@ -594,8 +594,8 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
   if (project.ui.dialogueBoxImage) {
     const assetId = project.ui.dialogueBoxImage.id;
     if (project.ui.dialogueBoxImage.type === 'image') {
-      const bg = project.backgrounds?.[assetId];
-      if (bg) addAsset(bg.imageUrl, 'ui');
+      const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+      if (bg) addAsset(bg.imageUrl || bg.videoUrl, 'ui');
     } else if (project.ui.dialogueBoxImage.type === 'video') {
       const video = project.videos?.[assetId];
       if (video) addAsset(video.videoUrl, 'ui');
@@ -605,8 +605,8 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
   if (project.ui.choiceButtonImage) {
     const assetId = project.ui.choiceButtonImage.id;
     if (project.ui.choiceButtonImage.type === 'image') {
-      const bg = project.backgrounds?.[assetId];
-      if (bg) addAsset(bg.imageUrl, 'ui');
+      const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+      if (bg) addAsset(bg.imageUrl || bg.videoUrl, 'ui');
     } else if (project.ui.choiceButtonImage.type === 'video') {
       const video = project.videos?.[assetId];
       if (video) addAsset(video.videoUrl, 'ui');
@@ -647,8 +647,8 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       if ('thumbImage' in element && element.thumbImage) {
         const assetId = element.thumbImage.id;
         if (element.thumbImage.type === 'image') {
-          const bg = project.backgrounds?.[assetId];
-          if (bg) addAsset(bg.imageUrl, 'ui');
+          const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+          if (bg) addAsset(bg.imageUrl || bg.videoUrl, 'ui');
         } else if (element.thumbImage.type === 'video') {
           const video = project.videos?.[assetId];
           if (video) addAsset(video.videoUrl, 'ui');
@@ -657,8 +657,8 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       if ('trackImage' in element && element.trackImage) {
         const assetId = element.trackImage.id;
         if (element.trackImage.type === 'image') {
-          const bg = project.backgrounds?.[assetId];
-          if (bg) addAsset(bg.imageUrl, 'ui');
+          const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+          if (bg) addAsset(bg.imageUrl || bg.videoUrl, 'ui');
         } else if (element.trackImage.type === 'video') {
           const video = project.videos?.[assetId];
           if (video) addAsset(video.videoUrl, 'ui');
@@ -668,8 +668,8 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       if ('checkedImage' in element && element.checkedImage) {
         const assetId = element.checkedImage.id;
         if (element.checkedImage.type === 'image') {
-          const bg = project.backgrounds?.[assetId];
-          if (bg) addAsset(bg.imageUrl, 'ui');
+          const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+          if (bg) addAsset(bg.imageUrl || bg.videoUrl, 'ui');
         } else if (element.checkedImage.type === 'video') {
           const video = project.videos?.[assetId];
           if (video) addAsset(video.videoUrl, 'ui');
@@ -678,8 +678,8 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       if ('uncheckedImage' in element && element.uncheckedImage) {
         const assetId = element.uncheckedImage.id;
         if (element.uncheckedImage.type === 'image') {
-          const bg = project.backgrounds?.[assetId];
-          if (bg) addAsset(bg.imageUrl, 'ui');
+          const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+          if (bg) addAsset(bg.imageUrl || bg.videoUrl, 'ui');
         } else if (element.uncheckedImage.type === 'video') {
           const video = project.videos?.[assetId];
           if (video) addAsset(video.videoUrl, 'ui');

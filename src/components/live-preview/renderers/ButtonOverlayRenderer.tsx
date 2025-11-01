@@ -62,7 +62,7 @@ export const ButtonOverlayElement: React.FC<ButtonOverlayElementProps> = ({
     }, [overlay.id, overlay.transition, overlay.action]);
 
     const handleClick = () => {
-        console.log('Button clicked:', overlay.text, 'Action:', overlay.onClick);
+        console.log('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0);
         if (overlay.clickSound) {
             try {
                 playSound(overlay.clickSound);
@@ -70,7 +70,17 @@ export const ButtonOverlayElement: React.FC<ButtonOverlayElementProps> = ({
                 console.error('Error playing button click sound:', e);
             }
         }
+        
+        // Execute primary action
         onAction(overlay.onClick);
+        
+        // Execute additional actions
+        if (overlay.actions && overlay.actions.length > 0) {
+            overlay.actions.forEach((action, index) => {
+                console.log(`  Executing additional action ${index + 1}:`, action.type);
+                onAction(action);
+            });
+        }
         
         // If this button requires click to advance, call the advance function
         // BUT: Don't advance if action is JumpToScene (it handles its own navigation)

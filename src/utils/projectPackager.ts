@@ -281,7 +281,16 @@ export const exportProject = async (project: VNProject) => {
     for (const scene of Object.values(project.scenes) as VNScene[]) {
         for (const command of scene.commands) {
             switch (command.type) {
-                case CommandType.SetBackground: assetsToProcess.backgrounds.add((command as SetBackgroundCommand).backgroundId); break;
+                case CommandType.SetBackground: {
+                    const bgId = (command as SetBackgroundCommand).backgroundId;
+                    // Background ID could be from backgrounds or images collection
+                    if (project.backgrounds[bgId]) {
+                        assetsToProcess.backgrounds.add(bgId);
+                    } else if (project.images && project.images[bgId]) {
+                        assetsToProcess.images.add(bgId);
+                    }
+                    break;
+                }
                 case CommandType.ShowImage: assetsToProcess.images.add((command as ShowImageCommand).imageId); break;
                 case CommandType.ShowButton: {
                     const cmd = command as ShowButtonCommand;

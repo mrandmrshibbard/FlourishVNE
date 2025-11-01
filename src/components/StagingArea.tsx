@@ -200,7 +200,11 @@ const StagingArea: React.FC<{
 
             switch (command.type) {
                 case CommandType.SetBackground:
-                    backgroundUrl = project.backgrounds[command.backgroundId]?.imageUrl || null;
+                    backgroundUrl = project.backgrounds[command.backgroundId]?.imageUrl || 
+                                   project.backgrounds[command.backgroundId]?.videoUrl ||
+                                   project.images?.[command.backgroundId]?.imageUrl || 
+                                   project.images?.[command.backgroundId]?.videoUrl ||
+                                   null;
                     break;
                 case CommandType.ShowCharacter:
                     const charData = project.characters[command.characterId];

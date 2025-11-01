@@ -6,7 +6,7 @@ import { fontSettingsToStyle } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition } from '../types';
 import { VNProject } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
@@ -1879,7 +1879,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 variables: saveData.playerStateData.variables,
                 stageState: saveData.playerStateData.stageState,
                 history: [],
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false },
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
@@ -1937,7 +1937,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             variables: initialVariables,
             stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5 } },
             history: [],
-            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false },
+            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
         });
         setScreenStack([]);
@@ -2810,6 +2810,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case CommandType.ShowScreen: {
                     instantAdvance = false; // Pause execution when showing a screen/menu
                     const cmd = command as any;
+                    // Store the current scene ID so UI actions can reference it later
+                    setPlayerState(p => p ? {
+                        ...p,
+                        uiState: {
+                            ...p.uiState,
+                            screenSceneId: p.currentSceneId
+                        }
+                    } : null);
                     // If we're in-playing, treat this as a HUD/in-game overlay
                     if (playerState && playerState.mode === 'playing') {
                         setHudStack(s => [...s, cmd.screenId]);
@@ -3385,6 +3393,75 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     [cycleAction.variableId]: newIndex
                 }));
             }
+        } else if (action.type === UIActionType.JumpToLabel && playerState) {
+            const jumpToLabelAction = action as JumpToLabelAction;
+            const targetLabel = jumpToLabelAction.targetLabel;
+            
+            // Use the screen's original scene ID if available, otherwise use current scene
+            const targetSceneId = playerState.uiState.screenSceneId || playerState.currentSceneId;
+            
+            console.log('JumpToLabel handler triggered:', { 
+                targetLabel, 
+                currentSceneId: playerState.currentSceneId,
+                currentSceneName: project.scenes[playerState.currentSceneId]?.name,
+                screenSceneId: playerState.uiState.screenSceneId,
+                targetSceneId: targetSceneId,
+                targetSceneName: project.scenes[targetSceneId]?.name
+            });
+            
+            // Find the label in the target scene's commands
+            const targetScene = project.scenes[targetSceneId];
+            if (!targetScene) {
+                console.warn('JumpToLabel failed: Target scene not found');
+                return;
+            }
+            
+            // Log all labels in the target scene
+            const allLabels = targetScene.commands
+                .filter(cmd => cmd.type === CommandType.Label)
+                .map(cmd => (cmd as LabelCommand).labelId);
+            console.log('JumpToLabel: Available labels in target scene:', allLabels);
+            
+            const labelIndex = targetScene.commands.findIndex((cmd) => 
+                cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
+            );
+            
+            if (labelIndex === -1) {
+                console.warn(`JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
+                console.warn('Looking for label:', targetLabel);
+                console.warn('Available labels:', allLabels);
+                return;
+            }
+            
+            console.log(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
+            
+            // Close any open HUD screens
+            setHudStack([]);
+            
+            // Jump to the label by updating the current index and clearing overlays
+            // Also switch back to the target scene if we've moved to a different scene
+            setPlayerState(p => {
+                if (!p) return null;
+                return {
+                    ...p,
+                    currentSceneId: targetSceneId,
+                    currentCommands: targetScene.commands,
+                    currentIndex: labelIndex,
+                    stageState: {
+                        ...p.stageState,
+                        buttonOverlays: [],
+                        imageOverlays: [],
+                        textOverlays: []
+                    },
+                    uiState: {
+                        ...p.uiState,
+                        dialogue: null,
+                        choices: null,
+                        isWaitingForInput: false,
+                        screenSceneId: null, // Clear the stored scene ID after jumping
+                    }
+                };
+            });
         }
     };
 

@@ -81,7 +81,7 @@ const UIElementInspector: React.FC<{
                     
                     <h4 className="font-bold text-sm mt-2 text-slate-400">Default Image</h4>
                     <div className="grid grid-cols-2 gap-2 p-2 border border-slate-700 rounded">
-                        <AssetSelector label="Asset" assetType={el.image?.type === 'video' ? 'videos' : 'backgrounds'} value={el.image?.id || null} onChange={id => updateElement({ image: id ? { type: el.image?.type || 'image', id } : null })} />
+                        <AssetSelector label="Asset" assetType={el.image?.type === 'video' ? 'videos' : 'images'} allowVideo value={el.image?.id || null} onChange={id => updateElement({ image: id ? { type: el.image?.type || 'image', id } : null })} />
                         <FormField label="Type">
                             <Select value={el.image?.type || 'image'} onChange={e => updateElement({ image: { type: e.target.value as 'image'|'video', id: el.image?.id || '' }})}>
                                 <option value="image">Image</option>
@@ -92,7 +92,7 @@ const UIElementInspector: React.FC<{
                     
                     <h4 className="font-bold text-sm mt-2 text-slate-400">Hover Image</h4>
                     <div className="grid grid-cols-2 gap-2 p-2 border border-slate-700 rounded">
-                        <AssetSelector label="Asset" assetType={el.hoverImage?.type === 'video' ? 'videos' : 'backgrounds'} value={el.hoverImage?.id || null} onChange={id => updateElement({ hoverImage: id ? { type: el.hoverImage?.type || 'image', id } : null })} />
+                        <AssetSelector label="Asset" assetType={el.hoverImage?.type === 'video' ? 'videos' : 'images'} allowVideo value={el.hoverImage?.id || null} onChange={id => updateElement({ hoverImage: id ? { type: el.hoverImage?.type || 'image', id } : null })} />
                         <FormField label="Type">
                             <Select value={el.hoverImage?.type || 'image'} onChange={e => updateElement({ hoverImage: { type: e.target.value as 'image'|'video', id: el.hoverImage?.id || '' }})}>
                                 <option value="image">Image</option>
@@ -216,7 +216,8 @@ const UIElementInspector: React.FC<{
                     ) : (
                         <AssetSelector 
                             label={bgType === 'video' ? 'Video Asset' : 'Image Asset'} 
-                            assetType={bgType === 'video' ? 'videos' : 'backgrounds'} 
+                            assetType={bgType === 'video' ? 'videos' : 'images'} 
+                            allowVideo
                             value={typeof bgValue === 'string' ? bgValue : null} 
                             onChange={id => updateElement({ background: { type: bgType as 'image' | 'video', assetId: id }, image: null })} 
                         />
@@ -322,8 +323,8 @@ const UIElementInspector: React.FC<{
                     )}
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Images</h4>
-                    <AssetSelector label="Thumb Image" assetType="backgrounds" value={el.thumbImage?.id || null} onChange={id => updateElement({ thumbImage: id ? { type: 'image', id } : null })} />
-                    <AssetSelector label="Track Image" assetType="backgrounds" value={el.trackImage?.id || null} onChange={id => updateElement({ trackImage: id ? { type: 'image', id } : null })} />
+                    <AssetSelector label="Thumb Image" assetType="images" allowVideo value={el.thumbImage?.id || null} onChange={id => updateElement({ thumbImage: id ? { type: 'image', id } : null })} />
+                    <AssetSelector label="Track Image" assetType="images" allowVideo value={el.trackImage?.id || null} onChange={id => updateElement({ trackImage: id ? { type: 'image', id } : null })} />
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Colors</h4>
                     <div className="grid grid-cols-2 gap-2">
@@ -493,8 +494,8 @@ const UIElementInspector: React.FC<{
                     <FormField label="Label Text"><TextInput value={el.text} onChange={e => updateElement({ text: e.target.value })} /></FormField>
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Checkbox Images</h4>
-                    <AssetSelector label="Checked Image" assetType="backgrounds" value={el.checkedImage?.id || null} onChange={id => updateElement({ checkedImage: id ? { type: 'image', id } : null })} />
-                    <AssetSelector label="Unchecked Image" assetType="backgrounds" value={el.uncheckedImage?.id || null} onChange={id => updateElement({ uncheckedImage: id ? { type: 'image', id } : null })} />
+                    <AssetSelector label="Checked Image" assetType="images" allowVideo value={el.checkedImage?.id || null} onChange={id => updateElement({ checkedImage: id ? { type: 'image', id } : null })} />
+                    <AssetSelector label="Unchecked Image" assetType="images" allowVideo value={el.uncheckedImage?.id || null} onChange={id => updateElement({ uncheckedImage: id ? { type: 'image', id } : null })} />
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Checkbox Color</h4>
                     <FormField label="Color">

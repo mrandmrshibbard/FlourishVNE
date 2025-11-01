@@ -109,7 +109,8 @@ export interface HideCharacterCommand extends BaseCommand {
     endPosition?: VNPosition; // for slide transitions
 }
 
-export type ChoiceAction = JumpToSceneAction | SetVariableAction;
+// Choice actions now support all UI button actions for maximum flexibility
+export type ChoiceAction = VNUIAction;
 
 export interface ChoiceOption {
     id: VNID;
@@ -292,6 +293,7 @@ export interface ShowButtonCommand extends BaseCommand {
     hoverImage?: { type: 'image' | 'video', id: VNID } | null;
     // Actions
     onClick: VNUIAction;
+    actions?: VNUIAction[]; // Multiple actions support
     clickSound?: VNID | null;
     waitForClick?: boolean; // If true, pause execution until button is clicked
     // Transition

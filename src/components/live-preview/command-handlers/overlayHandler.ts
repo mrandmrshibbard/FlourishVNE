@@ -274,6 +274,7 @@ export function handleShowButton(
       ? assetResolver(command.hoverImage.id, command.hoverImage.type)
       : null,
     onClick: command.onClick,
+    actions: command.actions, // Multiple actions support
     clickSound: command.clickSound,
     waitForClick: command.waitForClick,
     transition: command.transition !== 'instant' ? command.transition : undefined,

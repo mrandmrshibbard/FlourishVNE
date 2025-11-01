@@ -1,0 +1,56 @@
+Thank you for choosing Flourish Visual Novel Engine! Our goal from the start has been to open visual novel development up to everyone, regardless of their ability to code. Individuality and self-expression have been under assault recently and to solve this, we have strived to offer a creation engine to take care of the tough work, freeing up creators to focus on the STORY and ART, not the lines and lines of script.
+
+This quick start guide will help you get your first visual novel project up and running in no time. Let's dive in!
+
+New Projects - Creating in Minutes
+1. **Install Flourish VNE**  
+   No installation is required! Simply unzip the  program and run the executable!
+
+2. **Create a New Project**
+    After launching Flourish, you'll start on the Welcome Splash screen. Click "Create New Project" to start a fresh project, or "Open Existing Project" to load a project you've worked on before.
+
+3. **Saving and Loading Projects**
+    The main method of saving your project is by using the "Export" button in the top right. This will save a zip file containing all of your project data and assets. Every time you make changes or work on your project, you MUST export it to save your work. To load a project, use the "Open Existing Project" button on the Welcome Splash screen and select your previously exported zip file to continue working!
+
+4. **The Main Editor Interface**
+    Once your project is created or loaded, you'll be taken to the main editor interface. Here you will see:
+    - **Scene List**: On the left, a list of all your scenes. Click on any scene to start editing it. 
+    - **Scene Editor**: In the center, the scene editor is where you can add, remove, and arrange commands to build your scenes. Tip: Branch commands, with conditionals, can help organize lengthy scenes with multiple paths.
+    - **Command Palette**: On the bottom left under the scene list, the command palette allows you to add new commands to your scene. Simply drag and drop commands into the scene editor to add them!
+    - **Properties Inspector**: On the right, the properties inspector shows details and settings for the currently selected command. Adjust parameters here to customize how each command behaves. You can select to run commands based on conditional values set by variables in your game.
+    -**Staging Area**: In the center above the scene editor, you will see the Staging Area. This is where you can preview your scenes as you build them. You will see commands, images, and text update in real-time as you make changes here.
+    -**Tips and Hints**: If you drag two commands together, you can run them 'asynchronously', meaning they will run at the same time! This is great for showing two characters, images, or buttons at the same time. Certain commands, like Dialogue or choices, cannot be run in this manner due to their reliance on user input or game state.
+
+5. **Adding Characters**
+    To add characters to your visual novel, use the "Characters" at the top of the window, or by simply pressing the '2' key. This will open the character manager, where you can add new characters, set their names, and assign layers and image assets to them.
+    -**Character Layers**: You can create different layers for your characters. Layers are most important when using the Asset cycler in character creators to change outfits, hair styles, ect. Here you will upload all the images to be used in a layer for your character.
+    -**Expressions**: Expressions are variations of a character's appearance, such as happy, sad, angry, etc. You simply create a new expression and assign it an image from your layer assets. Then, when using a character command, you can select the expression to display.
+    -**Custom Fonts**: Yuo can assign custom fonts to characters to give them a unique look in dialogue. Simply select from a predetermined list or upload a font file (.ttf format) in the character manager and assign it to your character.
+    -**Tips**: Using layers and expressions to create a character creator or dress up system can be advanced and complex, but completely doable! Start off with simple characters and once you feel comfortable using the character manager and variable system, you can try more advanced techniques.
+
+6. **UI System**
+    Flourish VNE comes with a built-in, fully customizable UI system you can navigate to using the '3' key. It allows you to create interactive screens and menus, text inputs, image and video overlays, and much more! The UI Screens system is actual a valuable part of the engine, used for creating everything from character creators, CG Galleries, inventory systems, and much more!
+    -**Screens Tree**: All of the default screens are show to the left. These inlcude the Title Screen, Save Screen, Load Screen, Settings Screen, and Pause Menu. These are all locked and required for visual novels created using Flourish, though you can completely customize them and all their elements. And if you find you messed up and need a redo to bring your screens back... NO PROBLEM! Just click "Restore Default Screens" at the bottom of the screens tree to reset them all back to default.
+    -**Creating New Screens**: To create a new screen, simply click the "+ Add UI Screen" button at the top of the screens tree. Or you can duplicate the default screens to create custom experiences (like start specific and in-game specific save load and settings screens).
+    -**UI Editor Staging Area**: The center of the screen is the UI Editor Staging Area. Just like the scene Staging Area, you will be able to edit and preview your UI screens in real-time as you work. UI Elements here can be dragged around, resized, and selected to edit their properties.
+    -**UI Element Inspector**: On the right side is the UI Element Inspector. Here you can edit all the properties of the currently selected UI element. You can change images, text, colors, sizes, positions, and even add custom actions to buttons and interactive elements.
+    -**Adding UI Elements**: To add new UI elements to your screen, all the buttons needed are at the bottom of the window. Most of these are self-explainatory. But a few require special mention:
+      - **Button**: Buttons are very versatile and have many actions. You can use them to navigate to scenes, open screens, set variables, perform default game screen actions like save and load or quit, and cycling through assets (though this is better done with the Asset Cycler element).
+      - **CharacterPreview / Asset Cycler**: These two elements need to be mentioned together because they both play a powerful role in in-game character customization. The character preview element displays a preview of a selected character and a chosen layer of theirs. The Asset Cycler is used in tandem with the Character Preview to allow players to cycle through assets in a character's chosen layer. Though there is a guide specifically for using these items in this way, as it requires advanced use of variables and variable filtering.
+      -**Text Input**: The text input element allows players to input text to save to a chosen variable. This is great for name inputs, or any other situation where you want players to type something in to be saved and displayed later. You can store the inputted text into a variable for later use in the game. 
+      -**Dropdown**: The dropdown element allows a users to select from a list of variables and customize options for that variable. This is great for allowing players to choose from preset conditions or options in your game.
+      -**Tips**: The UI System is extremely useful and versatile and works best when used with the Show Screen or Show Button commands in scenes. This allows players to navigate between screens and interact with your systems.
+
+7. **Assets Manager**
+    The Asset manager can be accessed using the '4' key. Here you can upload and manage all the assets used in your visual novel, including images, audio files, backgrounds, or videos. Simply click the "+ Add Asset" button in the desired category to upload new files.
+    -**Tips**: You can use videos in the background or image elements of the UI system to create immersive experiences.
+
+8. **Variables System**
+    The Variables system is a powerful way to create branching narratives and interactive experiences. It is a crucial part to creating most of the systems in your visual novel, as it is used in the conditional logic of commands (setting commands, branchs, or scenes to only run of a certain variable matchs a set condition). You can access the Variables system using the '5' key.
+    -**Creating Variables**: To create a new variable, simply click the "+ Add Variable" to the left. You can choose between three types of variables: Number, Text (string), and Boolean (true/false). Name your variable and set its default value (booleans are best set to false by default).
+    -**Using Variables**: Once created, you can use variables in commands throughout your scenes and manipulate them using the Choice commands, Set Variable command, or using Buttons with the show Button command or the UI System.
+
+9. **Settings**
+    Access the settings menu in the header or by tapping 6 on your keyboard. You can adjust the name and starting scene of your visual novel here, as well as UI assets for dialogue and choice boxes, global font settings, and select special screen assigns (including adding an always visible HUD screen for things such as inventory or character sheet buttons).
+
+I hope you learned a lot and feel better about using my creation engine! There will be more information to come regarding systems like the Asset Cycler and Character Preview, Variable Filtering, and more advanced techniques for building your visual novel. Stay tuned for more updates and guides!

@@ -40,7 +40,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 const char = command.characterId ? project.characters[command.characterId]?.name : 'Narrator';
                 return `${char}: "${command.text.substring(0, 20)}..."`;
             case 'SetBackground':
-                return `BG: ${project.backgrounds[command.backgroundId]?.name || 'N/A'}`;
+                return `BG: ${project.backgrounds[command.backgroundId]?.name || project.images?.[command.backgroundId]?.name || 'N/A'}`;
             case 'ShowCharacter':
                 const charName = project.characters[command.characterId]?.name || 'N/A';
                 return `Show: ${charName}`;

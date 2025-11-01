@@ -1,9 +1,9 @@
 import React from 'react';
 import { VNID } from '../../types';
 import { VNUIScreen } from '../../features/ui/types';
-import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, SetVariableAction, CycleLayerAssetAction } from '../../types/shared';
+import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, CycleLayerAssetAction } from '../../types/shared';
 import { VNSetVariableOperator } from '../../features/variables/types';
-import { VNScene } from '../../features/scene/types';
+import { VNScene, CommandType, LabelCommand } from '../../features/scene/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter } from '../../features/character/types';
 import { useProject } from '../../contexts/ProjectContext';
@@ -24,6 +24,19 @@ const ActionEditor: React.FC<{
             case UIActionType.JumpToScene:
                 newAction = { ...newAction, targetSceneId: project.startSceneId } as JumpToSceneAction;
                 break;
+            case UIActionType.JumpToLabel: {
+                // Find the first available label across all scenes
+                let firstLabel = '';
+                for (const scene of Object.values(project.scenes) as VNScene[]) {
+                    const labelCmd = scene.commands.find(cmd => cmd.type === CommandType.Label);
+                    if (labelCmd) {
+                        firstLabel = (labelCmd as LabelCommand).labelId;
+                        break;
+                    }
+                }
+                newAction = { ...newAction, targetLabel: firstLabel } as JumpToLabelAction;
+                break;
+            }
             case UIActionType.SetVariable:
                 newAction = { ...newAction, variableId: Object.keys(project.variables)[0] || '', operator: 'set', value: '' } as SetVariableAction;
                 break;
@@ -52,6 +65,7 @@ const ActionEditor: React.FC<{
                     <option value={UIActionType.QuitToTitle}>Quit To Title</option>
                     <option value={UIActionType.ExitGame}>Exit Game</option>
                     <option value={UIActionType.JumpToScene}>Jump To Scene</option>
+                    <option value={UIActionType.JumpToLabel}>Jump To Label</option>
                     <option value={UIActionType.SetVariable}>Set Variable</option>
                     <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
                     <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
@@ -76,6 +90,34 @@ const ActionEditor: React.FC<{
                     </Select>
                 </FormField>
             )}
+            {action.type === UIActionType.JumpToLabel && (() => {
+                // Collect all labels from all scenes
+                const allLabels: Array<{ labelId: string; sceneName: string; sceneId: string }> = [];
+                Object.values(project.scenes).forEach((scene: VNScene) => {
+                    scene.commands.forEach(cmd => {
+                        if (cmd.type === CommandType.Label) {
+                            allLabels.push({
+                                labelId: (cmd as LabelCommand).labelId,
+                                sceneName: scene.name,
+                                sceneId: scene.id
+                            });
+                        }
+                    });
+                });
+                
+                return (
+                    <FormField label="Target Label">
+                        <Select value={(action as JumpToLabelAction).targetLabel} onChange={e => onActionChange({ ...(action as JumpToLabelAction), targetLabel: e.target.value })}>
+                            {allLabels.length === 0 && <option value="">No labels found</option>}
+                            {allLabels.map((labelInfo, idx) => (
+                                <option key={idx} value={labelInfo.labelId}>
+                                    {labelInfo.labelId} (in {labelInfo.sceneName})
+                                </option>
+                            ))}
+                        </Select>
+                    </FormField>
+                );
+            })()}
             {action.type === UIActionType.SetVariable && (
                 <div className="space-y-2 p-2 border border-slate-700 rounded">
                     <FormField label="Variable"><Select value={(action as SetVariableAction).variableId} onChange={e => {
@@ -108,6 +150,13 @@ const ActionEditor: React.FC<{
                                 <TextInput type="number" value={String((action as SetVariableAction).randomMax ?? 100)} onChange={e => onActionChange({ ...(action as SetVariableAction), randomMax: parseFloat(e.target.value) || 100 })}/>
                             </FormField>
                         </div>
+                    ) : project.variables[(action as SetVariableAction).variableId]?.type === 'boolean' ? (
+                        <FormField label="Value">
+                            <Select value={String((action as SetVariableAction).value)} onChange={e => onActionChange({ ...(action as SetVariableAction), value: e.target.value })}>
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                            </Select>
+                        </FormField>
                     ) : (
                         <FormField label="Value"><TextInput value={String((action as SetVariableAction).value)} onChange={e => onActionChange({ ...(action as SetVariableAction), value: e.target.value })}/></FormField>
                     )}
