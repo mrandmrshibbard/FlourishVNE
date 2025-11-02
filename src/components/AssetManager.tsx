@@ -322,26 +322,47 @@ const AssetItem: React.FC<AssetItemProps> = ({
 const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => void; accept?: string }> = ({ onUpload, accept }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
+        const files = e.target.files;
+        if (files && files.length > 0) {
             setIsUploading(true);
-            try {
-                const base64 = await fileToBase64(file);
-                const name = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
-                onUpload(name, base64);
-                console.log('[AssetUploader] Successfully uploaded:', name);
-            } catch (error) {
-                console.error('[AssetUploader] Failed to upload file:', error);
-                if (error instanceof Error && error.message !== 'Upload cancelled by user') {
-                    alert(`Failed to upload ${file.name}:\n\n${error.message}\n\nPlease try a smaller file or compress the video.`);
+            const fileArray = Array.from(files) as File[];
+            setUploadProgress({ current: 0, total: fileArray.length });
+            
+            let successCount = 0;
+            let failCount = 0;
+            const errors: string[] = [];
+
+            for (let i = 0; i < fileArray.length; i++) {
+                const file = fileArray[i];
+                setUploadProgress({ current: i + 1, total: fileArray.length });
+                
+                try {
+                    const base64 = await fileToBase64(file);
+                    const name = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+                    onUpload(name, base64);
+                    console.log('[AssetUploader] Successfully uploaded:', name);
+                    successCount++;
+                } catch (error) {
+                    console.error('[AssetUploader] Failed to upload file:', error);
+                    failCount++;
+                    if (error instanceof Error && error.message !== 'Upload cancelled by user') {
+                        errors.push(`${file.name}: ${error.message}`);
+                    }
                 }
-            } finally {
-                setIsUploading(false);
-                // Reset the input so the same file can be selected again if needed
-                if (inputRef.current) inputRef.current.value = '';
             }
+
+            // Show summary if there were any failures
+            if (failCount > 0) {
+                alert(`Upload Summary:\n✓ ${successCount} succeeded\n✗ ${failCount} failed\n\n${errors.join('\n')}\n\nFailed files may be too large or in an unsupported format.`);
+            }
+
+            setIsUploading(false);
+            setUploadProgress(null);
+            // Reset the input so the same files can be selected again if needed
+            if (inputRef.current) inputRef.current.value = '';
         }
     };
 
@@ -354,6 +375,7 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
                 onChange={handleFileChange}
                 style={{ display: 'none' }}
                 disabled={isUploading}
+                multiple
             />
 
             <button
@@ -362,7 +384,9 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
                 className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <PlusIcon className="w-4 h-4" />
-                {isUploading ? 'Uploading...' : 'Upload Asset'}
+                {isUploading && uploadProgress 
+                    ? `Uploading ${uploadProgress.current}/${uploadProgress.total}...` 
+                    : 'Upload Assets'}
             </button>
         </>
     );

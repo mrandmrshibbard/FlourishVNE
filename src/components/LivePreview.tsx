@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { XMarkIcon, FilmIcon } from './icons';
@@ -261,7 +262,7 @@ const ButtonOverlayElement: React.FC<{
     }, [overlay.id, overlay.transition, overlay.action]);
 
     const handleClick = () => {
-        console.log('Button clicked:', overlay.text, 'Action:', overlay.onClick);
+        console.log('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0);
         if (overlay.clickSound) {
             try {
                 playSound(overlay.clickSound);
@@ -269,10 +270,16 @@ const ButtonOverlayElement: React.FC<{
                 console.error('Error playing button click sound:', e);
             }
         }
-        onAction(overlay.onClick);
+
+        const allActions: VNUIAction[] = [overlay.onClick, ...(overlay.actions || [])];
+        const setVarActions = allActions.filter(action => action.type === UIActionType.SetVariable);
+        const otherActions = allActions.filter(action => action.type !== UIActionType.SetVariable);
+
+        setVarActions.forEach(action => onAction(action));
+        otherActions.forEach(action => onAction(action));
         
         // If this button requires click to advance, call the advance function
-        // BUT: Don't advance if action is JumpToScene (it handles its own navigation)
+        // BUT: Don't advance if primary action is JumpToScene (it handles its own navigation)
         if (overlay.waitForClick && onAdvance && overlay.onClick.type !== UIActionType.JumpToScene) {
             onAdvance();
         }
@@ -662,15 +669,24 @@ const ButtonElement: React.FC<{
     const handleClick = () => {
         try { playSound(element.clickSoundId); } catch(e) {}
         
-        // Execute primary action (backward compatibility)
+        // Collect all actions (primary + additional)
+        const allActions: VNUIAction[] = [];
         if (element.action) {
-            onAction(element.action);
+            allActions.push(element.action);
+        }
+        if (element.actions && element.actions.length > 0) {
+            allActions.push(...element.actions);
         }
         
-        // Execute additional actions
-        if (element.actions && element.actions.length > 0) {
-            element.actions.forEach(action => onAction(action));
-        }
+        // Process SetVariable actions FIRST to ensure variables are updated before navigation/screen changes
+        const setVarActions = allActions.filter(a => a.type === UIActionType.SetVariable);
+        const otherActions = allActions.filter(a => a.type !== UIActionType.SetVariable);
+        
+        // Execute SetVariable actions first
+        setVarActions.forEach(action => onAction(action));
+        
+        // Then execute other actions (navigation, screen changes, etc.)
+        otherActions.forEach(action => onAction(action));
     };
     
     return (
@@ -725,7 +741,8 @@ const UIScreenRenderer: React.FC<{
     variables?: Record<VNID, string | number | boolean>;
     onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
     isClosing?: boolean;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false }) => {
+    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -763,6 +780,15 @@ const UIScreenRenderer: React.FC<{
     
     const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject) => {
         console.log('🎯 renderElement called:', element.type, element.name, element.id);
+        
+        // Check visibility conditions - if conditions exist and are not met, don't render
+        if (element.conditions && element.conditions.length > 0) {
+            const conditionsMet = evaluateConditions(element.conditions, variables);
+            if (!conditionsMet) {
+                console.log('🚫 Element conditions not met, skipping render:', element.name);
+                return null;
+            }
+        }
         
         const transitionStyle = getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay);
         
@@ -2443,7 +2469,36 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...p,
                             currentSceneId: nextSceneId,
                             currentCommands: nextScene.commands,
-                            currentIndex: 0
+                            currentIndex: 0,
+                            // Clear stage state for new scene
+                            stageState: {
+                                backgroundUrl: null,
+                                characters: {},
+                                textOverlays: [],
+                                imageOverlays: [],
+                                buttonOverlays: [],
+                                screen: {
+                                    shake: { active: false, intensity: 0 },
+                                    tint: 'transparent',
+                                    zoom: 1,
+                                    panX: 0,
+                                    panY: 0,
+                                    transitionDuration: 0.5
+                                }
+                            },
+                            // Clear UI state
+                            uiState: {
+                                dialogue: null,
+                                choices: null,
+                                textInput: null,
+                                movieUrl: null,
+                                isWaitingForInput: false,
+                                isTransitioning: false,
+                                transitionElement: null,
+                                flash: null,
+                                showHistory: false,
+                                screenSceneId: null
+                            }
                         } : null);
                     } else {
                         // No valid next scene found, return to title
@@ -2571,7 +2626,36 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 ...p,
                                 currentSceneId: nextSceneId,
                                 currentCommands: nextScene.commands,
-                                currentIndex: 0
+                                currentIndex: 0,
+                                // Clear stage state for new scene
+                                stageState: {
+                                    backgroundUrl: null,
+                                    characters: {},
+                                    textOverlays: [],
+                                    imageOverlays: [],
+                                    buttonOverlays: [],
+                                    screen: {
+                                        shake: { active: false, intensity: 0 },
+                                        tint: 'transparent',
+                                        zoom: 1,
+                                        panX: 0,
+                                        panY: 0,
+                                        transitionDuration: 0.5
+                                    }
+                                },
+                                // Clear UI state
+                                uiState: {
+                                    dialogue: null,
+                                    choices: null,
+                                    textInput: null,
+                                    movieUrl: null,
+                                    isWaitingForInput: false,
+                                    isTransitioning: false,
+                                    transitionElement: null,
+                                    flash: null,
+                                    showHistory: false,
+                                    screenSceneId: null
+                                }
                             } : null);
                             return;
                         }
@@ -3088,18 +3172,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // No transition, close immediately
                         setHudStack(s => s.slice(0, -1));
                         if (hudStack.length === 1) {
-                            setPlayerState(p => {
-                                if (!p) return null;
-                                return {
-                                    ...p,
-                                    currentIndex: p.currentIndex + 1,
-                                    stageState: {
-                                        ...p.stageState,
-                                        buttonOverlays: [],
-                                        imageOverlays: []
-                                    }
-                                };
-                            });
+                            // Delay advancement to ensure any SetVariable actions from button clicks are processed first
+                            setTimeout(() => {
+                                setPlayerState(p => {
+                                    if (!p) return null;
+                                    return {
+                                        ...p,
+                                        currentIndex: p.currentIndex + 1,
+                                        stageState: {
+                                            ...p.stageState,
+                                            buttonOverlays: [],
+                                            imageOverlays: []
+                                        }
+                                    };
+                                });
+                            }, 0);
                         }
                     }
                 }
@@ -3193,7 +3280,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const initialVariables: Record<VNID, string | number | boolean> = {};
                 for (const varId in project.variables) {
                     const v = project.variables[varId];
-                    initialVariables[v.id] = v.defaultValue;
+                    const customizedValue = menuVariables[v.id];
+                    initialVariables[v.id] = customizedValue !== undefined ? customizedValue : v.defaultValue;
                 }
                 
                 setPlayerState({
@@ -3283,7 +3371,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     };
                 });
             }
-        } else if (action.type === UIActionType.SetVariable && playerState) {
+        } else if (action.type === UIActionType.SetVariable) {
             const setVarAction = action as SetVariableAction;
             const variable = project.variables[setVarAction.variableId];
             if (!variable) {
@@ -3291,37 +3379,66 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return;
             }
 
-            setPlayerState(p => {
-                if (!p) return null;
-                const currentVal = p.variables[setVarAction.variableId];
+            const computeNewValue = (currentVal: string | number | boolean | undefined): string | number | boolean => {
                 const changeValStr = String(setVarAction.value);
-                let newVal: string | number | boolean = setVarAction.value;
-
                 if (setVarAction.operator === 'add') {
-                    newVal = (Number(currentVal) || 0) + (Number(changeValStr) || 0);
-                } else if (setVarAction.operator === 'subtract') {
-                    newVal = (Number(currentVal) || 0) - (Number(changeValStr) || 0);
-                } else if (setVarAction.operator === 'random') {
-                    // Generate random number within range (inclusive)
+                    return (Number(currentVal) || 0) + (Number(changeValStr) || 0);
+                }
+                if (setVarAction.operator === 'subtract') {
+                    return (Number(currentVal) || 0) - (Number(changeValStr) || 0);
+                }
+                if (setVarAction.operator === 'random') {
                     const min = setVarAction.randomMin ?? 0;
                     const max = setVarAction.randomMax ?? 100;
-                    newVal = Math.floor(Math.random() * (max - min + 1)) + min;
-                } else { // 'set' operator
-                    // Coerce the value to the correct type based on variable definition
-                    switch(variable.type) {
-                        case 'number':
-                            newVal = Number(changeValStr) || 0;
-                            break;
-                        case 'boolean':
-                            newVal = changeValStr.toLowerCase() === 'true';
-                            break;
-                        case 'string':
-                        default:
-                            newVal = changeValStr;
-                            break;
-                    }
+                    return Math.floor(Math.random() * (max - min + 1)) + min;
                 }
-                return { ...p, variables: { ...p.variables, [setVarAction.variableId]: newVal } };
+
+                switch (variable.type) {
+                    case 'number':
+                        return Number(changeValStr) || 0;
+                    case 'boolean':
+                        return changeValStr.toLowerCase() === 'true' || changeValStr === '1';
+                    case 'string':
+                    default:
+                        return changeValStr;
+                }
+            };
+
+            // Use flushSync to ensure variable updates are applied immediately and synchronously
+            // This prevents race conditions where navigation happens before variables are updated
+            flushSync(() => {
+                if (playerState) {
+                    setPlayerState(p => {
+                        if (!p) return null;
+                        const currentVal = p.variables[setVarAction.variableId];
+                        const newVal = computeNewValue(currentVal);
+                        console.log('[SetVariable] Details:', {
+                            variable: variable.name,
+                            variableId: setVarAction.variableId,
+                            rawValue: setVarAction.value,
+                            operator: setVarAction.operator,
+                            previousValue: currentVal,
+                            nextValue: newVal,
+                            type: variable.type
+                        });
+                        return { ...p, variables: { ...p.variables, [setVarAction.variableId]: newVal } };
+                    });
+                } else {
+                    setMenuVariables(prev => {
+                        const currentVal = prev[setVarAction.variableId] ?? variable.defaultValue;
+                        const newVal = computeNewValue(currentVal);
+                        console.log('[SetVariable] Details (menu):', {
+                            variable: variable.name,
+                            variableId: setVarAction.variableId,
+                            rawValue: setVarAction.value,
+                            operator: setVarAction.operator,
+                            previousValue: currentVal,
+                            nextValue: newVal,
+                            type: variable.type
+                        });
+                        return { ...prev, [setVarAction.variableId]: newVal };
+                    });
+                }
             });
         } else if (action.type === UIActionType.CycleLayerAsset) {
             console.log('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
@@ -3434,33 +3551,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             
             console.log(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
+            console.log('JumpToLabel: Label command at that index:', targetScene.commands[labelIndex]);
             
             // Close any open HUD screens
             setHudStack([]);
             
             // Jump to the label by updating the current index and clearing overlays
             // Also switch back to the target scene if we've moved to a different scene
-            setPlayerState(p => {
-                if (!p) return null;
-                return {
-                    ...p,
-                    currentSceneId: targetSceneId,
-                    currentCommands: targetScene.commands,
-                    currentIndex: labelIndex,
-                    stageState: {
-                        ...p.stageState,
-                        buttonOverlays: [],
-                        imageOverlays: [],
-                        textOverlays: []
-                    },
-                    uiState: {
-                        ...p.uiState,
-                        dialogue: null,
-                        choices: null,
-                        isWaitingForInput: false,
-                        screenSceneId: null, // Clear the stored scene ID after jumping
-                    }
-                };
+            flushSync(() => {
+                setPlayerState(p => {
+                    if (!p) return null;
+                    console.log('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
+                    return {
+                        ...p,
+                        currentSceneId: targetSceneId,
+                        currentCommands: targetScene.commands,
+                        currentIndex: labelIndex,
+                        stageState: {
+                            ...p.stageState,
+                            buttonOverlays: [],
+                            imageOverlays: [],
+                            textOverlays: []
+                        },
+                        uiState: {
+                            ...p.uiState,
+                            dialogue: null,
+                            choices: null,
+                            isWaitingForInput: false,
+                            screenSceneId: null, // Clear the stored scene ID after jumping
+                        }
+                    };
+                });
             });
         }
     };
@@ -4025,6 +4146,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         variables={playerState?.variables || menuVariables}
                         onVariableChange={handleVariableChange}
                         isClosing={closingScreens.has(currentScreenId)}
+                        evaluateConditions={evaluateConditions}
                     />
                 )}
                 {
@@ -4044,6 +4166,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     variables={playerState?.variables || menuVariables}
                                     onVariableChange={handleVariableChange}
                                     isClosing={closingScreens.has(hudScreenId)}
+                                    evaluateConditions={evaluateConditions}
                                 />
                             ) : null;
                         })()

@@ -26,6 +26,35 @@ export function handleJump(command: JumpCommand, context: CommandContext): Comma
       currentCommands: newScene.commands,
       currentIndex: 0,
       commandStack: [],
+      // Clear stage state for new scene
+      stageState: {
+        backgroundUrl: null,
+        characters: {},
+        textOverlays: [],
+        imageOverlays: [],
+        buttonOverlays: [],
+        screen: {
+          shake: { active: false, intensity: 0 },
+          tint: 'transparent',
+          zoom: 1,
+          panX: 0,
+          panY: 0,
+          transitionDuration: 0.5
+        }
+      },
+      // Clear UI state
+      uiState: {
+        dialogue: null,
+        choices: null,
+        textInput: null,
+        movieUrl: null,
+        isWaitingForInput: false,
+        isTransitioning: false,
+        transitionElement: null,
+        flash: null,
+        showHistory: false,
+        screenSceneId: null
+      }
     },
   };
 }

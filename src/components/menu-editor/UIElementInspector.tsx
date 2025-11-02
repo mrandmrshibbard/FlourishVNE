@@ -2,14 +2,128 @@ import React from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
+import { VNCondition, VNConditionOperator } from '../../types/shared';
 import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption, GameSetting, GameToggleSetting } from '../../features/ui/types';
-import { VNVariable } from '../../features/variables/types';
+import { VNVariable, VNVariableType } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
+import { VNProject } from '../../types/project';
 import { FormField, TextInput, Select } from '../ui/Form';
-import { TrashIcon } from '../icons';
+import { TrashIcon, XMarkIcon, PlusIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
 import ActionEditor from './ActionEditor';
 import AssetSelector from '../ui/AssetSelector';
+
+const ConditionsEditor: React.FC<{
+    conditions: VNCondition[] | undefined;
+    project: VNProject;
+    onChange: (newConditions: VNCondition[] | undefined) => void;
+    isRequired?: boolean;
+}> = ({ conditions, project, onChange, isRequired }) => {
+    const hasVariables = Object.keys(project.variables).length > 0;
+
+    const getOperatorsForType = (type: VNVariableType | undefined): VNConditionOperator[] => {
+        switch (type) {
+            case 'string': return ['==', '!=', 'contains', 'startsWith'];
+            case 'number': return ['==', '!=', '>', '<', '>=', '<='];
+            case 'boolean': return ['is true', 'is false'];
+            default: return ['==', '!=', '>', '<', '>=', '<=', 'contains', 'startsWith'];
+        }
+    };
+
+    const handleAddCondition = () => {
+        const firstVarId = Object.keys(project.variables)[0];
+        if (!firstVarId) return;
+        const newCondition: VNCondition = {
+            variableId: firstVarId,
+            operator: '==',
+            value: ''
+        };
+        onChange([...(conditions || []), newCondition]);
+    };
+
+    const handleUpdateCondition = (index: number, updates: Partial<VNCondition>) => {
+        const newConditions = [...(conditions || [])];
+        newConditions[index] = { ...newConditions[index], ...updates };
+
+        // If operator changes, check if it's compatible
+        if(updates.operator) {
+            const variable = project.variables[newConditions[index].variableId];
+            const allowedOperators = getOperatorsForType(variable?.type);
+            if(!allowedOperators.includes(updates.operator)) {
+                newConditions[index].operator = allowedOperators[0];
+            }
+        }
+        // If variable changes, reset operator
+        if(updates.variableId) {
+            const variable = project.variables[updates.variableId];
+            newConditions[index].operator = getOperatorsForType(variable?.type)[0];
+        }
+
+        onChange(newConditions);
+    };
+
+    const handleRemoveCondition = (index: number) => {
+        const newConditions = (conditions || []).filter((_, i) => i !== index);
+        if (newConditions.length === 0 && !isRequired) {
+            onChange(undefined);
+        } else {
+            onChange(newConditions);
+        }
+    };
+
+    if (!hasVariables) {
+        return <p className="text-xs text-slate-500">No variables defined to create conditions.</p>;
+    }
+
+    if (!conditions && !isRequired) {
+        return <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs">Add Condition</button>;
+    };
+
+    return (
+        <div className="space-y-2">
+            {(conditions || []).map((condition, index) => {
+                const variable = project.variables[condition.variableId];
+                const operators = getOperatorsForType(variable?.type);
+                const valueIsHidden = condition.operator === 'is true' || condition.operator === 'is false';
+
+                return (
+                    <div key={index} className="p-1 border border-slate-700 rounded-md">
+                        <div className="flex gap-1 items-start">
+                            <div className="flex-grow space-y-1">
+                                <FormField label="Variable">
+                                    <Select value={condition.variableId} onChange={e => handleUpdateCondition(index, { variableId: e.target.value })}>
+                                        {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                    </Select>
+                                </FormField>
+                                <div className="grid grid-cols-2 gap-1">
+                                    <FormField label="Operator">
+                                        <Select value={condition.operator} onChange={e => handleUpdateCondition(index, { operator: e.target.value as VNConditionOperator })}>
+                                            {operators.map(op => <option key={op} value={op}>{op}</option>)}
+                                        </Select>
+                                    </FormField>
+                                    {!valueIsHidden && (
+                                        <FormField label="Value">
+                                            {variable?.type === 'boolean' ? (
+                                                <Select value={String(condition.value)} onChange={e => handleUpdateCondition(index, { value: e.target.value === 'true' })}>
+                                                    <option value="true">True</option>
+                                                    <option value="false">False</option>
+                                                </Select>
+                                            ) : (
+                                                <TextInput value={String(condition.value || '')} onChange={e => handleUpdateCondition(index, { value: e.target.value })} />
+                                            )}
+                                        </FormField>
+                                    )}
+                                </div>
+                            </div>
+                            <button onClick={() => handleRemoveCondition(index)} className="text-red-400 hover:text-red-300 mt-1 p-1"><XMarkIcon className="w-4 h-4" /></button>
+                        </div>
+                    </div>
+                );
+            })}
+             <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs mt-2 flex items-center gap-1"><PlusIcon className="w-4 h-4"/>Add Condition</button>
+        </div>
+    );
+};
 
 const UIElementInspector: React.FC<{
     screenId: VNID;
@@ -69,6 +183,14 @@ const UIElementInspector: React.FC<{
             <FormField label="Delay (ms)">
                 <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} />
             </FormField>
+            
+            <h3 className="font-bold mt-3 mb-2 text-slate-400">Visibility Conditions</h3>
+            <p className="text-xs text-slate-500 mb-2">This element will only be visible if all conditions are met.</p>
+            <ConditionsEditor 
+                conditions={element.conditions} 
+                project={project} 
+                onChange={(cs) => updateElement({ conditions: cs })}
+            />
         </>
     );
 

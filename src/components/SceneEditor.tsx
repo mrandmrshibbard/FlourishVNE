@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 // FIX: VNID is not exported from scene/types. Imported from ../types instead.
@@ -18,6 +18,9 @@ import {
     isCommandStacked
 } from '../features/scene/commandStackUtils';
 import { CommandStackRow, DragDropIndicator } from './CommandStackComponents';
+
+const generateCommandId = () => `cmd-${Math.random().toString(36).substring(2, 9)}`;
+const generateBranchId = () => `branch-${Math.random().toString(36).substring(2, 9)}`;
 
 const CommandItem: React.FC<{ 
     command: VNCommand, 
@@ -361,6 +364,86 @@ const SceneEditor: React.FC<{
     const [clipboard, setClipboard] = useState<VNCommand[]>([]);
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
 
+    const createCommandWithId = useCallback((type: CommandType, options: { branchId?: string } = {}) => {
+        const commandData = createCommand(type, project, options);
+        if (!commandData) {
+            return null;
+        }
+        return { ...commandData, id: generateCommandId() } as VNCommand;
+    }, [project]);
+
+    const insertCommandsIntoScene = useCallback((commandsToInsert: VNCommand[], insertIndex: number) => {
+        if (!activeScene) {
+            return;
+        }
+
+        const clampedIndex = Math.max(0, Math.min(insertIndex, activeScene.commands.length));
+        const newCommands = [
+            ...activeScene.commands.slice(0, clampedIndex),
+            ...commandsToInsert,
+            ...activeScene.commands.slice(clampedIndex)
+        ];
+
+        dispatch({
+            type: 'UPDATE_SCENE_COMMANDS',
+            payload: {
+                sceneId: activeSceneId,
+                commands: newCommands
+            }
+        });
+
+        if (commandsToInsert.length > 0) {
+            setSelectedCommands(new Set([commandsToInsert[0].id]));
+        } else {
+            setSelectedCommands(new Set());
+        }
+
+        setSelectedCommandIndex(clampedIndex);
+        setLastSelectedIndex(clampedIndex);
+        setSelectedVariableId(null);
+    }, [activeScene, activeSceneId, dispatch, setSelectedCommandIndex, setSelectedVariableId, setSelectedCommands, setLastSelectedIndex]);
+
+    const handleAddCommandToBranch = useCallback((branchId: string, type: CommandType) => {
+        if (!activeScene) {
+            return;
+        }
+
+        const branchStartIndex = activeScene.commands.findIndex(cmd => 
+            cmd.type === CommandType.BranchStart &&
+            (cmd as BranchStartCommand).branchId === branchId
+        );
+        if (branchStartIndex === -1) {
+            return;
+        }
+
+        const branchEndIndex = activeScene.commands.findIndex((cmd, index) =>
+            index > branchStartIndex &&
+            cmd.type === CommandType.BranchEnd &&
+            (cmd as BranchEndCommand).branchId === branchId
+        );
+        if (branchEndIndex === -1) {
+            return;
+        }
+
+        if (type === CommandType.BranchStart) {
+            const nestedBranchId = generateBranchId();
+            const branchStart = createCommandWithId(CommandType.BranchStart, { branchId: nestedBranchId });
+            const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId: nestedBranchId });
+
+            if (branchStart && branchEnd) {
+                insertCommandsIntoScene([branchStart, branchEnd], branchEndIndex);
+            }
+            return;
+        }
+
+        const newCommand = createCommandWithId(type);
+        if (!newCommand) {
+            return;
+        }
+
+        insertCommandsIntoScene([newCommand], branchEndIndex);
+    }, [activeScene, createCommandWithId, insertCommandsIntoScene]);
+
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -381,37 +464,40 @@ const SceneEditor: React.FC<{
                 e.preventDefault();
                 const insertIndex = selectedCommandIndex !== null ? selectedCommandIndex + 1 : activeScene.commands.length;
                 
-                clipboard.forEach((cmd, i) => {
+                // Add all commands first, then move them in batch
+                const newCommandIds: string[] = [];
+                clipboard.forEach((cmd) => {
                     const newCommand = { 
                         ...cmd, 
                         id: `cmd-${Math.random().toString(36).substring(2, 9)}` 
                     };
+                    newCommandIds.push(newCommand.id);
                     
-                    setTimeout(() => {
-                        dispatch({
-                            type: 'ADD_COMMAND',
-                            payload: {
-                                sceneId: activeSceneId,
-                                command: newCommand as VNCommand
-                            }
-                        });
-                        
-                        if (i === 0) {
-                            // Move first pasted command to insertion point
-                            const newCommandIndex = activeScene.commands.length;
-                            setTimeout(() => {
-                                dispatch({
-                                    type: 'MOVE_COMMAND',
-                                    payload: {
-                                        sceneId: activeSceneId,
-                                        fromIndex: newCommandIndex,
-                                        toIndex: insertIndex + i
-                                    }
-                                });
-                            }, 10);
+                    dispatch({
+                        type: 'ADD_COMMAND',
+                        payload: {
+                            sceneId: activeSceneId,
+                            command: newCommand as VNCommand
                         }
-                    }, i * 20);
+                    });
                 });
+                
+                // Move all pasted commands to the insertion point
+                setTimeout(() => {
+                    newCommandIds.forEach((cmdId, i) => {
+                        const currentIndex = activeScene.commands.findIndex(c => c.id === cmdId);
+                        if (currentIndex !== -1) {
+                            dispatch({
+                                type: 'MOVE_COMMAND',
+                                payload: {
+                                    sceneId: activeSceneId,
+                                    fromIndex: currentIndex,
+                                    toIndex: insertIndex + i
+                                }
+                            });
+                        }
+                    });
+                }, 50);
                 
                 setSelectedCommandIndex(insertIndex);
                 setSelectedCommands(new Set());
@@ -492,7 +578,7 @@ const SceneEditor: React.FC<{
             
             // Special handling for BranchStart - create both BranchStart and BranchEnd
             if (paletteCommandType === CommandType.BranchStart) {
-                const branchId = `branch-${Math.random().toString(36).substring(2, 9)}`;
+                const branchId = generateBranchId();
                 const branchStart = createCommand(CommandType.BranchStart, project, { branchId });
                 const branchEnd = createCommand(CommandType.BranchEnd, project, { branchId });
                 
@@ -744,7 +830,7 @@ const SceneEditor: React.FC<{
     const handleAddCommand = (type: CommandType) => {
         if (type === CommandType.BranchStart) {
             // When adding BranchStart, automatically add BranchEnd
-            const branchId = `branch-${Math.random().toString(36).substring(2, 9)}`;
+            const branchId = generateBranchId();
             const branchStart = createCommand(type, project, { branchId });
             const branchEnd = createCommand(CommandType.BranchEnd, project, { branchId });
             
@@ -1129,33 +1215,23 @@ const SceneEditor: React.FC<{
                                                         // Check if dropping from command palette
                                                         const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
                                                         if (paletteCommandType) {
-                                                            // Create new command from palette
-                                                            const newCommandData = createCommand(paletteCommandType as CommandType, project);
-                                                            if (newCommandData) {
-                                                                const newCommand = { ...newCommandData, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
-                                                                
-                                                                // Add command at the end first
-                                                                dispatch({
-                                                                    type: 'ADD_COMMAND',
-                                                                    payload: {
-                                                                        sceneId: activeSceneId,
-                                                                        command: newCommand
-                                                                    }
-                                                                });
-                                                                
-                                                                // Then move it into the branch (before BranchEnd)
-                                                                setTimeout(() => {
-                                                                    const newCommandIndex = activeScene.commands.length;
-                                                                    dispatch({
-                                                                        type: 'MOVE_COMMAND',
-                                                                        payload: {
-                                                                            sceneId: activeSceneId,
-                                                                            fromIndex: newCommandIndex,
-                                                                            toIndex: branchEndIndex
-                                                                        }
-                                                                    });
-                                                                    setSelectedCommandIndex(branchEndIndex - 1);
-                                                                }, 0);
+                                                            const typedCommand = paletteCommandType as CommandType;
+
+                                                            if (typedCommand === CommandType.BranchStart) {
+                                                                const nestedBranchId = generateBranchId();
+                                                                const branchStart = createCommandWithId(CommandType.BranchStart, { branchId: nestedBranchId });
+                                                                const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId: nestedBranchId });
+
+                                                                if (branchStart && branchEnd) {
+                                                                    insertCommandsIntoScene([branchStart, branchEnd], branchEndIndex);
+                                                                }
+                                                                setDropTarget(null);
+                                                                return;
+                                                            }
+
+                                                            const newCommand = createCommandWithId(typedCommand);
+                                                            if (newCommand) {
+                                                                insertCommandsIntoScene([newCommand], branchEndIndex);
                                                             }
                                                             setDropTarget(null);
                                                             return;
@@ -1206,6 +1282,9 @@ const SceneEditor: React.FC<{
                                                         }
                                                     }}
                                                 >
+                                                    <div className="flex justify-end mb-2">
+                                                        <AddCommandMenu onAdd={(type) => handleAddCommandToBranch(branchCmd.branchId, type)} />
+                                                    </div>
                                                     {branchCommands.length === 0 ? (
                                                         <div className="text-[var(--text-secondary)] text-sm italic py-2">
                                                             Drag commands here...
@@ -1239,8 +1318,29 @@ const SceneEditor: React.FC<{
                                                                         onDragEnd={handleDragEnd}
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
+                                                                            
+                                                                            if (e.shiftKey && lastSelectedIndex !== null) {
+                                                                                // Shift-click: select range
+                                                                                const start = Math.min(lastSelectedIndex, childIndex);
+                                                                                const end = Math.max(lastSelectedIndex, childIndex);
+                                                                                const rangeIds = activeScene.commands.slice(start, end + 1).map(c => c.id);
+                                                                                setSelectedCommands(new Set([...selectedCommands, ...rangeIds]));
+                                                                            } else if (e.ctrlKey || e.metaKey) {
+                                                                                // Ctrl-click: toggle selection
+                                                                                const newSelected = new Set(selectedCommands);
+                                                                                if (newSelected.has(branchChildCmd.id)) {
+                                                                                    newSelected.delete(branchChildCmd.id);
+                                                                                } else {
+                                                                                    newSelected.add(branchChildCmd.id);
+                                                                                }
+                                                                                setSelectedCommands(newSelected);
+                                                                            } else {
+                                                                                // Regular click: select single
+                                                                                setSelectedCommands(new Set([branchChildCmd.id]));
+                                                                            }
+                                                                            
+                                                                            setLastSelectedIndex(childIndex);
                                                                             setSelectedCommandIndex(childIndex);
-                                                                            setSelectedCommands(new Set([branchChildCmd.id]));
                                                                             setSelectedVariableId(null);
                                                                         }}
                                                                         className="cursor-pointer relative"
@@ -1259,7 +1359,8 @@ const SceneEditor: React.FC<{
                                                                         <CommandItem 
                                                                             command={branchChildCmd} 
                                                                             project={project} 
-                                                                            isSelected={childIndex === selectedCommandIndex} 
+                                                                            isSelected={childIndex === selectedCommandIndex}
+                                                                            isInMultiSelection={selectedCommands.has(branchChildCmd.id) && selectedCommands.size > 1}
                                                                             depth={1}
                                                                             collapsedBranches={collapsedBranches}
                                                                         />
@@ -1287,33 +1388,23 @@ const SceneEditor: React.FC<{
                                                                         // Check if dropping from command palette
                                                                         const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
                                                                         if (paletteCommandType) {
-                                                                            // Create new command from palette
-                                                                            const newCommandData = createCommand(paletteCommandType as CommandType, project);
-                                                                            if (newCommandData) {
-                                                                                const newCommand = { ...newCommandData, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
-                                                                                
-                                                                                // Add command at the end first
-                                                                                dispatch({
-                                                                                    type: 'ADD_COMMAND',
-                                                                                    payload: {
-                                                                                        sceneId: activeSceneId,
-                                                                                        command: newCommand
-                                                                                    }
-                                                                                });
-                                                                                
-                                                                                // Then move it into the branch (before BranchEnd)
-                                                                                setTimeout(() => {
-                                                                                    const newCommandIndex = activeScene.commands.length;
-                                                                                    dispatch({
-                                                                                        type: 'MOVE_COMMAND',
-                                                                                        payload: {
-                                                                                            sceneId: activeSceneId,
-                                                                                            fromIndex: newCommandIndex,
-                                                                                            toIndex: branchEndIndex
-                                                                                        }
-                                                                                    });
-                                                                                    setSelectedCommandIndex(branchEndIndex);
-                                                                                }, 0);
+                                                                            const typedCommand = paletteCommandType as CommandType;
+
+                                                                            if (typedCommand === CommandType.BranchStart) {
+                                                                                const nestedBranchId = generateBranchId();
+                                                                                const branchStart = createCommandWithId(CommandType.BranchStart, { branchId: nestedBranchId });
+                                                                                const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId: nestedBranchId });
+
+                                                                                if (branchStart && branchEnd) {
+                                                                                    insertCommandsIntoScene([branchStart, branchEnd], branchEndIndex);
+                                                                                }
+                                                                                setDropTarget(null);
+                                                                                return;
+                                                                            }
+
+                                                                            const newCommand = createCommandWithId(typedCommand);
+                                                                            if (newCommand) {
+                                                                                insertCommandsIntoScene([newCommand], branchEndIndex);
                                                                             }
                                                                             setDropTarget(null);
                                                                             return;
@@ -1406,8 +1497,30 @@ const SceneEditor: React.FC<{
                                                             }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
+                                                                
+                                                                if (e.shiftKey && lastSelectedIndex !== null) {
+                                                                    // Shift-click: select range
+                                                                    const start = Math.min(lastSelectedIndex, childIndex);
+                                                                    const end = Math.max(lastSelectedIndex, childIndex);
+                                                                    const rangeIds = activeScene.commands.slice(start, end + 1).map(c => c.id);
+                                                                    setSelectedCommands(new Set([...selectedCommands, ...rangeIds]));
+                                                                } else if (e.ctrlKey || e.metaKey) {
+                                                                    // Ctrl-click: toggle selection
+                                                                    const newSelected = new Set(selectedCommands);
+                                                                    const groupChildId = activeScene.commands[childIndex].id;
+                                                                    if (newSelected.has(groupChildId)) {
+                                                                        newSelected.delete(groupChildId);
+                                                                    } else {
+                                                                        newSelected.add(groupChildId);
+                                                                    }
+                                                                    setSelectedCommands(newSelected);
+                                                                } else {
+                                                                    // Regular click: select single
+                                                                    setSelectedCommands(new Set([activeScene.commands[childIndex].id]));
+                                                                }
+                                                                
+                                                                setLastSelectedIndex(childIndex);
                                                                 setSelectedCommandIndex(childIndex);
-                                                                setSelectedCommands(new Set([activeScene.commands[childIndex].id]));
                                                                 setSelectedVariableId(null);
                                                             }}
                                                             className="cursor-pointer relative"
@@ -1426,7 +1539,8 @@ const SceneEditor: React.FC<{
                                                             <CommandItem 
                                                                 command={childCmd} 
                                                                 project={project} 
-                                                                isSelected={childIndex === selectedCommandIndex} 
+                                                                isSelected={childIndex === selectedCommandIndex}
+                                                                isInMultiSelection={selectedCommands.has(childCmd.id) && selectedCommands.size > 1}
                                                                 depth={1}
                                                                 collapsedBranches={collapsedBranches}
                                                             />
