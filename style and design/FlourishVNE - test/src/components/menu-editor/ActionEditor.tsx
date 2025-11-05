@@ -109,7 +109,48 @@ const ActionEditor: React.FC<{
                             </FormField>
                         </div>
                     ) : (
-                        <FormField label="Value"><TextInput value={String((action as SetVariableAction).value)} onChange={e => onActionChange({ ...(action as SetVariableAction), value: e.target.value })}/></FormField>
+                        (() => {
+                            const currentAction = action as SetVariableAction;
+                            const selectedVar = project.variables[currentAction.variableId];
+                            const varType = selectedVar?.type;
+
+                            if (varType === 'boolean') {
+                                return (
+                                    <FormField label="Value">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!currentAction.value}
+                                                onChange={e => onActionChange({ ...currentAction, value: e.target.checked })}
+                                            />
+                                            <span>{String(!!currentAction.value)}</span>
+                                        </label>
+                                    </FormField>
+                                );
+                            }
+
+                            if (varType === 'number') {
+                                return (
+                                    <FormField label="Value">
+                                        <TextInput
+                                            type="number"
+                                            value={String(currentAction.value ?? '')}
+                                            onChange={e => onActionChange({ ...currentAction, value: parseFloat(e.target.value) || 0 })}
+                                        />
+                                    </FormField>
+                                );
+                            }
+
+                            // default: string
+                            return (
+                                <FormField label="Value">
+                                    <TextInput
+                                        value={String(currentAction.value ?? '')}
+                                        onChange={e => onActionChange({ ...currentAction, value: e.target.value })}
+                                    />
+                                </FormField>
+                            );
+                        })()
                     )}
                 </div>
             )}

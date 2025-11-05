@@ -7,6 +7,15 @@ import React from 'react';
 import { VNID } from '../../../types';
 import { VNProject } from '../../../types/project';
 import { PlayerState, StageState, MusicState } from '../types/gameState';
+import { CommandScheduler } from '../runtime/commandScheduler';
+import { RuntimeVariableStore } from '../runtime/runtimeVariableStore';
+import { RuntimeDiagnostics } from '../runtime/runtimeDiagnostics';
+
+export interface RuntimeCommandHelpers {
+    scheduler: CommandScheduler;
+    variableStore: RuntimeVariableStore;
+    diagnostics: RuntimeDiagnostics;
+}
 
 /**
  * Context passed to all command handlers
@@ -19,6 +28,7 @@ export interface CommandContext {
     musicAudioRef: React.RefObject<HTMLAudioElement>;
     fadeAudio: (audio: HTMLAudioElement, targetVolume: number, duration?: number, onComplete?: () => void) => void;
     playSound: (soundId: VNID | null, volume?: number) => void;
+    stopAllSfx: () => void;
     settings: {
         textSpeed: number;
         musicVolume: number;
@@ -29,6 +39,7 @@ export interface CommandContext {
     advance: () => void;
     setPlayerState: React.Dispatch<React.SetStateAction<PlayerState | null>>;
     activeEffectTimeoutsRef: React.MutableRefObject<number[]>;
+    runtime?: RuntimeCommandHelpers;
 }
 
 /**

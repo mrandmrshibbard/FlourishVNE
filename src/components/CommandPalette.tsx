@@ -22,7 +22,7 @@ export const COMMAND_CATEGORIES = {
     'Audio': {
         color: 'bg-yellow-500/20 border-yellow-500 text-yellow-300',
         headerColor: 'bg-yellow-600/30 text-yellow-200',
-        commands: [CommandType.PlayMusic, CommandType.StopMusic, CommandType.PlaySoundEffect]
+        commands: [CommandType.PlayMusic, CommandType.StopMusic, CommandType.PlaySoundEffect, CommandType.StopSoundEffect]
     },
     'Variables': {
         color: 'bg-pink-500/20 border-pink-500 text-pink-300',

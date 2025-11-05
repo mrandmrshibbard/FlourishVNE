@@ -1,4 +1,4 @@
-import { PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand } from '../../../features/scene/types';
+import { PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand } from '../../../features/scene/types';
 import { CommandContext, CommandResult } from './types';
 
 /**
@@ -137,6 +137,20 @@ export function handlePlaySoundEffect(
   } catch (e) {
     console.error('Failed to play sound effect:', e);
   }
+  
+  return { advance: true };
+}
+
+/**
+ * Handles stopping all currently playing sound effects
+ */
+export function handleStopSoundEffect(
+  context: CommandContext
+): CommandResult {
+  const { stopAllSfx } = context;
+  
+  console.log('[StopSoundEffect] Stopping all sound effects');
+  stopAllSfx();
   
   return { advance: true };
 }

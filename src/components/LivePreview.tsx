@@ -29,6 +29,7 @@ import { VNVariable } from '../features/variables/types';
 import {
     CommandContext,
     CommandResult,
+    RuntimeCommandHelpers,
     handleDialogue,
     handleSetVariable,
     handleChoice,
@@ -38,6 +39,7 @@ import {
     handlePlayMusic,
     handleStopMusic,
     handlePlaySoundEffect,
+    handleStopSoundEffect,
     handleShowText,
     handleHideText,
     handleShowImage,
@@ -57,6 +59,9 @@ import {
     handleFlashScreen,
     handleTextInput,
 } from './live-preview/command-handlers';
+import { CommandScheduler } from './live-preview/runtime/commandScheduler';
+import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
+import { RuntimeDiagnostics } from './live-preview/runtime/runtimeDiagnostics';
 
 // Import extracted types
 import {
@@ -221,7 +226,8 @@ const ButtonOverlayElement: React.FC<{
     onAction: (action: VNUIAction) => void;
     playSound: (soundId: VNID | null) => void;
     onAdvance?: () => void;
-}> = ({ overlay, onAction, playSound, onAdvance }) => {
+    onCommitVariables?: () => void;
+}> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables }) => {
     const [isHovered, setIsHovered] = useState(false);
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
     const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
@@ -275,7 +281,17 @@ const ButtonOverlayElement: React.FC<{
         const setVarActions = allActions.filter(action => action.type === UIActionType.SetVariable);
         const otherActions = allActions.filter(action => action.type !== UIActionType.SetVariable);
 
+        // Process SetVariable actions first
         setVarActions.forEach(action => onAction(action));
+        
+        // CRITICAL: Commit variables to playerState BEFORE any navigation
+        // This ensures JumpToScene/ReturnToPreviousScreen see the updated values
+        if (setVarActions.length > 0 && onCommitVariables) {
+            console.log('[Button] Committing', setVarActions.length, 'variable changes before navigation');
+            onCommitVariables();
+        }
+        
+        // Now process navigation/other actions with fresh playerState
         otherActions.forEach(action => onAction(action));
         
         // If this button requires click to advance, call the advance function
@@ -657,8 +673,9 @@ const ButtonElement: React.FC<{
     onAction: (action: VNUIAction) => void,
     getElementAssetUrl: (image: { type: 'image' | 'video', id: VNID } | null) => string | null,
     variables?: Record<VNID, string | number | boolean>,
-    project?: VNProject
-}> = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project }) => {
+    project?: VNProject,
+    onCommitVariables?: () => void
+}> = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project, onCommitVariables }) => {
     const [isHovered, setIsHovered] = useState(false);
     const bgUrl = getElementAssetUrl(element.image);
     const hoverUrl = getElementAssetUrl(element.hoverImage);
@@ -684,6 +701,12 @@ const ButtonElement: React.FC<{
         
         // Execute SetVariable actions first
         setVarActions.forEach(action => onAction(action));
+        
+        // CRITICAL: Commit UI variables to playerState before any navigation
+        if (setVarActions.length > 0 && onCommitVariables) {
+            console.log('[UI Button] Committing', setVarActions.length, 'variable changes before navigation');
+            onCommitVariables();
+        }
         
         // Then execute other actions (navigation, screen changes, etc.)
         otherActions.forEach(action => onAction(action));
@@ -742,7 +765,8 @@ const UIScreenRenderer: React.FC<{
     onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
     isClosing?: boolean;
     evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions }) => {
+    onCommitVariables?: () => void;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -778,7 +802,7 @@ const UIScreenRenderer: React.FC<{
         return null;
     };
     
-    const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject) => {
+    const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject, onCommitVariables?: () => void) => {
         console.log('🎯 renderElement called:', element.type, element.name, element.id);
         
         // Check visibility conditions - if conditions exist and are not met, don't render
@@ -809,7 +833,7 @@ const UIScreenRenderer: React.FC<{
         switch (element.type) {
             case UIElementType.Button: {
                 const el = element as UIButtonElement;
-                return <ButtonElement key={el.id} element={el} style={style} playSound={playSound} onAction={onAction} getElementAssetUrl={getElementAssetUrl} variables={variables} project={project} />;
+                return <ButtonElement key={el.id} element={el} style={style} playSound={playSound} onAction={onAction} getElementAssetUrl={getElementAssetUrl} variables={variables} project={project} onCommitVariables={onCommitVariables} />;
             }
             case UIElementType.Text: {
                 const el = element as UITextElement;
@@ -1576,7 +1600,7 @@ const UIScreenRenderer: React.FC<{
     return (
         <div key={`${screenId}-${isClosing ? 'closing' : 'open'}`} className="absolute inset-0 w-full h-full" style={screenTransitionStyle}>
             {getBackgroundElement()}
-            {Object.values(screen.elements).map(element => renderElement(element as VNUIElement, variables, project))}
+            {Object.values(screen.elements).map(element => renderElement(element as VNUIElement, variables, project, onCommitVariables))}
         </div>
     );
 });
@@ -1608,6 +1632,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
     const [settings, setSettings] = useState<GameSettings>(defaultSettings);
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+    const playerStateRef = useRef<PlayerState | null>(null);
+    const updatePlayerState = useCallback((updater: React.SetStateAction<PlayerState | null>) => {
+        setPlayerState(prev => {
+            const next = typeof updater === 'function'
+                ? (updater as (prevState: PlayerState | null) => PlayerState | null)(prev)
+                : updater;
+            playerStateRef.current = next;
+            return next;
+        });
+    }, []);
+
+    useEffect(() => {
+        playerStateRef.current = playerState;
+    }, [playerState]);
     const [gameSaves, setGameSaves] = useState<Record<number, GameStateSave>>({});
     const [isJustLoaded, setIsJustLoaded] = useState(false);
     
@@ -1619,6 +1657,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
         return initVars;
     });
+    
+    // UI variables: used for UI screens during gameplay (separate from game variables until merged back)
+    const [uiVariables, setUiVariables] = useState<Record<VNID, string | number | boolean>>(() => {
+        const initVars: Record<VNID, string | number | boolean> = {};
+        Object.values(project.variables).forEach((v: any) => {
+            initVars[v.id] = v.defaultValue;
+        });
+        return initVars;
+    });
+    const uiVariablesRef = useRef<Record<VNID, string | number | boolean>>(uiVariables);
+
+    useEffect(() => {
+        uiVariablesRef.current = uiVariables;
+    }, [uiVariables]);
     
     // Sync menuVariables when project variables change
     useEffect(() => {
@@ -1679,7 +1731,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // Track active one-shot SFX so we can stop them when a scene ends
     const sfxPoolRef = useRef<HTMLAudioElement[]>([]);
-    const lastProcessedCommandRef = useRef<{ sceneId: VNID; index: number; commandId: VNID } | null>(null);
+    const commandSchedulerRef = useRef(new CommandScheduler());
+    const runtimeDiagnosticsRef = useRef(new RuntimeDiagnostics());
+    const variableStoreRef = useRef<RuntimeVariableStore | null>(null);
+    const uiDirtyVariableIdsRef = useRef<Set<VNID>>(new Set());
     const activeEffectTimeoutsRef = useRef<number[]>([]);
     
     // Use refs for visual effects to avoid triggering command loop re-execution
@@ -1896,7 +1951,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const saves = savesPersistentRef.current ? getGameSaves() : inMemorySavesRef.current;
         const saveData = saves[slotNumber];
         if (saveData) {
-            setPlayerState({
+            updatePlayerState({
                 mode: 'playing',
                 currentSceneId: saveData.playerStateData.currentSceneId,
                 currentCommands: saveData.playerStateData.currentCommands || project.scenes[saveData.playerStateData.currentSceneId]?.commands || [],
@@ -1954,7 +2009,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
         }
 
-        setPlayerState({
+        // Initialize uiVariables with the same initial values as game variables
+    setUiVariables(initialVariables);
+    uiVariablesRef.current = initialVariables;
+    console.log('[CLEAR] Dirty set cleared after startNewGame');
+    uiDirtyVariableIdsRef.current.clear();
+        
+    updatePlayerState({
             mode: 'playing',
             currentSceneId: startSceneId,
             currentCommands: project.scenes[startSceneId]?.commands || [],
@@ -2062,15 +2123,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 case '>': 
                     result = Number(effectiveVarValue) > Number(condition.value);
+                    console.log('[DEBUG evaluateConditions] Numeric comparison >', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar: Number(effectiveVarValue),
+                        numericCond: Number(condition.value),
+                        result
+                    });
                     break;
                 case '<': 
                     result = Number(effectiveVarValue) < Number(condition.value);
+                    console.log('[DEBUG evaluateConditions] Numeric comparison <', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar: Number(effectiveVarValue),
+                        numericCond: Number(condition.value),
+                        result
+                    });
                     break;
                 case '>=': 
                     result = Number(effectiveVarValue) >= Number(condition.value);
+                    console.log('[DEBUG evaluateConditions] Numeric comparison >=', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar: Number(effectiveVarValue),
+                        numericCond: Number(condition.value),
+                        result
+                    });
                     break;
                 case '<=': 
                     result = Number(effectiveVarValue) <= Number(condition.value);
+                    console.log('[DEBUG evaluateConditions] Numeric comparison <=', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar: Number(effectiveVarValue),
+                        numericCond: Number(condition.value),
+                        result
+                    });
                     break;
                 case 'contains': 
                     // Check if either the asset ID or asset name contains the value
@@ -2429,8 +2518,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // --- Game Loop ---
     useEffect(() => {
+        const scheduler = commandSchedulerRef.current;
+        const diagnostics = runtimeDiagnosticsRef.current;
+
         if (!playerState || playerState.mode !== 'playing') {
-            lastProcessedCommandRef.current = null;
+            scheduler.reset();
+            variableStoreRef.current = null;
             return;
         }
 
@@ -2443,11 +2536,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
+    // Merge any dirty UI variables into the base variables BEFORE creating the runtime snapshot
+    // This ensures conditions are evaluated with the most up-to-date variable values
+    const baseVariables = mergeDirtyUiVariables(playerState.variables);
+    const variableStore = new RuntimeVariableStore({ globals: { ...baseVariables } });
+    variableStoreRef.current = variableStore;
+    const getRuntimeVariables = () => variableStore.snapshot().globals as Record<VNID, string | number | boolean>;
+
         const command = playerState.currentCommands[playerState.currentIndex];
         if (!command) { 
             if (playerState.commandStack.length > 0) {
                 const popped = playerState.commandStack[playerState.commandStack.length - 1];
-                setPlayerState(p => {
+                updatePlayerState(p => {
                     if (!p) return null;
                     const newStack = p.commandStack.slice(0, -1);
                     return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
@@ -2465,7 +2565,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     
                     if (nextScene) {
                         console.log(`Advancing to next scene: ${nextSceneId}`);
-                        setPlayerState(p => p ? {
+                        updatePlayerState(p => p ? {
                             ...p,
                             currentSceneId: nextSceneId,
                             currentCommands: nextScene.commands,
@@ -2514,7 +2614,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         stopAllSfx();
                         
                         // Clear player state and return to title screen
-                        setPlayerState(null);
+                        updatePlayerState(null);
                         if (project.ui.titleScreenId) {
                             setScreenStack([project.ui.titleScreenId]);
                         }
@@ -2533,13 +2633,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     stopAllSfx();
                     
                     // Clear player state and return to title screen
-                    setPlayerState(null);
+                    updatePlayerState(null);
                     if (project.ui.titleScreenId) {
                         setScreenStack([project.ui.titleScreenId]);
                     }
                 }
             }
-            lastProcessedCommandRef.current = null;
+            scheduler.reset();
             return; 
         }
 
@@ -2548,22 +2648,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             index: playerState.currentIndex,
             commandId: command.id,
         };
-        const lastSignature = lastProcessedCommandRef.current;
-        // Prevent re-processing the same command when React replays the effect (e.g., StrictMode).
-        if (
-            lastSignature &&
-            lastSignature.sceneId === commandSignature.sceneId &&
-            lastSignature.index === commandSignature.index &&
-            lastSignature.commandId === commandSignature.commandId
-        ) {
+        if (!scheduler.shouldProcess(commandSignature)) {
             return;
         }
-        lastProcessedCommandRef.current = commandSignature;
+        scheduler.markProcessed(commandSignature);
+        diagnostics.emit('command-start', {
+            sceneId: commandSignature.sceneId,
+            commandId: commandSignature.commandId,
+            index: commandSignature.index,
+        });
 
         // Special handling for BranchStart - check conditions and skip branch if not met
         if (command.type === CommandType.BranchStart) {
             const branchCmd = command as BranchStartCommand;
-            const conditionsMet = evaluateConditions(branchCmd.conditions, playerState.variables);
+            const conditionsMet = evaluateConditions(branchCmd.conditions, getRuntimeVariables());
             
             if (!conditionsMet) {
                 // Skip to matching BranchEnd
@@ -2575,39 +2673,42 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 
                 if (branchEndIndex !== -1) {
                     // Jump to just after the BranchEnd
-                    setPlayerState(p => p ? { ...p, currentIndex: branchEndIndex + 1 } : null);
+                    updatePlayerState(p => p ? { ...p, currentIndex: branchEndIndex + 1 } : null);
                 } else {
                     // No matching BranchEnd found, just advance
-                    setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                    updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
                 }
                 return;
             }
             // If conditions met, continue to execute BranchStart normally (which does nothing)
-            setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
             return;
         }
 
         // Check conditions for all other commands
-        const conditionsMet = evaluateConditions(command.conditions, playerState.variables);
-        console.log('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'Variables:', playerState.variables);
+    const conditionsMet = evaluateConditions(command.conditions, getRuntimeVariables());
+    console.log('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'Variables:', getRuntimeVariables());
         if (!conditionsMet) {
             console.log('[DEBUG] Skipping command due to failed conditions');
-            setPlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
             return;
         }
 
         const advance = () => {
             console.log('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
             // Guard: Don't advance if we've already moved past this command
-            if (lastProcessedCommandRef.current && lastProcessedCommandRef.current.index > playerState.currentIndex) {
-                console.log('[DEBUG advance()] Skipping - already advanced to', lastProcessedCommandRef.current.index);
+            if (scheduler.alreadyAdvancedPast(playerState.currentIndex)) {
+                const last = scheduler.getLastProcessed();
+                if (last) {
+                    console.log('[DEBUG advance()] Skipping - already advanced to', last.index);
+                }
                 return;
             }
             const nextIndex = playerState.currentIndex + 1;
             if (nextIndex >= playerState.currentCommands.length) {
                 if (playerState.commandStack.length > 0) {
                     const popped = playerState.commandStack[playerState.commandStack.length - 1];
-                    setPlayerState(p => {
+                    updatePlayerState(p => {
                         if (!p) return null;
                         const newStack = p.commandStack.slice(0, -1);
                         return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
@@ -2618,11 +2719,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
                     
                     if (currentSceneIndex !== -1 && currentSceneIndex < sceneIds.length - 1) {
-                        const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], playerState.variables);
+                        const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], getRuntimeVariables());
                         const nextScene = project.scenes[nextSceneId];
                         
                         if (nextScene) {
-                            setPlayerState(p => p ? {
+                            updatePlayerState(p => p ? {
                                 ...p,
                                 currentSceneId: nextSceneId,
                                 currentCommands: nextScene.commands,
@@ -2672,13 +2773,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     stopAllSfx();
                     
                     // Clear player state and return to title screen
-                    setPlayerState(null);
+                    updatePlayerState(null);
                     if (project.ui.titleScreenId) {
                         setScreenStack([project.ui.titleScreenId]);
                     }
+                    scheduler.reset();
                 }
             } else {
-                setPlayerState(p => p ? { ...p, currentIndex: nextIndex } : null);
+                updatePlayerState(p => p ? { ...p, currentIndex: nextIndex } : null);
             }
         };
 
@@ -2694,9 +2796,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             musicAudioRef,
             fadeAudio,
             playSound,
+            stopAllSfx,
             settings,
             advance,
-            setPlayerState,
+            setPlayerState: updatePlayerState,
             activeEffectTimeoutsRef,
         };
         
@@ -2705,21 +2808,51 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             try {
             // Helper function to apply command result
             const applyResult = (result: CommandResult) => {
+                const variableStore = variableStoreRef.current;
+                const previousSceneId = playerState?.currentSceneId;
+                if (result.updates?.variables && variableStore) {
+                    const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
+                        variableId,
+                        value,
+                        scope: 'global' as const,
+                        sourceCommandId: command.id,
+                    }));
+                    variableStore.applyWrites(writes);
+                }
                 if (result.updates) {
-                    setPlayerState(p => {
+                    updatePlayerState(p => {
                         if (!p) return null;
+                        const mergedVariables = result.updates?.variables && variableStore ? variableStore.snapshot().globals : { ...p.variables, ...(result.updates?.variables ?? {}) };
                         return {
                             ...p,
                             ...(result.updates?.currentSceneId !== undefined ? { currentSceneId: result.updates.currentSceneId } : {}),
                             ...(result.updates?.currentCommands !== undefined ? { currentCommands: result.updates.currentCommands } : {}),
                             ...(result.updates?.currentIndex !== undefined ? { currentIndex: result.updates.currentIndex } : {}),
                             ...(result.updates?.commandStack !== undefined ? { commandStack: result.updates.commandStack } : {}),
-                            ...(result.updates?.variables !== undefined ? { variables: { ...p.variables, ...result.updates.variables } } : {}),
+                            ...(result.updates?.variables !== undefined ? { variables: mergedVariables } : {}),
                             ...(result.updates?.stageState !== undefined ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {}),
                             ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
                             ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
                         };
                     });
+                    
+                    // If scene changed, clear UI screens (scene cleanup)
+                    if (result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId) {
+                        console.log('[Scene Cleanup] Scene changed from', previousSceneId, 'to', result.updates.currentSceneId, '- clearing UI stacks');
+                        setScreenStack([]);
+                        setHudStack([]);
+                        
+                        // Clear all active effect timeouts
+                        activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+                        activeEffectTimeoutsRef.current = [];
+                        
+                        // Clear active visual effects
+                        activeFlashRef.current = null;
+                        setFlashTrigger(0);
+                        activeShakeRef.current = null;
+                        scheduler.reset();
+                        variableStoreRef.current = null;
+                    }
                 }
                 instantAdvance = result.advance;
                 
@@ -2730,6 +2863,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 } else if (result.callback) {
                     result.callback();
                 }
+                diagnostics.emit('command-finish', {
+                    commandId: command.id,
+                    sceneId: playerState.currentSceneId,
+                    index: playerState.currentIndex,
+                    advance: result.advance,
+                });
             };
             
             switch (command.type) {
@@ -2803,9 +2942,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                case CommandType.StopSoundEffect: {
+                    const result = handleStopSoundEffect(commandContext);
+                    applyResult(result);
+                    break;
+                }
                 case CommandType.PlayMovie: {
                     instantAdvance = false;
-                    setPlayerState(p => p ? {...p, uiState: {...p.uiState, isWaitingForInput: true, movieUrl: assetResolver((command as PlayMovieCommand).videoId, 'video')}} : null);
+                    updatePlayerState(p => p ? {...p, uiState: {...p.uiState, isWaitingForInput: true, movieUrl: assetResolver((command as PlayMovieCommand).videoId, 'video')}} : null);
                     break;
                 }
                 case CommandType.Wait: {
@@ -2868,17 +3012,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.TintScreen: {
                     const cmd = command as TintScreenCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration }}} : null);
                     break;
                 }
                 case CommandType.PanZoomScreen: {
                      const cmd = command as PanZoomScreenCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration }}} : null);
                     break;
                 }
                 case CommandType.ResetScreenEffects: {
                     const cmd = command as ResetScreenEffectsCommand;
-                    setPlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration }}} : null);
                     break;
                 }
                 case CommandType.FlashScreen: {
@@ -2895,7 +3039,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     instantAdvance = false; // Pause execution when showing a screen/menu
                     const cmd = command as any;
                     // Store the current scene ID so UI actions can reference it later
-                    setPlayerState(p => p ? {
+                    updatePlayerState(p => p ? {
                         ...p,
                         uiState: {
                             ...p.uiState,
@@ -2983,7 +3127,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // --- Input & Action Handlers ---
     const handleDialogueAdvance = () => {
-        setPlayerState(p => {
+        updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
             
             // Add dialogue to history
@@ -3005,7 +3149,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
     const handleChoiceSelect = (choice: ChoiceOption) => {
         console.log('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
-        setPlayerState(p => {
+    updatePlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
             
@@ -3032,11 +3176,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         console.warn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
                         continue; // Skip this action
                     }
-                    
+
                     const currentVal = newState.variables[setVarAction.variableId];
                     const changeValStr = String(setVarAction.value);
                     let newVal: string | number | boolean = setVarAction.value;
-    
+
                     if (setVarAction.operator === 'add') {
                         newVal = (Number(currentVal) || 0) + (Number(changeValStr) || 0);
                     } else if (setVarAction.operator === 'subtract') {
@@ -3059,12 +3203,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 } else {
                                     // Convert string/number to boolean
                                     const normalized = String(setVarAction.value).trim().toLowerCase();
-                                    if (normalized === 'true' || normalized === '1') {
+                                    // Empty string or whitespace for a boolean in 'set' mode = toggle current value
+                                    if (normalized === '' && setVarAction.operator === 'set') {
+                                        console.log('[Choice Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
+                                        newVal = !currentVal;
+                                    } else if (normalized === 'true' || normalized === '1') {
                                         newVal = true;
-                                    } else if (normalized === 'false' || normalized === '0' || normalized === '') {
+                                    } else if (normalized === 'false' || normalized === '0') {
                                         newVal = false;
                                     } else {
-                                        // Any other truthy value
+                                        // Any other truthy value = true
                                         newVal = !!setVarAction.value;
                                     }
                                 }
@@ -3104,7 +3252,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
 
     const handleTextInputSubmit = (value: string) => {
-        setPlayerState(p => p ? { 
+    updatePlayerState(p => p ? { 
             ...p, 
             currentIndex: p.currentIndex + 1, 
             variables: { ...p.variables, [p.uiState.textInput!.variableId]: value },
@@ -3118,7 +3266,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (!playerState && action.type === UIActionType.StartNewGame) {
             startNewGame();
         } else if (playerState?.mode === 'paused' && action.type === UIActionType.ReturnToGame) {
-             setPlayerState(p => p ? { ...p, mode: 'playing' } : null);
+             updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
              setScreenStack([]);
              // Resume music if it was paused
              if (musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
@@ -3154,18 +3302,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             
                             // If we're closing the last HUD screen, advance to next command
                             if (hudStack.length === 1) {
-                                setPlayerState(p => {
-                                    if (!p) return null;
-                                    return {
-                                        ...p,
-                                        currentIndex: p.currentIndex + 1,
-                                        stageState: {
-                                            ...p.stageState,
-                                            buttonOverlays: [],
-                                            imageOverlays: []
-                                        }
-                                    };
+                                flushSync(() => {
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        console.log('ReturnToPreviousScreen (transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                                        console.log('ReturnToPreviousScreen (transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                                        console.log('ReturnToPreviousScreen (transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                                        console.log('ReturnToPreviousScreen (transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                                        return {
+                                            ...p,
+                                            variables: mergedVariables, // Merge UI variables into game variables
+                                            currentIndex: p.currentIndex + 1,
+                                            stageState: {
+                                                ...p.stageState,
+                                                buttonOverlays: [],
+                                                imageOverlays: []
+                                            }
+                                        };
+                                    });
                                 });
+                                console.log('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (with transition)');
+                                uiDirtyVariableIdsRef.current.clear();
                             }
                         }, transitionDuration);
                     } else {
@@ -3174,18 +3332,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         if (hudStack.length === 1) {
                             // Delay advancement to ensure any SetVariable actions from button clicks are processed first
                             setTimeout(() => {
-                                setPlayerState(p => {
-                                    if (!p) return null;
-                                    return {
-                                        ...p,
-                                        currentIndex: p.currentIndex + 1,
-                                        stageState: {
-                                            ...p.stageState,
-                                            buttonOverlays: [],
-                                            imageOverlays: []
-                                        }
-                                    };
+                                flushSync(() => {
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        console.log('ReturnToPreviousScreen (no transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                                        console.log('ReturnToPreviousScreen (no transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                                        console.log('ReturnToPreviousScreen (no transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                                        console.log('ReturnToPreviousScreen (no transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                                        return {
+                                            ...p,
+                                            variables: mergedVariables, // Merge UI variables into game variables
+                                            currentIndex: p.currentIndex + 1,
+                                            stageState: {
+                                                ...p.stageState,
+                                                buttonOverlays: [],
+                                                imageOverlays: []
+                                            }
+                                        };
+                                    });
                                 });
+                                console.log('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (no transition)');
+                                uiDirtyVariableIdsRef.current.clear();
                             }, 0);
                         }
                     }
@@ -3226,15 +3394,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             stopAllSfx();
             
-            // Clear player state and return to title screen
-            setPlayerState(null);
+            // Clear player state, uiVariables, and return to title screen
+            updatePlayerState(null);
             setHudStack([]);
+            // Reset uiVariables to defaults when quitting to title
+            const resetVars: Record<VNID, string | number | boolean> = {};
+            Object.values(project.variables).forEach((v: any) => {
+                resetVars[v.id] = v.defaultValue;
+            });
+            setUiVariables(resetVars);
+            uiVariablesRef.current = resetVars;
+            console.log('[CLEAR] Dirty set cleared after QuitToTitle');
+            uiDirtyVariableIdsRef.current.clear();
             if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
         } else if (action.type === UIActionType.SaveGame) {
             saveGame((action as SaveGameAction).slotNumber);
         } else if (action.type === UIActionType.LoadGame) {
             loadGame((action as LoadGameAction).slotNumber);
         } else if (action.type === UIActionType.JumpToScene) {
+            console.log('[JumpToScene] Action triggered');
             const jumpAction = action as JumpToSceneAction;
             const targetScene = project.scenes[jumpAction.targetSceneId];
             console.log('JumpToScene handler triggered:', {
@@ -3258,6 +3436,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 });
             }
             
+            console.log('[JumpToScene] Clearing screen and HUD stacks');
             // Clear screen and HUD stacks when jumping to a scene
             setScreenStack([]);
             setHudStack([]);
@@ -3271,8 +3450,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setFlashTrigger(0);
             activeShakeRef.current = null;
             
-            // Clear the last processed command ref to allow new scene commands to execute
-            lastProcessedCommandRef.current = null;
+            // Reset scheduler and variable cache before executing the new scene
+            commandSchedulerRef.current.reset();
+            variableStoreRef.current = null;
             
             // If playerState is null (jumping from title screen), initialize it
             if (!playerState) {
@@ -3284,7 +3464,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     initialVariables[v.id] = customizedValue !== undefined ? customizedValue : v.defaultValue;
                 }
                 
-                setPlayerState({
+                updatePlayerState({
                     mode: 'playing',
                     currentSceneId: jumpAction.targetSceneId,
                     currentCommands: targetScene.commands,
@@ -3324,52 +3504,75 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         currentTime: 0,
                     }
                 });
+                console.log('[CLEAR] Dirty set cleared after title screen jump');
+                uiDirtyVariableIdsRef.current.clear();
             } else {
                 // Jump to the target scene and reset stage state
                 console.log('Jumping to new scene from existing game state');
                 console.log('[DEBUG Jump] Current variables before jump:', playerState.variables);
-                setPlayerState(p => {
-                    if (!p) return null;
-                    console.log('Setting new scene:', {
-                        targetSceneId: jumpAction.targetSceneId,
-                        commandCount: targetScene.commands.length,
-                        commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
+                
+                // Check if we're jumping to the same scene (should preserve currentIndex)
+                const isSameScene = playerState.currentSceneId === jumpAction.targetSceneId;
+                console.log('[DEBUG Jump] Same scene?', isSameScene, 'Current:', playerState.currentSceneId, 'Target:', jumpAction.targetSceneId);
+                
+                flushSync(() => {
+                    updatePlayerState(p => {
+                        if (!p) return null;
+                        console.log('Setting new scene:', {
+                            targetSceneId: jumpAction.targetSceneId,
+                            commandCount: targetScene.commands.length,
+                            commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
+                        });
+                        console.log('[DEBUG Jump] Variables being carried over:', p.variables);
+                        console.log('[DEBUG Jump] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+                        console.log('[DEBUG Jump] dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                        console.log('[DEBUG Jump] Variables after merge with uiVariables:', mergedVariables);
+                        
+                        // If jumping to the same scene, preserve currentIndex and advance by 1
+                        // If jumping to a different scene, reset to 0
+                        const newIndex = isSameScene ? p.currentIndex + 1 : 0;
+                        console.log('[DEBUG Jump] Setting currentIndex to:', newIndex, '(was:', p.currentIndex, ')');
+                        
+                        return {
+                            ...p,
+                            currentSceneId: jumpAction.targetSceneId,
+                            currentCommands: targetScene.commands,
+                            currentIndex: newIndex,
+                            // Reset stage state to clean slate
+                            stageState: { 
+                                backgroundUrl: null, 
+                                characters: {}, 
+                                textOverlays: [], 
+                                imageOverlays: [], 
+                                buttonOverlays: [], 
+                                screen: { 
+                                    shake: { active: false, intensity: 0 }, 
+                                    tint: 'transparent', 
+                                    zoom: 1, 
+                                    panX: 0, 
+                                    panY: 0, 
+                                    transitionDuration: 0.5 
+                                } 
+                            },
+                            // Clear any active UI state (dialogue, choices, etc.)
+                            uiState: {
+                                dialogue: null,
+                                choices: null,
+                                textInput: null,
+                                movieUrl: null,
+                                isWaitingForInput: false,
+                                isTransitioning: false,
+                                transitionElement: null,
+                                flash: null,
+                            },
+                            variables: mergedVariables
+                        };
                     });
-                    console.log('[DEBUG Jump] Variables being carried over:', p.variables);
-                    return {
-                        ...p,
-                        currentSceneId: jumpAction.targetSceneId,
-                        currentCommands: targetScene.commands,
-                        currentIndex: 0,
-                        // Reset stage state to clean slate
-                        stageState: { 
-                            backgroundUrl: null, 
-                            characters: {}, 
-                            textOverlays: [], 
-                            imageOverlays: [], 
-                            buttonOverlays: [], 
-                            screen: { 
-                                shake: { active: false, intensity: 0 }, 
-                                tint: 'transparent', 
-                                zoom: 1, 
-                                panX: 0, 
-                                panY: 0, 
-                                transitionDuration: 0.5 
-                            } 
-                        },
-                        // Clear any active UI state (dialogue, choices, etc.)
-                        uiState: {
-                            dialogue: null,
-                            choices: null,
-                            textInput: null,
-                            movieUrl: null,
-                            isWaitingForInput: false,
-                            isTransitioning: false,
-                            transitionElement: null,
-                            flash: null,
-                        }
-                    };
                 });
+                // Clear dirty set after state update completes
+                console.log('[CLEAR] Dirty set cleared after JumpToScene');
+                uiDirtyVariableIdsRef.current.clear();
             }
         } else if (action.type === UIActionType.SetVariable) {
             const setVarAction = action as SetVariableAction;
@@ -3378,6 +3581,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 console.warn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
                 return;
             }
+
+            console.log('[SetVariable] RAW ACTION:', {
+                variableId: setVarAction.variableId,
+                variableName: variable.name,
+                variableType: variable.type,
+                actionValue: setVarAction.value,
+                actionValueType: typeof setVarAction.value,
+                operator: setVarAction.operator
+            });
 
             const computeNewValue = (currentVal: string | number | boolean | undefined): string | number | boolean => {
                 const changeValStr = String(setVarAction.value);
@@ -3397,7 +3609,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     case 'number':
                         return Number(changeValStr) || 0;
                     case 'boolean':
-                        return changeValStr.toLowerCase() === 'true' || changeValStr === '1';
+                        // Handle boolean conversion with multiple formats
+                        if (typeof setVarAction.value === 'boolean') {
+                            return setVarAction.value;
+                        }
+                        const normalized = changeValStr.trim().toLowerCase();
+                        // Empty string or whitespace for a boolean in 'set' mode = toggle current value
+                        if (normalized === '' && setVarAction.operator === 'set') {
+                            console.log('[Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
+                            return !currentVal;
+                        }
+                        // Explicit true values
+                        if (normalized === 'true' || normalized === '1') {
+                            return true;
+                        }
+                        // Explicit false values
+                        if (normalized === 'false' || normalized === '0') {
+                            return false;
+                        }
+                        // Any other truthy string = true
+                        return !!changeValStr;
                     case 'string':
                     default:
                         return changeValStr;
@@ -3408,11 +3639,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // This prevents race conditions where navigation happens before variables are updated
             flushSync(() => {
                 if (playerState) {
-                    setPlayerState(p => {
-                        if (!p) return null;
-                        const currentVal = p.variables[setVarAction.variableId];
+                    // UI screens during gameplay: update uiVariables (separate from game variables)
+                    uiDirtyVariableIdsRef.current.add(setVarAction.variableId);
+                    setUiVariables(prev => {
+                        const currentVal = prev[setVarAction.variableId];
                         const newVal = computeNewValue(currentVal);
-                        console.log('[SetVariable] Details:', {
+                        console.log('[SetVariable] Details (uiVariables):', {
                             variable: variable.name,
                             variableId: setVarAction.variableId,
                             rawValue: setVarAction.value,
@@ -3421,7 +3653,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             nextValue: newVal,
                             type: variable.type
                         });
-                        return { ...p, variables: { ...p.variables, [setVarAction.variableId]: newVal } };
+                        const next = { ...prev, [setVarAction.variableId]: newVal };
+                        uiVariablesRef.current = next;
+                        return next;
                     });
                 } else {
                     setMenuVariables(prev => {
@@ -3475,7 +3709,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Use playerState variables if in-game, otherwise use menuVariables
             if (playerState) {
                 // In-game: update playerState variables
-                setPlayerState(p => {
+                updatePlayerState(p => {
                     if (!p) return null;
                     
                     const currentIndex = Number(p.variables[cycleAction.variableId]) || 0;
@@ -3559,14 +3793,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Jump to the label by updating the current index and clearing overlays
             // Also switch back to the target scene if we've moved to a different scene
             flushSync(() => {
-                setPlayerState(p => {
+                updatePlayerState(p => {
                     if (!p) return null;
                     console.log('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
+                    console.log('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                    console.log('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                    console.log('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                    const mergedVariables = mergeDirtyUiVariables(p.variables);
+                    console.log('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
                     return {
                         ...p,
                         currentSceneId: targetSceneId,
                         currentCommands: targetScene.commands,
                         currentIndex: labelIndex,
+                        variables: mergedVariables, // Merge UI variables into game variables
                         stageState: {
                             ...p.stageState,
                             buttonOverlays: [],
@@ -3583,30 +3823,84 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     };
                 });
             });
+            console.log('[CLEAR] Dirty set cleared after JumpToLabel');
+            uiDirtyVariableIdsRef.current.clear();
         }
     };
 
     const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
+        console.log('[handleVariableChange] Called with:', { variableId, value, hasPlayerState: !!playerState });
         if (playerState) {
-            // In-game: update playerState variables
-            setPlayerState(prev => {
-                if (!prev) return prev;
-                return {
+            // In-game UI screens: update uiVariables (separate from game variables)
+            console.log('[handleVariableChange] Updating uiVariables');
+            uiDirtyVariableIdsRef.current.add(variableId);
+            console.log('[handleVariableChange] ✓ Added to dirty set. Size now:', uiDirtyVariableIdsRef.current.size, 'IDs:', Array.from(uiDirtyVariableIdsRef.current));
+            setUiVariables(prev => {
+                const newVars = {
                     ...prev,
-                    variables: {
-                        ...prev.variables,
-                        [variableId]: value
-                    }
+                    [variableId]: value
                 };
+                console.log('[handleVariableChange] uiVariables BEFORE:', JSON.stringify(prev, null, 2));
+                console.log('[handleVariableChange] uiVariables AFTER:', JSON.stringify(newVars, null, 2));
+                uiVariablesRef.current = newVars;
+                return newVars;
             });
         } else {
             // Pre-game menu: update menuVariables
-            setMenuVariables(prev => ({
-                ...prev,
-                [variableId]: value
-            }));
+            console.log('[handleVariableChange] Updating menuVariables');
+            setMenuVariables(prev => {
+                const newVars = {
+                    ...prev,
+                    [variableId]: value
+                };
+                console.log('[handleVariableChange] New menuVariables:', JSON.stringify(newVars, null, 2));
+                return newVars;
+            });
         }
     };
+
+    const mergeDirtyUiVariables = useCallback((base: PlayerState['variables']) => {
+        const dirtyIds = uiDirtyVariableIdsRef.current;
+        if (dirtyIds.size === 0) {
+            return base;
+        }
+        const sourceVariables = uiVariablesRef.current;
+        const merged = { ...base };
+        dirtyIds.forEach(id => {
+            if (Object.prototype.hasOwnProperty.call(sourceVariables, id)) {
+                merged[id] = sourceVariables[id];
+            }
+        });
+        return merged;
+    }, []);
+
+    const commitUiVariablesToPlayerState = useCallback(() => {
+        if (uiDirtyVariableIdsRef.current.size === 0) {
+            console.log('[commitUiVariables] No dirty variables to commit');
+            return;
+        }
+        
+        console.log('[commitUiVariables] Committing dirty variables:', Array.from(uiDirtyVariableIdsRef.current));
+        console.log('[commitUiVariables] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+        
+        flushSync(() => {
+            updatePlayerState(p => {
+                if (!p) {
+                    console.log('[commitUiVariables] No playerState, skipping commit');
+                    return null;
+                }
+                console.log('[commitUiVariables] BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                const mergedVariables = mergeDirtyUiVariables(p.variables);
+                console.log('[commitUiVariables] AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                return {
+                    ...p,
+                    variables: mergedVariables,
+                };
+            });
+        });
+        console.log('[commitUiVariables] Clearing dirty set after successful commit');
+        uiDirtyVariableIdsRef.current.clear();
+    }, [mergeDirtyUiVariables]);
     
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -3622,20 +3916,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // H key to toggle history
             if ((e.key === 'h' || e.key === 'H') && playerState.mode === 'playing' && !playerState.uiState.textInput) {
                 e.preventDefault();
-                setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
                 return;
             }
             
             if (e.key === 'Escape') {
                 // Close history if open
                 if (playerState.uiState.showHistory) {
-                    setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
                     return;
                 }
                 
                 if (playerState.mode === 'playing') {
                     // PAUSE THE GAME
-                    setPlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                    updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
                     // Always pause the game music when entering pause mode
                     if (musicAudioRef.current && !musicAudioRef.current.paused) {
                         musicAudioRef.current.pause();
@@ -3648,7 +3942,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     if (screenStack.length > 1) {
                         setScreenStack(s => s.slice(0, -1));
                     } else {
-                        setPlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                        updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
                         // Resume music when unpausing
                         if (musicAudioRef.current && musicAudioRef.current.src && playerState.musicState.isPlaying) {
                             musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
@@ -3743,8 +4037,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             let positionStyle = getPositionStyle(char.position);
                             
                             // Add centering transform for non-slide transitions
+                            // Only apply centering for preset positions, not custom coordinates
+                            const isCustomPosition = typeof char.position === 'object';
                             if (!char.transition || char.transition.type !== 'slide') {
-                                positionStyle = { ...positionStyle, transform: 'translate3d(-50%, 0, 0)' };
+                                if (!isCustomPosition) {
+                                    // For preset positions, center horizontally
+                                    positionStyle = { ...positionStyle, transform: 'translate3d(-50%, 0, 0)' };
+                                }
                             }
                             
                             if (char.transition) {
@@ -3860,8 +4159,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 overlay={overlay} 
                                 onAction={handleUIAction} 
                                 playSound={playSound} 
+                                onCommitVariables={commitUiVariablesToPlayerState}
                                 onAdvance={overlay.waitForClick ? () => {
-                                    setPlayerState(p => {
+                                    updatePlayerState(p => {
                                         if (!p) return null;
                                         return {
                                             ...p,
@@ -3941,12 +4241,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {uiState.showHistory && (
                 <HistoryPanel 
                     history={playerState.history} 
-                    onClose={() => setPlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)} 
+                    onClose={() => updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)} 
                 />
             )}
             {uiState.movieUrl && (
-                <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white" onClick={() => setPlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)}>
-                    <video src={uiState.movieUrl} autoPlay className="w-full h-full" onEnded={() => setPlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)} />
+                <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white" onClick={() => updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)}>
+                    <video src={uiState.movieUrl} autoPlay className="w-full h-full" onEnded={() => updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)} />
                 </div>
             )}
             {/* Show dialogue if: 1) dialogue exists, AND 2) either no HUD screen or HUD screen has showDialogue enabled */}
@@ -4143,10 +4443,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         assetResolver={assetResolver}
                         gameSaves={gameSaves}
                         playSound={playSound}
-                        variables={playerState?.variables || menuVariables}
+                        variables={playerState ? (() => {
+                            const vars = {...uiVariables};
+                            console.log('[Screen Stack UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
+                            return vars;
+                        })() : (() => {
+                            const vars = {...menuVariables};
+                            console.log('[Screen Stack UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
+                            return vars;
+                        })()}
                         onVariableChange={handleVariableChange}
                         isClosing={closingScreens.has(currentScreenId)}
                         evaluateConditions={evaluateConditions}
+                        onCommitVariables={commitUiVariablesToPlayerState}
                     />
                 )}
                 {
@@ -4163,10 +4472,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     assetResolver={assetResolver}
                                     gameSaves={gameSaves}
                                     playSound={playSound}
-                                    variables={playerState?.variables || menuVariables}
+                                    variables={playerState ? (() => {
+                                        const vars = {...uiVariables};
+                                        console.log('[HUD UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
+                                        return vars;
+                                    })() : (() => {
+                                        const vars = {...menuVariables};
+                                        console.log('[HUD UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
+                                        return vars;
+                                    })()}
                                     onVariableChange={handleVariableChange}
                                     isClosing={closingScreens.has(hudScreenId)}
                                     evaluateConditions={evaluateConditions}
+                                    onCommitVariables={commitUiVariablesToPlayerState}
                                 />
                             ) : null;
                         })()

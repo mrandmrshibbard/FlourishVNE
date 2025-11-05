@@ -14,13 +14,15 @@ interface ButtonOverlayElementProps {
     onAction: (action: VNUIAction) => void;
     playSound: (soundId: VNID | null) => void;
     onAdvance?: () => void;
+    onCommitVariables?: () => void;
 }
 
 export const ButtonOverlayElement: React.FC<ButtonOverlayElementProps> = ({ 
     overlay, 
     onAction, 
     playSound, 
-    onAdvance 
+    onAdvance,
+    onCommitVariables
 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
@@ -71,15 +73,37 @@ export const ButtonOverlayElement: React.FC<ButtonOverlayElementProps> = ({
             }
         }
         
-        // Execute primary action
-        onAction(overlay.onClick);
-        
-        // Execute additional actions
-        if (overlay.actions && overlay.actions.length > 0) {
-            overlay.actions.forEach((action, index) => {
-                console.log(`  Executing additional action ${index + 1}:`, action.type);
+        const actions: VNUIAction[] = [overlay.onClick, ...(overlay.actions ?? [])];
+        let pendingCommit = false;
+
+        actions.forEach((action, index) => {
+            const isSetVariable = action.type === UIActionType.SetVariable;
+            if (isSetVariable) {
                 onAction(action);
-            });
+                pendingCommit = true;
+                const nextAction = actions[index + 1];
+                const nextIsSetVariable = nextAction?.type === UIActionType.SetVariable;
+                if (!nextIsSetVariable && pendingCommit && onCommitVariables) {
+                    console.log('[ButtonOverlay] Committing variable changes before non-variable action');
+                    onCommitVariables();
+                    pendingCommit = false;
+                }
+                return;
+            }
+
+            if (pendingCommit && onCommitVariables) {
+                console.log(`[ButtonOverlay] Committing variable changes before ${action.type}`);
+                onCommitVariables();
+                pendingCommit = false;
+            }
+
+            onAction(action);
+        });
+
+        if (pendingCommit && onCommitVariables) {
+            console.log('[ButtonOverlay] Final commit after processing actions');
+            onCommitVariables();
+            pendingCommit = false;
         }
         
         // If this button requires click to advance, call the advance function

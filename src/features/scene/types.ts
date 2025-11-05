@@ -52,6 +52,7 @@ export enum CommandType {
     PlayMusic = 'PlayMusic',
     StopMusic = 'StopMusic',
     PlaySoundEffect = 'PlaySoundEffect',
+    StopSoundEffect = 'StopSoundEffect',
     PlayMovie = 'PlayMovie',
     Wait = 'Wait',
     ShakeScreen = 'ShakeScreen',
@@ -184,6 +185,9 @@ export interface PlaySoundEffectCommand extends BaseCommand {
     type: CommandType.PlaySoundEffect;
     audioId: VNID;
     volume?: number; // optional per-sfx volume (0-1)
+}
+export interface StopSoundEffectCommand extends BaseCommand {
+    type: CommandType.StopSoundEffect;
 }
 export interface PlayMovieCommand extends BaseCommand {
     type: CommandType.PlayMovie;
@@ -322,7 +326,7 @@ export interface GroupCommand extends BaseCommand {
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
-  | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | PlayMovieCommand | WaitCommand
+  | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
   | FlashScreenCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | GroupCommand;

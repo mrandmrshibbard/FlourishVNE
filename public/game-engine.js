@@ -33,6 +33,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["PlayMusic"] = "PlayMusic";
     CommandType2["StopMusic"] = "StopMusic";
     CommandType2["PlaySoundEffect"] = "PlaySoundEffect";
+    CommandType2["StopSoundEffect"] = "StopSoundEffect";
     CommandType2["PlayMovie"] = "PlayMovie";
     CommandType2["Wait"] = "Wait";
     CommandType2["ShakeScreen"] = "ShakeScreen";
@@ -1660,6 +1661,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return { advance: true };
   }
+  function handleStopSoundEffect(context) {
+    const { stopAllSfx } = context;
+    console.log("[StopSoundEffect] Stopping all sound effects");
+    stopAllSfx();
+    return { advance: true };
+  }
   function handleShowText(command, context) {
     const { playerState, project } = context;
     const interpolatedText = interpolateVariables(command.text, playerState.variables, project);
@@ -2049,6 +2056,133 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
   }
+  class CommandScheduler {
+    constructor() {
+      this.lastProcessed = null;
+    }
+    /**
+     * Determines whether the supplied command should execute. Returns false if
+     * the scheduler has already advanced past the same signature.
+     */
+    shouldProcess(signature) {
+      if (!this.lastProcessed) {
+        return true;
+      }
+      return !(this.lastProcessed.sceneId === signature.sceneId && this.lastProcessed.commandId === signature.commandId && this.lastProcessed.index === signature.index);
+    }
+    /**
+     * Records the most recently processed command signature.
+     */
+    markProcessed(signature) {
+      this.lastProcessed = signature;
+    }
+    /**
+     * Resets processed state, typically when scenes change or the command loop
+     * rewinds (e.g., user restarts a scene).
+     */
+    reset() {
+      this.lastProcessed = null;
+    }
+    /**
+     * Utility guard that replicates the `lastProcessedCommandRef` early exit in
+     * the legacy runtime. Useful when a command attempts to advance after the
+     * scheduler already moved ahead.
+     */
+    alreadyAdvancedPast(currentIndex) {
+      if (!this.lastProcessed) {
+        return false;
+      }
+      return this.lastProcessed.index > currentIndex;
+    }
+    getLastProcessed() {
+      return this.lastProcessed;
+    }
+  }
+  class RuntimeVariableStore {
+    constructor(initial) {
+      this.lastWriteOrder = [];
+      this.globals = { ...(initial == null ? void 0 : initial.globals) ?? {} };
+      this.scene = { ...(initial == null ? void 0 : initial.scene) ?? {} };
+      this.transient = { ...(initial == null ? void 0 : initial.transient) ?? {} };
+      this.lastWriteOrder = [...(initial == null ? void 0 : initial.lastWriteOrder) ?? []];
+    }
+    applyWrites(writes) {
+      for (const write of writes) {
+        const { variableId, value, scope, sourceCommandId } = write;
+        switch (scope) {
+          case "global":
+            this.globals[variableId] = value;
+            break;
+          case "scene":
+            this.scene[variableId] = value;
+            break;
+          case "transient":
+            this.transient[variableId] = value;
+            break;
+          default:
+            throw new Error(`Unsupported variable scope: ${scope}`);
+        }
+        if (sourceCommandId) {
+          this.lastWriteOrder.push(sourceCommandId);
+        }
+      }
+    }
+    get(variableId) {
+      if (variableId in this.transient) {
+        return this.transient[variableId];
+      }
+      if (variableId in this.scene) {
+        return this.scene[variableId];
+      }
+      return this.globals[variableId];
+    }
+    resetScene(sceneDefaults) {
+      this.scene = { ...sceneDefaults ?? {} };
+      this.transient = {};
+    }
+    resetTransient() {
+      this.transient = {};
+    }
+    snapshot() {
+      return {
+        globals: { ...this.globals },
+        scene: { ...this.scene },
+        transient: { ...this.transient },
+        lastWriteOrder: [...this.lastWriteOrder]
+      };
+    }
+  }
+  class RuntimeDiagnostics {
+    constructor() {
+      this.events = [];
+      this.subscribers = /* @__PURE__ */ new Set();
+    }
+    emit(type, payload) {
+      const event = {
+        id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        timestamp: Date.now(),
+        type,
+        payload
+      };
+      this.events.push(event);
+      for (const subscriber of this.subscribers) {
+        subscriber(event);
+      }
+      return event;
+    }
+    getEvents() {
+      return [...this.events];
+    }
+    clear() {
+      this.events = [];
+    }
+    subscribe(subscriber) {
+      this.subscribers.add(subscriber);
+      return () => {
+        this.subscribers.delete(subscriber);
+      };
+    }
+  }
   const getOverlayTransitionClass = (transition, isHide) => {
     switch (transition) {
       case "fade":
@@ -2157,7 +2291,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { className, style, children: overlay.text });
   };
-  const ButtonOverlayElement = ({ overlay, onAction, playSound, onAdvance }) => {
+  const ButtonOverlayElement = ({ overlay, onAction, playSound, onAdvance, onCommitVariables }) => {
     const [isHovered, setIsHovered] = React2.useState(false);
     const hasTransition = overlay.transition && overlay.transition !== "instant";
     const [playTransition, setPlayTransition] = React2.useState(overlay.action === "hide" && !!hasTransition);
@@ -2206,6 +2340,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const setVarActions = allActions.filter((action) => action.type === UIActionType.SetVariable);
       const otherActions = allActions.filter((action) => action.type !== UIActionType.SetVariable);
       setVarActions.forEach((action) => onAction(action));
+      if (setVarActions.length > 0 && onCommitVariables) {
+        console.log("[Button] Committing", setVarActions.length, "variable changes before navigation");
+        onCommitVariables();
+      }
       otherActions.forEach((action) => onAction(action));
       if (overlay.waitForClick && onAdvance && overlay.onClick.type !== UIActionType.JumpToScene) {
         onAdvance();
@@ -2501,7 +2639,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     ] }) });
   };
-  const ButtonElement = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project }) => {
+  const ButtonElement = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project, onCommitVariables }) => {
     const [isHovered, setIsHovered] = React2.useState(false);
     const bgUrl = getElementAssetUrl(element.image);
     const hoverUrl = getElementAssetUrl(element.hoverImage);
@@ -2523,6 +2661,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const setVarActions = allActions.filter((a) => a.type === UIActionType.SetVariable);
       const otherActions = allActions.filter((a) => a.type !== UIActionType.SetVariable);
       setVarActions.forEach((action) => onAction(action));
+      if (setVarActions.length > 0 && onCommitVariables) {
+        console.log("[UI Button] Committing", setVarActions.length, "variable changes before navigation");
+        onCommitVariables();
+      }
       otherActions.forEach((action) => onAction(action));
     };
     return /* @__PURE__ */ jsxRuntime2.jsxs(
@@ -2557,7 +2699,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`
     };
   };
-  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2 }) => {
+  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React2.useRef(null);
@@ -2592,7 +2734,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       return null;
     };
-    const renderElement = (element, variables2, project2) => {
+    const renderElement = (element, variables2, project2, onCommitVariables2) => {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D;
       console.log("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
@@ -2621,7 +2763,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       switch (element.type) {
         case UIElementType.Button: {
           const el = element;
-          return /* @__PURE__ */ jsxRuntime2.jsx(ButtonElement, { element: el, style, playSound, onAction, getElementAssetUrl, variables: variables2, project: project2 }, el.id);
+          return /* @__PURE__ */ jsxRuntime2.jsx(ButtonElement, { element: el, style, playSound, onAction, getElementAssetUrl, variables: variables2, project: project2, onCommitVariables: onCommitVariables2 }, el.id);
         }
         case UIElementType.Text: {
           const el = element;
@@ -3277,7 +3419,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     screen.showDialogue && variables;
     return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 w-full h-full", style: screenTransitionStyle, children: [
       getBackgroundElement(),
-      Object.values(screen.elements).map((element) => renderElement(element, variables, project))
+      Object.values(screen.elements).map((element) => renderElement(element, variables, project, onCommitVariables))
     ] }, `${screenId}-${isClosing ? "closing" : "open"}`);
   });
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false }) => {
@@ -3298,6 +3440,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [closingScreens, setClosingScreens] = React2.useState(/* @__PURE__ */ new Set());
     const [settings, setSettings] = React2.useState(defaultSettings);
     const [playerState, setPlayerState] = React2.useState(null);
+    const playerStateRef = React2.useRef(null);
+    const updatePlayerState = React2.useCallback((updater) => {
+      setPlayerState((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        playerStateRef.current = next;
+        return next;
+      });
+    }, []);
+    React2.useEffect(() => {
+      playerStateRef.current = playerState;
+    }, [playerState]);
     const [gameSaves, setGameSaves] = React2.useState({});
     const [isJustLoaded, setIsJustLoaded] = React2.useState(false);
     const [menuVariables, setMenuVariables] = React2.useState(() => {
@@ -3307,6 +3460,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       });
       return initVars;
     });
+    const [uiVariables, setUiVariables] = React2.useState(() => {
+      const initVars = {};
+      Object.values(project.variables).forEach((v) => {
+        initVars[v.id] = v.defaultValue;
+      });
+      return initVars;
+    });
+    const uiVariablesRef = React2.useRef(uiVariables);
+    React2.useEffect(() => {
+      uiVariablesRef.current = uiVariables;
+    }, [uiVariables]);
     React2.useEffect(() => {
       const updatedVars = {};
       Object.values(project.variables).forEach((v) => {
@@ -3352,7 +3516,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const queuedMusicRef = React2.useRef(null);
     const userGestureDetectedRef = React2.useRef(false);
     const sfxPoolRef = React2.useRef([]);
-    const lastProcessedCommandRef = React2.useRef(null);
+    const commandSchedulerRef = React2.useRef(new CommandScheduler());
+    const runtimeDiagnosticsRef = React2.useRef(new RuntimeDiagnostics());
+    const variableStoreRef = React2.useRef(null);
+    const uiDirtyVariableIdsRef = React2.useRef(/* @__PURE__ */ new Set());
     const activeEffectTimeoutsRef = React2.useRef([]);
     const activeFlashRef = React2.useRef(null);
     const activeShakeRef = React2.useRef(null);
@@ -3533,7 +3700,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const saves = savesPersistentRef.current ? getGameSaves() : inMemorySavesRef.current;
       const saveData = saves[slotNumber];
       if (saveData) {
-        setPlayerState({
+        updatePlayerState({
           mode: "playing",
           currentSceneId: saveData.playerStateData.currentSceneId,
           currentCommands: saveData.playerStateData.currentCommands || ((_a = project.scenes[saveData.playerStateData.currentSceneId]) == null ? void 0 : _a.commands) || [],
@@ -3590,7 +3757,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           startSceneId = startScene.fallbackSceneId;
         }
       }
-      setPlayerState({
+      setUiVariables(initialVariables);
+      uiVariablesRef.current = initialVariables;
+      console.log("[CLEAR] Dirty set cleared after startNewGame");
+      uiDirtyVariableIdsRef.current.clear();
+      updatePlayerState({
         mode: "playing",
         currentSceneId: startSceneId,
         currentCommands: ((_a = project.scenes[startSceneId]) == null ? void 0 : _a.commands) || [],
@@ -3669,15 +3840,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             break;
           case ">":
             result = Number(effectiveVarValue) > Number(condition.value);
+            console.log("[DEBUG evaluateConditions] Numeric comparison >", {
+              effectiveVarValue,
+              conditionValue: condition.value,
+              numericVar: Number(effectiveVarValue),
+              numericCond: Number(condition.value),
+              result
+            });
             break;
           case "<":
             result = Number(effectiveVarValue) < Number(condition.value);
+            console.log("[DEBUG evaluateConditions] Numeric comparison <", {
+              effectiveVarValue,
+              conditionValue: condition.value,
+              numericVar: Number(effectiveVarValue),
+              numericCond: Number(condition.value),
+              result
+            });
             break;
           case ">=":
             result = Number(effectiveVarValue) >= Number(condition.value);
+            console.log("[DEBUG evaluateConditions] Numeric comparison >=", {
+              effectiveVarValue,
+              conditionValue: condition.value,
+              numericVar: Number(effectiveVarValue),
+              numericCond: Number(condition.value),
+              result
+            });
             break;
           case "<=":
             result = Number(effectiveVarValue) <= Number(condition.value);
+            console.log("[DEBUG evaluateConditions] Numeric comparison <=", {
+              effectiveVarValue,
+              conditionValue: condition.value,
+              numericVar: Number(effectiveVarValue),
+              numericCond: Number(condition.value),
+              result
+            });
             break;
           case "contains":
             result = stringVarValue.toLowerCase().includes(stringCondValue.toLowerCase()) || assetName && assetName.toLowerCase().includes(stringCondValue.toLowerCase());
@@ -3986,8 +4185,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [settings.sfxVolume]);
     React2.useEffect(() => {
       var _a;
+      const scheduler = commandSchedulerRef.current;
+      const diagnostics = runtimeDiagnosticsRef.current;
       if (!playerState || playerState.mode !== "playing") {
-        lastProcessedCommandRef.current = null;
+        scheduler.reset();
+        variableStoreRef.current = null;
         return;
       }
       if (playerState.uiState.isWaitingForInput || playerState.uiState.isTransitioning || playerState.uiState.choices) {
@@ -3996,11 +4198,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (hudStack.length > 0) {
         return;
       }
+      const baseVariables = mergeDirtyUiVariables(playerState.variables);
+      const variableStore = new RuntimeVariableStore({ globals: { ...baseVariables } });
+      variableStoreRef.current = variableStore;
+      const getRuntimeVariables = () => variableStore.snapshot().globals;
       const command = playerState.currentCommands[playerState.currentIndex];
       if (!command) {
         if (playerState.commandStack.length > 0) {
           const popped = playerState.commandStack[playerState.commandStack.length - 1];
-          setPlayerState((p) => {
+          updatePlayerState((p) => {
             if (!p) return null;
             const newStack = p.commandStack.slice(0, -1);
             return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
@@ -4014,7 +4220,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const nextScene = project.scenes[nextSceneId];
             if (nextScene) {
               console.log(`Advancing to next scene: ${nextSceneId}`);
-              setPlayerState((p) => p ? {
+              updatePlayerState((p) => p ? {
                 ...p,
                 currentSceneId: nextSceneId,
                 currentCommands: nextScene.commands,
@@ -4058,7 +4264,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 audio.src = "";
               }
               stopAllSfx();
-              setPlayerState(null);
+              updatePlayerState(null);
               if (project.ui.titleScreenId) {
                 setScreenStack([project.ui.titleScreenId]);
               }
@@ -4072,13 +4278,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               audio.src = "";
             }
             stopAllSfx();
-            setPlayerState(null);
+            updatePlayerState(null);
             if (project.ui.titleScreenId) {
               setScreenStack([project.ui.titleScreenId]);
             }
           }
         }
-        lastProcessedCommandRef.current = null;
+        scheduler.reset();
         return;
       }
       const commandSignature = {
@@ -4086,46 +4292,53 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         index: playerState.currentIndex,
         commandId: command.id
       };
-      const lastSignature = lastProcessedCommandRef.current;
-      if (lastSignature && lastSignature.sceneId === commandSignature.sceneId && lastSignature.index === commandSignature.index && lastSignature.commandId === commandSignature.commandId) {
+      if (!scheduler.shouldProcess(commandSignature)) {
         return;
       }
-      lastProcessedCommandRef.current = commandSignature;
+      scheduler.markProcessed(commandSignature);
+      diagnostics.emit("command-start", {
+        sceneId: commandSignature.sceneId,
+        commandId: commandSignature.commandId,
+        index: commandSignature.index
+      });
       if (command.type === CommandType.BranchStart) {
         const branchCmd = command;
-        const conditionsMet2 = evaluateConditions2(branchCmd.conditions, playerState.variables);
+        const conditionsMet2 = evaluateConditions2(branchCmd.conditions, getRuntimeVariables());
         if (!conditionsMet2) {
           const branchEndIndex = playerState.currentCommands.findIndex(
             (cmd, idx) => idx > playerState.currentIndex && cmd.type === CommandType.BranchEnd && cmd.branchId === branchCmd.branchId
           );
           if (branchEndIndex !== -1) {
-            setPlayerState((p) => p ? { ...p, currentIndex: branchEndIndex + 1 } : null);
+            updatePlayerState((p) => p ? { ...p, currentIndex: branchEndIndex + 1 } : null);
           } else {
-            setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
           }
           return;
         }
-        setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+        updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
         return;
       }
-      const conditionsMet = evaluateConditions2(command.conditions, playerState.variables);
-      console.log("[DEBUG] Command:", command.type, "Index:", playerState.currentIndex, "Conditions met:", conditionsMet, "Variables:", playerState.variables);
+      const conditionsMet = evaluateConditions2(command.conditions, getRuntimeVariables());
+      console.log("[DEBUG] Command:", command.type, "Index:", playerState.currentIndex, "Conditions met:", conditionsMet, "Variables:", getRuntimeVariables());
       if (!conditionsMet) {
         console.log("[DEBUG] Skipping command due to failed conditions");
-        setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+        updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
         return;
       }
       const advance = () => {
         console.log("[DEBUG advance()] Called from command:", command.type, "Current index:", playerState.currentIndex);
-        if (lastProcessedCommandRef.current && lastProcessedCommandRef.current.index > playerState.currentIndex) {
-          console.log("[DEBUG advance()] Skipping - already advanced to", lastProcessedCommandRef.current.index);
+        if (scheduler.alreadyAdvancedPast(playerState.currentIndex)) {
+          const last = scheduler.getLastProcessed();
+          if (last) {
+            console.log("[DEBUG advance()] Skipping - already advanced to", last.index);
+          }
           return;
         }
         const nextIndex = playerState.currentIndex + 1;
         if (nextIndex >= playerState.currentCommands.length) {
           if (playerState.commandStack.length > 0) {
             const popped = playerState.commandStack[playerState.commandStack.length - 1];
-            setPlayerState((p) => {
+            updatePlayerState((p) => {
               if (!p) return null;
               const newStack = p.commandStack.slice(0, -1);
               return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
@@ -4134,10 +4347,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const sceneIds = Object.keys(project.scenes);
             const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
             if (currentSceneIndex !== -1 && currentSceneIndex < sceneIds.length - 1) {
-              const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], playerState.variables);
+              const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], getRuntimeVariables());
               const nextScene = project.scenes[nextSceneId];
               if (nextScene) {
-                setPlayerState((p) => p ? {
+                updatePlayerState((p) => p ? {
                   ...p,
                   currentSceneId: nextSceneId,
                   currentCommands: nextScene.commands,
@@ -4182,13 +4395,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               audio.src = "";
             }
             stopAllSfx();
-            setPlayerState(null);
+            updatePlayerState(null);
             if (project.ui.titleScreenId) {
               setScreenStack([project.ui.titleScreenId]);
             }
+            scheduler.reset();
           }
         } else {
-          setPlayerState((p) => p ? { ...p, currentIndex: nextIndex } : null);
+          updatePlayerState((p) => p ? { ...p, currentIndex: nextIndex } : null);
         }
       };
       const shouldRunAsync = ((_a = command.modifiers) == null ? void 0 : _a.runAsync) === true;
@@ -4200,31 +4414,57 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         musicAudioRef,
         fadeAudio,
         playSound,
+        stopAllSfx,
         settings,
         advance,
-        setPlayerState,
+        setPlayerState: updatePlayerState,
         activeEffectTimeoutsRef
       };
       let instantAdvance = true;
       (async () => {
         try {
           const applyResult = (result) => {
+            var _a2, _b;
+            const variableStore2 = variableStoreRef.current;
+            const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
+            if (((_a2 = result.updates) == null ? void 0 : _a2.variables) && variableStore2) {
+              const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
+                variableId,
+                value,
+                scope: "global",
+                sourceCommandId: command.id
+              }));
+              variableStore2.applyWrites(writes);
+            }
             if (result.updates) {
-              setPlayerState((p) => {
-                var _a2, _b, _c, _d, _e, _f, _g, _h;
+              updatePlayerState((p) => {
+                var _a3, _b2, _c, _d, _e, _f, _g, _h, _i, _j;
                 if (!p) return null;
+                const mergedVariables = ((_a3 = result.updates) == null ? void 0 : _a3.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b2 = result.updates) == null ? void 0 : _b2.variables) ?? {} };
                 return {
                   ...p,
-                  ...((_a2 = result.updates) == null ? void 0 : _a2.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                  ...((_b = result.updates) == null ? void 0 : _b.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
-                  ...((_c = result.updates) == null ? void 0 : _c.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
-                  ...((_d = result.updates) == null ? void 0 : _d.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
-                  ...((_e = result.updates) == null ? void 0 : _e.variables) !== void 0 ? { variables: { ...p.variables, ...result.updates.variables } } : {},
-                  ...((_f = result.updates) == null ? void 0 : _f.stageState) !== void 0 ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {},
-                  ...((_g = result.updates) == null ? void 0 : _g.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
-                  ...((_h = result.updates) == null ? void 0 : _h.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
+                  ...((_c = result.updates) == null ? void 0 : _c.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
+                  ...((_d = result.updates) == null ? void 0 : _d.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                  ...((_e = result.updates) == null ? void 0 : _e.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
+                  ...((_f = result.updates) == null ? void 0 : _f.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
+                  ...((_g = result.updates) == null ? void 0 : _g.variables) !== void 0 ? { variables: mergedVariables } : {},
+                  ...((_h = result.updates) == null ? void 0 : _h.stageState) !== void 0 ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {},
+                  ...((_i = result.updates) == null ? void 0 : _i.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
+                  ...((_j = result.updates) == null ? void 0 : _j.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
               });
+              if (((_b = result.updates) == null ? void 0 : _b.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
+                console.log("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
+                setScreenStack([]);
+                setHudStack([]);
+                activeEffectTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+                activeEffectTimeoutsRef.current = [];
+                activeFlashRef.current = null;
+                setFlashTrigger(0);
+                activeShakeRef.current = null;
+                scheduler.reset();
+                variableStoreRef.current = null;
+              }
             }
             instantAdvance = result.advance;
             if (result.delay && result.callback) {
@@ -4233,6 +4473,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             } else if (result.callback) {
               result.callback();
             }
+            diagnostics.emit("command-finish", {
+              commandId: command.id,
+              sceneId: playerState.currentSceneId,
+              index: playerState.currentIndex,
+              advance: result.advance
+            });
           };
           switch (command.type) {
             case CommandType.Group: {
@@ -4305,9 +4551,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               applyResult(result);
               break;
             }
+            case CommandType.StopSoundEffect: {
+              const result = handleStopSoundEffect(commandContext);
+              applyResult(result);
+              break;
+            }
             case CommandType.PlayMovie: {
               instantAdvance = false;
-              setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, movieUrl: assetResolver(command.videoId, "video") } } : null);
+              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, movieUrl: assetResolver(command.videoId, "video") } } : null);
               break;
             }
             case CommandType.Wait: {
@@ -4354,17 +4605,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.TintScreen: {
               const cmd = command;
-              setPlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration } } } : null);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration } } } : null);
               break;
             }
             case CommandType.PanZoomScreen: {
               const cmd = command;
-              setPlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration } } } : null);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration } } } : null);
               break;
             }
             case CommandType.ResetScreenEffects: {
               const cmd = command;
-              setPlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration } } } : null);
+              updatePlayerState((p) => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration } } } : null);
               break;
             }
             case CommandType.FlashScreen: {
@@ -4376,7 +4627,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case CommandType.ShowScreen: {
               instantAdvance = false;
               const cmd = command;
-              setPlayerState((p) => p ? {
+              updatePlayerState((p) => p ? {
                 ...p,
                 uiState: {
                   ...p.uiState,
@@ -4454,7 +4705,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       })();
     }, [playerState, project, assetResolver, playSound, evaluateConditions2, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, hudStack]);
     const handleDialogueAdvance = () => {
-      setPlayerState((p) => {
+      updatePlayerState((p) => {
         if (!p || !p.uiState.dialogue) return p;
         const historyEntry = {
           timestamp: Date.now(),
@@ -4474,7 +4725,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const handleChoiceSelect = (choice) => {
       var _a;
       console.log("[CHOICE] Selected:", choice.text, "Actions:", ((_a = choice.actions) == null ? void 0 : _a.length) || 0);
-      setPlayerState((p) => {
+      updatePlayerState((p) => {
         if (!p) return null;
         let newState = { ...p };
         const historyEntry = {
@@ -4517,9 +4768,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     newVal = setVarAction.value;
                   } else {
                     const normalized = String(setVarAction.value).trim().toLowerCase();
-                    if (normalized === "true" || normalized === "1") {
+                    if (normalized === "" && setVarAction.operator === "set") {
+                      console.log("[Choice Boolean Toggle] Empty value detected, toggling from", currentVal, "to", !currentVal);
+                      newVal = !currentVal;
+                    } else if (normalized === "true" || normalized === "1") {
                       newVal = true;
-                    } else if (normalized === "false" || normalized === "0" || normalized === "") {
+                    } else if (normalized === "false" || normalized === "0") {
                       newVal = false;
                     } else {
                       newVal = !!setVarAction.value;
@@ -4555,7 +4809,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       });
     };
     const handleTextInputSubmit = (value) => {
-      setPlayerState((p) => p ? {
+      updatePlayerState((p) => p ? {
         ...p,
         currentIndex: p.currentIndex + 1,
         variables: { ...p.variables, [p.uiState.textInput.variableId]: value },
@@ -4568,7 +4822,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!playerState && action.type === UIActionType.StartNewGame) {
         startNewGame();
       } else if ((playerState == null ? void 0 : playerState.mode) === "paused" && action.type === UIActionType.ReturnToGame) {
-        setPlayerState((p) => p ? { ...p, mode: "playing" } : null);
+        updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
         setScreenStack([]);
         if (musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
           musicAudioRef.current.play().catch((e) => console.error("Failed to resume music:", e));
@@ -4597,36 +4851,58 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   return next;
                 });
                 if (hudStack.length === 1) {
-                  setPlayerState((p) => {
-                    if (!p) return null;
-                    return {
-                      ...p,
-                      currentIndex: p.currentIndex + 1,
-                      stageState: {
-                        ...p.stageState,
-                        buttonOverlays: [],
-                        imageOverlays: []
-                      }
-                    };
+                  reactDom.flushSync(() => {
+                    updatePlayerState((p) => {
+                      if (!p) return null;
+                      console.log("ReturnToPreviousScreen (transition): BEFORE merge - playerState.variables:", JSON.stringify(p.variables, null, 2));
+                      console.log("ReturnToPreviousScreen (transition): uiVariables to merge:", JSON.stringify(uiVariablesRef.current, null, 2));
+                      console.log("ReturnToPreviousScreen (transition): dirty variable IDs:", Array.from(uiDirtyVariableIdsRef.current));
+                      const mergedVariables = mergeDirtyUiVariables(p.variables);
+                      console.log("ReturnToPreviousScreen (transition): AFTER merge - merged variables:", JSON.stringify(mergedVariables, null, 2));
+                      return {
+                        ...p,
+                        variables: mergedVariables,
+                        // Merge UI variables into game variables
+                        currentIndex: p.currentIndex + 1,
+                        stageState: {
+                          ...p.stageState,
+                          buttonOverlays: [],
+                          imageOverlays: []
+                        }
+                      };
+                    });
                   });
+                  console.log("[CLEAR] Dirty set cleared after ReturnToPreviousScreen (with transition)");
+                  uiDirtyVariableIdsRef.current.clear();
                 }
               }, transitionDuration);
             } else {
               setHudStack((s) => s.slice(0, -1));
               if (hudStack.length === 1) {
                 setTimeout(() => {
-                  setPlayerState((p) => {
-                    if (!p) return null;
-                    return {
-                      ...p,
-                      currentIndex: p.currentIndex + 1,
-                      stageState: {
-                        ...p.stageState,
-                        buttonOverlays: [],
-                        imageOverlays: []
-                      }
-                    };
+                  reactDom.flushSync(() => {
+                    updatePlayerState((p) => {
+                      if (!p) return null;
+                      console.log("ReturnToPreviousScreen (no transition): BEFORE merge - playerState.variables:", JSON.stringify(p.variables, null, 2));
+                      console.log("ReturnToPreviousScreen (no transition): uiVariables to merge:", JSON.stringify(uiVariablesRef.current, null, 2));
+                      console.log("ReturnToPreviousScreen (no transition): dirty variable IDs:", Array.from(uiDirtyVariableIdsRef.current));
+                      const mergedVariables = mergeDirtyUiVariables(p.variables);
+                      console.log("ReturnToPreviousScreen (no transition): AFTER merge - merged variables:", JSON.stringify(mergedVariables, null, 2));
+                      return {
+                        ...p,
+                        variables: mergedVariables,
+                        // Merge UI variables into game variables
+                        currentIndex: p.currentIndex + 1,
+                        stageState: {
+                          ...p.stageState,
+                          buttonOverlays: [],
+                          imageOverlays: []
+                        }
+                      };
+                    });
                   });
+                  console.log("[CLEAR] Dirty set cleared after ReturnToPreviousScreen (no transition)");
+                  uiDirtyVariableIdsRef.current.clear();
                 }, 0);
               }
             }
@@ -4660,14 +4936,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           audio.src = "";
         }
         stopAllSfx();
-        setPlayerState(null);
+        updatePlayerState(null);
         setHudStack([]);
+        const resetVars = {};
+        Object.values(project.variables).forEach((v) => {
+          resetVars[v.id] = v.defaultValue;
+        });
+        setUiVariables(resetVars);
+        uiVariablesRef.current = resetVars;
+        console.log("[CLEAR] Dirty set cleared after QuitToTitle");
+        uiDirtyVariableIdsRef.current.clear();
         if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
       } else if (action.type === UIActionType.SaveGame) {
         saveGame(action.slotNumber);
       } else if (action.type === UIActionType.LoadGame) {
         loadGame(action.slotNumber);
       } else if (action.type === UIActionType.JumpToScene) {
+        console.log("[JumpToScene] Action triggered");
         const jumpAction = action;
         const targetScene = project.scenes[jumpAction.targetSceneId];
         console.log("JumpToScene handler triggered:", {
@@ -4688,6 +4973,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             audio.currentTime = 0;
           });
         }
+        console.log("[JumpToScene] Clearing screen and HUD stacks");
         setScreenStack([]);
         setHudStack([]);
         activeEffectTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
@@ -4695,15 +4981,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         activeFlashRef.current = null;
         setFlashTrigger(0);
         activeShakeRef.current = null;
-        lastProcessedCommandRef.current = null;
+        commandSchedulerRef.current.reset();
+        variableStoreRef.current = null;
         if (!playerState) {
           console.log("Initializing playerState for scene jump from title");
           const initialVariables = {};
           for (const varId in project.variables) {
             const v = project.variables[varId];
-            initialVariables[v.id] = v.defaultValue;
+            const customizedValue = menuVariables[v.id];
+            initialVariables[v.id] = customizedValue !== void 0 ? customizedValue : v.defaultValue;
           }
-          setPlayerState({
+          updatePlayerState({
             mode: "playing",
             currentSceneId: jumpAction.targetSceneId,
             currentCommands: targetScene.commands,
@@ -4743,51 +5031,66 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               currentTime: 0
             }
           });
+          console.log("[CLEAR] Dirty set cleared after title screen jump");
+          uiDirtyVariableIdsRef.current.clear();
         } else {
           console.log("Jumping to new scene from existing game state");
           console.log("[DEBUG Jump] Current variables before jump:", playerState.variables);
-          setPlayerState((p) => {
-            if (!p) return null;
-            console.log("Setting new scene:", {
-              targetSceneId: jumpAction.targetSceneId,
-              commandCount: targetScene.commands.length,
-              commands: targetScene.commands.map((c) => ({ type: c.type, id: c.id }))
+          const isSameScene = playerState.currentSceneId === jumpAction.targetSceneId;
+          console.log("[DEBUG Jump] Same scene?", isSameScene, "Current:", playerState.currentSceneId, "Target:", jumpAction.targetSceneId);
+          reactDom.flushSync(() => {
+            updatePlayerState((p) => {
+              if (!p) return null;
+              console.log("Setting new scene:", {
+                targetSceneId: jumpAction.targetSceneId,
+                commandCount: targetScene.commands.length,
+                commands: targetScene.commands.map((c) => ({ type: c.type, id: c.id }))
+              });
+              console.log("[DEBUG Jump] Variables being carried over:", p.variables);
+              console.log("[DEBUG Jump] uiVariables snapshot:", JSON.stringify(uiVariablesRef.current, null, 2));
+              console.log("[DEBUG Jump] dirty variable IDs:", Array.from(uiDirtyVariableIdsRef.current));
+              const mergedVariables = mergeDirtyUiVariables(p.variables);
+              console.log("[DEBUG Jump] Variables after merge with uiVariables:", mergedVariables);
+              const newIndex = isSameScene ? p.currentIndex + 1 : 0;
+              console.log("[DEBUG Jump] Setting currentIndex to:", newIndex, "(was:", p.currentIndex, ")");
+              return {
+                ...p,
+                currentSceneId: jumpAction.targetSceneId,
+                currentCommands: targetScene.commands,
+                currentIndex: newIndex,
+                // Reset stage state to clean slate
+                stageState: {
+                  backgroundUrl: null,
+                  characters: {},
+                  textOverlays: [],
+                  imageOverlays: [],
+                  buttonOverlays: [],
+                  screen: {
+                    shake: { active: false, intensity: 0 },
+                    tint: "transparent",
+                    zoom: 1,
+                    panX: 0,
+                    panY: 0,
+                    transitionDuration: 0.5
+                  }
+                },
+                // Clear any active UI state (dialogue, choices, etc.)
+                uiState: {
+                  dialogue: null,
+                  choices: null,
+                  textInput: null,
+                  movieUrl: null,
+                  isWaitingForInput: false,
+                  isTransitioning: false,
+                  transitionElement: null,
+                  flash: null
+                },
+                variables: mergedVariables
+              };
             });
-            console.log("[DEBUG Jump] Variables being carried over:", p.variables);
-            return {
-              ...p,
-              currentSceneId: jumpAction.targetSceneId,
-              currentCommands: targetScene.commands,
-              currentIndex: 0,
-              // Reset stage state to clean slate
-              stageState: {
-                backgroundUrl: null,
-                characters: {},
-                textOverlays: [],
-                imageOverlays: [],
-                buttonOverlays: [],
-                screen: {
-                  shake: { active: false, intensity: 0 },
-                  tint: "transparent",
-                  zoom: 1,
-                  panX: 0,
-                  panY: 0,
-                  transitionDuration: 0.5
-                }
-              },
-              // Clear any active UI state (dialogue, choices, etc.)
-              uiState: {
-                dialogue: null,
-                choices: null,
-                textInput: null,
-                movieUrl: null,
-                isWaitingForInput: false,
-                isTransitioning: false,
-                transitionElement: null,
-                flash: null
-              }
-            };
           });
+          console.log("[CLEAR] Dirty set cleared after JumpToScene");
+          uiDirtyVariableIdsRef.current.clear();
         }
       } else if (action.type === UIActionType.SetVariable) {
         const setVarAction = action;
@@ -4796,6 +5099,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           console.warn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
           return;
         }
+        console.log("[SetVariable] RAW ACTION:", {
+          variableId: setVarAction.variableId,
+          variableName: variable.name,
+          variableType: variable.type,
+          actionValue: setVarAction.value,
+          actionValueType: typeof setVarAction.value,
+          operator: setVarAction.operator
+        });
         const computeNewValue = (currentVal) => {
           const changeValStr = String(setVarAction.value);
           if (setVarAction.operator === "add") {
@@ -4813,7 +5124,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case "number":
               return Number(changeValStr) || 0;
             case "boolean":
-              return changeValStr.toLowerCase() === "true" || changeValStr === "1";
+              if (typeof setVarAction.value === "boolean") {
+                return setVarAction.value;
+              }
+              const normalized = changeValStr.trim().toLowerCase();
+              if (normalized === "" && setVarAction.operator === "set") {
+                console.log("[Boolean Toggle] Empty value detected, toggling from", currentVal, "to", !currentVal);
+                return !currentVal;
+              }
+              if (normalized === "true" || normalized === "1") {
+                return true;
+              }
+              if (normalized === "false" || normalized === "0") {
+                return false;
+              }
+              return !!changeValStr;
             case "string":
             default:
               return changeValStr;
@@ -4821,11 +5146,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
         reactDom.flushSync(() => {
           if (playerState) {
-            setPlayerState((p) => {
-              if (!p) return null;
-              const currentVal = p.variables[setVarAction.variableId];
+            uiDirtyVariableIdsRef.current.add(setVarAction.variableId);
+            setUiVariables((prev) => {
+              const currentVal = prev[setVarAction.variableId];
               const newVal = computeNewValue(currentVal);
-              console.log("[SetVariable] Details:", {
+              console.log("[SetVariable] Details (uiVariables):", {
                 variable: variable.name,
                 variableId: setVarAction.variableId,
                 rawValue: setVarAction.value,
@@ -4834,7 +5159,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 nextValue: newVal,
                 type: variable.type
               });
-              return { ...p, variables: { ...p.variables, [setVarAction.variableId]: newVal } };
+              const next = { ...prev, [setVarAction.variableId]: newVal };
+              uiVariablesRef.current = next;
+              return next;
             });
           } else {
             setMenuVariables((prev) => {
@@ -4881,7 +5208,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return;
         }
         if (playerState) {
-          setPlayerState((p) => {
+          updatePlayerState((p) => {
             if (!p) return null;
             const currentIndex = Number(p.variables[cycleAction.variableId]) || 0;
             let newIndex;
@@ -4942,14 +5269,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         console.log("JumpToLabel: Label command at that index:", targetScene.commands[labelIndex]);
         setHudStack([]);
         reactDom.flushSync(() => {
-          setPlayerState((p) => {
+          updatePlayerState((p) => {
             if (!p) return null;
             console.log("JumpToLabel: Setting new state - currentIndex from", p.currentIndex, "to", labelIndex);
+            console.log("JumpToLabel: BEFORE merge - playerState.variables:", JSON.stringify(p.variables, null, 2));
+            console.log("JumpToLabel: uiVariables to merge:", JSON.stringify(uiVariablesRef.current, null, 2));
+            console.log("JumpToLabel: dirty variable IDs:", Array.from(uiDirtyVariableIdsRef.current));
+            const mergedVariables = mergeDirtyUiVariables(p.variables);
+            console.log("JumpToLabel: AFTER merge - merged variables:", JSON.stringify(mergedVariables, null, 2));
             return {
               ...p,
               currentSceneId: targetSceneId,
               currentCommands: targetScene.commands,
               currentIndex: labelIndex,
+              variables: mergedVariables,
+              // Merge UI variables into game variables
               stageState: {
                 ...p.stageState,
                 buttonOverlays: [],
@@ -4967,27 +5301,77 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             };
           });
         });
+        console.log("[CLEAR] Dirty set cleared after JumpToLabel");
+        uiDirtyVariableIdsRef.current.clear();
       }
     };
     const handleVariableChange = (variableId, value) => {
+      console.log("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
       if (playerState) {
-        setPlayerState((prev) => {
-          if (!prev) return prev;
-          return {
+        console.log("[handleVariableChange] Updating uiVariables");
+        uiDirtyVariableIdsRef.current.add(variableId);
+        console.log("[handleVariableChange] ✓ Added to dirty set. Size now:", uiDirtyVariableIdsRef.current.size, "IDs:", Array.from(uiDirtyVariableIdsRef.current));
+        setUiVariables((prev) => {
+          const newVars = {
             ...prev,
-            variables: {
-              ...prev.variables,
-              [variableId]: value
-            }
+            [variableId]: value
           };
+          console.log("[handleVariableChange] uiVariables BEFORE:", JSON.stringify(prev, null, 2));
+          console.log("[handleVariableChange] uiVariables AFTER:", JSON.stringify(newVars, null, 2));
+          uiVariablesRef.current = newVars;
+          return newVars;
         });
       } else {
-        setMenuVariables((prev) => ({
-          ...prev,
-          [variableId]: value
-        }));
+        console.log("[handleVariableChange] Updating menuVariables");
+        setMenuVariables((prev) => {
+          const newVars = {
+            ...prev,
+            [variableId]: value
+          };
+          console.log("[handleVariableChange] New menuVariables:", JSON.stringify(newVars, null, 2));
+          return newVars;
+        });
       }
     };
+    const mergeDirtyUiVariables = React2.useCallback((base) => {
+      const dirtyIds = uiDirtyVariableIdsRef.current;
+      if (dirtyIds.size === 0) {
+        return base;
+      }
+      const sourceVariables = uiVariablesRef.current;
+      const merged = { ...base };
+      dirtyIds.forEach((id) => {
+        if (Object.prototype.hasOwnProperty.call(sourceVariables, id)) {
+          merged[id] = sourceVariables[id];
+        }
+      });
+      return merged;
+    }, []);
+    const commitUiVariablesToPlayerState = React2.useCallback(() => {
+      if (uiDirtyVariableIdsRef.current.size === 0) {
+        console.log("[commitUiVariables] No dirty variables to commit");
+        return;
+      }
+      console.log("[commitUiVariables] Committing dirty variables:", Array.from(uiDirtyVariableIdsRef.current));
+      console.log("[commitUiVariables] uiVariables snapshot:", JSON.stringify(uiVariablesRef.current, null, 2));
+      reactDom.flushSync(() => {
+        updatePlayerState((p) => {
+          if (!p) {
+            console.log("[commitUiVariables] No playerState, skipping commit");
+            return null;
+          }
+          console.log("[commitUiVariables] BEFORE merge - playerState.variables:", JSON.stringify(p.variables, null, 2));
+          const mergedVariables = mergeDirtyUiVariables(p.variables);
+          console.log("[commitUiVariables] AFTER merge - merged variables:", JSON.stringify(mergedVariables, null, 2));
+          return {
+            ...p,
+            variables: mergedVariables
+          };
+        });
+      });
+      console.log("[commitUiVariables] Clearing dirty set after successful commit");
+      uiDirtyVariableIdsRef.current.clear();
+    }, [mergeDirtyUiVariables]);
     React2.useEffect(() => {
       const handleKeyDown = (e) => {
         if (!playerState) return;
@@ -4998,16 +5382,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         if ((e.key === "h" || e.key === "H") && playerState.mode === "playing" && !playerState.uiState.textInput) {
           e.preventDefault();
-          setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
+          updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
           return;
         }
         if (e.key === "Escape") {
           if (playerState.uiState.showHistory) {
-            setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
+            updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
             return;
           }
           if (playerState.mode === "playing") {
-            setPlayerState((p) => p ? { ...p, mode: "paused" } : null);
+            updatePlayerState((p) => p ? { ...p, mode: "paused" } : null);
             if (musicAudioRef.current && !musicAudioRef.current.paused) {
               musicAudioRef.current.pause();
             }
@@ -5018,7 +5402,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (screenStack.length > 1) {
               setScreenStack((s) => s.slice(0, -1));
             } else {
-              setPlayerState((p) => p ? { ...p, mode: "playing" } : null);
+              updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
               if (musicAudioRef.current && musicAudioRef.current.src && playerState.musicState.isPlaying) {
                 musicAudioRef.current.play().catch((e2) => console.error("Failed to resume music:", e2));
               }
@@ -5095,8 +5479,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 let animationDuration = "1s";
                 let slideStyle = {};
                 let positionStyle = getPositionStyle2(char.position);
+                const isCustomPosition = typeof char.position === "object";
                 if (!char.transition || char.transition.type !== "slide") {
-                  positionStyle = { ...positionStyle, transform: "translate3d(-50%, 0, 0)" };
+                  if (!isCustomPosition) {
+                    positionStyle = { ...positionStyle, transform: "translate3d(-50%, 0, 0)" };
+                  }
                 }
                 if (char.transition) {
                   const isHideTransition = char.transition.action === "hide";
@@ -5195,8 +5582,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   overlay,
                   onAction: handleUIAction,
                   playSound,
+                  onCommitVariables: commitUiVariablesToPlayerState,
                   onAdvance: overlay.waitForClick ? () => {
-                    setPlayerState((p) => {
+                    updatePlayerState((p) => {
                       if (!p) return null;
                       return {
                         ...p,
@@ -5259,10 +5647,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           HistoryPanel,
           {
             history: playerState.history,
-            onClose: () => setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)
+            onClose: () => updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)
           }
         ),
-        uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white", onClick: () => setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null), children: /* @__PURE__ */ jsxRuntime2.jsx("video", { src: uiState.movieUrl, autoPlay: true, className: "w-full h-full", onEnded: () => setPlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null) }) }),
+        uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white", onClick: () => updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null), children: /* @__PURE__ */ jsxRuntime2.jsx("video", { src: uiState.movieUrl, autoPlay: true, className: "w-full h-full", onEnded: () => updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null) }) }),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsx(DialogueBox, { dialogue: uiState.dialogue, settings, projectUI: project.ui, onFinished: handleDialogueAdvance, variables: playerState.variables, project }),
         uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(ChoiceMenu, { choices: uiState.choices, projectUI: project.ui, onSelect: handleChoiceSelect, variables: playerState.variables, project }),
         uiState.textInput && /* @__PURE__ */ jsxRuntime2.jsx(TextInputForm, { textInput: uiState.textInput, onSubmit: handleTextInputSubmit, variables: playerState.variables, project }),
@@ -5436,10 +5824,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             assetResolver,
             gameSaves,
             playSound,
-            variables: (playerState == null ? void 0 : playerState.variables) || menuVariables,
+            variables: playerState ? (() => {
+              const vars = { ...uiVariables };
+              console.log("[Screen Stack UI] Receiving uiVariables:", JSON.stringify(vars, null, 2));
+              return vars;
+            })() : (() => {
+              const vars = { ...menuVariables };
+              console.log("[Screen Stack UI] Receiving menuVariables:", JSON.stringify(vars, null, 2));
+              return vars;
+            })(),
             onVariableChange: handleVariableChange,
             isClosing: closingScreens.has(currentScreenId),
-            evaluateConditions: evaluateConditions2
+            evaluateConditions: evaluateConditions2,
+            onCommitVariables: commitUiVariablesToPlayerState
           }
         ),
         // Render HUD screens while in playing mode. Priority: explicit hudStack top, then project.ui.gameHudScreenId
@@ -5455,10 +5852,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               assetResolver,
               gameSaves,
               playSound,
-              variables: (playerState == null ? void 0 : playerState.variables) || menuVariables,
+              variables: playerState ? (() => {
+                const vars = { ...uiVariables };
+                console.log("[HUD UI] Receiving uiVariables:", JSON.stringify(vars, null, 2));
+                return vars;
+              })() : (() => {
+                const vars = { ...menuVariables };
+                console.log("[HUD UI] Receiving menuVariables:", JSON.stringify(vars, null, 2));
+                return vars;
+              })(),
               onVariableChange: handleVariableChange,
               isClosing: closingScreens.has(hudScreenId),
-              evaluateConditions: evaluateConditions2
+              evaluateConditions: evaluateConditions2,
+              onCommitVariables: commitUiVariablesToPlayerState
             }
           ) : null;
         })(),

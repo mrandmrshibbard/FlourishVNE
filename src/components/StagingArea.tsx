@@ -335,8 +335,10 @@ const StagingArea: React.FC<{
 
     const getPositionStyle = (position: VNPosition): React.CSSProperties => {
         if (typeof position === 'object') {
-            return { left: `${position.x}%`, top: `${position.y}%`, transform: 'translate(-50%, 0)' };
+            // Custom coordinates - use exact position without centering transform
+            return { left: `${position.x}%`, top: `${position.y}%` };
         }
+        // Preset positions - apply horizontal centering
         const presetStyles: Record<VNPositionPreset, React.CSSProperties> = {
             'left': { top: '10%', left: '25%', transform: 'translate(-50%, 0)' },
             'center': { top: '10%', left: '50%', transform: 'translate(-50%, 0)' },
@@ -412,11 +414,19 @@ const StagingArea: React.FC<{
                     style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}
                 >
                     {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
-                {Object.values(stageState.characters).map((char) => (
-                    <div key={char.charId} className="absolute w-auto aspect-[3/4]" style={{ ...getPositionStyle(char.position), height: '90%', bottom: '0', top: 'auto' }}>
-                        {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
-                    </div>
-                ))}
+                {Object.values(stageState.characters).map((char) => {
+                    const posStyle = getPositionStyle(char.position);
+                    const isCustomPosition = typeof char.position === 'object';
+                    // For preset positions, anchor to bottom. For custom positions, respect the exact coordinates
+                    const finalStyle = isCustomPosition 
+                        ? { ...posStyle, height: '90%' }
+                        : { ...posStyle, height: '90%', bottom: '0', top: 'auto' };
+                    return (
+                        <div key={char.charId} className="absolute w-auto aspect-[3/4]" style={finalStyle}>
+                            {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
+                        </div>
+                    );
+                })}
                 {stageState.textOverlays.map(o => (
                      <div key={o.id} style={{
                         position: 'absolute', 

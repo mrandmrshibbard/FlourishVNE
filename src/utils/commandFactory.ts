@@ -74,6 +74,10 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             const command = { type, audioId: firstAudioId || '' };
             return command;
         }
+        case CommandType.StopSoundEffect: {
+            const command = { type };
+            return command;
+        }
         case CommandType.PlayMovie: {
             const command = { type, videoId: firstVideoId || '', waitsForCompletion: true };
             return command;
