@@ -20,7 +20,15 @@ import UIManager from './UIManager';
 import AssetManager from './AssetManager';
 import VariableManager from './VariableManager';
 import SettingsManager from './SettingsManager';
+import TemplateGallery from './templates/TemplateGallery';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
+import { TemplateService } from '../features/templates/TemplateService';
+import { TemplateGenerator } from '../features/templates/TemplateGenerator';
+import { Template } from '../types/template';
+
+// Create service instances
+const templateService = new TemplateService();
+const templateGenerator = new TemplateGenerator();
 
 
 const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
@@ -36,6 +44,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     const [activeTab, setActiveTab] = useState<NavigationTab>('scenes');
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
     const [isConfiguringScene, setIsConfiguringScene] = useState(false);
+    const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
 
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
@@ -85,14 +94,15 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 return;
             }
 
-            // Map number keys 1-6 to tabs
+            // Map number keys 1-7 to tabs
             const tabMap: Record<string, NavigationTab> = {
                 '1': 'scenes',
                 '2': 'characters',
                 '3': 'ui',
                 '4': 'assets',
                 '5': 'variables',
-                '6': 'settings'
+                '6': 'settings',
+                '7': 'templates'
             };
 
             const newTab = tabMap[e.key];
@@ -186,6 +196,86 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                       (project.audio ? Object.keys(project.audio).length : 0) +
                       (project.videos ? Object.keys(project.videos).length : 0);
     const variableCount = project.variables ? Object.keys(project.variables).length : 0;
+    
+    // Template system integration
+    const [selectedTemplateId, setSelectedTemplateId] = useState<VNID | undefined>(undefined);
+    const [previewTemplate, setPreviewTemplate] = useState<any | null>(null);
+    
+    const handleSelectTemplate = (template: any) => {
+        setSelectedTemplateId(template.id);
+        console.log('Template selected:', template);
+    };
+    
+    const handlePreviewTemplate = (template: any) => {
+        setPreviewTemplate(template);
+        console.log('Previewing template:', template);
+        // TODO: Open template preview modal or panel
+    };
+    
+    const handleApplyTemplate = async (template: Template) => {
+        console.log('Applying template:', template);
+        try {
+            // Use the template's default config for now
+            // TODO: Add configuration UI for users to customize before applying
+            const config = template.defaultConfig;
+            
+            // Generate the template content
+            const result = await templateGenerator.generateInstance(
+                template,
+                config,
+                project.id,
+                {
+                    validateBeforeGeneration: true,
+                    trackUsage: true,
+                    generateIds: true
+                }
+            );
+            
+            if (!result.success) {
+                alert(`Failed to apply template:\n${result.errors.join('\n')}`);
+                return;
+            }
+            
+            // Add generated UI screens to project
+            if (result.generatedScreens && result.generatedScreens.length > 0) {
+                result.generatedScreens.forEach(screen => {
+                    dispatch({
+                        type: 'ADD_UI_SCREEN',
+                        payload: { screen }
+                    });
+                });
+            }
+            
+            // Add generated variables to project
+            if (result.generatedVariables && result.generatedVariables.length > 0) {
+                result.generatedVariables.forEach(variable => {
+                    dispatch({
+                        type: 'ADD_VARIABLE',
+                        payload: { variable }
+                    });
+                });
+            }
+            
+            // Show success message
+            const message = `Template "${template.name}" applied successfully!\n\n` +
+                `Created:\n` +
+                `- ${result.generatedScreens.length} UI Screen(s)\n` +
+                `- ${result.generatedVariables.length} Variable(s)` +
+                (result.warnings.length > 0 ? `\n\nWarnings:\n${result.warnings.join('\n')}` : '');
+            
+            alert(message);
+            
+            // Switch to UI tab to show the new screen
+            if (result.generatedScreens.length > 0) {
+                setActiveTab('ui');
+                handleSetActiveMenuScreen(result.generatedScreens[0].id as VNID);
+            }
+            
+        } catch (error) {
+            console.error('Failed to apply template:', error);
+            alert('Failed to apply template. Please try again.');
+        }
+    };
 
     const handleTabChange = (tab: NavigationTab) => {
         setActiveTab(tab);
@@ -261,6 +351,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                         <VariableManager project={project} />
                     ) : activeTab === 'settings' ? (
                         <SettingsManager project={project} />
+                    ) : activeTab === 'templates' ? (
+                        <TemplateGallery 
+                            onSelectTemplate={handleSelectTemplate}
+                            onPreviewTemplate={handlePreviewTemplate}
+                            onApplyTemplate={handleApplyTemplate}
+                            selectedTemplateId={selectedTemplateId}
+                        />
                     ) : null}
                 </div>
 

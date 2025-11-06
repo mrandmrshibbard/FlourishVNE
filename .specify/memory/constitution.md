@@ -121,7 +121,7 @@ Every feature MUST have user-facing documentation with examples. Complex feature
 - Error messages MUST be actionable (e.g., "Character not showing? Check expression assignments")
 - Code comments explain business logic, edge cases, and architectural decisions
 
-### VIII. Must User Existing Setup
+### VIII. Must Use Existing Setup
 
 Any work done MUST integrate with the existing project setup, tools, and workflows. Introducing new dependencies, build steps, or runtime requirements is forbidden unless absolutely necessary and approved through governance.
 

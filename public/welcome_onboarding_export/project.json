@@ -1,0 +1,4213 @@
+{
+  "id": "proj-1760830281303",
+  "title": "Welcome-Onboarding",
+  "startSceneId": "scene-start",
+  "scenes": {
+    "scene-start": {
+      "id": "scene-start",
+      "name": "Intro",
+      "commands": [
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-jk0hyo4",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-tlk3nsa"
+        },
+        {
+          "type": "PlayMusic",
+          "audioId": "audi-b7kvjt0",
+          "loop": true,
+          "fadeDuration": 1,
+          "id": "cmd-4pj40c2"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-spsp46p",
+          "position": "right",
+          "transition": "dissolve",
+          "duration": 1,
+          "id": "cmd-pn9bjgn",
+          "endPosition": "right"
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-1n479q6",
+          "id": "cmd-730jt76"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Oh?",
+          "id": "cmd-7z3gkgi"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-iderb3z",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-fxj977p"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Hey there. My name's Alana. Welcome to Flo...",
+          "id": "cmd-kxocakl"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-6cs1ud4",
+          "position": "right",
+          "transition": "fade",
+          "duration": 0.3,
+          "id": "cmd-hq0zgtm"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "And I'm...... ",
+          "id": "cmd-lfd87a3"
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-b56pjyn",
+          "id": "cmd-xucztt1"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-u91cvtb",
+          "position": "left",
+          "transition": "slide",
+          "duration": 0.3,
+          "id": "cmd-dk4xprj",
+          "endPosition": "left",
+          "startPosition": "right"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "BLOSSOM!!!!",
+          "id": "cmd-kr7zx49"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-xdulyry",
+          "position": "left",
+          "transition": "instant",
+          "duration": 0.1,
+          "id": "cmd-s2hxboj"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-yn9lay8",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-dnxa7lv"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Hi, Blossom...",
+          "id": "cmd-rsl9pib"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Blossom's my girlfriend. And she gets waaaay too excited to meet new people.",
+          "id": "cmd-u5mmnp5"
+        },
+        {
+          "type": "HideCharacter",
+          "characterId": "char-2lmqqwo",
+          "transition": "fade",
+          "duration": 0.1,
+          "id": "cmd-gh392yp",
+          "endPosition": "left"
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-bwqukse",
+          "id": "cmd-fsfl7ne"
+        },
+        {
+          "type": "ShowImage",
+          "imageId": "imag-7zkqra8",
+          "x": 50,
+          "y": 90,
+          "width": 200,
+          "height": 200,
+          "rotation": 0,
+          "opacity": 1,
+          "scaleX": 5,
+          "scaleY": 5,
+          "transition": "fade",
+          "duration": 0.1,
+          "id": "cmd-r4xuf60"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-6cs1ud4",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-t3264va"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "So... what's your name?! Huh? HUH?!",
+          "id": "cmd-unu8k3z"
+        },
+        {
+          "type": "TextInput",
+          "variableId": "var-demo",
+          "prompt": "My name is:",
+          "placeholder": "Type here...",
+          "maxLength": 50,
+          "id": "cmd-9g1nhz1"
+        },
+        {
+          "type": "HideImage",
+          "targetCommandId": "cmd-r4xuf60",
+          "transition": "fade",
+          "duration": 0.1,
+          "id": "cmd-i8bun5m"
+        },
+        {
+          "type": "ShowImage",
+          "imageId": "imag-n99wsl2",
+          "x": 50,
+          "y": 90,
+          "width": 200,
+          "height": 200,
+          "rotation": 0,
+          "opacity": 1,
+          "scaleX": 5,
+          "scaleY": 5,
+          "transition": "fade",
+          "duration": 0.1,
+          "id": "cmd-h3fa4o1"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "WELCOME TO FLOURISH {name}!!!!",
+          "id": "cmd-hyx1t92"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Blossom... you're going to scare them away!",
+          "id": "cmd-cvwqe9n"
+        },
+        {
+          "type": "HideImage",
+          "targetCommandId": "cmd-h3fa4o1",
+          "transition": "fade",
+          "duration": 0.5,
+          "id": "cmd-dajfxle"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-c195cl8",
+          "position": "left",
+          "transition": "fade",
+          "duration": 0.1,
+          "id": "cmd-g91hfu2"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-iderb3z",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-1mghbl6"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Anyways... truly, welcome. We hope you have a lot of fun creating with us!",
+          "id": "cmd-1yubsi4"
+        },
+        {
+          "type": "StopMusic",
+          "fadeDuration": 1,
+          "id": "cmd-bh1iziq"
+        }
+      ]
+    },
+    "scene-2ug2p63": {
+      "id": "scene-2ug2p63",
+      "name": "layered_sprites",
+      "commands": [
+        {
+          "type": "BranchStart",
+          "name": "Intro",
+          "color": "#38bdf8",
+          "branchId": "branch-r8joaa7",
+          "isCollapsed": false,
+          "id": "cmd-hzkc2rl",
+          "conditions": [
+            {
+              "variableId": "var-6uxozln",
+              "operator": "is false",
+              "value": ""
+            }
+          ],
+          "conditionExpression": "var-6uxozln == false"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-pwmdrvz",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-81r0uoe",
+          "conditions": [
+            {
+              "variableId": "var-1huo4q2",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "duration": 2,
+          "waitForInput": false,
+          "id": "cmd-6qjgvh0"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-aoss6ml",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-nwwdkb2"
+        },
+        {
+          "type": "PlayMusic",
+          "audioId": "audi-zb3rcm6",
+          "loop": true,
+          "fadeDuration": 1,
+          "id": "cmd-clc3gsf"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-2jnu1nm",
+          "position": "center",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-ritefqx"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Uh {name}... hey. So... I kind of need your help.",
+          "id": "cmd-dp839e8"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-7v5lgcm",
+          "position": "center",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-2vvm93p"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "I'VE GOT A DATE WITH BLOSSOM TONIGHT! I DON'T KNOW WHAT TO WEAR!",
+          "id": "cmd-vso3g68"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-7x1d594",
+          "position": "center",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-arnxf60ep"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Please... can you help me pick out an outfit?",
+          "id": "cmd-k7zw06758"
+        },
+        {
+          "type": "Choice",
+          "options": [
+            {
+              "id": "opt-v8wa2pu",
+              "text": "Sure!",
+              "actions": [
+                {
+                  "type": "SetVariable",
+                  "variableId": "var-494x12p",
+                  "operator": "set",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "opt-9cvruvy",
+              "text": "No thanks!",
+              "actions": [
+                {
+                  "type": "SetVariable",
+                  "variableId": "var-494x12p",
+                  "operator": "set",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "id": "cmd-3t38wfwfg"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Aw.... whatever. I'll figure it out!",
+          "id": "cmd-99hupfw",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "THANK YOOOOOU!!!!!!",
+          "id": "cmd-k4w4fmmsy",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "SetVariable",
+          "variableId": "var-6uxozln",
+          "operator": "set",
+          "value": true,
+          "id": "cmd-8ug6gx3"
+        },
+        {
+          "type": "ShowScreen",
+          "screenId": "screen-qgvldy4",
+          "id": "cmd-cnsudx7c7",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "BranchEnd",
+          "branchId": "branch-r8joaa7",
+          "id": "cmd-k5xosfn"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-aoss6ml",
+          "transition": "dissolve",
+          "duration": 0.5,
+          "id": "cmd-yv22zii"
+        },
+        {
+          "type": "BranchStart",
+          "name": "Agree To Help",
+          "color": "#38bdf8",
+          "branchId": "branch-4ahddrp",
+          "isCollapsed": false,
+          "id": "cmd-ztizxbz",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Label",
+          "labelId": "dress_check",
+          "id": "cmd-uuhv9dj"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-ob27uus",
+          "position": "center",
+          "transition": "fade",
+          "duration": 0.5,
+          "id": "cmd-a6wewzx"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Oooh... nice choice. All done?",
+          "id": "cmd-q8ycrr1"
+        },
+        {
+          "type": "Choice",
+          "options": [
+            {
+              "id": "opt-0mgb3ea",
+              "text": "Let's go!",
+              "actions": [
+                {
+                  "type": "SetVariable",
+                  "variableId": "var-u6m8xfq",
+                  "operator": "set",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "opt-k5kt0ov",
+              "text": "Let's Change",
+              "actions": [
+                {
+                  "type": "SetVariable",
+                  "variableId": "var-4narp3z",
+                  "operator": "set",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "id": "cmd-8rkrro2"
+        },
+        {
+          "type": "ShowScreen",
+          "screenId": "screen-qgvldy4",
+          "id": "cmd-v4fmr1p",
+          "conditions": [
+            {
+              "variableId": "var-4narp3z",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "HideCharacter",
+          "characterId": "char-ld8azvx",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-n89rgaz",
+          "conditions": [
+            {
+              "variableId": "var-u6m8xfq",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Jump",
+          "targetSceneId": "scene-536upln",
+          "id": "cmd-zqsadbl",
+          "conditions": [
+            {
+              "variableId": "var-u6m8xfq",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "BranchEnd",
+          "branchId": "branch-4ahddrp",
+          "id": "cmd-v9a97ms"
+        },
+        {
+          "type": "BranchStart",
+          "name": "Refuse To Help",
+          "color": "#38bdf8",
+          "branchId": "branch-3fj4wh4",
+          "isCollapsed": false,
+          "id": "cmd-ok4mocn",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "HideCharacter",
+          "characterId": "char-ld8azvx",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-vtptwd6",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-pqhdcwk",
+          "position": "center",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-choet2n",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Let's go!",
+          "id": "cmd-01bihvc",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "StopMusic",
+          "fadeDuration": 1,
+          "id": "cmd-nxxtk3t"
+        },
+        {
+          "type": "Jump",
+          "targetSceneId": "scene-536upln",
+          "id": "cmd-iyqirl2",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "BranchEnd",
+          "branchId": "branch-3fj4wh4",
+          "id": "cmd-pkgmymn"
+        }
+      ]
+    },
+    "scene-536upln": {
+      "id": "scene-536upln",
+      "name": "money_system",
+      "commands": [
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-lta167r",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-b8cc6cy"
+        },
+        {
+          "type": "PlayMusic",
+          "audioId": "audi-d4u2pz6",
+          "loop": true,
+          "fadeDuration": 3,
+          "id": "cmd-0w63rj7"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-7t4f6t8",
+          "expressionId": "expr-upu8896",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-5qq754p",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-54qrudi"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-1ca4ehz",
+          "expressionId": "expr-mzlyzex",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-bm4irf8",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-avnnekc"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-hghox0c",
+          "expressionId": "expr-1iwr5zj",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-ajzzzx6",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-85hr8l5"
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ia50f6k",
+          "expressionId": "expr-mevwa3j",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-8c8epp0",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-w134y9v"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-pqhdcwk",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-6epuxan",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Hey, {name}... Blossom should be here any minute.",
+          "id": "cmd-yvrkrdd"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-k5zvkcs",
+          "position": "left",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-18dxml7"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "Hi, Alana...",
+          "id": "cmd-y9u2dru"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Oh.... h-h-hey, Blossom. You look... wow",
+          "id": "cmd-bvqd6ye"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-ezx6xsj",
+          "position": "left",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-cwfzmew"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "Tehehehehe",
+          "id": "cmd-g4s0hsv"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-xo3oees",
+          "position": "left",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-lhuusqj"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "Come on!!! Let's get some snacks!",
+          "id": "cmd-cskmyr1"
+        },
+        {
+          "type": "ShowScreen",
+          "screenId": "screen-0mpq2xi",
+          "id": "cmd-vkp55li"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-3bqnqrf",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-b9fawbs"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-lm7znb0",
+          "position": {
+            "x": 60,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-i4xk4rd"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-pqhdcwk",
+          "position": {
+            "x": 75,
+            "y": 20
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-w3vlsmk",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-1ca4ehz",
+          "expressionId": "expr-use7149",
+          "position": {
+            "x": 75,
+            "y": 20
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-9tvhqcf",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-avnnekc"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-7t4f6t8",
+          "expressionId": "expr-l8ewxpy",
+          "position": {
+            "x": 75,
+            "y": 20
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-hvl77re",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-54qrudi"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ia50f6k",
+          "expressionId": "expr-pcooyu0",
+          "position": {
+            "x": 75,
+            "y": 20
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-bbdtunt",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-w134y9v"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-hghox0c",
+          "expressionId": "expr-3tv03h0",
+          "position": {
+            "x": 75,
+            "y": 20
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-xilpbxt",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-85hr8l5"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "Mmmm! SNACKS! Let's go!!!",
+          "id": "cmd-7fp0pwe",
+          "conditions": [
+            {
+              "variableId": "var-a1f1wc9",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "Aw I wanted something else... Oh well!",
+          "id": "cmd-0uh793f",
+          "conditions": [
+            {
+              "variableId": "var-gze6kdj",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "StopMusic",
+          "fadeDuration": 1,
+          "id": "cmd-9ijw3eh"
+        }
+      ]
+    },
+    "scene-w84gtln": {
+      "id": "scene-w84gtln",
+      "name": "love_system",
+      "commands": [
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-j96tmom",
+          "id": "cmd-dypc32u"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-93rn4x9",
+          "transition": "dissolve",
+          "duration": 1,
+          "id": "cmd-dqctxs1"
+        },
+        {
+          "type": "Wait",
+          "duration": 2,
+          "waitForInput": false,
+          "id": "cmd-rr4xvx6"
+        },
+        {
+          "type": "PlayMusic",
+          "audioId": "audi-flub88r",
+          "loop": true,
+          "fadeDuration": 1,
+          "id": "cmd-b9lfe7q"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-s661ohf",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-248g0qk"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-gs8go4g",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-nq0ndli",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-1ca4ehz",
+          "expressionId": "expr-use7149",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-8kpz39h",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-avnnekc"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ia50f6k",
+          "expressionId": "expr-pcooyu0",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-dchiv7z",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-w134y9v"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-7t4f6t8",
+          "expressionId": "expr-l8ewxpy",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-hc86xi0",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-54qrudi"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-hghox0c",
+          "expressionId": "expr-3tv03h0",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-f2oboa3",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-85hr8l5"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-lm7znb0",
+          "position": {
+            "x": 35,
+            "y": 13
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-tyep9jx"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "I... uh... had a really good time tonight, Blossom!",
+          "id": "cmd-117rnyy"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "Me too, Alana!",
+          "id": "cmd-b2pwcyr"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "Blossom stares expectantly at Alana... should she :",
+          "id": "cmd-hh48y3w"
+        },
+        {
+          "type": "Choice",
+          "options": [
+            {
+              "id": "opt-fnw2y5z",
+              "text": "Kiss Blossom",
+              "actions": [
+                {
+                  "type": "SetVariable",
+                  "variableId": "var-3eg6fli",
+                  "operator": "set",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "opt-9jimxd6",
+              "text": "Hug Blossom",
+              "actions": [
+                {
+                  "type": "SetVariable",
+                  "variableId": "var-d8o3tec",
+                  "operator": "set",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "id": "cmd-rt12rvj"
+        },
+        {
+          "type": "FlashScreen",
+          "color": "#FFFFFF",
+          "duration": 0.5,
+          "id": "cmd-soff0am",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-wdojrlx",
+            "stackOrder": 0
+          },
+          "conditions": [
+            {
+              "variableId": "var-3eg6fli",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-d8o3tec",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowImage",
+          "imageId": "imag-ysfw94n",
+          "x": 50,
+          "y": 50,
+          "width": 800,
+          "height": 800,
+          "rotation": 0,
+          "opacity": 1,
+          "scaleX": 1,
+          "scaleY": 1,
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-4rvenc7",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-wdojrlx",
+            "stackOrder": 1
+          },
+          "conditions": [
+            {
+              "variableId": "var-3eg6fli",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-d8o3tec",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-ky3p0gn",
+          "id": "cmd-vrq83j9",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-wdojrlx",
+            "stackOrder": 1
+          },
+          "conditions": [
+            {
+              "variableId": "var-3eg6fli",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-d8o3tec",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "FlashScreen",
+          "color": "#FFFFFF",
+          "duration": 0.5,
+          "id": "cmd-75t60vb",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-6prn9td",
+            "stackOrder": 0
+          },
+          "conditions": [
+            {
+              "variableId": "var-d8o3tec",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-3eg6fli",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-e09bn7z",
+          "id": "cmd-bc4elak",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-6prn9td",
+            "stackOrder": 1
+          },
+          "conditions": [
+            {
+              "variableId": "var-d8o3tec",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-3eg6fli",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-gi7dsro",
+          "id": "cmd-b3o2nsq",
+          "conditions": [
+            {
+              "variableId": "var-demo",
+              "operator": "==",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "HideImage",
+          "targetCommandId": "cmd-4rvenc7",
+          "transition": "fade",
+          "duration": 2,
+          "id": "cmd-933m004"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-2lmqqwo",
+          "expressionId": "expr-ckt6qz1",
+          "position": {
+            "x": 35,
+            "y": 13
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-bkzvqlo"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ld8azvx",
+          "expressionId": "expr-bf11cn3",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-9ct881b",
+          "conditions": [
+            {
+              "variableId": "var-494x12p",
+              "operator": "is false",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-1ca4ehz",
+          "expressionId": "expr-kchxvhp",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-p8eo4p0",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-avnnekc"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-ia50f6k",
+          "expressionId": "expr-ahz43o3",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-yx6b7jb",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-w134y9v"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-7t4f6t8",
+          "expressionId": "expr-y0z1rla",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-z3n5xfy",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-54qrudi"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-hghox0c",
+          "expressionId": "expr-cjawvkc",
+          "position": {
+            "x": 50,
+            "y": 15
+          },
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-rqnh546",
+          "conditions": [
+            {
+              "variableId": "var-mmfnsxt",
+              "operator": "==",
+              "value": "asset-85hr8l5"
+            },
+            {
+              "variableId": "var-494x12p",
+              "operator": "is true",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "hEeHeEhEe....",
+          "id": "cmd-pfphvbe"
+        },
+        {
+          "type": "StopMusic",
+          "fadeDuration": 1,
+          "id": "cmd-u8qzae0"
+        }
+      ]
+    },
+    "scene-cn6jdcd": {
+      "id": "scene-cn6jdcd",
+      "name": "Outro",
+      "commands": [
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-aoss6ml",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-xkgks7l"
+        },
+        {
+          "type": "StopSoundEffect",
+          "id": "cmd-ytk959m"
+        },
+        {
+          "type": "PlayMusic",
+          "audioId": "audi-b7kvjt0",
+          "loop": true,
+          "fadeDuration": 1,
+          "id": "cmd-ywzaord"
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-355cg48",
+          "expressionId": "expr-ktdkmeu",
+          "position": "center",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-umiqndt"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "Hey, {name}! Thanks so much for helping me with my date. I couldn't have done it with out you! ...literally.",
+          "id": "cmd-j54gfzb"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-ld8azvx",
+          "text": "I hope you had fun and learned a lot. As for me... it's my bed time. See ya tomorrow, {name}!",
+          "id": "cmd-i564ai4"
+        }
+      ]
+    }
+  },
+  "characters": {
+    "char-ld8azvx": {
+      "id": "char-ld8azvx",
+      "name": "Alana",
+      "color": "#3d79c7",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-yv9lobm": {
+          "id": "layer-yv9lobm",
+          "name": "Alana_normal",
+          "assets": {
+            "asset-nl5r7gq": {
+              "id": "asset-nl5r7gq",
+              "name": "alana_surprised",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-nl5r7gq_alana_surprised.png"
+            },
+            "asset-o31zo1q": {
+              "id": "asset-o31zo1q",
+              "name": "alana_lovie",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-o31zo1q_alana_lovie.png"
+            },
+            "asset-kpd5uqb": {
+              "id": "asset-kpd5uqb",
+              "name": "alana_happy",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-kpd5uqb_alana_happy.png"
+            },
+            "asset-fmxfxm5": {
+              "id": "asset-fmxfxm5",
+              "name": "alana_embaressed",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-fmxfxm5_alana_embaressed.png"
+            },
+            "asset-ry9diww": {
+              "id": "asset-ry9diww",
+              "name": "alana_anxious",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-ry9diww_alana_anxious.png"
+            },
+            "asset-rdbyddr": {
+              "id": "asset-rdbyddr",
+              "name": "alana_headon",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-rdbyddr_alana_headon.png"
+            },
+            "asset-e974d7m": {
+              "id": "asset-e974d7m",
+              "name": "alana_anxious2",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-e974d7m_alana_anxious2.png"
+            },
+            "asset-8bv5dzd": {
+              "id": "asset-8bv5dzd",
+              "name": "alana_bed",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-8bv5dzd_alana_bed.png"
+            }
+          }
+        },
+        "layer-cdv853a": {
+          "id": "layer-cdv853a",
+          "name": "outfit",
+          "assets": {
+            "asset-85hr8l5": {
+              "id": "asset-85hr8l5",
+              "name": "alana_redskirt_blackshoes",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-cdv853a/asset-85hr8l5_alana_redskirt_blackshoes.png"
+            },
+            "asset-w134y9v": {
+              "id": "asset-w134y9v",
+              "name": "alana_redskirt_boots",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-cdv853a/asset-w134y9v_alana_redskirt_boots.png"
+            },
+            "asset-54qrudi": {
+              "id": "asset-54qrudi",
+              "name": "alana_purpleshirt_boots",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-cdv853a/asset-54qrudi_alana_purpleshirt_boots.png"
+            },
+            "asset-avnnekc": {
+              "id": "asset-avnnekc",
+              "name": "alana_purpleshirt_blackshoes",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-cdv853a/asset-avnnekc_alana_purpleshirt_blackshoes.png"
+            }
+          }
+        },
+        "layer-qdn7vok": {
+          "id": "layer-qdn7vok",
+          "name": "date",
+          "assets": {
+            "asset-y1vmjwp": {
+              "id": "asset-y1vmjwp",
+              "name": "red_flats",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-qdn7vok/asset-y1vmjwp_red_flats.png"
+            },
+            "asset-m2u7am5": {
+              "id": "asset-m2u7am5",
+              "name": "redflats_look",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-qdn7vok/asset-m2u7am5_redflats_look.png"
+            },
+            "asset-u4mcowq": {
+              "id": "asset-u4mcowq",
+              "name": "redflats_blush",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-qdn7vok/asset-u4mcowq_redflats_blush.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-spsp46p": {
+          "id": "expr-spsp46p",
+          "name": "Idle",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-nl5r7gq",
+            "layer-cdv853a": null,
+            "layer-qdn7vok": null
+          }
+        },
+        "expr-iderb3z": {
+          "id": "expr-iderb3z",
+          "name": "Grin",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-kpd5uqb"
+          }
+        },
+        "expr-6cs1ud4": {
+          "id": "expr-6cs1ud4",
+          "name": "Embarressed",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-fmxfxm5"
+          }
+        },
+        "expr-yn9lay8": {
+          "id": "expr-yn9lay8",
+          "name": "Love",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-o31zo1q"
+          }
+        },
+        "expr-7v5lgcm": {
+          "id": "expr-7v5lgcm",
+          "name": "Anxious",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-ry9diww"
+          }
+        },
+        "expr-2jnu1nm": {
+          "id": "expr-2jnu1nm",
+          "name": "Idle_headon",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-rdbyddr"
+          }
+        },
+        "expr-7x1d594": {
+          "id": "expr-7x1d594",
+          "name": "Anxious 2",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-e974d7m"
+          }
+        },
+        "expr-ob27uus": {
+          "id": "expr-ob27uus",
+          "name": "dressup",
+          "layerConfiguration": {
+            "layer-yv9lobm": null,
+            "layer-cdv853a": null
+          }
+        },
+        "expr-26y5ola": {
+          "id": "expr-26y5ola",
+          "name": "date1",
+          "layerConfiguration": {
+            "layer-yv9lobm": null,
+            "layer-cdv853a": null,
+            "layer-qdn7vok": null
+          }
+        },
+        "expr-pqhdcwk": {
+          "id": "expr-pqhdcwk",
+          "name": "date_default",
+          "layerConfiguration": {
+            "layer-yv9lobm": null,
+            "layer-cdv853a": null,
+            "layer-qdn7vok": "asset-y1vmjwp"
+          }
+        },
+        "expr-gs8go4g": {
+          "id": "expr-gs8go4g",
+          "name": "look",
+          "layerConfiguration": {
+            "layer-yv9lobm": null,
+            "layer-cdv853a": null,
+            "layer-qdn7vok": "asset-m2u7am5"
+          }
+        },
+        "expr-bf11cn3": {
+          "id": "expr-bf11cn3",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-yv9lobm": null,
+            "layer-cdv853a": null,
+            "layer-qdn7vok": "asset-u4mcowq"
+          }
+        },
+        "expr-ctad1s1": {
+          "id": "expr-ctad1s1",
+          "name": "bed",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-8bv5dzd",
+            "layer-cdv853a": null,
+            "layer-qdn7vok": null
+          }
+        }
+      },
+      "fontUrl": "assets/characters/char-ld8azvx/font.ttf",
+      "fontFamily": "KOMIKAX_"
+    },
+    "char-2lmqqwo": {
+      "id": "char-2lmqqwo",
+      "name": "Blossom",
+      "color": "#c633d1",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-sq9n8rc": {
+          "id": "layer-sq9n8rc",
+          "name": "Blossom_normal",
+          "assets": {
+            "asset-b3qn82y": {
+              "id": "asset-b3qn82y",
+              "name": "blossom_smile",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-b3qn82y_blossom_smile.png"
+            },
+            "asset-8iic6jz": {
+              "id": "asset-8iic6jz",
+              "name": "blossom_happy",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-8iic6jz_blossom_happy.png"
+            },
+            "asset-2sknvz0": {
+              "id": "asset-2sknvz0",
+              "name": "blossom_excited",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-2sknvz0_blossom_excited.png"
+            },
+            "asset-or2pzz8": {
+              "id": "asset-or2pzz8",
+              "name": "blossom_dressedup",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-or2pzz8_blossom_dressedup.png"
+            },
+            "asset-xlglojh": {
+              "id": "asset-xlglojh",
+              "name": "grinbig",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-xlglojh_grinbig.png"
+            },
+            "asset-uye31qf": {
+              "id": "asset-uye31qf",
+              "name": "blush",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-uye31qf_blush.png"
+            },
+            "asset-txtkdy5": {
+              "id": "asset-txtkdy5",
+              "name": "blossom_blush",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-txtkdy5_blossom_blush.png"
+            },
+            "asset-gc7esbz": {
+              "id": "asset-gc7esbz",
+              "name": "blossom_look",
+              "imageUrl": "assets/characters/char-2lmqqwo/layer-sq9n8rc/asset-gc7esbz_blossom_look.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-c195cl8": {
+          "id": "expr-c195cl8",
+          "name": "Idle",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-b3qn82y"
+          }
+        },
+        "expr-u91cvtb": {
+          "id": "expr-u91cvtb",
+          "name": "Excited",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-2sknvz0"
+          }
+        },
+        "expr-xdulyry": {
+          "id": "expr-xdulyry",
+          "name": "Happy",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-8iic6jz"
+          }
+        },
+        "expr-k5zvkcs": {
+          "id": "expr-k5zvkcs",
+          "name": "date",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-or2pzz8"
+          }
+        },
+        "expr-xo3oees": {
+          "id": "expr-xo3oees",
+          "name": "grin",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-xlglojh"
+          }
+        },
+        "expr-ezx6xsj": {
+          "id": "expr-ezx6xsj",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-uye31qf"
+          }
+        },
+        "expr-lm7znb0": {
+          "id": "expr-lm7znb0",
+          "name": "look",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-gc7esbz"
+          }
+        },
+        "expr-ckt6qz1": {
+          "id": "expr-ckt6qz1",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-sq9n8rc": "asset-txtkdy5"
+          }
+        }
+      },
+      "fontUrl": "assets/characters/char-2lmqqwo/font.ttf",
+      "fontFamily": "Super Trend",
+      "fontSize": 36
+    },
+    "char-1ca4ehz": {
+      "id": "char-1ca4ehz",
+      "name": "Alana_purple_flats",
+      "color": "#FFFFFF",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-5adpebf": {
+          "id": "layer-5adpebf",
+          "name": "New Layer 1",
+          "assets": {
+            "asset-6f3dko3": {
+              "id": "asset-6f3dko3",
+              "name": "purple_shoes",
+              "imageUrl": "assets/characters/char-1ca4ehz/layer-5adpebf/asset-6f3dko3_purple_shoes.png"
+            },
+            "asset-lpzpt0a": {
+              "id": "asset-lpzpt0a",
+              "name": "purpleflats_look",
+              "imageUrl": "assets/characters/char-1ca4ehz/layer-5adpebf/asset-lpzpt0a_purpleflats_look.png"
+            },
+            "asset-yzoz0t3": {
+              "id": "asset-yzoz0t3",
+              "name": "purpleflats_blush",
+              "imageUrl": "assets/characters/char-1ca4ehz/layer-5adpebf/asset-yzoz0t3_purpleflats_blush.png"
+            },
+            "asset-15fu3qf": {
+              "id": "asset-15fu3qf",
+              "name": "alana_bed",
+              "imageUrl": "assets/characters/char-1ca4ehz/layer-5adpebf/asset-15fu3qf_alana_bed.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-mzlyzex": {
+          "id": "expr-mzlyzex",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-5adpebf": "asset-6f3dko3"
+          }
+        },
+        "expr-use7149": {
+          "id": "expr-use7149",
+          "name": "look",
+          "layerConfiguration": {
+            "layer-5adpebf": "asset-lpzpt0a"
+          }
+        },
+        "expr-kchxvhp": {
+          "id": "expr-kchxvhp",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-5adpebf": "asset-yzoz0t3"
+          }
+        },
+        "expr-8mv80q5": {
+          "id": "expr-8mv80q5",
+          "name": "bed",
+          "layerConfiguration": {
+            "layer-5adpebf": "asset-15fu3qf"
+          }
+        }
+      },
+      "fontUrl": ""
+    },
+    "char-7t4f6t8": {
+      "id": "char-7t4f6t8",
+      "name": " Alana_purple_boots",
+      "color": "#FFFFFF",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-g70dljq": {
+          "id": "layer-g70dljq",
+          "name": "New Layer 1",
+          "assets": {
+            "asset-ceqvy9x": {
+              "id": "asset-ceqvy9x",
+              "name": "purple_boots",
+              "imageUrl": "assets/characters/char-7t4f6t8/layer-g70dljq/asset-ceqvy9x_purple_boots.png"
+            },
+            "asset-96qezo9": {
+              "id": "asset-96qezo9",
+              "name": "purpleboots_blush",
+              "imageUrl": "assets/characters/char-7t4f6t8/layer-g70dljq/asset-96qezo9_purpleboots_blush.png"
+            },
+            "asset-ynhs35k": {
+              "id": "asset-ynhs35k",
+              "name": "purpleboots_look",
+              "imageUrl": "assets/characters/char-7t4f6t8/layer-g70dljq/asset-ynhs35k_purpleboots_look.png"
+            },
+            "asset-e14vhnm": {
+              "id": "asset-e14vhnm",
+              "name": "alana_bed",
+              "imageUrl": "assets/characters/char-7t4f6t8/layer-g70dljq/asset-e14vhnm_alana_bed.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-upu8896": {
+          "id": "expr-upu8896",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-g70dljq": "asset-ceqvy9x"
+          }
+        },
+        "expr-l8ewxpy": {
+          "id": "expr-l8ewxpy",
+          "name": "look",
+          "layerConfiguration": {
+            "layer-g70dljq": "asset-ynhs35k"
+          }
+        },
+        "expr-y0z1rla": {
+          "id": "expr-y0z1rla",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-g70dljq": "asset-96qezo9"
+          }
+        },
+        "expr-g58m5ew": {
+          "id": "expr-g58m5ew",
+          "name": "bed",
+          "layerConfiguration": {
+            "layer-g70dljq": "asset-e14vhnm"
+          }
+        }
+      },
+      "fontUrl": ""
+    },
+    "char-ia50f6k": {
+      "id": "char-ia50f6k",
+      "name": "  Alana_red_boots",
+      "color": "#FFFFFF",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-4fmh8ou": {
+          "id": "layer-4fmh8ou",
+          "name": "New Layer 1",
+          "assets": {
+            "asset-ji5reag": {
+              "id": "asset-ji5reag",
+              "name": "red_boots",
+              "imageUrl": "assets/characters/char-ia50f6k/layer-4fmh8ou/asset-ji5reag_red_boots.png"
+            },
+            "asset-ulb0rrp": {
+              "id": "asset-ulb0rrp",
+              "name": "redboots_blush",
+              "imageUrl": "assets/characters/char-ia50f6k/layer-4fmh8ou/asset-ulb0rrp_redboots_blush.png"
+            },
+            "asset-yddt7hk": {
+              "id": "asset-yddt7hk",
+              "name": "redboots_look",
+              "imageUrl": "assets/characters/char-ia50f6k/layer-4fmh8ou/asset-yddt7hk_redboots_look.png"
+            },
+            "asset-tqc1cdv": {
+              "id": "asset-tqc1cdv",
+              "name": "alana_bed",
+              "imageUrl": "assets/characters/char-ia50f6k/layer-4fmh8ou/asset-tqc1cdv_alana_bed.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-mevwa3j": {
+          "id": "expr-mevwa3j",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-4fmh8ou": "asset-ji5reag"
+          }
+        },
+        "expr-pcooyu0": {
+          "id": "expr-pcooyu0",
+          "name": "look",
+          "layerConfiguration": {
+            "layer-4fmh8ou": "asset-yddt7hk"
+          }
+        },
+        "expr-ahz43o3": {
+          "id": "expr-ahz43o3",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-4fmh8ou": "asset-ulb0rrp"
+          }
+        },
+        "expr-g0bs0oq": {
+          "id": "expr-g0bs0oq",
+          "name": "bed",
+          "layerConfiguration": {
+            "layer-4fmh8ou": "asset-tqc1cdv"
+          }
+        }
+      },
+      "fontUrl": ""
+    },
+    "char-hghox0c": {
+      "id": "char-hghox0c",
+      "name": "Alana _red_flats",
+      "color": "#FFFFFF",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-kp1ilof": {
+          "id": "layer-kp1ilof",
+          "name": "New Layer 1",
+          "assets": {
+            "asset-s6vb24z": {
+              "id": "asset-s6vb24z",
+              "name": "red_flats",
+              "imageUrl": "assets/characters/char-hghox0c/layer-kp1ilof/asset-s6vb24z_red_flats.png"
+            },
+            "asset-8m2ztsl": {
+              "id": "asset-8m2ztsl",
+              "name": "redflats_blush",
+              "imageUrl": "assets/characters/char-hghox0c/layer-kp1ilof/asset-8m2ztsl_redflats_blush.png"
+            },
+            "asset-j8k23x7": {
+              "id": "asset-j8k23x7",
+              "name": "redflats_look",
+              "imageUrl": "assets/characters/char-hghox0c/layer-kp1ilof/asset-j8k23x7_redflats_look.png"
+            },
+            "asset-sqbrz8u": {
+              "id": "asset-sqbrz8u",
+              "name": "alana_bed",
+              "imageUrl": "assets/characters/char-hghox0c/layer-kp1ilof/asset-sqbrz8u_alana_bed.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-1iwr5zj": {
+          "id": "expr-1iwr5zj",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-kp1ilof": "asset-s6vb24z"
+          }
+        },
+        "expr-3tv03h0": {
+          "id": "expr-3tv03h0",
+          "name": "look",
+          "layerConfiguration": {
+            "layer-kp1ilof": "asset-j8k23x7"
+          }
+        },
+        "expr-cjawvkc": {
+          "id": "expr-cjawvkc",
+          "name": "blush",
+          "layerConfiguration": {
+            "layer-kp1ilof": "asset-8m2ztsl"
+          }
+        },
+        "expr-z97z1vh": {
+          "id": "expr-z97z1vh",
+          "name": "bed",
+          "layerConfiguration": {
+            "layer-kp1ilof": "asset-sqbrz8u"
+          }
+        }
+      },
+      "fontUrl": ""
+    },
+    "char-355cg48": {
+      "id": "char-355cg48",
+      "name": "Alana_bed",
+      "color": "#FFFFFF",
+      "baseImageUrl": null,
+      "layers": {
+        "layer-d3ev634": {
+          "id": "layer-d3ev634",
+          "name": "New Layer 1",
+          "assets": {
+            "asset-v0e7xrq": {
+              "id": "asset-v0e7xrq",
+              "name": "alana_bed",
+              "imageUrl": "assets/characters/char-355cg48/layer-d3ev634/asset-v0e7xrq_alana_bed.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-ktdkmeu": {
+          "id": "expr-ktdkmeu",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-d3ev634": "asset-v0e7xrq"
+          }
+        }
+      }
+    }
+  },
+  "backgrounds": {
+    "back-7k3rptv": {
+      "id": "back-7k3rptv",
+      "name": "app_image",
+      "imageUrl": "assets/backgrounds/back-7k3rptv_app_image.png"
+    },
+    "back-rt8ixo6": {
+      "id": "back-rt8ixo6",
+      "name": "game_button",
+      "imageUrl": "assets/backgrounds/back-rt8ixo6_game_button.png"
+    },
+    "back-jk0hyo4": {
+      "id": "back-jk0hyo4",
+      "name": "sakura_garden",
+      "imageUrl": "assets/backgrounds/back-jk0hyo4_sakura_garden.jpg"
+    },
+    "back-aoss6ml": {
+      "id": "back-aoss6ml",
+      "name": "alanabedroom.763Z",
+      "imageUrl": "assets/backgrounds/back-aoss6ml_alanabedroom.763z.png"
+    },
+    "back-jccj1ns": {
+      "id": "back-jccj1ns",
+      "name": "alanaroom2",
+      "imageUrl": "assets/backgrounds/back-jccj1ns_alanaroom2.png"
+    },
+    "back-pwmdrvz": {
+      "id": "back-pwmdrvz",
+      "name": "transition",
+      "imageUrl": "assets/backgrounds/back-pwmdrvz_transition.png"
+    },
+    "back-9rh8rmk": {
+      "id": "back-9rh8rmk",
+      "name": "_s-1397932753",
+      "imageUrl": "assets/backgrounds/back-9rh8rmk__s-1397932753.png"
+    },
+    "back-2mk2136": {
+      "id": "back-2mk2136",
+      "name": "background",
+      "imageUrl": "assets/backgrounds/back-2mk2136_background.png"
+    },
+    "back-3bqnqrf": {
+      "id": "back-3bqnqrf",
+      "name": "snackbar",
+      "imageUrl": "assets/backgrounds/back-3bqnqrf_snackbar.png"
+    },
+    "back-lta167r": {
+      "id": "back-lta167r",
+      "name": "movietheater",
+      "imageUrl": "assets/backgrounds/back-lta167r_movietheater.png"
+    },
+    "back-s661ohf": {
+      "id": "back-s661ohf",
+      "name": "sakura_garden_night",
+      "imageUrl": "assets/backgrounds/back-s661ohf_sakura_garden_night.png"
+    },
+    "back-93rn4x9": {
+      "id": "back-93rn4x9",
+      "name": "transition2",
+      "imageUrl": "assets/backgrounds/back-93rn4x9_transition2.png"
+    }
+  },
+  "images": {
+    "imag-7zkqra8": {
+      "id": "imag-7zkqra8",
+      "name": "_s-2169971041_bg-removal (2)",
+      "imageUrl": "assets/images/imag-7zkqra8__s-2169971041_bg-removal_2_.png"
+    },
+    "imag-n99wsl2": {
+      "id": "imag-n99wsl2",
+      "name": "_s-2169971041_bg-removal",
+      "imageUrl": "assets/images/imag-n99wsl2__s-2169971041_bg-removal.png"
+    },
+    "imag-x8hvoqs": {
+      "id": "imag-x8hvoqs",
+      "name": "buttongmae",
+      "imageUrl": "assets/images/imag-x8hvoqs_buttongmae.png"
+    },
+    "imag-sks4j37": {
+      "id": "imag-sks4j37",
+      "name": "sampletext",
+      "imageUrl": "assets/images/imag-sks4j37_sampletext.png"
+    },
+    "imag-r7v1zeh": {
+      "id": "imag-r7v1zeh",
+      "name": "background",
+      "imageUrl": "assets/images/imag-r7v1zeh_background.png"
+    },
+    "imag-vxzucu6": {
+      "id": "imag-vxzucu6",
+      "name": "water",
+      "imageUrl": "assets/images/imag-vxzucu6_water.png"
+    },
+    "imag-3i8l6uq": {
+      "id": "imag-3i8l6uq",
+      "name": "soda",
+      "imageUrl": "assets/images/imag-3i8l6uq_soda.png"
+    },
+    "imag-9mgpzis": {
+      "id": "imag-9mgpzis",
+      "name": "popcorn",
+      "imageUrl": "assets/images/imag-9mgpzis_popcorn.png"
+    },
+    "imag-pex5chv": {
+      "id": "imag-pex5chv",
+      "name": "nachos",
+      "imageUrl": "assets/images/imag-pex5chv_nachos.png"
+    },
+    "imag-jjydhjv": {
+      "id": "imag-jjydhjv",
+      "name": "licorice",
+      "imageUrl": "assets/images/imag-jjydhjv_licorice.png"
+    },
+    "imag-v9ytu29": {
+      "id": "imag-v9ytu29",
+      "name": "chocolate_bar",
+      "imageUrl": "assets/images/imag-v9ytu29_chocolate_bar.png"
+    },
+    "imag-ysfw94n": {
+      "id": "imag-ysfw94n",
+      "name": "pinup-style-lip-print_53876-8546",
+      "imageUrl": "assets/images/imag-ysfw94n_pinup-style-lip-print_53876-8546.png"
+    },
+    "imag-gz1unn1": {
+      "id": "imag-gz1unn1",
+      "name": "25dde2a93322c4d0298d2e71f01f2c2a",
+      "imageUrl": "assets/images/imag-gz1unn1_25dde2a93322c4d0298d2e71f01f2c2a.jpg"
+    }
+  },
+  "audio": {
+    "audi-m96fo4k": {
+      "id": "audi-m96fo4k",
+      "name": "Find My Light",
+      "audioUrl": "assets/audio/audi-m96fo4k_find_my_light.mp3"
+    },
+    "audi-zb3rcm6": {
+      "id": "audi-zb3rcm6",
+      "name": "Beach Breeze Melody ext v2",
+      "audioUrl": "assets/audio/audi-zb3rcm6_beach_breeze_melody_ext_v2.mp3"
+    },
+    "audi-rmtjagb": {
+      "id": "audi-rmtjagb",
+      "name": "Whispers of Yesterday",
+      "audioUrl": "assets/audio/audi-rmtjagb_whispers_of_yesterday.mp3"
+    },
+    "audi-li73ksg": {
+      "id": "audi-li73ksg",
+      "name": "tada-military-2-183973",
+      "audioUrl": "assets/audio/audi-li73ksg_tada-military-2-183973.mp3"
+    },
+    "audi-e09bn7z": {
+      "id": "audi-e09bn7z",
+      "name": "alanasigh",
+      "audioUrl": "assets/audio/audi-e09bn7z_alanasigh.wav"
+    },
+    "audi-ee4j1re": {
+      "id": "audi-ee4j1re",
+      "name": "alanahi",
+      "audioUrl": "assets/audio/audi-ee4j1re_alanahi.wav"
+    },
+    "audi-7b1uotb": {
+      "id": "audi-7b1uotb",
+      "name": "086060_tadawav-85939",
+      "audioUrl": "assets/audio/audi-7b1uotb_086060_tadawav-85939.mp3"
+    },
+    "audi-dyhck9m": {
+      "id": "audi-dyhck9m",
+      "name": "Whispers of Warmth ext v2",
+      "audioUrl": "assets/audio/audi-dyhck9m_whispers_of_warmth_ext_v2.mp3"
+    },
+    "audi-b56pjyn": {
+      "id": "audi-b56pjyn",
+      "name": "crashtada",
+      "audioUrl": "assets/audio/audi-b56pjyn_crashtada.mp3"
+    },
+    "audi-ui1mcq9": {
+      "id": "audi-ui1mcq9",
+      "name": "zoom-in-35865",
+      "audioUrl": "assets/audio/audi-ui1mcq9_zoom-in-35865.mp3"
+    },
+    "audi-1n479q6": {
+      "id": "audi-1n479q6",
+      "name": "Sandrahuh",
+      "audioUrl": "assets/audio/audi-1n479q6_sandrahuh.wav"
+    },
+    "audi-bwqukse": {
+      "id": "audi-bwqukse",
+      "name": "boing",
+      "audioUrl": "assets/audio/audi-bwqukse_boing.mp3"
+    },
+    "audi-wybqr64": {
+      "id": "audi-wybqr64",
+      "name": "waiting_music",
+      "audioUrl": "assets/audio/audi-wybqr64_waiting_music.mp3"
+    },
+    "audi-j96tmom": {
+      "id": "audi-j96tmom",
+      "name": "cricket-chirping-6231",
+      "audioUrl": "assets/audio/audi-j96tmom_cricket-chirping-6231.mp3"
+    },
+    "audi-gi7dsro": {
+      "id": "audi-gi7dsro",
+      "name": "awwwww-37944",
+      "audioUrl": "assets/audio/audi-gi7dsro_awwwww-37944.mp3"
+    },
+    "audi-ky3p0gn": {
+      "id": "audi-ky3p0gn",
+      "name": "kissing-lips-175357",
+      "audioUrl": "assets/audio/audi-ky3p0gn_kissing-lips-175357.mp3"
+    },
+    "audi-b7kvjt0": {
+      "id": "audi-b7kvjt0",
+      "name": "k-pop-ringtone-no-copyright-357142",
+      "audioUrl": "assets/audio/audi-b7kvjt0_k-pop-ringtone-no-copyright-357142.mp3"
+    },
+    "audi-r27oe5h": {
+      "id": "audi-r27oe5h",
+      "name": "elevator-music-jazz-lounge-419360",
+      "audioUrl": "assets/audio/audi-r27oe5h_elevator-music-jazz-lounge-419360.mp3"
+    },
+    "audi-d4u2pz6": {
+      "id": "audi-d4u2pz6",
+      "name": "house-trance-230715",
+      "audioUrl": "assets/audio/audi-d4u2pz6_house-trance-230715.mp3"
+    },
+    "audi-flub88r": {
+      "id": "audi-flub88r",
+      "name": "Warm Sunrise",
+      "audioUrl": "assets/audio/audi-flub88r_warm_sunrise.mp3"
+    }
+  },
+  "videos": {
+    "vide-ymhsi1r": {
+      "id": "vide-ymhsi1r",
+      "name": "falling_petals",
+      "videoUrl": "assets/videos/vide-ymhsi1r_falling_petals.webm"
+    }
+  },
+  "variables": {
+    "var-demo": {
+      "id": "var-demo",
+      "name": "name",
+      "type": "string",
+      "defaultValue": "name"
+    },
+    "var-494x12p": {
+      "id": "var-494x12p",
+      "name": "helped_alana",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-2eoyb87": {
+      "id": "var-2eoyb87",
+      "name": "alana_outfit",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-4gtzpm2": {
+      "id": "var-4gtzpm2",
+      "name": "alana_shoes",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-mmfnsxt": {
+      "id": "var-mmfnsxt",
+      "name": "alana_full",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-1huo4q2": {
+      "id": "var-1huo4q2",
+      "name": "finished_outfit",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-9tlg3wa": {
+      "id": "var-9tlg3wa",
+      "name": "met_blossom",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-6pe6go3": {
+      "id": "var-6pe6go3",
+      "name": "money",
+      "type": "number",
+      "defaultValue": 6
+    },
+    "var-uj0f6u6": {
+      "id": "var-uj0f6u6",
+      "name": "blossom_affection",
+      "type": "number",
+      "defaultValue": 10
+    },
+    "var-gze6kdj": {
+      "id": "var-gze6kdj",
+      "name": "bad_snacks",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-3eg6fli": {
+      "id": "var-3eg6fli",
+      "name": "kiss",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-d8o3tec": {
+      "id": "var-d8o3tec",
+      "name": "hug",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-a1f1wc9": {
+      "id": "var-a1f1wc9",
+      "name": "good_snacks",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-6uxozln": {
+      "id": "var-6uxozln",
+      "name": "intro_seen",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-4narp3z": {
+      "id": "var-4narp3z",
+      "name": "dressed_again",
+      "type": "boolean",
+      "defaultValue": false
+    },
+    "var-u6m8xfq": {
+      "id": "var-u6m8xfq",
+      "name": "go_on_date",
+      "type": "boolean",
+      "defaultValue": false
+    }
+  },
+  "ui": {
+    "titleScreenId": "screen-gsjihqh",
+    "saveScreenId": "screen-hd90m1b",
+    "loadScreenId": "screen-eiwd08q",
+    "settingsScreenId": "screen-zircrw6",
+    "pauseScreenId": "screen-do9rrh1",
+    "gameHudScreenId": null,
+    "dialogueBoxImage": null,
+    "choiceButtonImage": null,
+    "dialogueNameFont": {
+      "family": "Poppins, sans-serif",
+      "size": 22,
+      "color": "#FFFFFF",
+      "weight": "bold",
+      "italic": false
+    },
+    "dialogueTextFont": {
+      "family": "Poppins, sans-serif",
+      "size": 20,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "choiceTextFont": {
+      "family": "Poppins, sans-serif",
+      "size": 18,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    }
+  },
+  "uiScreens": {
+    "screen-gsjihqh": {
+      "id": "screen-gsjihqh",
+      "name": "Title Screen",
+      "background": {
+        "type": "image",
+        "assetId": "back-7k3rptv"
+      },
+      "music": {
+        "audioId": "audi-b7kvjt0",
+        "policy": "continue"
+      },
+      "elements": {
+        "elem-qysni8q": {
+          "id": "elem-qysni8q",
+          "name": "Image",
+          "x": -1.6897225953327601,
+          "y": -2.380232722754038,
+          "width": 108.30950151808905,
+          "height": 104.34619044070112,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "cover",
+          "background": {
+            "type": "video",
+            "assetId": "vide-ymhsi1r"
+          }
+        },
+        "elem-vbcbup3": {
+          "id": "elem-vbcbup3",
+          "name": "Button",
+          "x": 41.98863630616632,
+          "y": 74.65346418312453,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Start Game",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "StartNewGame"
+          },
+          "image": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "hoverImage": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "elem-4s9d1sx": {
+          "id": "elem-4s9d1sx",
+          "name": "Button",
+          "x": 66.84659013324536,
+          "y": 88.54703913650928,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Setting",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-9i7rzju"
+          },
+          "image": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "hoverImage": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "elem-ny6dqj0": {
+          "id": "elem-ny6dqj0",
+          "name": "Button",
+          "x": 15.970644633823609,
+          "y": 86.9932666659746,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Load Game",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-8r0ig0a"
+          },
+          "image": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "hoverImage": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-hd90m1b": {
+      "id": "screen-hd90m1b",
+      "name": "Save Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-n1a6n94": {
+          "id": "el-n1a6n94",
+          "name": "Header",
+          "type": "Text",
+          "text": "Save Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-f407ft0": {
+          "id": "el-f407ft0",
+          "name": "Save Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-bol83xq": {
+          "id": "el-bol83xq",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-eiwd08q": {
+      "id": "screen-eiwd08q",
+      "name": "Load Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-reu1vop": {
+          "id": "el-reu1vop",
+          "name": "Header",
+          "type": "Text",
+          "text": "Load Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-g2odg2q": {
+          "id": "el-g2odg2q",
+          "name": "Load Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-7xli67q": {
+          "id": "el-7xli67q",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-zircrw6": {
+      "id": "screen-zircrw6",
+      "name": "Settings Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-bvp174v": {
+          "id": "el-bvp174v",
+          "name": "Header",
+          "type": "Text",
+          "text": "Settings",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-558k0uv": {
+          "id": "el-558k0uv",
+          "name": "Music Volume Label",
+          "type": "Text",
+          "text": "Music Volume",
+          "x": 35,
+          "y": 30,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-4s24yts": {
+          "id": "el-4s24yts",
+          "name": "Music Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "musicVolume",
+          "x": 65,
+          "y": 30,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-kfj0uwn": {
+          "id": "el-kfj0uwn",
+          "name": "SFX Volume Label",
+          "type": "Text",
+          "text": "Sound FX Volume",
+          "x": 35,
+          "y": 40,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-3hbnpyh": {
+          "id": "el-3hbnpyh",
+          "name": "SFX Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "sfxVolume",
+          "x": 65,
+          "y": 40,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-vlq5buh": {
+          "id": "el-vlq5buh",
+          "name": "Text Speed Label",
+          "type": "Text",
+          "text": "Text Speed",
+          "x": 35,
+          "y": 50,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-6rm2gak": {
+          "id": "el-6rm2gak",
+          "name": "Text Speed Slider",
+          "type": "SettingsSlider",
+          "setting": "textSpeed",
+          "x": 65,
+          "y": 50,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-dw2wirt": {
+          "id": "el-dw2wirt",
+          "name": "Enable Skip Toggle",
+          "type": "SettingsToggle",
+          "setting": "enableSkip",
+          "text": "Enable Skip",
+          "x": 50,
+          "y": 60,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          }
+        },
+        "el-5ufh35i": {
+          "id": "el-5ufh35i",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 85,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "elem-d88dx7o": {
+          "id": "elem-d88dx7o",
+          "name": "Settings Toggle",
+          "x": 35.170966027850056,
+          "y": 66.60275419568212,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "SettingsToggle",
+          "setting": "autoAdvance",
+          "text": "Auto Advance",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          }
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-do9rrh1": {
+      "id": "screen-do9rrh1",
+      "name": "Pause Menu",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-oxhyalw": {
+          "id": "el-oxhyalw",
+          "name": "Return Button",
+          "type": "Button",
+          "text": "Return to Game",
+          "x": 50,
+          "y": 30,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToGame"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-rhomx61": {
+          "id": "el-rhomx61",
+          "name": "Save Game Button",
+          "type": "Button",
+          "text": "Save Game",
+          "x": 50,
+          "y": 40,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-hd90m1b"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-fqtb5gg": {
+          "id": "el-fqtb5gg",
+          "name": "Load Game Button",
+          "type": "Button",
+          "text": "Load Game",
+          "x": 50,
+          "y": 50,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-eiwd08q"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-utew5kv": {
+          "id": "el-utew5kv",
+          "name": "Settings Button",
+          "type": "Button",
+          "text": "Settings",
+          "x": 50,
+          "y": 60,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-zircrw6"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-6fhbokl": {
+          "id": "el-6fhbokl",
+          "name": "Quit Button",
+          "type": "Button",
+          "text": "Quit to Title",
+          "x": 50,
+          "y": 70,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "QuitToTitle"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-8r0ig0a": {
+      "id": "screen-8r0ig0a",
+      "name": "Title Load Screen",
+      "background": {
+        "type": "image",
+        "assetId": "back-7k3rptv"
+      },
+      "music": {
+        "audioId": "audi-b7kvjt0",
+        "policy": "continue"
+      },
+      "elements": {
+        "elem-8x9zfrh": {
+          "id": "elem-8x9zfrh",
+          "name": "Header",
+          "type": "Text",
+          "text": "Load Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-myfcqkf": {
+          "id": "elem-myfcqkf",
+          "name": "Load Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "elem-6cxpzck": {
+          "id": "elem-6cxpzck",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "hoverImage": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-9i7rzju": {
+      "id": "screen-9i7rzju",
+      "name": "Title Settings Screen",
+      "background": {
+        "type": "image",
+        "assetId": "back-7k3rptv"
+      },
+      "music": {
+        "audioId": "audi-b7kvjt0",
+        "policy": "continue"
+      },
+      "elements": {
+        "elem-japjggv": {
+          "id": "elem-japjggv",
+          "name": "Header",
+          "type": "Text",
+          "text": "Settings",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-11jb113": {
+          "id": "elem-11jb113",
+          "name": "Music Volume Label",
+          "type": "Text",
+          "text": "Music Volume",
+          "x": 35,
+          "y": 30,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "elem-ups17pa": {
+          "id": "elem-ups17pa",
+          "name": "Music Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "musicVolume",
+          "x": 65,
+          "y": 30,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "elem-w3zfs2v": {
+          "id": "elem-w3zfs2v",
+          "name": "SFX Volume Label",
+          "type": "Text",
+          "text": "Sound FX Volume",
+          "x": 35,
+          "y": 40,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "elem-ct70mcg": {
+          "id": "elem-ct70mcg",
+          "name": "SFX Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "sfxVolume",
+          "x": 65,
+          "y": 40,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "elem-g95m5rp": {
+          "id": "elem-g95m5rp",
+          "name": "Text Speed Label",
+          "type": "Text",
+          "text": "Text Speed",
+          "x": 35,
+          "y": 50,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "elem-kychx96": {
+          "id": "elem-kychx96",
+          "name": "Text Speed Slider",
+          "type": "SettingsSlider",
+          "setting": "textSpeed",
+          "x": 65,
+          "y": 50,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "elem-zrp1hat": {
+          "id": "elem-zrp1hat",
+          "name": "Enable Skip Toggle",
+          "type": "SettingsToggle",
+          "setting": "enableSkip",
+          "text": "Enable Skip",
+          "x": 50,
+          "y": 60,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          }
+        },
+        "elem-dfl6bdf": {
+          "id": "elem-dfl6bdf",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 85,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "hoverImage": {
+            "type": "image",
+            "id": "back-rt8ixo6"
+          },
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      }
+    },
+    "screen-qgvldy4": {
+      "id": "screen-qgvldy4",
+      "name": "layer_sprites",
+      "background": {
+        "type": "image",
+        "assetId": "back-jccj1ns"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "elem-48bsm99": {
+          "id": "elem-48bsm99",
+          "name": "Character Preview",
+          "x": 44.10501640179935,
+          "y": 4.891904363835385,
+          "width": 53.08658689937942,
+          "height": 99.6699907964605,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "CharacterPreview",
+          "characterId": "char-ld8azvx",
+          "layerVariableMap": {
+            "layer-cdv853a": "var-mmfnsxt"
+          },
+          "expressionId": "expr-ob27uus"
+        },
+        "elem-i1v7ktu": {
+          "id": "elem-i1v7ktu",
+          "name": "Asset Cycler",
+          "x": 4,
+          "y": 14,
+          "width": 40,
+          "height": 8,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-ld8azvx",
+          "layerId": "layer-cdv853a",
+          "variableId": "var-2eoyb87",
+          "assetIds": [
+            "asset-85hr8l5",
+            "asset-avnnekc"
+          ],
+          "label": "Outfit",
+          "showAssetName": false,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)"
+        },
+        "elem-khkbh8s": {
+          "id": "elem-khkbh8s",
+          "name": "Asset Cycler",
+          "x": 4,
+          "y": 27,
+          "width": 40,
+          "height": 8,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-ld8azvx",
+          "layerId": "layer-cdv853a",
+          "variableId": "var-4gtzpm2",
+          "assetIds": [
+            "asset-85hr8l5",
+            "asset-w134y9v"
+          ],
+          "label": "Shoes",
+          "showAssetName": false,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)"
+        },
+        "elem-2578025": {
+          "id": "elem-2578025",
+          "name": "Asset Cycler",
+          "x": 4.170897710167033,
+          "y": 58.93787401421428,
+          "width": 40,
+          "height": 8,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-ld8azvx",
+          "layerId": "layer-cdv853a",
+          "variableId": "var-mmfnsxt",
+          "assetIds": [
+            "asset-85hr8l5",
+            "asset-w134y9v",
+            "asset-54qrudi",
+            "asset-avnnekc"
+          ],
+          "label": "Customize",
+          "showAssetName": true,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)",
+          "filterPattern": "{[1]}_{[2]}",
+          "filterVariableIds": [
+            "var-2eoyb87",
+            "var-4gtzpm2"
+          ],
+          "visible": false
+        },
+        "elem-7tbh0ng": {
+          "id": "elem-7tbh0ng",
+          "name": "Finished",
+          "x": 12.718631811833678,
+          "y": 77.81108401487097,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Finished",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-4narp3z",
+            "operator": "set",
+            "value": "false"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "actions": [
+            {
+              "type": "JumpToLabel",
+              "targetLabel": "dress_check"
+            }
+          ]
+        }
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "showDialogue": true
+    },
+    "screen-0mpq2xi": {
+      "id": "screen-0mpq2xi",
+      "name": "snack_bar",
+      "background": {
+        "type": "image",
+        "assetId": "back-3bqnqrf"
+      },
+      "music": {
+        "audioId": "audi-r27oe5h",
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "elem-vcyyqxj": {
+          "id": "elem-vcyyqxj",
+          "name": "Image",
+          "x": 9.923955070606883,
+          "y": 1.3556068283319664,
+          "width": 85.74144334123983,
+          "height": 95.1496151512254,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "back-2mk2136"
+          }
+        },
+        "elem-17vw8ip": {
+          "id": "elem-17vw8ip",
+          "name": "Image",
+          "x": 15.779468242701116,
+          "y": 10.503395192587568,
+          "width": 27.18631162029747,
+          "height": 28.410632530801045,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "imag-vxzucu6"
+          }
+        },
+        "elem-6kk7qso": {
+          "id": "elem-6kk7qso",
+          "name": "Image",
+          "x": 39.33460077589838,
+          "y": 12.483033099125317,
+          "width": 26.520912396195854,
+          "height": 23.06561018314913,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "imag-3i8l6uq"
+          }
+        },
+        "elem-gihgicv": {
+          "id": "elem-gihgicv",
+          "name": "Image",
+          "x": 60.09505656786885,
+          "y": 13.076924471086642,
+          "width": 26.387832551375528,
+          "height": 28.014704949493495,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "imag-jjydhjv"
+          }
+        },
+        "elem-0k9chlp": {
+          "id": "elem-0k9chlp",
+          "name": "Image",
+          "x": 15.513308553060474,
+          "y": 54.25339292707178,
+          "width": 27.053231775477148,
+          "height": 22.471718811187806,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "imag-v9ytu29"
+          }
+        },
+        "elem-kr3u8sp": {
+          "id": "elem-kr3u8sp",
+          "name": "Image",
+          "x": 36.80608372431224,
+          "y": 53.263573973802906,
+          "width": 25.58935348245359,
+          "height": 24.847284299033102,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "imag-9mgpzis"
+          }
+        },
+        "elem-et8o936": {
+          "id": "elem-et8o936",
+          "name": "Image",
+          "x": 57.699619361103025,
+          "y": 49.30429816072741,
+          "width": 28.916349602961677,
+          "height": 29.994342856031246,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Image",
+          "image": null,
+          "objectFit": "contain",
+          "background": {
+            "type": "image",
+            "assetId": "imag-pex5chv"
+          }
+        },
+        "elem-s1lgphn": {
+          "id": "elem-s1lgphn",
+          "name": "Text",
+          "x": 20.703422501053087,
+          "y": 35.24886902430941,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Water - 1$",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#272525",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-e7muk13": {
+          "id": "elem-e7muk13",
+          "name": "Text",
+          "x": 42.794676741226795,
+          "y": 33.86312248973299,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Soda - 2$",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#292929",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-9129lq9": {
+          "id": "elem-9129lq9",
+          "name": "Text",
+          "x": 62.49049377463467,
+          "y": 33.66515869907921,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Licorice - 1$",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#222020",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-m35mnpp": {
+          "id": "elem-m35mnpp",
+          "name": "Text",
+          "x": 18.97338451838888,
+          "y": 73.25791682983416,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Chocolate - 2$",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#272525",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-1noesu6": {
+          "id": "elem-1noesu6",
+          "name": "Text",
+          "x": 41.06463875856259,
+          "y": 73.45588062048792,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Popcorn - 1$",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#201d1d",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-0tymb6t": {
+          "id": "elem-0tymb6t",
+          "name": "Text",
+          "x": 62.88973330909565,
+          "y": 72.66402545787282,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Nachos - 2$",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#141414",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-q1h8swz": {
+          "id": "elem-q1h8swz",
+          "name": "Button",
+          "x": 23.36501939745956,
+          "y": 43.9592758130755,
+          "width": 14.543726362366737,
+          "height": 5.644796605616956,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Buy",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-6pe6go3",
+            "operator": "subtract",
+            "value": "1"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "conditions": [
+            {
+              "variableId": "var-6pe6go3",
+              "operator": ">=",
+              "value": "1"
+            }
+          ],
+          "actions": [
+            {
+              "type": "SetVariable",
+              "variableId": "var-uj0f6u6",
+              "operator": "subtract",
+              "value": "1"
+            },
+            {
+              "type": "SetVariable",
+              "variableId": "var-gze6kdj",
+              "operator": "set",
+              "value": ""
+            }
+          ]
+        },
+        "elem-kxkojkh": {
+          "id": "elem-kxkojkh",
+          "name": "Button",
+          "x": 44.524714723890995,
+          "y": 44.35520339438305,
+          "width": 14.543726362366737,
+          "height": 5.644796605616956,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Buy",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-6pe6go3",
+            "operator": "subtract",
+            "value": "2"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "conditions": [
+            {
+              "variableId": "var-6pe6go3",
+              "operator": ">=",
+              "value": "2"
+            }
+          ],
+          "actions": [
+            {
+              "type": "SetVariable",
+              "variableId": "var-uj0f6u6",
+              "operator": "add",
+              "value": "2"
+            },
+            {
+              "type": "SetVariable",
+              "variableId": "var-a1f1wc9",
+              "operator": "set",
+              "value": ""
+            }
+          ]
+        },
+        "elem-vbzz0ny": {
+          "id": "elem-vbzz0ny",
+          "name": "Button",
+          "x": 66.74904880888502,
+          "y": 43.76131202242172,
+          "width": 14.543726362366737,
+          "height": 5.644796605616956,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Buy",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-6pe6go3",
+            "operator": "subtract",
+            "value": "1"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "conditions": [
+            {
+              "variableId": "var-6pe6go3",
+              "operator": ">=",
+              "value": "1"
+            }
+          ],
+          "actions": [
+            {
+              "type": "SetVariable",
+              "variableId": "var-uj0f6u6",
+              "operator": "subtract",
+              "value": "1"
+            },
+            {
+              "type": "SetVariable",
+              "variableId": "var-gze6kdj",
+              "operator": "set",
+              "value": ""
+            }
+          ]
+        },
+        "elem-nko03tb": {
+          "id": "elem-nko03tb",
+          "name": "Button",
+          "x": 21.901141104436,
+          "y": 84.93778047840686,
+          "width": 14.543726362366737,
+          "height": 5.644796605616956,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Buy",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-6pe6go3",
+            "operator": "subtract",
+            "value": "2"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "conditions": [
+            {
+              "variableId": "var-6pe6go3",
+              "operator": ">=",
+              "value": "2"
+            }
+          ],
+          "actions": [
+            {
+              "type": "SetVariable",
+              "variableId": "var-uj0f6u6",
+              "operator": "add",
+              "value": "2"
+            },
+            {
+              "type": "SetVariable",
+              "variableId": "var-a1f1wc9",
+              "operator": "set",
+              "value": ""
+            }
+          ]
+        },
+        "elem-h4936zv": {
+          "id": "elem-h4936zv",
+          "name": "Button",
+          "x": 43.46007596532841,
+          "y": 84.14592531579176,
+          "width": 14.543726362366737,
+          "height": 5.644796605616956,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Buy",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-6pe6go3",
+            "operator": "subtract",
+            "value": "1"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "conditions": [
+            {
+              "variableId": "var-6pe6go3",
+              "operator": ">=",
+              "value": "1"
+            }
+          ],
+          "actions": [
+            {
+              "type": "SetVariable",
+              "variableId": "var-uj0f6u6",
+              "operator": "subtract",
+              "value": "1"
+            },
+            {
+              "type": "SetVariable",
+              "variableId": "var-gze6kdj",
+              "operator": "set",
+              "value": ""
+            }
+          ]
+        },
+        "elem-z1gyk45": {
+          "id": "elem-z1gyk45",
+          "name": "Button",
+          "x": 66.6159689640647,
+          "y": 83.35407015317666,
+          "width": 14.543726362366737,
+          "height": 5.644796605616956,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Buy",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "SetVariable",
+            "variableId": "var-6pe6go3",
+            "operator": "subtract",
+            "value": "2"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "conditions": [
+            {
+              "variableId": "var-6pe6go3",
+              "operator": ">=",
+              "value": "2"
+            }
+          ],
+          "actions": [
+            {
+              "type": "SetVariable",
+              "variableId": "var-uj0f6u6",
+              "operator": "add",
+              "value": "2"
+            },
+            {
+              "type": "SetVariable",
+              "variableId": "var-a1f1wc9",
+              "operator": "set",
+              "value": ""
+            }
+          ]
+        },
+        "elem-p1i1zwx": {
+          "id": "elem-p1i1zwx",
+          "name": "Button",
+          "x": 62.35741392981434,
+          "y": 90.48076661671256,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "Finished",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "JumpToScene",
+            "targetSceneId": "scene-536upln"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "actions": []
+        },
+        "elem-1kpkuun": {
+          "id": "elem-1kpkuun",
+          "name": "Text",
+          "x": 62.22433408499402,
+          "y": 9.513576239318699,
+          "width": 23.593155810148737,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Text",
+          "text": "Current Money: ${money}.00",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#1a1919",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        }
+      }
+    }
+  }
+}

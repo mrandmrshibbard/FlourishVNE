@@ -1,7 +1,7 @@
 import React from 'react';
 import { BookOpenIcon, SparkleIcon, BookmarkSquareIcon, PhotoIcon, Cog6ToothIcon } from './icons';
 
-export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings';
+export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings' | 'templates';
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -64,6 +64,13 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             icon: <Cog6ToothIcon className="w-3.5 h-3.5" />,
             count: 0,
             tooltip: 'Configure project settings and preferences (Press 6)'
+        },
+        {
+            id: 'templates' as NavigationTab,
+            label: 'Templates',
+            icon: <SparkleIcon className="w-3.5 h-3.5" />,
+            count: 0,
+            tooltip: 'Browse and apply pre-built templates to your project (Press 7)'
         }
     ];
 
