@@ -1004,7 +1004,7 @@ export class TemplateService {
       
       // Purchase Button with SetVariable actions
       const buyBtnId = this.generateId();
-      elements[buyBtnId] = {
+      const buyButton = {
         id: buyBtnId,
         name: `Buy ${item.name} Button`,
         type: 'Button',
@@ -1016,16 +1016,15 @@ export class TemplateService {
           weight: 'bold',
           italic: false
         },
-        action: null,
+        // Primary action: Subtract the price from currency
+        action: {
+          type: 'SetVariable',
+          variableId: currencyVariableId,
+          operator: 'subtract',
+          value: item.price.toString()
+        },
+        // Additional action: Increment the item count
         actions: [
-          // Action 1: Subtract the price from currency
-          {
-            type: 'SetVariable',
-            variableId: currencyVariableId,
-            operator: 'subtract',
-            value: item.price.toString()
-          },
-          // Action 2: Increment the item count
           {
             type: 'SetVariable',
             variableId: item.variableId!,
@@ -1044,6 +1043,8 @@ export class TemplateService {
         anchorX: 0.5,
         anchorY: 0
       };
+      
+      elements[buyBtnId] = buyButton;
     });
     
     // 4. Close/Back Button

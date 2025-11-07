@@ -865,7 +865,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   const variableReducer = (state, action) => {
     switch (action.type) {
       case "ADD_VARIABLE": {
-        const newId = `var-${generateId()}`;
+        const newId = action.payload.id || `var-${generateId()}`;
         const newVar = { id: newId, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };
         return {
           ...state,

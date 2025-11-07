@@ -8,14 +8,14 @@ import { VNVariable, VNVariableType } from '../types';
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export type VariableAction =
-    | { type: 'ADD_VARIABLE'; payload: { name: string; type: VNVariableType; defaultValue: string | number | boolean } }
+    | { type: 'ADD_VARIABLE'; payload: { name: string; type: VNVariableType; defaultValue: string | number | boolean; id?: VNID } }
     | { type: 'UPDATE_VARIABLE'; payload: { variableId: VNID; updates: Partial<VNVariable> } }
     | { type: 'DELETE_VARIABLE'; payload: { variableId: VNID } };
 
 export const variableReducer = (state: VNProject, action: VariableAction): VNProject => {
   switch (action.type) {
     case 'ADD_VARIABLE': {
-      const newId = `var-${generateId()}`;
+      const newId = action.payload.id || `var-${generateId()}`;
       const newVar: VNVariable = { id: newId, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };
       return {
         ...state,

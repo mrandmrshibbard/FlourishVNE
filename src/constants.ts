@@ -126,14 +126,7 @@ export const createInitialProject = (): VNProject => {
         images: {},
         audio: {},
         videos: {},
-        variables: {
-            'var-demo': {
-                id: 'var-demo',
-                name: 'Demo Variable',
-                type: 'string',
-                defaultValue: 'Hello World'
-            }
-        },
+        variables: {},
         ui: {
             ...specialIds,
             gameHudScreenId: null,

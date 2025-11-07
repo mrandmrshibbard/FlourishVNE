@@ -240,7 +240,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         try {
             // Use the template's default config for now
             // TODO: Add configuration UI for users to customize before applying
-            const config = template.defaultConfig;
+            // Deep clone the config so the TemplateGenerator can inject variable IDs
+            const config = JSON.parse(JSON.stringify(template.defaultConfig));
             
             // Generate the template content
             const result = await templateGenerator.generateInstance(
@@ -307,6 +308,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                     dispatch({
                         type: 'ADD_VARIABLE',
                         payload: {
+                            id: variable.id,
                             name: variable.name,
                             type: variable.type,
                             defaultValue: variable.defaultValue
