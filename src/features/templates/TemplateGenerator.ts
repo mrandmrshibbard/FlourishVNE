@@ -88,7 +88,21 @@ export class TemplateGenerator {
         }
       }
 
-      // Step 2: Generate UI screens
+      // Step 2: Pre-generate variables and inject their IDs into config
+      // This ensures UI elements reference the correct variable IDs
+      result.generatedVariables = this.generateVariablesFromConfig(config, template);
+      
+      // For Layered Character Creator, inject variable IDs back into config
+      if (template.id === 'template-character-creator' && config.layers) {
+        const layers = config.layers as Array<{name: string, order: number, variableId?: VNID}>;
+        layers.forEach((layer, index) => {
+          if (result.generatedVariables[index]) {
+            layer.variableId = result.generatedVariables[index].id;
+          }
+        });
+      }
+
+      // Step 3: Generate UI screens (now with variable IDs in config)
       try {
         const screens = await Promise.resolve(template.uiGenerator(config));
         
@@ -105,9 +119,6 @@ export class TemplateGenerator {
         result.errors.push(`Screen generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         return result;
       }
-
-      // Step 3: Generate variables
-      result.generatedVariables = this.generateVariablesFromConfig(config, template);
 
       // Step 4: Create instance record
       const instance: TemplateInstance = {
@@ -266,28 +277,54 @@ export class TemplateGenerator {
   private generateVariablesFromConfig(config: TemplateConfig, template: Template): VNVariable[] {
     const variables: VNVariable[] = [];
 
-    // Asset Cycling System variables
-    if (template.id === 'template-asset-cycling') {
-      const categories = config.categories as Array<{name: string, assetPrefix: string}>;
+    // Layered Character Creator variables
+    if (template.id === 'template-character-creator') {
+      const layers = config.layers as Array<{name: string, order: number}>;
       
-      // Create a variable for each category
-      if (categories && Array.isArray(categories)) {
-        categories.forEach((category) => {
+      // Create a variable for each layer
+      if (layers && Array.isArray(layers)) {
+        layers.forEach((layer) => {
           variables.push({
             id: this.generateVNID(),
-            name: `${category.name.toLowerCase().replace(/\s+/g, '_')}_selection`,
+            name: `character_${layer.name.toLowerCase().replace(/\s+/g, '_')}`,
             type: 'string',
             defaultValue: ''
           });
         });
       }
       
-      // Create the final combined variable
+      return variables;
+    }
+
+    // Shop System variables
+    if (template.id === 'template-shop-screen') {
+      const currencyName = config.currencyName as string || 'Gold';
+      const items = config.items as Array<{id: string, name: string, price: number}> || [];
+      
+      // Create currency variable
+      const currencyVarId = this.generateVNID();
       variables.push({
-        id: this.generateVNID(),
-        name: `${config.screenName?.toLowerCase().replace(/\s+/g, '_')}_final`,
-        type: 'string',
-        defaultValue: ''
+        id: currencyVarId,
+        name: `player_${currencyName.toLowerCase()}`,
+        type: 'number',
+        defaultValue: 1000 // Starting currency amount
+      });
+      
+      // Store currency variable ID in config for UI generator
+      (config as any).currencyVariableId = currencyVarId;
+      
+      // Create item count variables and inject IDs into items
+      items.forEach(item => {
+        const itemVarId = this.generateVNID();
+        variables.push({
+          id: itemVarId,
+          name: `${item.id}_count`,
+          type: 'number',
+          defaultValue: 0
+        });
+        
+        // Inject variable ID into item config
+        (item as any).variableId = itemVarId;
       });
       
       return variables;

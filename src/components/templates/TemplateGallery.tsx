@@ -253,13 +253,6 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
         </div>
       )}
 
-      {/* Results count */}
-      <div className="template-gallery__info">
-        <p className="results-count">
-          {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''} found
-        </p>
-      </div>
-
       {/* Template grid/list */}
       <div className={`template-gallery__content template-gallery__content--${viewMode}`}>
         {filteredTemplates.length > 0 ? (

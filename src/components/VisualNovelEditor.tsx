@@ -21,6 +21,7 @@ import AssetManager from './AssetManager';
 import VariableManager from './VariableManager';
 import SettingsManager from './SettingsManager';
 import TemplateGallery from './templates/TemplateGallery';
+import InfoModal from './ui/InfoModal';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
@@ -201,6 +202,25 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     const [selectedTemplateId, setSelectedTemplateId] = useState<VNID | undefined>(undefined);
     const [previewTemplate, setPreviewTemplate] = useState<any | null>(null);
     
+    // Modal state
+    const [modalState, setModalState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+    }>({
+        isOpen: false,
+        title: '',
+        message: ''
+    });
+    
+    const showModal = (title: string, message: string) => {
+        setModalState({ isOpen: true, title, message });
+    };
+    
+    const closeModal = () => {
+        setModalState({ isOpen: false, title: '', message: '' });
+    };
+    
     const handleSelectTemplate = (template: any) => {
         setSelectedTemplateId(template.id);
         console.log('Template selected:', template);
@@ -209,7 +229,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     const handlePreviewTemplate = (template: any) => {
         setPreviewTemplate(template);
         console.log('Previewing template:', template);
-        // TODO: Open template preview modal or panel
+        
+        // Show template details in a modal
+        const details = `${template.description}\n\nCategory: ${template.category}\nVersion: ${template.version}\nTags: ${template.tags.join(', ')}\n\nClick "Apply" to use this template.`;
+        showModal(template.name, details);
     };
     
     const handleApplyTemplate = async (template: Template) => {
@@ -232,16 +255,48 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
             );
             
             if (!result.success) {
-                alert(`Failed to apply template:\n${result.errors.join('\n')}`);
+                showModal('Template Application Failed', result.errors.join('\n'));
                 return;
             }
             
             // Add generated UI screens to project
             if (result.generatedScreens && result.generatedScreens.length > 0) {
                 result.generatedScreens.forEach(screen => {
+                    // Add the screen with its ID and name
                     dispatch({
                         type: 'ADD_UI_SCREEN',
-                        payload: { screen }
+                        payload: { 
+                            name: screen.name,
+                            id: screen.id 
+                        }
+                    });
+                    
+                    // Then update it with the full structure
+                    dispatch({
+                        type: 'UPDATE_UI_SCREEN',
+                        payload: {
+                            screenId: screen.id,
+                            updates: {
+                                background: screen.background,
+                                music: screen.music,
+                                ambientNoise: screen.ambientNoise,
+                                transitionIn: screen.transitionIn,
+                                transitionOut: screen.transitionOut,
+                                transitionDuration: screen.transitionDuration,
+                                showDialogue: screen.showDialogue
+                            }
+                        }
+                    });
+                    
+                    // Add each UI element
+                    Object.values(screen.elements).forEach(element => {
+                        dispatch({
+                            type: 'ADD_UI_ELEMENT',
+                            payload: {
+                                screenId: screen.id,
+                                element: element
+                            }
+                        });
                     });
                 });
             }
@@ -251,19 +306,27 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 result.generatedVariables.forEach(variable => {
                     dispatch({
                         type: 'ADD_VARIABLE',
-                        payload: { variable }
+                        payload: {
+                            name: variable.name,
+                            type: variable.type,
+                            defaultValue: variable.defaultValue
+                        }
                     });
                 });
             }
             
             // Show success message
-            const message = `Template "${template.name}" applied successfully!\n\n` +
-                `Created:\n` +
+            const message = `Created:\n` +
                 `- ${result.generatedScreens.length} UI Screen(s)\n` +
-                `- ${result.generatedVariables.length} Variable(s)` +
+                `- ${result.generatedVariables.length} Variable(s)\n\n` +
+                `Next steps:\n` +
+                `1. Create a character in the Characters tab\n` +
+                `2. Add layers and assets to the character\n` +
+                `3. Go to UI tab and populate the asset cyclers\n` +
+                `4. Test in live preview!` +
                 (result.warnings.length > 0 ? `\n\nWarnings:\n${result.warnings.join('\n')}` : '');
             
-            alert(message);
+            showModal(`Template "${template.name}" Applied Successfully!`, message);
             
             // Switch to UI tab to show the new screen
             if (result.generatedScreens.length > 0) {
@@ -273,7 +336,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
             
         } catch (error) {
             console.error('Failed to apply template:', error);
-            alert('Failed to apply template. Please try again.');
+            showModal('Template Application Error', 'Failed to apply template. Please try again.');
         }
     };
 
@@ -365,6 +428,15 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 {renderInspector()}
             </main>
             {isPlaying && <LivePreview onClose={() => setIsPlaying(false)} />}
+            
+            {/* Info Modal */}
+            <InfoModal
+                isOpen={modalState.isOpen}
+                onClose={closeModal}
+                title={modalState.title}
+            >
+                {modalState.message}
+            </InfoModal>
         </div>
     );
 };

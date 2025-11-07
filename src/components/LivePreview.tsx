@@ -733,6 +733,242 @@ const ButtonElement: React.FC<{
     );
 };
 
+// --- AssetCycler Component ---
+const AssetCyclerElement: React.FC<{
+    element: UIAssetCyclerElement,
+    style: React.CSSProperties,
+    variables: Record<VNID, string | number | boolean>,
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void,
+    project: VNProject
+}> = ({ element, style, variables, onVariableChange, project }) => {
+    const el = element;
+    const character = project.characters[el.characterId];
+    const layer = character?.layers[el.layerId];
+    let currentAssetId = String(variables[el.variableId] || '');
+    
+    console.log(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
+    
+    // Apply filtering if filterPattern is set
+    let filteredAssetIds = el.assetIds;
+    if (el.filterPattern) {
+        // Support both old single variable and new multi-variable filtering
+        const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
+        
+        if (filterVarIds.length > 0) {
+            console.log(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
+            
+            // Get all filter variable values (as asset names, not IDs)
+            const filterValues: Record<string, string> = {};
+            let allFiltersHaveValues = true;
+            
+            for (const varId of filterVarIds) {
+                const assetId = String(variables[varId] || '');
+                if (!assetId) {
+                    allFiltersHaveValues = false;
+                    break;
+                }
+                // Get the asset name from the ID
+                const asset = layer?.assets[assetId];
+                const assetName = asset?.name || assetId;
+                console.log(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
+                filterValues[varId] = assetName;
+            }
+            
+            if (allFiltersHaveValues) {
+                // Replace placeholders in the pattern with asset names or parts of asset names
+                let pattern = el.filterPattern;
+                
+                // Helper function to extract part of asset name by index
+                const extractPart = (assetName: string, index: number): string => {
+                    const parts = assetName.split('_');
+                    if (index >= 0 && index < parts.length) {
+                        return parts[index];
+                    }
+                    return assetName;
+                };
+                
+                // First, try to replace specific {varId} or {varId[index]} placeholders
+                for (const varId of filterVarIds) {
+                    const assetName = filterValues[varId];
+                    
+                    // Replace {varId[index]} with specific part of asset name
+                    const indexedRegex = new RegExp(`\\{${varId}\\[(\\d+)\\]\\}`, 'g');
+                    pattern = pattern.replace(indexedRegex, (match, indexStr) => {
+                        const index = parseInt(indexStr, 10);
+                        const part = extractPart(assetName, index);
+                        console.log(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
+                        return part;
+                    });
+                    
+                    // Replace {varId} with full asset name
+                    const specificRegex = new RegExp(`\\{${varId}\\}`, 'g');
+                    pattern = pattern.replace(specificRegex, assetName);
+                }
+                
+                // Then, replace any remaining generic placeholders by position
+                const remainingPlaceholders = pattern.match(/\{[^}]*\}/g);
+                if (remainingPlaceholders) {
+                    for (let i = 0; i < Math.min(remainingPlaceholders.length, filterVarIds.length); i++) {
+                        const varId = filterVarIds[i];
+                        const assetName = filterValues[varId];
+                        
+                        // Check if placeholder has [index] syntax
+                        const indexMatch = remainingPlaceholders[i].match(/\[(\d+)\]/);
+                        if (indexMatch) {
+                            const index = parseInt(indexMatch[1], 10);
+                            const part = extractPart(assetName, index);
+                            console.log(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
+                            pattern = pattern.replace(/\{[^}]*\}/, part);
+                        } else {
+                            pattern = pattern.replace(/\{[^}]*\}/, assetName);
+                        }
+                    }
+                }
+                
+                console.log(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
+                
+                filteredAssetIds = el.assetIds.filter(assetId => {
+                    const asset = layer?.assets[assetId];
+                    if (!asset) return false;
+                    
+                    const matches = asset.name.toLowerCase().includes(pattern.toLowerCase());
+                    if (matches) {
+                        console.log(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
+                    }
+                    return matches;
+                });
+                console.log(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+            } else {
+                console.log(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
+            }
+        }
+    }
+    
+    // Initialize variable to first asset if not set (using useEffect to avoid setState during render)
+    React.useEffect(() => {
+        if (!currentAssetId && filteredAssetIds.length > 0 && onVariableChange) {
+            const firstAsset = filteredAssetIds[0];
+            console.log(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
+            onVariableChange(el.variableId, firstAsset);
+        }
+    }, [currentAssetId, filteredAssetIds.length > 0 ? filteredAssetIds[0] : null, el.variableId, onVariableChange]);
+    
+    // Update variable when filtered results change (for filter-driven cyclers)
+    React.useEffect(() => {
+        if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
+            if (!filteredAssetIds.includes(currentAssetId)) {
+                const firstFiltered = filteredAssetIds[0];
+                console.log(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
+                onVariableChange(el.variableId, firstFiltered);
+            }
+        }
+    }, [filteredAssetIds.join(','), el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
+    
+    const currentIndex = filteredAssetIds.indexOf(currentAssetId);
+    const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
+    
+    const handlePrevious = () => {
+        if (filteredAssetIds.length === 0) return;
+        const newIndex = currentIndex <= 0 ? filteredAssetIds.length - 1 : currentIndex - 1;
+        console.log(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+        onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
+    };
+    
+    const handleNext = () => {
+        if (filteredAssetIds.length === 0) return;
+        const newIndex = currentIndex >= filteredAssetIds.length - 1 ? 0 : currentIndex + 1;
+        console.log(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+        onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
+    };
+    
+    return (
+        <div
+            key={el.id}
+            style={{
+                ...style,
+                backgroundColor: el.backgroundColor || 'rgba(30, 41, 59, 0.8)',
+                borderRadius: '8px',
+                padding: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: el.visible === false ? 0 : 1,
+                pointerEvents: el.visible === false ? 'none' : 'auto'
+            }}
+        >
+            {el.label && (
+                <div
+                    style={{
+                        fontSize: `${(el.font?.size || 16) * 0.8}px`,
+                        fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                        fontWeight: el.font?.weight || 'normal',
+                        fontStyle: el.font?.italic ? 'italic' : 'normal',
+                        color: el.font?.color || '#f1f5f9',
+                        opacity: 0.8,
+                        textAlign: 'center'
+                    }}
+                >
+                    {el.label}
+                </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+                <button
+                    onClick={handlePrevious}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: el.arrowColor || '#a855f7',
+                        fontSize: `${el.arrowSize || 24}px`,
+                        cursor: 'pointer',
+                        padding: '4px',
+                        lineHeight: 1,
+                        opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
+                        transition: 'opacity 0.2s'
+                    }}
+                    disabled={filteredAssetIds.length === 0}
+                >
+                    ◀
+                </button>
+                <div
+                    style={{
+                        flex: 1,
+                        fontSize: `${el.font?.size || 16}px`,
+                        fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                        fontWeight: el.font?.weight || 'normal',
+                        fontStyle: el.font?.italic ? 'italic' : 'normal',
+                        color: el.font?.color || '#f1f5f9',
+                        textAlign: 'center',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    {el.showAssetName && currentAsset ? currentAsset.name : (currentIndex >= 0 ? `${currentIndex + 1} / ${filteredAssetIds.length}` : '–')}
+                </div>
+                <button
+                    onClick={handleNext}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: el.arrowColor || '#a855f7',
+                        fontSize: `${el.arrowSize || 24}px`,
+                        cursor: 'pointer',
+                        padding: '4px',
+                        lineHeight: 1,
+                        opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
+                        transition: 'opacity 0.2s'
+                    }}
+                    disabled={filteredAssetIds.length === 0}
+                >
+                    ▶
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // --- Helper for Element Transitions ---
 const getTransitionStyle = (
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale',
@@ -1347,241 +1583,14 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.AssetCycler: {
                 const el = element as UIAssetCyclerElement;
-                const character = project.characters[el.characterId];
-                const layer = character?.layers[el.layerId];
-                let currentAssetId = String(variables[el.variableId] || '');
-                
-                console.log(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
-                
-                // Apply filtering if filterPattern is set
-                let filteredAssetIds = el.assetIds;
-                if (el.filterPattern) {
-                    // Support both old single variable and new multi-variable filtering
-                    const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
-                    
-                    if (filterVarIds.length > 0) {
-                        console.log(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
-                        
-                        // Get all filter variable values (as asset names, not IDs)
-                        const filterValues: Record<string, string> = {};
-                        let allFiltersHaveValues = true;
-                        
-                        for (const varId of filterVarIds) {
-                            const assetId = String(variables[varId] || '');
-                            if (!assetId) {
-                                allFiltersHaveValues = false;
-                                break;
-                            }
-                            // Get the asset name from the ID
-                            const asset = layer?.assets[assetId];
-                            const assetName = asset?.name || assetId;
-                            console.log(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
-                            filterValues[varId] = assetName;
-                        }
-                        
-                        if (allFiltersHaveValues) {
-                            // Replace placeholders in the pattern with asset names or parts of asset names
-                            // Supports: {varId}, {varId[1]}, {name[2]}, {}, etc.
-                            let pattern = el.filterPattern;
-                            
-                            // Helper function to extract part of asset name by index
-                            const extractPart = (assetName: string, index: number): string => {
-                                const parts = assetName.split('_');
-                                if (index >= 0 && index < parts.length) {
-                                    return parts[index];
-                                }
-                                return assetName; // Return full name if index out of bounds
-                            };
-                            
-                            // First, try to replace specific {varId} or {varId[index]} placeholders
-                            for (const varId of filterVarIds) {
-                                const assetName = filterValues[varId];
-                                
-                                // Replace {varId[index]} with specific part of asset name
-                                const indexedRegex = new RegExp(`\\{${varId}\\[(\\d+)\\]\\}`, 'g');
-                                pattern = pattern.replace(indexedRegex, (match, indexStr) => {
-                                    const index = parseInt(indexStr, 10);
-                                    const part = extractPart(assetName, index);
-                                    console.log(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
-                                    return part;
-                                });
-                                
-                                // Replace {varId} with full asset name
-                                const specificRegex = new RegExp(`\\{${varId}\\}`, 'g');
-                                pattern = pattern.replace(specificRegex, assetName);
-                            }
-                            
-                            // Then, replace any remaining generic placeholders by position
-                            // Supports: {name[2]}, {[1]}, {} etc.
-                            const remainingPlaceholders = pattern.match(/\{[^}]*\}/g);
-                            if (remainingPlaceholders) {
-                                for (let i = 0; i < Math.min(remainingPlaceholders.length, filterVarIds.length); i++) {
-                                    const varId = filterVarIds[i];
-                                    const assetName = filterValues[varId];
-                                    
-                                    // Check if placeholder has [index] syntax
-                                    const indexMatch = remainingPlaceholders[i].match(/\[(\d+)\]/);
-                                    if (indexMatch) {
-                                        const index = parseInt(indexMatch[1], 10);
-                                        const part = extractPart(assetName, index);
-                                        console.log(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
-                                        pattern = pattern.replace(/\{[^}]*\}/, part);
-                                    } else {
-                                        // Replace with full asset name
-                                        pattern = pattern.replace(/\{[^}]*\}/, assetName);
-                                    }
-                                }
-                            }
-                            
-                            console.log(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
-                            
-                            filteredAssetIds = el.assetIds.filter(assetId => {
-                                const asset = layer?.assets[assetId];
-                                if (!asset) return false;
-                                
-                                // Check if asset name matches the pattern (case-insensitive)
-                                const matches = asset.name.toLowerCase().includes(pattern.toLowerCase());
-                                if (matches) {
-                                    console.log(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
-                                }
-                                return matches;
-                            });
-                            console.log(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
-                        } else {
-                            console.log(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
-                            // Don't filter - show all assets until all filter variables are set
-                            // This prevents the cycler from being empty on initial load
-                        }
-                    }
-                }
-                
-                // Initialize variable to first asset if not set (using useEffect to avoid setState during render)
-                // MUST be called unconditionally to satisfy React's Rules of Hooks
-                const shouldInitialize = !currentAssetId && filteredAssetIds.length > 0;
-                React.useEffect(() => {
-                    if (shouldInitialize && onVariableChange) {
-                        const firstAsset = filteredAssetIds[0];
-                        console.log(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
-                        onVariableChange(el.variableId, firstAsset);
-                    }
-                }, [shouldInitialize, filteredAssetIds, el.variableId, onVariableChange]);
-                
-                // Update variable when filtered results change (for filter-driven cyclers)
-                // This allows a "hidden matcher" cycler to automatically update when filter variables change
-                React.useEffect(() => {
-                    if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
-                        // If this cycler has filters and the current value isn't in the filtered list, update it
-                        if (!filteredAssetIds.includes(currentAssetId)) {
-                            const firstFiltered = filteredAssetIds[0];
-                            console.log(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
-                            onVariableChange(el.variableId, firstFiltered);
-                        }
-                    }
-                }, [filteredAssetIds.join(','), el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
-                
-                const currentIndex = filteredAssetIds.indexOf(currentAssetId);
-                const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
-                
-                const handlePrevious = () => {
-                    if (filteredAssetIds.length === 0) return;
-                    const newIndex = currentIndex <= 0 ? filteredAssetIds.length - 1 : currentIndex - 1;
-                    console.log(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
-                    onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
-                };
-                
-                const handleNext = () => {
-                    if (filteredAssetIds.length === 0) return;
-                    const newIndex = currentIndex >= filteredAssetIds.length - 1 ? 0 : currentIndex + 1;
-                    console.log(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
-                    onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
-                };
-                
-                return (
-                    <div
-                        key={el.id}
-                        style={{
-                            ...style,
-                            backgroundColor: el.backgroundColor || 'rgba(30, 41, 59, 0.8)',
-                            borderRadius: '8px',
-                            padding: '8px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            opacity: el.visible === false ? 0 : 1,
-                            pointerEvents: el.visible === false ? 'none' : 'auto'
-                        }}
-                    >
-                        {el.label && (
-                            <div
-                                style={{
-                                    fontSize: `${(el.font?.size || 16) * 0.8}px`,
-                                    fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
-                                    fontWeight: el.font?.weight || 'normal',
-                                    fontStyle: el.font?.italic ? 'italic' : 'normal',
-                                    color: el.font?.color || '#f1f5f9',
-                                    opacity: 0.8,
-                                    textAlign: 'center'
-                                }}
-                            >
-                                {el.label}
-                            </div>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-                            <button
-                                onClick={handlePrevious}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: el.arrowColor || '#a855f7',
-                                    fontSize: `${el.arrowSize || 24}px`,
-                                    cursor: 'pointer',
-                                    padding: '4px',
-                                    lineHeight: 1,
-                                    opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
-                                    transition: 'opacity 0.2s'
-                                }}
-                                disabled={filteredAssetIds.length === 0}
-                            >
-                                ◀
-                            </button>
-                            <div
-                                style={{
-                                    flex: 1,
-                                    fontSize: `${el.font?.size || 16}px`,
-                                    fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
-                                    fontWeight: el.font?.weight || 'normal',
-                                    fontStyle: el.font?.italic ? 'italic' : 'normal',
-                                    color: el.font?.color || '#f1f5f9',
-                                    textAlign: 'center',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                {el.showAssetName && currentAsset ? currentAsset.name : (currentIndex >= 0 ? `${currentIndex + 1} / ${filteredAssetIds.length}` : '–')}
-                            </div>
-                            <button
-                                onClick={handleNext}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: el.arrowColor || '#a855f7',
-                                    fontSize: `${el.arrowSize || 24}px`,
-                                    cursor: 'pointer',
-                                    padding: '4px',
-                                    lineHeight: 1,
-                                    opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
-                                    transition: 'opacity 0.2s'
-                                }}
-                                disabled={filteredAssetIds.length === 0}
-                            >
-                                ▶
-                            </button>
-                        </div>
-                    </div>
-                );
+                return <AssetCyclerElement 
+                    key={el.id} 
+                    element={el} 
+                    style={style} 
+                    variables={variables} 
+                    onVariableChange={onVariableChange} 
+                    project={project} 
+                />;
             }
             default: return null;
         }

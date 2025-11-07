@@ -726,8 +726,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
       }
       case "ADD_UI_SCREEN": {
-        const { name } = action.payload;
-        const newId = `screen-${generateId$1()}`;
+        const { name, id } = action.payload;
+        const newId = id || `screen-${generateId$1()}`;
         const newScreen = {
           id: newId,
           name,
@@ -2689,6 +2689,209 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       element.id
     );
   };
+  const AssetCyclerElement = ({ element, style, variables, onVariableChange, project }) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    const el = element;
+    const character = project.characters[el.characterId];
+    const layer = character == null ? void 0 : character.layers[el.layerId];
+    let currentAssetId = String(variables[el.variableId] || "");
+    console.log(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
+    let filteredAssetIds = el.assetIds;
+    if (el.filterPattern) {
+      const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
+      if (filterVarIds.length > 0) {
+        console.log(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
+        const filterValues = {};
+        let allFiltersHaveValues = true;
+        for (const varId of filterVarIds) {
+          const assetId = String(variables[varId] || "");
+          if (!assetId) {
+            allFiltersHaveValues = false;
+            break;
+          }
+          const asset = layer == null ? void 0 : layer.assets[assetId];
+          const assetName = (asset == null ? void 0 : asset.name) || assetId;
+          console.log(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
+          filterValues[varId] = assetName;
+        }
+        if (allFiltersHaveValues) {
+          let pattern = el.filterPattern;
+          const extractPart = (assetName, index) => {
+            const parts = assetName.split("_");
+            if (index >= 0 && index < parts.length) {
+              return parts[index];
+            }
+            return assetName;
+          };
+          for (const varId of filterVarIds) {
+            const assetName = filterValues[varId];
+            const indexedRegex = new RegExp(`\\{${varId}\\[(\\d+)\\]\\}`, "g");
+            pattern = pattern.replace(indexedRegex, (match, indexStr) => {
+              const index = parseInt(indexStr, 10);
+              const part = extractPart(assetName, index);
+              console.log(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
+              return part;
+            });
+            const specificRegex = new RegExp(`\\{${varId}\\}`, "g");
+            pattern = pattern.replace(specificRegex, assetName);
+          }
+          const remainingPlaceholders = pattern.match(/\{[^}]*\}/g);
+          if (remainingPlaceholders) {
+            for (let i = 0; i < Math.min(remainingPlaceholders.length, filterVarIds.length); i++) {
+              const varId = filterVarIds[i];
+              const assetName = filterValues[varId];
+              const indexMatch = remainingPlaceholders[i].match(/\[(\d+)\]/);
+              if (indexMatch) {
+                const index = parseInt(indexMatch[1], 10);
+                const part = extractPart(assetName, index);
+                console.log(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
+                pattern = pattern.replace(/\{[^}]*\}/, part);
+              } else {
+                pattern = pattern.replace(/\{[^}]*\}/, assetName);
+              }
+            }
+          }
+          console.log(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
+          filteredAssetIds = el.assetIds.filter((assetId) => {
+            const asset = layer == null ? void 0 : layer.assets[assetId];
+            if (!asset) return false;
+            const matches = asset.name.toLowerCase().includes(pattern.toLowerCase());
+            if (matches) {
+              console.log(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
+            }
+            return matches;
+          });
+          console.log(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+        } else {
+          console.log(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
+        }
+      }
+    }
+    React2.useEffect(() => {
+      if (!currentAssetId && filteredAssetIds.length > 0 && onVariableChange) {
+        const firstAsset = filteredAssetIds[0];
+        console.log(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
+        onVariableChange(el.variableId, firstAsset);
+      }
+    }, [currentAssetId, filteredAssetIds.length > 0 ? filteredAssetIds[0] : null, el.variableId, onVariableChange]);
+    React2.useEffect(() => {
+      if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
+        if (!filteredAssetIds.includes(currentAssetId)) {
+          const firstFiltered = filteredAssetIds[0];
+          console.log(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
+          onVariableChange(el.variableId, firstFiltered);
+        }
+      }
+    }, [filteredAssetIds.join(","), el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
+    const currentIndex = filteredAssetIds.indexOf(currentAssetId);
+    const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
+    const handlePrevious = () => {
+      if (filteredAssetIds.length === 0) return;
+      const newIndex = currentIndex <= 0 ? filteredAssetIds.length - 1 : currentIndex - 1;
+      console.log(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+      onVariableChange == null ? void 0 : onVariableChange(el.variableId, filteredAssetIds[newIndex]);
+    };
+    const handleNext = () => {
+      if (filteredAssetIds.length === 0) return;
+      const newIndex = currentIndex >= filteredAssetIds.length - 1 ? 0 : currentIndex + 1;
+      console.log(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+      onVariableChange == null ? void 0 : onVariableChange(el.variableId, filteredAssetIds[newIndex]);
+    };
+    return /* @__PURE__ */ jsxRuntime2.jsxs(
+      "div",
+      {
+        style: {
+          ...style,
+          backgroundColor: el.backgroundColor || "rgba(30, 41, 59, 0.8)",
+          borderRadius: "8px",
+          padding: "8px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px",
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: el.visible === false ? 0 : 1,
+          pointerEvents: el.visible === false ? "none" : "auto"
+        },
+        children: [
+          el.label && /* @__PURE__ */ jsxRuntime2.jsx(
+            "div",
+            {
+              style: {
+                fontSize: `${(((_a = el.font) == null ? void 0 : _a.size) || 16) * 0.8}px`,
+                fontFamily: ((_b = el.font) == null ? void 0 : _b.family) || "Inter, system-ui, sans-serif",
+                fontWeight: ((_c = el.font) == null ? void 0 : _c.weight) || "normal",
+                fontStyle: ((_d = el.font) == null ? void 0 : _d.italic) ? "italic" : "normal",
+                color: ((_e = el.font) == null ? void 0 : _e.color) || "#f1f5f9",
+                opacity: 0.8,
+                textAlign: "center"
+              },
+              children: el.label
+            }
+          ),
+          /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", width: "100%" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "button",
+              {
+                onClick: handlePrevious,
+                style: {
+                  background: "none",
+                  border: "none",
+                  color: el.arrowColor || "#a855f7",
+                  fontSize: `${el.arrowSize || 24}px`,
+                  cursor: "pointer",
+                  padding: "4px",
+                  lineHeight: 1,
+                  opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
+                  transition: "opacity 0.2s"
+                },
+                disabled: filteredAssetIds.length === 0,
+                children: "◀"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "div",
+              {
+                style: {
+                  flex: 1,
+                  fontSize: `${((_f = el.font) == null ? void 0 : _f.size) || 16}px`,
+                  fontFamily: ((_g = el.font) == null ? void 0 : _g.family) || "Inter, system-ui, sans-serif",
+                  fontWeight: ((_h = el.font) == null ? void 0 : _h.weight) || "normal",
+                  fontStyle: ((_i = el.font) == null ? void 0 : _i.italic) ? "italic" : "normal",
+                  color: ((_j = el.font) == null ? void 0 : _j.color) || "#f1f5f9",
+                  textAlign: "center",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                },
+                children: el.showAssetName && currentAsset ? currentAsset.name : currentIndex >= 0 ? `${currentIndex + 1} / ${filteredAssetIds.length}` : "–"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "button",
+              {
+                onClick: handleNext,
+                style: {
+                  background: "none",
+                  border: "none",
+                  color: el.arrowColor || "#a855f7",
+                  fontSize: `${el.arrowSize || 24}px`,
+                  cursor: "pointer",
+                  padding: "4px",
+                  lineHeight: 1,
+                  opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
+                  transition: "opacity 0.2s"
+                },
+                disabled: filteredAssetIds.length === 0,
+                children: "▶"
+              }
+            )
+          ] })
+        ]
+      },
+      el.id
+    );
+  };
   const getTransitionStyle = (transitionIn, duration, delay) => {
     const durationMs = duration || 300;
     const delayMs = delay || 0;
@@ -2735,7 +2938,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return null;
     };
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
       console.log("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
@@ -3206,203 +3409,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.AssetCycler: {
           const el = element;
-          const character = project2.characters[el.characterId];
-          const layer = character == null ? void 0 : character.layers[el.layerId];
-          let currentAssetId = String(variables2[el.variableId] || "");
-          console.log(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
-          let filteredAssetIds = el.assetIds;
-          if (el.filterPattern) {
-            const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
-            if (filterVarIds.length > 0) {
-              console.log(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
-              const filterValues = {};
-              let allFiltersHaveValues = true;
-              for (const varId of filterVarIds) {
-                const assetId = String(variables2[varId] || "");
-                if (!assetId) {
-                  allFiltersHaveValues = false;
-                  break;
-                }
-                const asset = layer == null ? void 0 : layer.assets[assetId];
-                const assetName = (asset == null ? void 0 : asset.name) || assetId;
-                console.log(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
-                filterValues[varId] = assetName;
-              }
-              if (allFiltersHaveValues) {
-                let pattern = el.filterPattern;
-                const extractPart = (assetName, index) => {
-                  const parts = assetName.split("_");
-                  if (index >= 0 && index < parts.length) {
-                    return parts[index];
-                  }
-                  return assetName;
-                };
-                for (const varId of filterVarIds) {
-                  const assetName = filterValues[varId];
-                  const indexedRegex = new RegExp(`\\{${varId}\\[(\\d+)\\]\\}`, "g");
-                  pattern = pattern.replace(indexedRegex, (match, indexStr) => {
-                    const index = parseInt(indexStr, 10);
-                    const part = extractPart(assetName, index);
-                    console.log(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
-                    return part;
-                  });
-                  const specificRegex = new RegExp(`\\{${varId}\\}`, "g");
-                  pattern = pattern.replace(specificRegex, assetName);
-                }
-                const remainingPlaceholders = pattern.match(/\{[^}]*\}/g);
-                if (remainingPlaceholders) {
-                  for (let i = 0; i < Math.min(remainingPlaceholders.length, filterVarIds.length); i++) {
-                    const varId = filterVarIds[i];
-                    const assetName = filterValues[varId];
-                    const indexMatch = remainingPlaceholders[i].match(/\[(\d+)\]/);
-                    if (indexMatch) {
-                      const index = parseInt(indexMatch[1], 10);
-                      const part = extractPart(assetName, index);
-                      console.log(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
-                      pattern = pattern.replace(/\{[^}]*\}/, part);
-                    } else {
-                      pattern = pattern.replace(/\{[^}]*\}/, assetName);
-                    }
-                  }
-                }
-                console.log(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
-                filteredAssetIds = el.assetIds.filter((assetId) => {
-                  const asset = layer == null ? void 0 : layer.assets[assetId];
-                  if (!asset) return false;
-                  const matches = asset.name.toLowerCase().includes(pattern.toLowerCase());
-                  if (matches) {
-                    console.log(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
-                  }
-                  return matches;
-                });
-                console.log(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
-              } else {
-                console.log(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
-              }
-            }
-          }
-          const shouldInitialize = !currentAssetId && filteredAssetIds.length > 0;
-          React2.useEffect(() => {
-            if (shouldInitialize && onVariableChange) {
-              const firstAsset = filteredAssetIds[0];
-              console.log(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
-              onVariableChange(el.variableId, firstAsset);
-            }
-          }, [shouldInitialize, filteredAssetIds, el.variableId, onVariableChange]);
-          React2.useEffect(() => {
-            if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
-              if (!filteredAssetIds.includes(currentAssetId)) {
-                const firstFiltered = filteredAssetIds[0];
-                console.log(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
-                onVariableChange(el.variableId, firstFiltered);
-              }
-            }
-          }, [filteredAssetIds.join(","), el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
-          const currentIndex = filteredAssetIds.indexOf(currentAssetId);
-          const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
-          const handlePrevious = () => {
-            if (filteredAssetIds.length === 0) return;
-            const newIndex = currentIndex <= 0 ? filteredAssetIds.length - 1 : currentIndex - 1;
-            console.log(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
-            onVariableChange == null ? void 0 : onVariableChange(el.variableId, filteredAssetIds[newIndex]);
-          };
-          const handleNext = () => {
-            if (filteredAssetIds.length === 0) return;
-            const newIndex = currentIndex >= filteredAssetIds.length - 1 ? 0 : currentIndex + 1;
-            console.log(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
-            onVariableChange == null ? void 0 : onVariableChange(el.variableId, filteredAssetIds[newIndex]);
-          };
-          return /* @__PURE__ */ jsxRuntime2.jsxs(
-            "div",
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            AssetCyclerElement,
             {
-              style: {
-                ...style,
-                backgroundColor: el.backgroundColor || "rgba(30, 41, 59, 0.8)",
-                borderRadius: "8px",
-                padding: "8px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "4px",
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: el.visible === false ? 0 : 1,
-                pointerEvents: el.visible === false ? "none" : "auto"
-              },
-              children: [
-                el.label && /* @__PURE__ */ jsxRuntime2.jsx(
-                  "div",
-                  {
-                    style: {
-                      fontSize: `${(((_u = el.font) == null ? void 0 : _u.size) || 16) * 0.8}px`,
-                      fontFamily: ((_v = el.font) == null ? void 0 : _v.family) || "Inter, system-ui, sans-serif",
-                      fontWeight: ((_w = el.font) == null ? void 0 : _w.weight) || "normal",
-                      fontStyle: ((_x = el.font) == null ? void 0 : _x.italic) ? "italic" : "normal",
-                      color: ((_y = el.font) == null ? void 0 : _y.color) || "#f1f5f9",
-                      opacity: 0.8,
-                      textAlign: "center"
-                    },
-                    children: el.label
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px", width: "100%" }, children: [
-                  /* @__PURE__ */ jsxRuntime2.jsx(
-                    "button",
-                    {
-                      onClick: handlePrevious,
-                      style: {
-                        background: "none",
-                        border: "none",
-                        color: el.arrowColor || "#a855f7",
-                        fontSize: `${el.arrowSize || 24}px`,
-                        cursor: "pointer",
-                        padding: "4px",
-                        lineHeight: 1,
-                        opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
-                        transition: "opacity 0.2s"
-                      },
-                      disabled: filteredAssetIds.length === 0,
-                      children: "◀"
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntime2.jsx(
-                    "div",
-                    {
-                      style: {
-                        flex: 1,
-                        fontSize: `${((_z = el.font) == null ? void 0 : _z.size) || 16}px`,
-                        fontFamily: ((_A = el.font) == null ? void 0 : _A.family) || "Inter, system-ui, sans-serif",
-                        fontWeight: ((_B = el.font) == null ? void 0 : _B.weight) || "normal",
-                        fontStyle: ((_C = el.font) == null ? void 0 : _C.italic) ? "italic" : "normal",
-                        color: ((_D = el.font) == null ? void 0 : _D.color) || "#f1f5f9",
-                        textAlign: "center",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      },
-                      children: el.showAssetName && currentAsset ? currentAsset.name : currentIndex >= 0 ? `${currentIndex + 1} / ${filteredAssetIds.length}` : "–"
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntime2.jsx(
-                    "button",
-                    {
-                      onClick: handleNext,
-                      style: {
-                        background: "none",
-                        border: "none",
-                        color: el.arrowColor || "#a855f7",
-                        fontSize: `${el.arrowSize || 24}px`,
-                        cursor: "pointer",
-                        padding: "4px",
-                        lineHeight: 1,
-                        opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
-                        transition: "opacity 0.2s"
-                      },
-                      disabled: filteredAssetIds.length === 0,
-                      children: "▶"
-                    }
-                  )
-                ] })
-              ]
+              element: el,
+              style,
+              variables: variables2,
+              onVariableChange,
+              project: project2
             },
             el.id
           );

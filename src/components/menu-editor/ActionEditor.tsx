@@ -15,6 +15,33 @@ const ActionEditor: React.FC<{
 }> = ({ action, onActionChange }) => {
     const { project } = useProject();
 
+    // Handle null/undefined action
+    if (!action) {
+        const defaultAction: VNUIAction = { type: UIActionType.None };
+        return (
+            <div>
+                <FormField label="Action Type">
+                    <Select value={UIActionType.None} onChange={e => onActionChange({ type: e.target.value as UIActionType })}>
+                        <option value={UIActionType.None}>None</option>
+                        <option value={UIActionType.StartNewGame}>Start New Game</option>
+                        <option value={UIActionType.GoToScreen}>Go To Screen</option>
+                        <option value={UIActionType.LoadGame}>Load Game</option>
+                        <option value={UIActionType.SaveGame}>Save Game</option>
+                        <option value={UIActionType.ReturnToGame}>Return To Game</option>
+                        <option value={UIActionType.ReturnToPreviousScreen}>Return To Previous Screen</option>
+                        <option value={UIActionType.QuitToTitle}>Quit To Title</option>
+                        <option value={UIActionType.ExitGame}>Exit Game</option>
+                        <option value={UIActionType.JumpToScene}>Jump To Scene</option>
+                        <option value={UIActionType.JumpToLabel}>Jump To Label</option>
+                        <option value={UIActionType.SetVariable}>Set Variable</option>
+                        <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
+                        <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
+                    </Select>
+                </FormField>
+            </div>
+        );
+    }
+
     const handleTypeChange = (type: UIActionType) => {
         let newAction: VNUIAction = { type };
         switch(type) {

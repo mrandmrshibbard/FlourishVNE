@@ -227,7 +227,7 @@
 /* === CARD IMAGE === */
 .template-card__image {
   width: 100%;
-  height: 180px;
+  height: 120px;
   background: linear-gradient(135deg, var(--bg-tertiary, #4D3273) 0%, var(--bg-secondary, #2a1a45) 100%);
   display: flex;
   align-items: center;
@@ -243,10 +243,10 @@
 
 /* === CARD CONTENT === */
 .template-card__content {
-  padding: var(--spacing-lg, 1.5rem);
+  padding: var(--spacing-md, 1rem);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md, 1rem);
+  gap: var(--spacing-sm, 0.5rem);
 }
 
 .template-card__header {
@@ -280,13 +280,13 @@
 }
 
 .template-card__description {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--text-secondary, #c0b4d4);
-  line-height: 1.5;
+  line-height: 1.4;
   margin: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -295,16 +295,16 @@
 .template-card__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-sm, 0.5rem);
+  gap: var(--spacing-xs, 0.25rem);
 }
 
 .tag {
   display: inline-flex;
   align-items: center;
-  padding: var(--spacing-xs, 0.25rem) var(--spacing-sm, 0.5rem);
+  padding: 0.125rem var(--spacing-xs, 0.25rem);
   background-color: var(--bg-tertiary, #4D3273);
   border-radius: var(--radius-sm, 0.25rem);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--text-secondary, #c0b4d4);
 }
 
@@ -316,8 +316,8 @@
 /* === METADATA === */
 .template-card__meta {
   display: flex;
-  gap: var(--spacing-lg, 1.5rem);
-  padding-top: var(--spacing-md, 1rem);
+  gap: var(--spacing-md, 1rem);
+  padding-top: var(--spacing-sm, 0.5rem);
   border-top: 1px solid var(--slate-700, #334155);
 }
 
@@ -330,18 +330,18 @@
 .template-card__actions {
   display: flex;
   gap: var(--spacing-sm, 0.5rem);
-  margin-top: auto;
+  margin-top: var(--spacing-sm, 0.5rem);
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-md, 1rem) var(--spacing-lg, 1.5rem);
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-md, 1rem);
   border: none;
   border-radius: var(--radius-md, 0.5rem);
   font-family: var(--font-body, 'Poppins', sans-serif);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast, 150ms ease-in-out);

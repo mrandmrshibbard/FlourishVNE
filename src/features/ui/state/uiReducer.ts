@@ -15,7 +15,7 @@ export type UIAction =
           property: keyof VNFontSettings;
           value: string | number | boolean;
       } }
-    | { type: 'ADD_UI_SCREEN', payload: { name: string } }
+    | { type: 'ADD_UI_SCREEN', payload: { name: string; id?: VNID } }
     | { type: 'UPDATE_UI_SCREEN', payload: { screenId: VNID, updates: Partial<VNUIScreen> } }
     | { type: 'DELETE_UI_SCREEN', payload: { screenId: VNID } }
     | { type: 'DUPLICATE_UI_SCREEN', payload: { screenId: VNID } }
@@ -82,8 +82,8 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
     }
 
     case 'ADD_UI_SCREEN': {
-        const { name } = action.payload;
-        const newId = `screen-${generateId()}`;
+        const { name, id } = action.payload;
+        const newId = id || `screen-${generateId()}`;
         const newScreen: VNUIScreen = { 
             id: newId, 
             name, 
