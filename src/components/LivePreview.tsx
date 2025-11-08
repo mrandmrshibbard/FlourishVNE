@@ -1639,6 +1639,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [hudStack, setHudStack] = useState<VNID[]>([]);
     // Track screens that are currently closing with transitions
     const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
+    // Track scene transition fade out
+    const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
     const [settings, setSettings] = useState<GameSettings>(defaultSettings);
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
@@ -2574,41 +2576,60 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     
                     if (nextScene) {
                         console.log(`Advancing to next scene: ${nextSceneId}`);
-                        updatePlayerState(p => p ? {
-                            ...p,
-                            currentSceneId: nextSceneId,
-                            currentCommands: nextScene.commands,
-                            currentIndex: 0,
-                            // Clear stage state for new scene
-                            stageState: {
-                                backgroundUrl: null,
-                                characters: {},
-                                textOverlays: [],
-                                imageOverlays: [],
-                                buttonOverlays: [],
-                                screen: {
-                                    shake: { active: false, intensity: 0 },
-                                    tint: 'transparent',
-                                    zoom: 1,
-                                    panX: 0,
-                                    panY: 0,
-                                    transitionDuration: 0.5
+                        
+                        // Start visual fade out transition
+                        setSceneTransitionFading(true);
+                        
+                        // Fade out music before transitioning scenes
+                        const audio = musicAudioRef.current;
+                        if (!audio.paused) {
+                            fadeAudio(audio, 0, 0.5, () => {
+                                audio.pause();
+                                audio.currentTime = 0;
+                            });
+                        }
+                        
+                        // Wait for fade transition before changing scene
+                        setTimeout(() => {
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                currentSceneId: nextSceneId,
+                                currentCommands: nextScene.commands,
+                                currentIndex: 0,
+                                // Clear stage state for new scene
+                                stageState: {
+                                    backgroundUrl: null,
+                                    characters: {},
+                                    textOverlays: [],
+                                    imageOverlays: [],
+                                    buttonOverlays: [],
+                                    screen: {
+                                        shake: { active: false, intensity: 0 },
+                                        tint: 'transparent',
+                                        zoom: 1,
+                                        panX: 0,
+                                        panY: 0,
+                                        transitionDuration: 0.5
+                                    }
+                                },
+                                // Clear UI state
+                                uiState: {
+                                    dialogue: null,
+                                    choices: null,
+                                    textInput: null,
+                                    movieUrl: null,
+                                    isWaitingForInput: false,
+                                    isTransitioning: false,
+                                    transitionElement: null,
+                                    flash: null,
+                                    showHistory: false,
+                                    screenSceneId: null
                                 }
-                            },
-                            // Clear UI state
-                            uiState: {
-                                dialogue: null,
-                                choices: null,
-                                textInput: null,
-                                movieUrl: null,
-                                isWaitingForInput: false,
-                                isTransitioning: false,
-                                transitionElement: null,
-                                flash: null,
-                                showHistory: false,
-                                screenSceneId: null
-                            }
-                        } : null);
+                            } : null);
+                            
+                            // End fade transition after scene change
+                            setSceneTransitionFading(false);
+                        }, 500); // Match fade duration (0.5s)
                     } else {
                         // No valid next scene found, return to title
                         console.log('No valid next scene - returning to title');
@@ -2932,8 +2953,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.Jump: {
-                    const result = handleJump(command as JumpCommand, commandContext);
-                    applyResult(result);
+                    // Start visual fade out transition for scene change
+                    setSceneTransitionFading(true);
+                    
+                    // Fade out music before transitioning scenes
+                    const audio = musicAudioRef.current;
+                    if (!audio.paused) {
+                        fadeAudio(audio, 0, 0.5, () => {
+                            audio.pause();
+                            audio.currentTime = 0;
+                        });
+                    }
+                    
+                    // Wait for fade transition before executing the jump
+                    setTimeout(() => {
+                        const result = handleJump(command as JumpCommand, commandContext);
+                        applyResult(result);
+                        
+                        // End fade transition after scene change
+                        setSceneTransitionFading(false);
+                    }, 500); // Match fade duration (0.5s)
                     break;
                 }
                 case CommandType.PlayMusic: {
@@ -3283,7 +3322,50 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
              }
         } else if (action.type === UIActionType.GoToScreen) {
             const targetId = (action as GoToScreenAction).targetScreenId;
+            const targetScreen = project.uiScreens[targetId];
+            
+            if (!targetScreen) {
+                console.warn(`GoToScreen failed: Screen with ID ${targetId} not found`);
+                return;
+            }
+            
+            // Handle music transition when going to screen
             if (playerState && playerState.mode === 'playing') {
+                const screenMusicInfo = targetScreen.music;
+                const hasMusicChange = screenMusicInfo && screenMusicInfo.audioId;
+                
+                if (hasMusicChange) {
+                    const audio = musicAudioRef.current;
+                    const newMusicUrl = screenMusicInfo.audioId ? assetResolver(screenMusicInfo.audioId, 'audio') : null;
+                    const currentMusic = audio.src;
+                    const normalize = (value: string | null): string | null => {
+                        if (!value) return null;
+                        try {
+                            return new URL(value, window.location.href).href;
+                        } catch (e) {
+                            return value;
+                        }
+                    };
+                    const currentNormalized = currentMusic ? normalize(currentMusic) : null;
+                    const newNormalized = normalize(newMusicUrl);
+                    
+                    // Only transition if music is different
+                    if (currentNormalized !== newNormalized && newMusicUrl) {
+                        // Fade out current music
+                        fadeAudio(audio, 0, 0.5, () => {
+                            // Load and play new music
+                            audio.src = newMusicUrl;
+                            audio.load();
+                            audio.loop = true;
+                            audio.play().then(() => {
+                                fadeAudio(audio, settings.musicVolume, 0.5);
+                            }).catch(e => {
+                                console.error('Screen music play failed:', e);
+                            });
+                        });
+                    }
+                }
+                
                 setHudStack(s => [...s, targetId]);
             } else {
                 setScreenStack(stack => [...stack, targetId]);
@@ -3436,6 +3518,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return;
             }
             
+            // Start visual fade out transition
+            setSceneTransitionFading(true);
+            
             // Fade out music before transitioning scenes
             const audio = musicAudioRef.current;
             if (!audio.paused) {
@@ -3445,144 +3530,150 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 });
             }
             
-            console.log('[JumpToScene] Clearing screen and HUD stacks');
-            // Clear screen and HUD stacks when jumping to a scene
-            setScreenStack([]);
-            setHudStack([]);
-            
-            // Clear all active effect timeouts (FlashScreen, ShakeScreen, etc.)
-            activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
-            activeEffectTimeoutsRef.current = [];
-            
-            // Clear active visual effects
-            activeFlashRef.current = null;
-            setFlashTrigger(0);
-            activeShakeRef.current = null;
-            
-            // Reset scheduler and variable cache before executing the new scene
-            commandSchedulerRef.current.reset();
-            variableStoreRef.current = null;
-            
-            // If playerState is null (jumping from title screen), initialize it
-            if (!playerState) {
-                console.log('Initializing playerState for scene jump from title');
-                const initialVariables: Record<VNID, string | number | boolean> = {};
-                for (const varId in project.variables) {
-                    const v = project.variables[varId];
-                    const customizedValue = menuVariables[v.id];
-                    initialVariables[v.id] = customizedValue !== undefined ? customizedValue : v.defaultValue;
+            // Wait for fade transition to complete before changing scene
+            setTimeout(() => {
+                console.log('[JumpToScene] Clearing screen and HUD stacks');
+                // Clear screen and HUD stacks when jumping to a scene
+                setScreenStack([]);
+                setHudStack([]);
+                
+                // Clear all active effect timeouts (FlashScreen, ShakeScreen, etc.)
+                activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+                activeEffectTimeoutsRef.current = [];
+                
+                // Clear active visual effects
+                activeFlashRef.current = null;
+                setFlashTrigger(0);
+                activeShakeRef.current = null;
+                
+                // Reset scheduler and variable cache before executing the new scene
+                commandSchedulerRef.current.reset();
+                variableStoreRef.current = null;
+                
+                // If playerState is null (jumping from title screen), initialize it
+                if (!playerState) {
+                    console.log('Initializing playerState for scene jump from title');
+                    const initialVariables: Record<VNID, string | number | boolean> = {};
+                    for (const varId in project.variables) {
+                        const v = project.variables[varId];
+                        const customizedValue = menuVariables[v.id];
+                        initialVariables[v.id] = customizedValue !== undefined ? customizedValue : v.defaultValue;
+                    }
+                    
+                    updatePlayerState({
+                        mode: 'playing',
+                        currentSceneId: jumpAction.targetSceneId,
+                        currentCommands: targetScene.commands,
+                        currentIndex: 0,
+                        commandStack: [],
+                        variables: initialVariables,
+                        history: [],
+                        stageState: { 
+                            backgroundUrl: null, 
+                            characters: {}, 
+                            textOverlays: [], 
+                            imageOverlays: [], 
+                            buttonOverlays: [], 
+                            screen: { 
+                                shake: { active: false, intensity: 0 }, 
+                                tint: 'transparent', 
+                                zoom: 1, 
+                                panX: 0, 
+                                panY: 0, 
+                                transitionDuration: 0.5 
+                            } 
+                        },
+                        uiState: {
+                            dialogue: null,
+                            choices: null,
+                            textInput: null,
+                            movieUrl: null,
+                            isWaitingForInput: false,
+                            isTransitioning: false,
+                            transitionElement: null,
+                            flash: null,
+                        },
+                        musicState: {
+                            audioId: null,
+                            isPlaying: false,
+                            loop: false,
+                            currentTime: 0,
+                        }
+                    });
+                    console.log('[CLEAR] Dirty set cleared after title screen jump');
+                    uiDirtyVariableIdsRef.current.clear();
+                } else {
+                    // Jump to the target scene and reset stage state
+                    console.log('Jumping to new scene from existing game state');
+                    console.log('[DEBUG Jump] Current variables before jump:', playerState.variables);
+                    
+                    // Check if we're jumping to the same scene (should preserve currentIndex)
+                    const isSameScene = playerState.currentSceneId === jumpAction.targetSceneId;
+                    console.log('[DEBUG Jump] Same scene?', isSameScene, 'Current:', playerState.currentSceneId, 'Target:', jumpAction.targetSceneId);
+                    
+                    flushSync(() => {
+                        updatePlayerState(p => {
+                            if (!p) return null;
+                            console.log('Setting new scene:', {
+                                targetSceneId: jumpAction.targetSceneId,
+                                commandCount: targetScene.commands.length,
+                                commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
+                            });
+                            console.log('[DEBUG Jump] Variables being carried over:', p.variables);
+                            console.log('[DEBUG Jump] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+                            console.log('[DEBUG Jump] dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                            const mergedVariables = mergeDirtyUiVariables(p.variables);
+                            console.log('[DEBUG Jump] Variables after merge with uiVariables:', mergedVariables);
+                            
+                            // If jumping to the same scene, preserve currentIndex and advance by 1
+                            // If jumping to a different scene, reset to 0
+                            const newIndex = isSameScene ? p.currentIndex + 1 : 0;
+                            console.log('[DEBUG Jump] Setting currentIndex to:', newIndex, '(was:', p.currentIndex, ')');
+                            
+                            return {
+                                ...p,
+                                currentSceneId: jumpAction.targetSceneId,
+                                currentCommands: targetScene.commands,
+                                currentIndex: newIndex,
+                                // Reset stage state to clean slate
+                                stageState: { 
+                                    backgroundUrl: null, 
+                                    characters: {}, 
+                                    textOverlays: [], 
+                                    imageOverlays: [], 
+                                    buttonOverlays: [], 
+                                    screen: { 
+                                        shake: { active: false, intensity: 0 }, 
+                                        tint: 'transparent', 
+                                        zoom: 1, 
+                                        panX: 0, 
+                                        panY: 0, 
+                                        transitionDuration: 0.5 
+                                    } 
+                                },
+                                // Clear any active UI state (dialogue, choices, etc.)
+                                uiState: {
+                                    dialogue: null,
+                                    choices: null,
+                                    textInput: null,
+                                    movieUrl: null,
+                                    isWaitingForInput: false,
+                                    isTransitioning: false,
+                                    transitionElement: null,
+                                    flash: null,
+                                },
+                                variables: mergedVariables
+                            };
+                        });
+                    });
+                    // Clear dirty set after state update completes
+                    console.log('[CLEAR] Dirty set cleared after JumpToScene');
+                    uiDirtyVariableIdsRef.current.clear();
                 }
                 
-                updatePlayerState({
-                    mode: 'playing',
-                    currentSceneId: jumpAction.targetSceneId,
-                    currentCommands: targetScene.commands,
-                    currentIndex: 0,
-                    commandStack: [],
-                    variables: initialVariables,
-                    history: [],
-                    stageState: { 
-                        backgroundUrl: null, 
-                        characters: {}, 
-                        textOverlays: [], 
-                        imageOverlays: [], 
-                        buttonOverlays: [], 
-                        screen: { 
-                            shake: { active: false, intensity: 0 }, 
-                            tint: 'transparent', 
-                            zoom: 1, 
-                            panX: 0, 
-                            panY: 0, 
-                            transitionDuration: 0.5 
-                        } 
-                    },
-                    uiState: {
-                        dialogue: null,
-                        choices: null,
-                        textInput: null,
-                        movieUrl: null,
-                        isWaitingForInput: false,
-                        isTransitioning: false,
-                        transitionElement: null,
-                        flash: null,
-                    },
-                    musicState: {
-                        audioId: null,
-                        isPlaying: false,
-                        loop: false,
-                        currentTime: 0,
-                    }
-                });
-                console.log('[CLEAR] Dirty set cleared after title screen jump');
-                uiDirtyVariableIdsRef.current.clear();
-            } else {
-                // Jump to the target scene and reset stage state
-                console.log('Jumping to new scene from existing game state');
-                console.log('[DEBUG Jump] Current variables before jump:', playerState.variables);
-                
-                // Check if we're jumping to the same scene (should preserve currentIndex)
-                const isSameScene = playerState.currentSceneId === jumpAction.targetSceneId;
-                console.log('[DEBUG Jump] Same scene?', isSameScene, 'Current:', playerState.currentSceneId, 'Target:', jumpAction.targetSceneId);
-                
-                flushSync(() => {
-                    updatePlayerState(p => {
-                        if (!p) return null;
-                        console.log('Setting new scene:', {
-                            targetSceneId: jumpAction.targetSceneId,
-                            commandCount: targetScene.commands.length,
-                            commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
-                        });
-                        console.log('[DEBUG Jump] Variables being carried over:', p.variables);
-                        console.log('[DEBUG Jump] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
-                        console.log('[DEBUG Jump] dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
-                        const mergedVariables = mergeDirtyUiVariables(p.variables);
-                        console.log('[DEBUG Jump] Variables after merge with uiVariables:', mergedVariables);
-                        
-                        // If jumping to the same scene, preserve currentIndex and advance by 1
-                        // If jumping to a different scene, reset to 0
-                        const newIndex = isSameScene ? p.currentIndex + 1 : 0;
-                        console.log('[DEBUG Jump] Setting currentIndex to:', newIndex, '(was:', p.currentIndex, ')');
-                        
-                        return {
-                            ...p,
-                            currentSceneId: jumpAction.targetSceneId,
-                            currentCommands: targetScene.commands,
-                            currentIndex: newIndex,
-                            // Reset stage state to clean slate
-                            stageState: { 
-                                backgroundUrl: null, 
-                                characters: {}, 
-                                textOverlays: [], 
-                                imageOverlays: [], 
-                                buttonOverlays: [], 
-                                screen: { 
-                                    shake: { active: false, intensity: 0 }, 
-                                    tint: 'transparent', 
-                                    zoom: 1, 
-                                    panX: 0, 
-                                    panY: 0, 
-                                    transitionDuration: 0.5 
-                                } 
-                            },
-                            // Clear any active UI state (dialogue, choices, etc.)
-                            uiState: {
-                                dialogue: null,
-                                choices: null,
-                                textInput: null,
-                                movieUrl: null,
-                                isWaitingForInput: false,
-                                isTransitioning: false,
-                                transitionElement: null,
-                                flash: null,
-                            },
-                            variables: mergedVariables
-                        };
-                    });
-                });
-                // Clear dirty set after state update completes
-                console.log('[CLEAR] Dirty set cleared after JumpToScene');
-                uiDirtyVariableIdsRef.current.clear();
-            }
+                // End fade transition after scene change
+                setSceneTransitionFading(false);
+            }, 500); // Match fade duration (0.5s)
         } else if (action.type === UIActionType.SetVariable) {
             const setVarAction = action as SetVariableAction;
             const variable = project.variables[setVarAction.variableId];
@@ -4500,6 +4591,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     )
                 }
                 {renderPlayerUI()}
+                
+                {/* Scene transition fade overlay */}
+                {sceneTransitionFading && (
+                    <div 
+                        className="absolute inset-0 bg-black transition-opacity duration-500 pointer-events-none z-50"
+                        style={{ opacity: 1 }}
+                    />
+                )}
             </div>
             {!hideCloseButton && (
                 <button onClick={handleClose} className="absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50">
