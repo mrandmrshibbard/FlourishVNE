@@ -83,7 +83,7 @@ const UIManager: React.FC<UIManagerProps> = ({
     return (
         <div className="flex h-full">
             {/* UI Screen List Sidebar */}
-            <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
+            <div className="bg-slate-800 border-r border-slate-700 flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
                 <div className="p-4 border-b border-slate-700">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <BookmarkSquareIcon className="w-5 h-5" />

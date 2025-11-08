@@ -406,7 +406,14 @@ const StagingArea: React.FC<{
     };
 
     return (
-        <Panel title="Staging Area" className={className} style={style}>
+        <Panel 
+            title="Staging Area" 
+            className={className} 
+            style={{ 
+                height: style?.height || 'var(--canvas-height)',
+                ...style 
+            }}
+        >
             <div className="w-full h-full flex items-center justify-center p-2">
                 <div 
                     ref={stageRef}

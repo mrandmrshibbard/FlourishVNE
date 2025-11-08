@@ -8,4 +8,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   onBuildProgress: (callback) => 
     ipcRenderer.on('build-progress', (event, data) => callback(data)),
+  
+  // Multi-window support
+  openManagerWindow: (config) => 
+    ipcRenderer.send('open-manager-window', config),
+  
+  focusMainWindow: () => 
+    ipcRenderer.send('focus-main-window'),
+  
+  closeAllManagerWindows: () => 
+    ipcRenderer.send('close-all-manager-windows'),
+  
+  // Receive window type for manager windows
+  onWindowType: (callback) => 
+    ipcRenderer.on('window-type', (event, type) => callback(type)),
 });
+

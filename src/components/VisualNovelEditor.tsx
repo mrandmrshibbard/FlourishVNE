@@ -181,7 +181,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         }
         // Always show properties panel for scenes tab, even if nothing selected
         if (activeTab === 'scenes') {
-            return <Panel title="Properties" className="w-48 min-w-[180px] max-w-[200px] flex-shrink-0">
+            return <Panel title="Properties" style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
                 <p className="text-xs text-slate-400">Select a command to edit properties.</p>
             </Panel>;
         }
@@ -354,8 +354,17 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
             // Switch to UI screens - set first screen as active if available
             const firstScreenId = project.uiScreens ? (Object.keys(project.uiScreens)[0] as VNID | undefined) : undefined;
             handleSetActiveMenuScreen(firstScreenId || null);
+        } else {
+            // For assets, variables, settings, templates tabs - clear all active states
+            setActiveSceneId(project.startSceneId);
+            setSelectedCommandIndex(null);
+            setActiveMenuScreenId(null);
+            setSelectedUIElementId(null);
+            setActiveCharacterId(null);
+            setSelectedExpressionId(null);
+            setSelectedVariableId(null);
+            setIsConfiguringScene(false);
         }
-        // For assets, variables, and settings tabs, we don't need to set any active IDs
     };
     return (
         <div className="bg-slate-900 text-slate-100 h-screen flex flex-col">

@@ -112,7 +112,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     return (
         <div className="flex h-full overflow-hidden">
             {/* Left Sidebar - Scene List (2/3) + Command Palette (1/3) */}
-            <div className="w-64 min-w-[240px] max-w-[280px] panel border-r-2 border-slate-700 flex flex-col flex-shrink-0">
+            <div className="panel border-r-2 border-slate-700 flex flex-col flex-shrink-0" style={{ width: 'var(--sidebar-width)', minWidth: '240px', maxWidth: '320px' }}>
                 {/* Scene List - 2/3 */}
                 <div className="flex-[2] flex flex-col border-b-2 border-slate-700 min-h-0">
                     <div className="px-1.5 py-1 border-b border-slate-700 flex-shrink-0">
@@ -197,22 +197,23 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                 />
             )}
 
-            {/* Center - Staging Area (top) + Scene Editor (bottom) - Always visible */}
-            <div className="flex-1 flex flex-col min-w-[600px] panel border-r-2">
-                {/* Staging Area - Top - 50% */}
-                <div className="flex-[3] flex flex-col border-b-2 border-slate-700 min-h-0">
-                    <div className="flex-1 p-2 overflow-hidden min-h-0">
+            {/* Center - Staging Area (top) + Scene Editor (bottom) */}
+            <div className="flex-1 flex flex-col min-w-[600px] panel border-r-2 overflow-hidden">
+                {/* Staging Area - Top - 60% */}
+                <div className="flex-[3] flex flex-col border-b-2 border-slate-700 min-h-0 overflow-hidden">
+                    <div className="h-full p-2 overflow-hidden">
                         <StagingArea
                             project={project}
                             activeSceneId={activeSceneId}
                             selectedCommandIndex={selectedCommandIndex}
                             className="h-full w-full border-2 border-slate-700 rounded-lg"
+                            style={{ height: '100%' }}
                         />
                     </div>
                 </div>
 
-                {/* Scene Editor - Bottom - 50% */}
-                <div className="flex-[3] flex flex-col overflow-hidden min-h-0">
+                {/* Scene Editor - Bottom - 40% */}
+                <div className="flex-[2] flex flex-col overflow-hidden min-h-0">
                     <div className="flex-1 overflow-y-auto min-h-0">
                         <SceneEditor
                             activeSceneId={activeSceneId}

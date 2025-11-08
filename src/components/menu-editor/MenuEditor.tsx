@@ -302,9 +302,14 @@ const MenuEditor: React.FC<{
     };
 
     return (
-        <div className="flex-grow flex flex-col gap-4 min-h-0">
-            <Panel title={`Editing Menu: ${screen.name}`} className="flex-grow">
-                <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden aspect-video" ref={stageRef}
+        <div className="flex-grow flex flex-col gap-4 min-h-0 p-4">
+            {/* Canvas Panel - Fixed Height */}
+            <Panel 
+                title={`Editing Menu: ${screen.name}`} 
+                className="flex-shrink-0"
+                style={{ height: 'var(--canvas-height)' }}
+            >
+                <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden" ref={stageRef}
                     onMouseDown={() => setSelectedElementId(null)}
                     style={getBackground()}
                 >
@@ -327,6 +332,8 @@ const MenuEditor: React.FC<{
                     ))}
                 </div>
             </Panel>
+            
+            {/* Element Toolbar - Always Visible */}
             <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-11 gap-2">
                 <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
                 <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>

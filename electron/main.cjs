@@ -329,3 +329,65 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
   }
 });
 
+// Multi-Window Management
+const managerWindows = new Map();
+
+ipcMain.on('open-manager-window', (event, config) => {
+  const { type, width, height, title } = config;
+  
+  // If window already exists, focus it
+  if (managerWindows.has(type) && !managerWindows.get(type).isDestroyed()) {
+    managerWindows.get(type).focus();
+    return;
+  }
+  
+  // Create new manager window
+  const managerWindow = new BrowserWindow({
+    width,
+    height,
+    minWidth: 800,
+    minHeight: 600,
+    icon: path.join(__dirname, '../docs/Flourish.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false,
+      preload: path.join(__dirname, 'preload.cjs')
+    },
+    backgroundColor: '#1a102c',
+    title,
+    parent: mainWindow,
+    show: false
+  });
+  
+  // Load the same app
+  managerWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  
+  // Send window type to renderer after load
+  managerWindow.webContents.once('did-finish-load', () => {
+    managerWindow.webContents.send('window-type', type);
+    managerWindow.show();
+  });
+  
+  // Remove from map when closed
+  managerWindow.on('closed', () => {
+    managerWindows.delete(type);
+  });
+  
+  managerWindows.set(type, managerWindow);
+});
+
+ipcMain.on('focus-main-window', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus();
+  }
+});
+
+ipcMain.on('close-all-manager-windows', () => {
+  managerWindows.forEach(win => {
+    if (!win.isDestroyed()) {
+      win.close();
+    }
+  });
+  managerWindows.clear();
+});

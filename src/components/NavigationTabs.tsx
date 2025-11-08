@@ -1,5 +1,6 @@
 import React from 'react';
 import { BookOpenIcon, SparkleIcon, BookmarkSquareIcon, PhotoIcon, Cog6ToothIcon } from './icons';
+import { isMultiWindowSupported, openManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
 export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings' | 'templates';
 
@@ -74,31 +75,48 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         }
     ];
 
+    const handleOpenInWindow = (tabId: NavigationTab, event: React.MouseEvent) => {
+        event.stopPropagation();
+        openManagerWindow(tabId as ManagerWindowType);
+    };
+
     return (
         <div className="flex items-center gap-1.5 p-1.5 panel">
             {tabs.map((tab) => (
-                <button
-                    key={tab.id}
-                    onClick={() => onTabChange(tab.id)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        activeTab === tab.id
-                            ? 'bg-sky-500 text-white shadow-lg scale-105'
-                            : 'text-slate-300 hover:text-white hover:bg-slate-700 hover:scale-102'
-                    }`}
-                    title={tab.tooltip}
-                >
-                    <span className={activeTab === tab.id ? 'text-white' : 'text-sky-400'}>{tab.icon}</span>
-                    <span>{tab.label}</span>
-                    {tab.count > 0 && (
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                <div key={tab.id} className="relative group">
+                    <button
+                        onClick={() => onTabChange(tab.id)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                             activeTab === tab.id
-                                ? 'bg-white/20 text-white'
-                                : 'bg-slate-600/70 text-slate-300'
-                        }`}>
-                            {tab.count}
-                        </span>
+                                ? 'bg-sky-500 text-white shadow-lg scale-105'
+                                : 'text-slate-300 hover:text-white hover:bg-slate-700 hover:scale-102'
+                        }`}
+                        title={tab.tooltip}
+                    >
+                        <span className={activeTab === tab.id ? 'text-white' : 'text-sky-400'}>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                        {tab.count > 0 && (
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                activeTab === tab.id
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-slate-600/70 text-slate-300'
+                            }`}>
+                                {tab.count}
+                            </span>
+                        )}
+                    </button>
+                    
+                    {/* Pop-out Window Button */}
+                    {isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'templates' && (
+                        <button
+                            onClick={(e) => handleOpenInWindow(tab.id, e)}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-purple-500 hover:bg-purple-600 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            title={`Open ${tab.label} in separate window (Shift+${tabs.indexOf(tab) + 1})`}
+                        >
+                            ⧉
+                        </button>
                     )}
-                </button>
+                </div>
             ))}
         </div>
     );
