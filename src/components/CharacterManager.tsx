@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNCharacter } from '../features/character/types';
@@ -24,7 +24,7 @@ const CharacterManager: React.FC<CharacterManagerProps> = ({
     const { dispatch } = useProject();
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
 
-    const charactersArray = Object.values(project.characters) as VNCharacter[];
+    const charactersArray = useMemo(() => Object.values(project.characters) as VNCharacter[], [project.characters]);
 
     const addCharacter = () => {
         const name = `New Character ${Object.keys(project.characters).length + 1}`;

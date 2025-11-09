@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNScene } from '../features/scene/types';
@@ -38,7 +38,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     const [draggedSceneId, setDraggedSceneId] = useState<VNID | null>(null);
     const [dropTargetId, setDropTargetId] = useState<VNID | null>(null);
 
-    const scenesArray = Object.values(project.scenes) as VNScene[];
+    const scenesArray = useMemo(() => Object.values(project.scenes) as VNScene[], [project.scenes]);
 
     const addScene = () => {
         const name = `New Scene ${Object.keys(project.scenes).length + 1}`;

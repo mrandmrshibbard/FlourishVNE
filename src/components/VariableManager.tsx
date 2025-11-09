@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { VNProject } from '../types/project';
 import { VNVariable } from '../features/variables/types';
 import { useProject } from '../contexts/ProjectContext';
@@ -30,7 +30,10 @@ const VariableManager: React.FC<VariableManagerProps> = ({
         }
     };
 
-    const variablesArray = Object.values(project.variables || {}) as VNVariable[];
+    const variablesArray = useMemo(
+        () => Object.values(project.variables || {}) as VNVariable[],
+        [project.variables]
+    );
 
     const addVariable = () => {
         const name = `new_variable_${Object.keys(project.variables || {}).length + 1}`;

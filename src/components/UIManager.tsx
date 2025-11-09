@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNUIScreen } from '../features/ui/types';
@@ -27,15 +27,24 @@ const UIManager: React.FC<UIManagerProps> = ({
     const [pendingRestore, setPendingRestore] = useState(false);
     const [restoreModalOpen, setRestoreModalOpen] = useState(false);
 
-    const uiScreensArray = Object.values(project.uiScreens) as VNUIScreen[];
+    const uiScreensArray = useMemo(() => Object.values(project.uiScreens) as VNUIScreen[], [project.uiScreens]);
 
-    const specialScreenIds = [
-        project.ui.titleScreenId,
-        project.ui.settingsScreenId,
-        project.ui.saveScreenId,
-        project.ui.loadScreenId,
-        project.ui.pauseScreenId,
-    ].filter((id): id is VNID => Boolean(id));
+    const specialScreenIds = useMemo(
+        () => [
+            project.ui.titleScreenId,
+            project.ui.settingsScreenId,
+            project.ui.saveScreenId,
+            project.ui.loadScreenId,
+            project.ui.pauseScreenId,
+        ].filter((id): id is VNID => Boolean(id)),
+        [
+            project.ui.titleScreenId,
+            project.ui.settingsScreenId,
+            project.ui.saveScreenId,
+            project.ui.loadScreenId,
+            project.ui.pauseScreenId,
+        ]
+    );
 
     const addUIScreen = () => {
         const name = `New Screen ${Object.keys(project.uiScreens).length + 1}`;
