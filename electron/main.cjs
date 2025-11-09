@@ -110,6 +110,20 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 
+  // Prevent window from closing, ask renderer to show save dialog
+  mainWindow.on('close', (e) => {
+    // If we're already closing (confirmed), allow it
+    if (mainWindow.forceClose) {
+      return;
+    }
+
+    // Prevent the window from closing
+    e.preventDefault();
+    
+    // Ask renderer to show save dialog
+    mainWindow.webContents.send('request-save-before-quit');
+  });
+
   // Handle window closed
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -363,10 +377,24 @@ ipcMain.on('open-manager-window', (event, config) => {
   // Load the same app
   managerWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   
-  // Send window type to renderer after load
+  // Send window type and project data to renderer after load
   managerWindow.webContents.once('did-finish-load', () => {
-    managerWindow.webContents.send('window-type', type);
-    managerWindow.show();
+    // Get project data from main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript('window.__FLOURISH_PROJECT__')
+        .then(projectData => {
+          managerWindow.webContents.send('window-type', { type, project: projectData });
+          managerWindow.show();
+        })
+        .catch(() => {
+          // If no project data, just send type
+          managerWindow.webContents.send('window-type', { type });
+          managerWindow.show();
+        });
+    } else {
+      managerWindow.webContents.send('window-type', { type });
+      managerWindow.show();
+    }
   });
   
   // Remove from map when closed
@@ -380,6 +408,17 @@ ipcMain.on('open-manager-window', (event, config) => {
 ipcMain.on('focus-main-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.focus();
+    mainWindow.show();
+    mainWindow.restore(); // In case it's minimized
+  }
+});
+
+ipcMain.on('focus-manager-window', (event, type) => {
+  if (managerWindows.has(type) && !managerWindows.get(type).isDestroyed()) {
+    const win = managerWindows.get(type);
+    win.focus();
+    win.show();
+    win.restore(); // In case it's minimized
   }
 });
 
@@ -390,4 +429,57 @@ ipcMain.on('close-all-manager-windows', () => {
     }
   });
   managerWindows.clear();
+});
+
+// Sync project changes across all windows
+ipcMain.on('sync-project-state', (event, projectData) => {
+  // Update main window
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents !== event.sender) {
+    mainWindow.webContents.send('project-state-update', projectData);
+  }
+  
+  // Update all manager windows
+  managerWindows.forEach(win => {
+    if (!win.isDestroyed() && win.webContents !== event.sender) {
+      win.webContents.send('project-state-update', projectData);
+    }
+  });
+});
+
+ipcMain.handle('save-project-export', async (event, { data, filename }) => {
+  try {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    const result = await dialog.showSaveDialog(targetWindow, {
+      title: 'Save Project Export',
+      defaultPath: path.join(app.getPath('downloads'), filename),
+      filters: [{ name: 'Zip Archive', extensions: ['zip'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(result.filePath, buffer);
+
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('Failed to save project export:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Allow renderer to quit the app after save confirmation
+ipcMain.on('confirm-quit', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.forceClose = true;
+    mainWindow.close();
+  }
+});
+
+// Cancel quit
+ipcMain.on('cancel-quit', () => {
+  // Just do nothing, window won't close
+  console.log('Quit cancelled by user');
 });

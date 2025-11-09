@@ -30,6 +30,8 @@ export const ProjectProvider: React.FC<{
     future: []
   });
 
+  const isSyncing = useRef(false);
+
   const dispatchWithHistory = useCallback((action: ProjectAction) => {
     setHistory(prev => {
       const newPresent = rootReducer(prev.present, action);
@@ -39,12 +41,34 @@ export const ProjectProvider: React.FC<{
         return prev;
       }
 
-      return {
+      const newHistory = {
         past: [...prev.past.slice(-MAX_HISTORY + 1), prev.present],
         present: newPresent,
         future: [] // Clear future when new action is performed
       };
+
+      // Sync to other windows if in Electron
+      if (!isSyncing.current && (window as any).electronAPI?.syncProjectState) {
+        (window as any).electronAPI.syncProjectState(newPresent);
+      }
+
+      return newHistory;
     });
+  }, []);
+
+  // Listen for project updates from other windows
+  useEffect(() => {
+    if ((window as any).electronAPI?.onProjectStateUpdate) {
+      (window as any).electronAPI.onProjectStateUpdate((projectData: VNProject) => {
+        isSyncing.current = true;
+        setHistory(prev => ({
+          past: [...prev.past.slice(-MAX_HISTORY + 1), prev.present],
+          present: projectData,
+          future: [] // Clear future on external update
+        }));
+        isSyncing.current = false;
+      });
+    }
   }, []);
 
   const undo = useCallback(() => {
@@ -92,6 +116,12 @@ export const ProjectProvider: React.FC<{
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__FLOURISH_PROJECT__ = history.present;
+    }
+  }, [history.present]);
 
   return (
     <ProjectContext.Provider value={{ 

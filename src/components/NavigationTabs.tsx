@@ -1,6 +1,6 @@
 import React from 'react';
 import { BookOpenIcon, SparkleIcon, BookmarkSquareIcon, PhotoIcon, Cog6ToothIcon } from './icons';
-import { isMultiWindowSupported, openManagerWindow, type ManagerWindowType } from '../utils/windowManager';
+import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusMainWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
 export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings' | 'templates';
 
@@ -80,18 +80,43 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         openManagerWindow(tabId as ManagerWindowType);
     };
 
+    const handleRightClick = (tabId: NavigationTab, event: React.MouseEvent) => {
+        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'templates') {
+            event.preventDefault();
+            event.stopPropagation();
+            focusManagerWindow(tabId as ManagerWindowType);
+        }
+    };
+
+    const isChildWindow = isManagerWindow();
+
+    // Handle ESC key in manager windows to close them
+    React.useEffect(() => {
+        if (!isChildWindow) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                window.close();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isChildWindow]);
+
     return (
         <div className="flex items-center gap-1.5 p-1.5 panel">
             {tabs.map((tab) => (
                 <div key={tab.id} className="relative group">
                     <button
                         onClick={() => onTabChange(tab.id)}
+                        onContextMenu={(e) => handleRightClick(tab.id, e)}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                             activeTab === tab.id
                                 ? 'bg-sky-500 text-white shadow-lg scale-105'
                                 : 'text-slate-300 hover:text-white hover:bg-slate-700 hover:scale-102'
                         }`}
-                        title={tab.tooltip}
+                        title={tab.tooltip + (isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings' && tab.id !== 'templates' ? ' | Right-click to focus manager window' : '')}
                     >
                         <span className={activeTab === tab.id ? 'text-white' : 'text-sky-400'}>{tab.icon}</span>
                         <span>{tab.label}</span>
@@ -106,12 +131,12 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         )}
                     </button>
                     
-                    {/* Pop-out Window Button */}
-                    {isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'templates' && (
+                    {/* Pop-out Window Button - Only show in main window */}
+                    {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'templates' && (
                         <button
                             onClick={(e) => handleOpenInWindow(tab.id, e)}
                             className="absolute -top-1 -right-1 w-5 h-5 bg-purple-500 hover:bg-purple-600 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                            title={`Open ${tab.label} in separate window (Shift+${tabs.indexOf(tab) + 1})`}
+                            title={`Open or focus ${tab.label} in separate window`}
                         >
                             ⧉
                         </button>

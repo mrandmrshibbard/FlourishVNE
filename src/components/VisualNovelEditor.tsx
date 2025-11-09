@@ -32,7 +32,7 @@ const templateService = new TemplateService();
 const templateGenerator = new TemplateGenerator();
 
 
-const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationTab }> = ({ onExit, initialTab }) => {
     const { project, dispatch } = useProject();
     const [activeSceneId, setActiveSceneId] = useState<VNID>(project.startSceneId);
     const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
@@ -42,7 +42,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     const [selectedExpressionId, setSelectedExpressionId] = useState<VNID | null>(null);
     const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [activeTab, setActiveTab] = useState<NavigationTab>('scenes');
+    const [activeTab, setActiveTab] = useState<NavigationTab>(initialTab || 'scenes');
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
     const [isConfiguringScene, setIsConfiguringScene] = useState(false);
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);

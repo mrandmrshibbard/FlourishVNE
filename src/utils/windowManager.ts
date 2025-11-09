@@ -74,7 +74,9 @@ export const isElectron = (): boolean => {
 };
 
 /**
- * Open a manager in a new window
+ * Open a manager in a new window (or focus if already open)
+ * The Electron main process will automatically focus existing windows
+ * instead of creating duplicates
  */
 export const openManagerWindow = (type: ManagerWindowType): void => {
   if (!isElectron()) {
@@ -85,6 +87,7 @@ export const openManagerWindow = (type: ManagerWindowType): void => {
   const config = WINDOW_CONFIGS[type];
   
   // Send message to main process via IPC
+  // Main process will check if window exists and focus it, or create new one
   if ((window as any).electronAPI?.openManagerWindow) {
     (window as any).electronAPI.openManagerWindow({
       type: config.type,
@@ -105,6 +108,13 @@ export const isMultiWindowSupported = (): boolean => {
 };
 
 /**
+ * Check if this is a manager (child) window
+ */
+export const isManagerWindow = (): boolean => {
+  return !!(window as any).__IS_MANAGER_WINDOW__;
+};
+
+/**
  * Focus the main editor window
  */
 export const focusMainWindow = (): void => {
@@ -112,6 +122,17 @@ export const focusMainWindow = (): void => {
   
   if ((window as any).electronAPI?.focusMainWindow) {
     (window as any).electronAPI.focusMainWindow();
+  }
+};
+
+/**
+ * Focus a manager window if it exists
+ */
+export const focusManagerWindow = (type: ManagerWindowType): void => {
+  if (!isElectron()) return;
+  
+  if ((window as any).electronAPI?.focusManagerWindow) {
+    (window as any).electronAPI.focusManagerWindow(type);
   }
 };
 

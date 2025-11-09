@@ -131,7 +131,7 @@ const sanitizeFilename = (name: string, fallback: string): string => {
     return name.replace(/[^a-z0-9_.\-]/gi, '_').replace(/_{2,}/g, '_').toLowerCase();
 };
 
-export const exportProject = async (project: VNProject) => {
+export const exportProject = async (project: VNProject): Promise<boolean> => {
     if (!project) {
         throw new Error('A valid project object must be provided for export.');
     }
@@ -517,9 +517,27 @@ export const exportProject = async (project: VNProject) => {
     zip.file('project.json', JSON.stringify(projectClone, null, 2));
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-    const content = await zip.generateAsync({ type: 'blob' });
+    const archiveData = await zip.generateAsync({ type: 'uint8array' });
     const safeTitle = project.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    saveAs(content, `${safeTitle}_export.zip`);
+    const filename = `${safeTitle}_export.zip`;
+
+    const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPI?.saveProjectExport) {
+        const result = await electronAPI.saveProjectExport(archiveData, filename);
+
+        if (!result?.success) {
+            if (result?.canceled) {
+                return false;
+            }
+            throw new Error(result?.error || 'Failed to save project export.');
+        }
+
+        return true;
+    }
+
+    const blob = new Blob([archiveData], { type: 'application/zip' });
+    saveAs(blob, filename);
+    return true;
 };
 
 export const importProject = async (file: File): Promise<{ project: VNProject; manifest?: ExportManifest }> => {

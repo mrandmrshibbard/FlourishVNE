@@ -953,19 +953,40 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       present: initialProject,
       future: []
     });
+    const isSyncing = React2.useRef(false);
     const dispatchWithHistory = React2.useCallback((action) => {
       setHistory((prev) => {
+        var _a;
         const newPresent = rootReducer(prev.present, action);
         if (JSON.stringify(newPresent) === JSON.stringify(prev.present)) {
           return prev;
         }
-        return {
+        const newHistory = {
           past: [...prev.past.slice(-50 + 1), prev.present],
           present: newPresent,
           future: []
           // Clear future when new action is performed
         };
+        if (!isSyncing.current && ((_a = window.electronAPI) == null ? void 0 : _a.syncProjectState)) {
+          window.electronAPI.syncProjectState(newPresent);
+        }
+        return newHistory;
       });
+    }, []);
+    React2.useEffect(() => {
+      var _a;
+      if ((_a = window.electronAPI) == null ? void 0 : _a.onProjectStateUpdate) {
+        window.electronAPI.onProjectStateUpdate((projectData) => {
+          isSyncing.current = true;
+          setHistory((prev) => ({
+            past: [...prev.past.slice(-50 + 1), prev.present],
+            present: projectData,
+            future: []
+            // Clear future on external update
+          }));
+          isSyncing.current = false;
+        });
+      }
     }, []);
     const undo = React2.useCallback(() => {
       setHistory((prev) => {
@@ -1004,6 +1025,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
     }, [undo, redo]);
+    React2.useEffect(() => {
+      if (typeof window !== "undefined") {
+        window.__FLOURISH_PROJECT__ = history.present;
+      }
+    }, [history.present]);
     return /* @__PURE__ */ jsxRuntime2.jsx(ProjectContext.Provider, { value: {
       project: history.present,
       dispatch: dispatchWithHistory,
