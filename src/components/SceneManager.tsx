@@ -370,4 +370,4 @@ const SceneItem: React.FC<SceneItemProps> = ({
     );
 };
 
-export default SceneManager;
+export default React.memo(SceneManager);

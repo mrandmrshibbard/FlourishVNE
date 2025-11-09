@@ -36,8 +36,8 @@ export const ProjectProvider: React.FC<{
     setHistory(prev => {
       const newPresent = rootReducer(prev.present, action);
       
-      // Don't add to history if state didn't change
-      if (JSON.stringify(newPresent) === JSON.stringify(prev.present)) {
+      // Don't add to history if reducer returned identical state reference
+      if (newPresent === prev.present) {
         return prev;
       }
 

@@ -263,4 +263,4 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
     );
 };
 
-export default UIManager;
+export default React.memo(UIManager);

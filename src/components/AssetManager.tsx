@@ -1315,4 +1315,4 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     );
 };
 
-export default AssetManager;
+export default React.memo(AssetManager);

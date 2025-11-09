@@ -958,7 +958,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       setHistory((prev) => {
         var _a;
         const newPresent = rootReducer(prev.present, action);
-        if (JSON.stringify(newPresent) === JSON.stringify(prev.present)) {
+        if (newPresent === prev.present) {
           return prev;
         }
         const newHistory = {

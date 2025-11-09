@@ -3,7 +3,7 @@ import { PlayIcon, ArrowLeftOnRectangleIcon, ArrowDownTrayIcon, ArrowUturnLeftIc
 import { useProject } from '../contexts/ProjectContext';
 import { exportProject } from '../utils/projectPackager';
 import { GameBuilder } from './GameBuilder';
-import { isManagerWindow } from '../utils/windowManager';
+import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
 import ConfirmationModal from './ui/ConfirmationModal';
 import InfoModal from './ui/InfoModal';
 
@@ -21,6 +21,7 @@ const Header: React.FC<{
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [isExporting, setIsExporting] = useState(false);
+    const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
     const { project, undo, redo, canUndo, canRedo } = useProject();
     const isChildWindow = isManagerWindow();
 
@@ -33,6 +34,7 @@ const Header: React.FC<{
         if ((window as any).electronAPI?.onRequestSaveBeforeQuit) {
             (window as any).electronAPI.onRequestSaveBeforeQuit(() => {
                 console.log('Received quit request from Electron');
+                setExitMode('electron');
                 setShowExitModal(true);
             });
         }
@@ -72,10 +74,12 @@ const Header: React.FC<{
 
     const handleHubClick = () => {
         console.log('Hub button clicked, showing modal');
+        setExitMode('hub');
         setShowExitModal(true);
     };
 
     const handleConfirmReturn = async () => {
+        const mode = exitMode;
         setIsExporting(true);
         try {
             const didSave = await exportProject(project);
@@ -88,13 +92,17 @@ const Header: React.FC<{
             setTimeout(() => {
                 setShowExitModal(false);
                 setIsExporting(false);
-                
-                // If called from Electron window close, confirm quit
-                if ((window as any).electronAPI?.confirmQuit) {
+
+                if (mode === 'electron' && (window as any).electronAPI?.confirmQuit) {
                     (window as any).electronAPI.confirmQuit();
                 } else {
+                    if (mode === 'hub') {
+                        closeAllManagerWindows();
+                    }
                     onExit();
                 }
+
+                setExitMode(null);
             }, 500);
         } catch (error) {
             console.error("Export failed:", error);
@@ -102,6 +110,7 @@ const Header: React.FC<{
             setShowExitModal(false);
             setErrorMessage(`Failed to export project. ${error instanceof Error ? error.message : 'Unknown error'}`);
             setShowErrorModal(true);
+            setExitMode(null);
         }
     };
 
@@ -109,20 +118,27 @@ const Header: React.FC<{
         setShowExitModal(false);
         
         // If called from Electron window close, cancel quit
-        if ((window as any).electronAPI?.cancelQuit) {
+        if (exitMode === 'electron' && (window as any).electronAPI?.cancelQuit) {
             (window as any).electronAPI.cancelQuit();
         }
+
+        setExitMode(null);
     };
 
     const handleReturnWithoutSaving = () => {
         setShowExitModal(false);
+        const mode = exitMode;
         
-        // If called from Electron window close, confirm quit
-        if ((window as any).electronAPI?.confirmQuit) {
+        if (mode === 'electron' && (window as any).electronAPI?.confirmQuit) {
             (window as any).electronAPI.confirmQuit();
         } else {
+            if (mode === 'hub') {
+                closeAllManagerWindows();
+            }
             onExit();
         }
+
+        setExitMode(null);
     };
     
     return (

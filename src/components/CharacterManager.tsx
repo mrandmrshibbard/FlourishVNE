@@ -194,4 +194,4 @@ const CharacterItem: React.FC<CharacterItemProps> = ({
     );
 };
 
-export default CharacterManager;
+export default React.memo(CharacterManager);

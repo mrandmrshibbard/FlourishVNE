@@ -6,12 +6,29 @@ import { PlusIcon, TrashIcon, Cog6ToothIcon, PencilIcon } from './icons';
 
 interface VariableManagerProps {
     project: VNProject;
+    selectedVariableId?: string | null;
+    setSelectedVariableId?: (id: string | null) => void;
 }
 
-const VariableManager: React.FC<VariableManagerProps> = ({ project }) => {
+const VariableManager: React.FC<VariableManagerProps> = ({
+    project,
+    selectedVariableId: controlledSelectedId,
+    setSelectedVariableId: setControlledSelectedId
+}) => {
     const { dispatch } = useProject();
-    const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null);
+    const [internalSelectedVariableId, setInternalSelectedVariableId] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
+
+    const isControlledSelection = controlledSelectedId !== undefined && typeof setControlledSelectedId === 'function';
+    const selectedVariableId = isControlledSelection ? controlledSelectedId ?? null : internalSelectedVariableId;
+
+    const setSelectedVariableId = (id: string | null) => {
+        if (isControlledSelection && setControlledSelectedId) {
+            setControlledSelectedId(id);
+        } else {
+            setInternalSelectedVariableId(id);
+        }
+    };
 
     const variablesArray = Object.values(project.variables || {}) as VNVariable[];
 
@@ -295,4 +312,4 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
     );
 };
 
-export default VariableManager;
+export default React.memo(VariableManager);

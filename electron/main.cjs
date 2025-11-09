@@ -370,8 +370,8 @@ ipcMain.on('open-manager-window', (event, config) => {
     },
     backgroundColor: '#1a102c',
     title,
-    parent: mainWindow,
-    show: false
+    show: false,
+    skipTaskbar: false
   });
   
   // Load the same app
