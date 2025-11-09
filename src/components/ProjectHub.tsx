@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { VNProject } from '../types/project';
 import { createInitialProject } from '../constants';
 import { PlusIcon, UploadIcon } from './icons';
@@ -9,13 +9,32 @@ export const ProjectHub: React.FC<{
 }> = ({ onProjectSelect }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    useEffect(() => {
+        (window as any).__IS_MANAGER_WINDOW__ = false;
+        if ((window as any).electronAPI?.setHubActive) {
+            (window as any).electronAPI.setHubActive(true);
+        }
+
+        return () => {
+            if ((window as any).electronAPI?.setHubActive) {
+                (window as any).electronAPI.setHubActive(false);
+            }
+        };
+    }, []);
+
     const handleCreateNew = () => {
+        if ((window as any).electronAPI?.setHubActive) {
+            (window as any).electronAPI.setHubActive(false);
+        }
         const newProject = createInitialProject();
         // The new project is not saved to localStorage; it's passed directly to the editor state.
         onProjectSelect(newProject);
     };
 
     const handleFileOpen = () => {
+        if ((window as any).electronAPI?.setHubActive) {
+            (window as any).electronAPI.setHubActive(false);
+        }
         fileInputRef.current?.click();
     };
 
@@ -27,6 +46,9 @@ export const ProjectHub: React.FC<{
             // importProject no longer saves to localStorage.
             // It just parses the file and returns the project object.
             const { project } = await importProject(file);
+            if ((window as any).electronAPI?.setHubActive) {
+                (window as any).electronAPI.setHubActive(false);
+            }
             onProjectSelect(project);
         } catch (error) {
             console.error("Error importing project file:", error);

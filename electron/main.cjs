@@ -5,6 +5,7 @@ const { execSync } = require('child_process');
 const os = require('os');
 
 let mainWindow;
+let isHubActive = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -114,6 +115,10 @@ function createWindow() {
   mainWindow.on('close', (e) => {
     // If we're already closing (confirmed), allow it
     if (mainWindow.forceClose) {
+      return;
+    }
+
+    if (isHubActive) {
       return;
     }
 
@@ -468,6 +473,10 @@ ipcMain.handle('save-project-export', async (event, { data, filename }) => {
     console.error('Failed to save project export:', error);
     return { success: false, error: error.message };
   }
+});
+
+ipcMain.on('set-hub-active', (_event, isActive) => {
+  isHubActive = isActive;
 });
 
 // Allow renderer to quit the app after save confirmation
