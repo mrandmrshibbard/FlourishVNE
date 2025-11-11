@@ -22,6 +22,14 @@ import { CommandStackRow, DragDropIndicator } from './CommandStackComponents';
 const generateCommandId = () => `cmd-${Math.random().toString(36).substring(2, 9)}`;
 const generateBranchId = () => `branch-${Math.random().toString(36).substring(2, 9)}`;
 
+const cloneCommand = <T extends VNCommand>(command: T): T => {
+    const globalStructuredClone = (globalThis as unknown as { structuredClone?: <K>(value: K) => K }).structuredClone;
+    if (typeof globalStructuredClone === 'function') {
+        return globalStructuredClone(command);
+    }
+    return JSON.parse(JSON.stringify(command)) as T;
+};
+
 const CommandItem: React.FC<{ 
     command: VNCommand, 
     project: VNProject, 
@@ -203,6 +211,7 @@ const CommandItem: React.FC<{
     
     return (
         <div 
+            data-command-id={command.id}
             className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : multiSelectClass} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-slate-700'}`}
             style={{ 
                 paddingLeft: leftPadding,
@@ -373,15 +382,16 @@ const SceneEditor: React.FC<{
     }, [project]);
 
     const insertCommandsIntoScene = useCallback((commandsToInsert: VNCommand[], insertIndex: number) => {
-        if (!activeScene) {
+        const latestScene = project.scenes[activeSceneId];
+        if (!latestScene) {
             return;
         }
 
-        const clampedIndex = Math.max(0, Math.min(insertIndex, activeScene.commands.length));
+        const clampedIndex = Math.max(0, Math.min(insertIndex, latestScene.commands.length));
         const newCommands = [
-            ...activeScene.commands.slice(0, clampedIndex),
+            ...latestScene.commands.slice(0, clampedIndex),
             ...commandsToInsert,
-            ...activeScene.commands.slice(clampedIndex)
+            ...latestScene.commands.slice(clampedIndex)
         ];
 
         dispatch({
@@ -393,7 +403,7 @@ const SceneEditor: React.FC<{
         });
 
         if (commandsToInsert.length > 0) {
-            setSelectedCommands(new Set([commandsToInsert[0].id]));
+            setSelectedCommands(new Set(commandsToInsert.map(cmd => cmd.id)));
         } else {
             setSelectedCommands(new Set());
         }
@@ -401,7 +411,7 @@ const SceneEditor: React.FC<{
         setSelectedCommandIndex(clampedIndex);
         setLastSelectedIndex(clampedIndex);
         setSelectedVariableId(null);
-    }, [activeScene, activeSceneId, dispatch, setSelectedCommandIndex, setSelectedVariableId, setSelectedCommands, setLastSelectedIndex]);
+    }, [project, activeSceneId, dispatch, setSelectedCommandIndex, setSelectedVariableId, setSelectedCommands, setLastSelectedIndex]);
 
     const handleAddCommandToBranch = useCallback((branchId: string, type: CommandType) => {
         if (!activeScene) {
@@ -453,54 +463,97 @@ const SceneEditor: React.FC<{
             }
 
             // Copy (Ctrl+C)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedCommands.size > 0) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedCommands.size > 0 && activeScene) {
                 e.preventDefault();
-                const commandsToCopy = activeScene.commands.filter(cmd => selectedCommands.has(cmd.id));
-                setClipboard(commandsToCopy);
+                const selectedIds = new Set(selectedCommands);
+                const addedIds = new Set<VNID>();
+                const commandsToCopy: VNCommand[] = [];
+
+                for (let i = 0; i < activeScene.commands.length; i++) {
+                    const cmd = activeScene.commands[i];
+                    if (!selectedIds.has(cmd.id) || addedIds.has(cmd.id)) {
+                        continue;
+                    }
+
+                    if (cmd.type === CommandType.BranchStart) {
+                        const branchCmd = cmd as BranchStartCommand;
+                        const branchEndIndex = activeScene.commands.findIndex((candidate, index) =>
+                            index > i &&
+                            candidate.type === CommandType.BranchEnd &&
+                            (candidate as BranchEndCommand).branchId === branchCmd.branchId
+                        );
+
+                        commandsToCopy.push(cmd);
+                        addedIds.add(cmd.id);
+
+                        if (branchEndIndex !== -1) {
+                            for (let j = i + 1; j <= branchEndIndex; j++) {
+                                const nestedCmd = activeScene.commands[j];
+                                if (!addedIds.has(nestedCmd.id)) {
+                                    commandsToCopy.push(nestedCmd);
+                                    addedIds.add(nestedCmd.id);
+                                }
+                            }
+                            i = branchEndIndex;
+                        }
+                    } else {
+                        commandsToCopy.push(cmd);
+                        addedIds.add(cmd.id);
+                    }
+                }
+
+                if (commandsToCopy.length > 0) {
+                    setClipboard(commandsToCopy.map(cloneCommand));
+                }
             }
 
             // Paste (Ctrl+V)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard.length > 0) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard.length > 0 && activeScene) {
                 e.preventDefault();
-                const insertIndex = selectedCommandIndex !== null ? selectedCommandIndex + 1 : activeScene.commands.length;
-                
-                // Add all commands first, then move them in batch
-                const newCommandIds: string[] = [];
-                clipboard.forEach((cmd) => {
-                    const newCommand = { 
-                        ...cmd, 
-                        id: `cmd-${Math.random().toString(36).substring(2, 9)}` 
-                    };
-                    newCommandIds.push(newCommand.id);
-                    
-                    dispatch({
-                        type: 'ADD_COMMAND',
-                        payload: {
-                            sceneId: activeSceneId,
-                            command: newCommand as VNCommand
-                        }
-                    });
+                const currentCommands = activeScene.commands;
+                const insertIndex = selectedCommandIndex !== null ? selectedCommandIndex + 1 : currentCommands.length;
+                const branchIdRemap = new Map<string, string>();
+                const insertedCommands = clipboard.map((cmd) => {
+                    const cloned = cloneCommand(cmd);
+                    cloned.id = generateCommandId();
+
+                    if (cloned.type === CommandType.BranchStart) {
+                        const originalBranchId = (cmd as BranchStartCommand).branchId;
+                        const newBranchId = generateBranchId();
+                        (cloned as BranchStartCommand).branchId = newBranchId;
+                        branchIdRemap.set(originalBranchId, newBranchId);
+                    } else if (cloned.type === CommandType.BranchEnd) {
+                        const originalBranchId = (cmd as BranchEndCommand).branchId;
+                        const mappedBranchId = branchIdRemap.get(originalBranchId) || originalBranchId;
+                        (cloned as BranchEndCommand).branchId = mappedBranchId;
+                    }
+
+                    return cloned;
                 });
-                
-                // Move all pasted commands to the insertion point
-                setTimeout(() => {
-                    newCommandIds.forEach((cmdId, i) => {
-                        const currentIndex = activeScene.commands.findIndex(c => c.id === cmdId);
-                        if (currentIndex !== -1) {
-                            dispatch({
-                                type: 'MOVE_COMMAND',
-                                payload: {
-                                    sceneId: activeSceneId,
-                                    fromIndex: currentIndex,
-                                    toIndex: insertIndex + i
-                                }
-                            });
-                        }
-                    });
-                }, 50);
-                
-                setSelectedCommandIndex(insertIndex);
-                setSelectedCommands(new Set());
+
+                if (insertedCommands.length === 0) {
+                    return;
+                }
+
+                const updatedCommands = [
+                    ...currentCommands.slice(0, insertIndex),
+                    ...insertedCommands,
+                    ...currentCommands.slice(insertIndex)
+                ];
+
+                dispatch({
+                    type: 'UPDATE_SCENE_COMMANDS',
+                    payload: {
+                        sceneId: activeSceneId,
+                        commands: updatedCommands
+                    }
+                });
+
+                const lastInsertedIndex = insertIndex + insertedCommands.length - 1;
+                setSelectedCommandIndex(lastInsertedIndex);
+                setSelectedCommands(new Set(insertedCommands.map(cmd => cmd.id)));
+                setLastSelectedIndex(lastInsertedIndex);
+                setSelectedVariableId(null);
             }
 
             // Delete selected commands (Delete key)
@@ -529,12 +582,26 @@ const SceneEditor: React.FC<{
             // Deselect All (Escape)
             if (e.key === 'Escape') {
                 setSelectedCommands(new Set());
+                setSelectedCommandIndex(null);
+                setLastSelectedIndex(null);
+                setSelectedVariableId(null);
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeScene, selectedCommands, selectedCommandIndex, clipboard, dispatch, activeSceneId]);
+    }, [
+        activeScene,
+        selectedCommands,
+        selectedCommandIndex,
+        clipboard,
+        dispatch,
+        activeSceneId,
+        setSelectedCommandIndex,
+        setSelectedCommands,
+        setLastSelectedIndex,
+        setSelectedVariableId
+    ]);
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, commandId: string, index: number) => {
         const command = activeScene.commands.find(c => c.id === commandId);
@@ -575,101 +642,75 @@ const SceneEditor: React.FC<{
         const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
         if (paletteCommandType) {
             const targetIndex = activeScene.commands.findIndex(cmd => cmd.id === targetCommandId);
-            
+            const targetCommand = activeScene.commands[targetIndex];
+
+            if (targetIndex === -1) {
+                setDropTarget(null);
+                return;
+            }
+
+            const branchMeta = targetCommand?.type === CommandType.BranchStart
+                ? (() => {
+                    const branchCmd = targetCommand as BranchStartCommand;
+                    const branchEndIndex = activeScene.commands.findIndex((cmd, idx) =>
+                        idx > targetIndex &&
+                        cmd.type === CommandType.BranchEnd &&
+                        (cmd as BranchEndCommand).branchId === branchCmd.branchId
+                    );
+                    return {
+                        branchEndIndex,
+                        isEmpty: branchEndIndex === targetIndex + 1
+                    };
+                })()
+                : null;
+
+            const resolveInsertIndex = () => {
+                if (position === 'before') {
+                    return targetIndex;
+                }
+
+                if (branchMeta) {
+                    const { branchEndIndex, isEmpty } = branchMeta;
+                    const safeBranchEndIndex = branchEndIndex !== -1 ? branchEndIndex : targetIndex + 1;
+
+                    if (position === 'inside' || (position === 'after' && isEmpty)) {
+                        return safeBranchEndIndex;
+                    }
+
+                    if (position === 'after') {
+                        return safeBranchEndIndex + 1;
+                    }
+                }
+
+                if (position === 'inside' && targetCommand?.type === CommandType.BranchEnd) {
+                    return targetIndex;
+                }
+
+                return targetIndex + 1;
+            };
+
+            const insertIndex = resolveInsertIndex();
+
             // Special handling for BranchStart - create both BranchStart and BranchEnd
             if (paletteCommandType === CommandType.BranchStart) {
                 const branchId = generateBranchId();
-                const branchStart = createCommand(CommandType.BranchStart, project, { branchId });
-                const branchEnd = createCommand(CommandType.BranchEnd, project, { branchId });
-                
-                if (branchStart && branchEnd && targetIndex !== -1) {
-                    const newBranchStart = { ...branchStart, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
-                    const newBranchEnd = { ...branchEnd, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
-                    
-                    // Add both commands at the end
-                    dispatch({
-                        type: 'ADD_COMMAND',
-                        payload: { sceneId: activeSceneId, command: newBranchStart }
-                    });
-                    dispatch({
-                        type: 'ADD_COMMAND',
-                        payload: { sceneId: activeSceneId, command: newBranchEnd }
-                    });
-                    
-                    // Move them to the correct position
-                    const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-                    setTimeout(() => {
-                        const branchStartIndex = activeScene.commands.length;
-                        const branchEndIndex = activeScene.commands.length + 1;
-                        
-                        // Move BranchStart first
-                        dispatch({
-                            type: 'MOVE_COMMAND',
-                            payload: {
-                                sceneId: activeSceneId,
-                                fromIndex: branchStartIndex,
-                                toIndex: insertIndex
-                            }
-                        });
-                        
-                        // Move BranchEnd after BranchStart
-                        setTimeout(() => {
-                            dispatch({
-                                type: 'MOVE_COMMAND',
-                                payload: {
-                                    sceneId: activeSceneId,
-                                    fromIndex: branchEndIndex,
-                                    toIndex: insertIndex + 1
-                                }
-                            });
-                            setSelectedCommandIndex(insertIndex);
-                        }, 0);
-                    }, 0);
+                const branchStart = createCommandWithId(CommandType.BranchStart, { branchId });
+                const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId });
+
+                if (branchStart && branchEnd) {
+                    insertCommandsIntoScene([branchStart, branchEnd], insertIndex);
                 }
+
                 setDropTarget(null);
                 return;
             }
-            
+
             // Create new command from palette (non-branch commands)
-            const newCommandData = createCommand(paletteCommandType as CommandType, project);
-            if (!newCommandData) {
-                setDropTarget(null);
-                return;
+            const newCommand = createCommandWithId(paletteCommandType as CommandType);
+            if (newCommand) {
+                insertCommandsIntoScene([newCommand], insertIndex);
             }
-            
-            // Generate ID for the new command
-            const newCommand = { ...newCommandData, id: `cmd-${Math.random().toString(36).substring(2, 9)}` } as VNCommand;
-            
-            if (targetIndex !== -1) {
-                // Add command first
-                dispatch({
-                    type: 'ADD_COMMAND',
-                    payload: {
-                        sceneId: activeSceneId,
-                        command: newCommand
-                    }
-                });
-                
-                // Then move it to the correct position
-                const newCommandIndex = activeScene.commands.length; // It will be at the end initially
-                const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-                
-                if (insertIndex !== newCommandIndex) {
-                    setTimeout(() => {
-                        dispatch({
-                            type: 'MOVE_COMMAND',
-                            payload: {
-                                sceneId: activeSceneId,
-                                fromIndex: newCommandIndex,
-                                toIndex: insertIndex
-                            }
-                        });
-                        setSelectedCommandIndex(insertIndex);
-                    }, 0);
-                } else {
-                    setSelectedCommandIndex(insertIndex);
-                }
-            }
+
             setDropTarget(null);
             return;
         }
@@ -880,13 +921,12 @@ const SceneEditor: React.FC<{
             const cmd = activeScene.commands[i];
             if (cmd.type === CommandType.BranchStart) {
                 const branchCmd = cmd as BranchStartCommand;
-                // Find matching BranchEnd and hide everything between (including BranchEnd)
+                // Find matching BranchEnd and hide everything between (including BranchEnd) only when collapsed
                 for (let j = i + 1; j < activeScene.commands.length; j++) {
                     const endCmd = activeScene.commands[j];
                     if (endCmd.type === CommandType.BranchEnd && (endCmd as BranchEndCommand).branchId === branchCmd.branchId) {
-                        // Hide BranchEnd
+                        // Hide BranchEnd marker and all inner commands; rendering handles expanded display
                         commandsInBranches.add(endCmd.id);
-                        // Hide all commands between BranchStart and BranchEnd (they'll render inside the branch container)
                         for (let k = i + 1; k < j; k++) {
                             commandsInBranches.add(activeScene.commands[k].id);
                         }
@@ -966,6 +1006,15 @@ const SceneEditor: React.FC<{
                             setDropTarget(null);
                         }
                     }}
+                    onMouseDown={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (!target.closest('[data-command-id]')) {
+                            setSelectedCommands(new Set());
+                            setSelectedCommandIndex(null);
+                            setLastSelectedIndex(null);
+                            setSelectedVariableId(null);
+                        }
+                    }}
                 >
                     {(() => {
                         // Build set of command IDs that are inside groups
@@ -983,13 +1032,13 @@ const SceneEditor: React.FC<{
                             const cmd = activeScene.commands[i];
                             if (cmd.type === CommandType.BranchStart) {
                                 const branchCmd = cmd as BranchStartCommand;
-                                // Find matching BranchEnd and hide everything between (including BranchEnd)
+                                // Find matching BranchEnd and hide markers + collapsed contents
                                 for (let j = i + 1; j < activeScene.commands.length; j++) {
                                     const endCmd = activeScene.commands[j];
                                     if (endCmd.type === CommandType.BranchEnd && (endCmd as BranchEndCommand).branchId === branchCmd.branchId) {
-                                        // Hide BranchEnd
+                                        // Hide BranchEnd marker
                                         commandsInBranches.add(endCmd.id);
-                                        // Hide all commands between BranchStart and BranchEnd
+                                        // Hide all commands between BranchStart and BranchEnd (rendered separately)
                                         for (let k = i + 1; k < j; k++) {
                                             commandsInBranches.add(activeScene.commands[k].id);
                                         }
@@ -1195,6 +1244,75 @@ const SceneEditor: React.FC<{
                                             const branchCommands = activeScene.commands.slice(branchStartIndex + 1, branchEndIndex);
                                             const branchColor = branchCmd.color || '#6366f1';
                                             
+                                            const branchDropTargetId = `branch-container-${branchCmd.branchId}`;
+
+                                            const handleBranchDrop = (event: React.DragEvent<HTMLDivElement>) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+
+                                                const paletteCommandType = event.dataTransfer.getData('application/vn-command-type');
+                                                if (paletteCommandType) {
+                                                    const typedCommand = paletteCommandType as CommandType;
+
+                                                    if (typedCommand === CommandType.BranchStart) {
+                                                        const nestedBranchId = generateBranchId();
+                                                        const branchStart = createCommandWithId(CommandType.BranchStart, { branchId: nestedBranchId });
+                                                        const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId: nestedBranchId });
+
+                                                        if (branchStart && branchEnd) {
+                                                            insertCommandsIntoScene([branchStart, branchEnd], branchEndIndex);
+                                                        }
+                                                        setDropTarget(null);
+                                                        return;
+                                                    }
+
+                                                    const newCommand = createCommandWithId(typedCommand);
+                                                    if (newCommand) {
+                                                        insertCommandsIntoScene([newCommand], branchEndIndex);
+                                                    }
+                                                    setDropTarget(null);
+                                                    return;
+                                                }
+
+                                                if (!draggedCommandId) {
+                                                    setDropTarget(null);
+                                                    return;
+                                                }
+
+                                                const draggedIndex = activeScene.commands.findIndex(c => c.id === draggedCommandId);
+                                                if (draggedIndex === -1) {
+                                                    console.warn('[Branch Drop] Could not find dragged command index');
+                                                    setDropTarget(null);
+                                                    return;
+                                                }
+
+                                                const currentBranchEndIndex = activeScene.commands.findIndex((c, i) => 
+                                                    i > branchStartIndex && 
+                                                    c.type === CommandType.BranchEnd && 
+                                                    (c as BranchEndCommand).branchId === branchCmd.branchId
+                                                );
+
+                                                if (currentBranchEndIndex === -1) {
+                                                    console.warn('[Branch Drop] Missing BranchEnd command');
+                                                    setDropTarget(null);
+                                                    return;
+                                                }
+
+                                                const insertIndex = draggedIndex < currentBranchEndIndex ? currentBranchEndIndex - 1 : currentBranchEndIndex;
+
+                                                dispatch({ 
+                                                    type: 'MOVE_COMMAND', 
+                                                    payload: { 
+                                                        sceneId: activeSceneId, 
+                                                        fromIndex: draggedIndex, 
+                                                        toIndex: insertIndex 
+                                                    } 
+                                                });
+
+                                                setDropTarget(null);
+                                                setDraggedCommandId(null);
+                                            };
+
                                             return (
                                                 <div 
                                                     className="ml-6 mt-2 space-y-2 border-l-2 pl-2 min-h-[40px]" 
@@ -1202,92 +1320,35 @@ const SceneEditor: React.FC<{
                                                     onDragOver={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        console.log('[Branch DragOver] Command hovering over branch:', {
-                                                            branchId: branchCmd.branchId,
-                                                            isEmpty: branchCommands.length === 0,
-                                                            draggedCommandId
-                                                        });
+                                                        const paletteDrag = e.dataTransfer.types.includes('application/vn-command-type');
+                                                        e.dataTransfer.dropEffect = paletteDrag ? 'copy' : 'move';
+                                                        setDropTarget({ commandId: branchDropTargetId, position: 'inside' });
                                                     }}
-                                                    onDrop={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        
-                                                        // Check if dropping from command palette
-                                                        const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
-                                                        if (paletteCommandType) {
-                                                            const typedCommand = paletteCommandType as CommandType;
-
-                                                            if (typedCommand === CommandType.BranchStart) {
-                                                                const nestedBranchId = generateBranchId();
-                                                                const branchStart = createCommandWithId(CommandType.BranchStart, { branchId: nestedBranchId });
-                                                                const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId: nestedBranchId });
-
-                                                                if (branchStart && branchEnd) {
-                                                                    insertCommandsIntoScene([branchStart, branchEnd], branchEndIndex);
-                                                                }
-                                                                setDropTarget(null);
-                                                                return;
-                                                            }
-
-                                                            const newCommand = createCommandWithId(typedCommand);
-                                                            if (newCommand) {
-                                                                insertCommandsIntoScene([newCommand], branchEndIndex);
-                                                            }
-                                                            setDropTarget(null);
-                                                            return;
-                                                        }
-                                                        
-                                                        // Drop existing command into branch
-                                                        if (draggedCommandId) {
-                                                            console.log('[Branch Drop] Dropping existing command into branch:', {
-                                                                draggedCommandId,
-                                                                branchId: branchCmd.branchId,
-                                                                branchEndIndex
-                                                            });
-                                                            
-                                                            const draggedIndex = activeScene.commands.findIndex(c => c.id === draggedCommandId);
-                                                            if (draggedIndex !== -1) {
-                                                                // Recalculate branch end index in case it changed
-                                                                const currentBranchEndIndex = activeScene.commands.findIndex((c, i) => 
-                                                                    i > branchStartIndex && 
-                                                                    c.type === CommandType.BranchEnd && 
-                                                                    (c as BranchEndCommand).branchId === branchCmd.branchId
-                                                                );
-                                                                
-                                                                if (currentBranchEndIndex !== -1) {
-                                                                    const insertIndex = draggedIndex < currentBranchEndIndex ? currentBranchEndIndex - 1 : currentBranchEndIndex;
-                                                                    
-                                                                    console.log('[Branch Drop] Moving command:', {
-                                                                        fromIndex: draggedIndex,
-                                                                        toIndex: insertIndex,
-                                                                        currentBranchEndIndex
-                                                                    });
-                                                                    
-                                                                    dispatch({ 
-                                                                        type: 'MOVE_COMMAND', 
-                                                                        payload: { 
-                                                                            sceneId: activeSceneId, 
-                                                                            fromIndex: draggedIndex, 
-                                                                            toIndex: insertIndex 
-                                                                        } 
-                                                                    });
-                                                                }
-                                                                setDropTarget(null);
-                                                                setDraggedCommandId(null);
-                                                            } else {
-                                                                console.warn('[Branch Drop] Could not find dragged command index');
-                                                            }
-                                                        } else {
-                                                            console.warn('[Branch Drop] No draggedCommandId set');
-                                                        }
-                                                    }}
+                                                    onDrop={handleBranchDrop}
                                                 >
                                                     <div className="flex justify-end mb-2">
                                                         <AddCommandMenu onAdd={(type) => handleAddCommandToBranch(branchCmd.branchId, type)} />
                                                     </div>
                                                     {branchCommands.length === 0 ? (
-                                                        <div className="text-[var(--text-secondary)] text-sm italic py-2">
-                                                            Drag commands here...
+                                                        <div
+                                                            className={`min-h-[60px] border-2 border-dashed rounded flex flex-col items-center justify-center gap-1 text-[var(--text-secondary)] text-sm transition-colors ${dropTarget?.commandId === branchDropTargetId ? 'border-[var(--accent-purple)] text-[var(--accent-purple)]/80 bg-[var(--accent-purple)]/10' : ''}`}
+                                                            onDragOver={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                const paletteDrag = e.dataTransfer.types.includes('application/vn-command-type');
+                                                                e.dataTransfer.dropEffect = paletteDrag ? 'copy' : 'move';
+                                                                setDropTarget({ commandId: branchDropTargetId, position: 'inside' });
+                                                            }}
+                                                            onDragLeave={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                                                    setDropTarget(null);
+                                                                }
+                                                            }}
+                                                            onDrop={handleBranchDrop}
+                                                        >
+                                                            {dropTarget?.commandId === branchDropTargetId ? 'Release to drop' : 'Drag commands here...'}
                                                         </div>
                                                     ) : (
                                                         <>
@@ -1369,7 +1430,7 @@ const SceneEditor: React.FC<{
                                                             })}
                                                             {/* Bottom drop zone for branches */}
                                                             <div
-                                                                className="min-h-[40px] border-2 border-dashed rounded flex items-center justify-center text-[var(--text-secondary)] text-sm"
+                                                                className={`min-h-[40px] border-2 border-dashed rounded flex items-center justify-center text-[var(--text-secondary)] text-sm transition-colors ${dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? 'border-[var(--accent-purple)] text-[var(--accent-purple)]/80 bg-[var(--accent-purple)]/10' : ''}`}
                                                                 style={{ 
                                                                     borderColor: `${branchColor}4d`,
                                                                     opacity: dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? 1 : 0.3
@@ -1377,46 +1438,18 @@ const SceneEditor: React.FC<{
                                                                 onDragOver={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
+                                                                    const paletteDrag = e.dataTransfer.types.includes('application/vn-command-type');
+                                                                    e.dataTransfer.dropEffect = paletteDrag ? 'copy' : 'move';
                                                                     setDropTarget({ commandId: `branch-bottom-${branchCmd.branchId}`, position: 'after' });
                                                                 }}
-                                                                onDragLeave={handleDragLeave}
-                                                                onDrop={(e) => {
-                                                                    if (branchCommands.length > 0) {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        
-                                                                        // Check if dropping from command palette
-                                                                        const paletteCommandType = e.dataTransfer.getData('application/vn-command-type');
-                                                                        if (paletteCommandType) {
-                                                                            const typedCommand = paletteCommandType as CommandType;
-
-                                                                            if (typedCommand === CommandType.BranchStart) {
-                                                                                const nestedBranchId = generateBranchId();
-                                                                                const branchStart = createCommandWithId(CommandType.BranchStart, { branchId: nestedBranchId });
-                                                                                const branchEnd = createCommandWithId(CommandType.BranchEnd, { branchId: nestedBranchId });
-
-                                                                                if (branchStart && branchEnd) {
-                                                                                    insertCommandsIntoScene([branchStart, branchEnd], branchEndIndex);
-                                                                                }
-                                                                                setDropTarget(null);
-                                                                                return;
-                                                                            }
-
-                                                                            const newCommand = createCommandWithId(typedCommand);
-                                                                            if (newCommand) {
-                                                                                insertCommandsIntoScene([newCommand], branchEndIndex);
-                                                                            }
-                                                                            setDropTarget(null);
-                                                                            return;
-                                                                        }
-                                                                        
-                                                                        // Drop existing command after the last command in the branch
-                                                                        if (draggedCommandId) {
-                                                                            const lastBranchCmd = branchCommands[branchCommands.length - 1];
-                                                                            handleDrop(e, lastBranchCmd.id, 'after');
-                                                                        }
+                                                                onDragLeave={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                                                        setDropTarget(null);
                                                                     }
                                                                 }}
+                                                                onDrop={handleBranchDrop}
                                                             >
                                                                 {dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? '⬇ Drop at End' : 'Drop zone'}
                                                             </div>

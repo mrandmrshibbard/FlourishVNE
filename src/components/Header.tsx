@@ -235,16 +235,16 @@ const Header: React.FC<{
             isOpen={showExitModal}
             onClose={handleCancelReturn}
             onConfirm={handleConfirmReturn}
-            title="Save Before Returning to Hub?"
-            confirmLabel={isExporting ? "Saving..." : "Save & Return"}
+            title="Save Before Leaving?"
+            confirmLabel={isExporting ? "Saving..." : "Save & Leave"}
         >
-            <p className="mb-4">Do you want to export your project before going back to the Project Hub?</p>
+            <p className="mb-4">Do you want to export your project before leaving?</p>
             <button
                 onClick={handleReturnWithoutSaving}
                 className="w-full px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors font-semibold text-white"
                 disabled={isExporting}
             >
-                Return Without Saving
+                Exit Without Saving
             </button>
         </ConfirmationModal>
         

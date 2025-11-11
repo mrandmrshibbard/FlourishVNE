@@ -51,10 +51,13 @@ export const COMMAND_CATEGORIES = {
     }
 } as const;
 
+const HIDDEN_COMMANDS = new Set<CommandType>([CommandType.BranchEnd]);
+
 // Helper function to get command color
 export const getCommandColor = (commandType: CommandType): string => {
     for (const [_, category] of Object.entries(COMMAND_CATEGORIES)) {
-        if (category.commands.includes(commandType as any)) {
+        const commands = category.commands as readonly CommandType[];
+        if (commands.includes(commandType as CommandType)) {
             return category.color;
         }
     }
@@ -63,6 +66,9 @@ export const getCommandColor = (commandType: CommandType): string => {
 
 // Helper function to format command display name
 const formatCommandName = (commandType: CommandType): string => {
+    if (commandType === CommandType.BranchStart) {
+        return 'Branch';
+    }
     return commandType.replace(/([A-Z])/g, ' $1').trim();
 };
 
@@ -119,17 +125,19 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                             {/* Commands in Category */}
                             {!isCollapsed && (
                                 <div className="space-y-0.5 pl-2">
-                                    {category.commands.map(commandType => (
-                                        <div
-                                            key={commandType}
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, commandType)}
-                                            className={`px-1.5 py-0.5 rounded text-xs border cursor-move ${category.color} hover:opacity-80 transition-opacity`}
-                                            title={`Drag to add ${formatCommandName(commandType)}`}
-                                        >
-                                            {formatCommandName(commandType)}
-                                        </div>
-                                    ))}
+                                    {category.commands
+                                        .filter(commandType => !HIDDEN_COMMANDS.has(commandType))
+                                        .map(commandType => (
+                                            <div
+                                                key={commandType}
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, commandType)}
+                                                className={`px-1.5 py-0.5 rounded text-xs border cursor-move ${category.color} hover:opacity-80 transition-opacity`}
+                                                title={`Drag to add ${formatCommandName(commandType)}`}
+                                            >
+                                                {formatCommandName(commandType)}
+                                            </div>
+                                        ))}
                                 </div>
                             )}
                         </div>

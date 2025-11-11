@@ -70,7 +70,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
     const warning = getAsyncWarning(command.type);
 
     return (
-        <div className="relative group">
+        <div className="relative group" data-command-id={command.id}>
             <div
                 onClick={onSelect}
                 className={`
