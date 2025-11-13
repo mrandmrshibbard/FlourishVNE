@@ -73,8 +73,16 @@ const project = {
           }
         }
       },
-      "expressions": {},
-      "defaultExpression": ""
+      "expressions": {
+        "expr-default": {
+          "id": "expr-default",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-body": null
+          }
+        }
+      },
+      "defaultExpression": "expr-default"
     }
   },
   "backgrounds": {},

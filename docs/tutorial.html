@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flourish VNE - Getting Started Tutorial</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #e2e8f0;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 0 2rem;
+            border-bottom: 3px solid #3b82f6;
+            margin-bottom: 3rem;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 12px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: #60a5fa;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            font-weight: 300;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            color: #60a5fa;
+            margin: 2.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #475569;
+        }
+
+        h3 {
+            font-size: 1.3rem;
+            color: #93c5fd;
+            margin: 1.5rem 0 0.8rem;
+        }
+
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        ul li {
+            padding: 0.5rem 0 0.5rem 1.5rem;
+            position: relative;
+            margin-bottom: 0.5rem;
+            background: rgba(51, 65, 85, 0.3);
+            border-radius: 6px;
+            padding: 0.8rem 1rem 0.8rem 2.5rem;
+        }
+
+        ul li:before {
+            content: "→";
+            position: absolute;
+            left: 1rem;
+            color: #60a5fa;
+            font-weight: bold;
+        }
+
+        .section {
+            margin-bottom: 3rem;
+            background: rgba(30, 41, 59, 0.5);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .tips-section {
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid #3b82f6;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-top: 3rem;
+        }
+
+        .tips-section h2 {
+            color: #93c5fd;
+            border-bottom-color: #3b82f6;
+        }
+
+        .tip-item {
+            background: rgba(30, 41, 59, 0.6);
+            padding: 1.5rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+            border-left: 3px solid #60a5fa;
+        }
+
+        .highlight {
+            background: rgba(96, 165, 250, 0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            color: #93c5fd;
+            font-weight: 500;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 3rem;
+            color: #64748b;
+            border-top: 1px solid #334155;
+        }
+
+        .quick-start {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(147, 197, 253, 0.15) 100%);
+            border: 2px solid #3b82f6;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            h2 {
+                font-size: 1.5rem;
+            }
+
+            .section {
+                padding: 1.5rem;
+            }
+        }
+
+        .keyboard-shortcut {
+            background: rgba(100, 116, 139, 0.3);
+            border: 1px solid #475569;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #cbd5e1;
+        }
+
+        .nav-toc {
+            background: rgba(51, 65, 85, 0.5);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            border-left: 4px solid #8b5cf6;
+        }
+
+        .nav-toc h3 {
+            color: #c4b5fd;
+            margin-top: 0;
+        }
+
+        .nav-toc a {
+            display: block;
+            color: #93c5fd;
+            text-decoration: none;
+            padding: 0.5rem 0;
+            transition: color 0.2s;
+        }
+
+        .nav-toc a:hover {
+            color: #60a5fa;
+            padding-left: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌸 Flourish Visual Novel Engine</h1>
+            <p class="subtitle">Getting Started Tutorial</p>
+        </header>
+
+        <nav class="nav-toc">
+            <h3>📚 Table of Contents</h3>
+            <a href="#installation">Installation</a>
+            <a href="#overview">Overview - The Main Editor</a>
+            <a href="#navigation">Navigation</a>
+            <a href="#characters">Characters Tab</a>
+            <a href="#ui">UI Tab</a>
+            <a href="#assets">Assets Tab</a>
+            <a href="#variables">Variables Tab</a>
+            <a href="#settings">Settings Tab</a>
+            <a href="#templates">Templates</a>
+            <a href="#tips">Tips & Best Practices</a>
+        </nav>
+
+        <section id="installation" class="section quick-start">
+            <h2>🚀 Installation</h2>
+            <ul>
+                <li>Download the zip file and extract the folder</li>
+                <li>Launch the executable (the rainbow icon)</li>
+                <li>When the program loads, you'll be in the project hub</li>
+                <li>You can create a new project or import one you saved</li>
+            </ul>
+        </section>
+
+        <section id="overview" class="section">
+            <h2>📝 Overview - The Main Editor</h2>
+            <ul>
+                <li>Click <span class="highlight">Create New Project</span> and you'll be taken to the main Scenes editor</li>
+                <li>To the left, you'll find the <span class="highlight">Scene tree</span>, and under that the color coded <span class="highlight">command palette</span></li>
+                <li>In the middle of the screen, you'll see a blank window called the <span class="highlight">"Staging Area"</span></li>
+                <li>This is where you can view your scenes update in real time as you click and edit your commands</li>
+                <li>Under the staging area is the <span class="highlight">Scene Editor</span></li>
+                <li>This is where you will drag and drop your commands when you start working on a scene</li>
+                <li>When clicking on a command in the Scene Editor, you will see the <span class="highlight">properties inspector</span> on the right</li>
+                <li>This is where you can edit things like dialogue text, select images, or add conditionals to commands</li>
+            </ul>
+        </section>
+
+        <section id="navigation" class="section">
+            <h2>🧭 Navigate the Managers</h2>
+            <p style="margin-bottom: 1rem;">There are several ways to get around in Flourish:</p>
+            <ul>
+                <li>Click the tabs at the top of the page</li>
+                <li>Use the <span class="keyboard-shortcut">1-6</span> number keys</li>
+                <li>Hold <span class="keyboard-shortcut">Shift</span> and press a number key to pop out a manager into a window</li>
+                <li>You can then <span class="keyboard-shortcut">Alt+Tab</span> between the main editor and manager for faster workflows</li>
+            </ul>
+        </section>
+
+        <section id="characters" class="section">
+            <h2>👥 Characters Tab</h2>
+            <ul>
+                <li>Here, we can add and edit characters</li>
+                <li>When you add a character, you need to add <span class="highlight">layers</span> to upload sprite assets for the character</li>
+                <li>Once you have a layer with assets, go to the right and scroll down to find <span class="highlight">expressions</span></li>
+                <li>You can have as many expressions as you like and each one can use multiple layers</li>
+                <li>Either create an expression or select an existing one and scroll down to find the layer dropdown box</li>
+                <li>Here you will select your assets to be displayed in that expression</li>
+                <li>Once your expression has assets selected, the sprites will be shown in the character preview to the left</li>
+            </ul>
+        </section>
+
+        <section id="ui" class="section">
+            <h2>🎨 UI Tab</h2>
+            <ul>
+                <li>In this tab, you will find the <span class="highlight">UI Editor</span>, where you can customize and create UI screens</li>
+                <li>By default, every project starts with a list of default screens</li>
+                <li>These are fully customizable and can be duplicated</li>
+                <li>If, for some reason, you should want or need to restore these screens, click the <span class="highlight">Restore Default Screens</span> button at the bottom of the screens list</li>
+                <li>This won't delete your current screens, but rather add fresh default screens to your list</li>
+                <li>In the middle, you will find the main UI Editor that allows you to drag and resize elements</li>
+                <li>Under that, a list of buttons to add various elements to your screen</li>
+                <li>Each element has its own properties and uses, which can be found to the right after clicking on an element in the UI Editor window</li>
+            </ul>
+        </section>
+
+        <section id="assets" class="section">
+            <h2>📦 Assets Tab</h2>
+            <ul>
+                <li>This is where you will upload all of your backgrounds, audio, videos, and images for your project</li>
+                <li>There are categories to the left that can be clicked, allowing you to upload to this specific category</li>
+                <li>In the middle, you can view and search through your assets</li>
+                <li>You can also create folders to further organize</li>
+                <li>The upload button is to the top right</li>
+            </ul>
+        </section>
+
+        <section id="variables" class="section">
+            <h2>🔢 Variables Tab</h2>
+            <ul>
+                <li>Next, we have the variables tab, where you can create and manage your project's variables</li>
+                <li>Variables are a powerful part of most visual novels</li>
+                <li>They allow the creation of advanced systems and branching conditional paths</li>
+                <li>When adding a variable, you can choose between <span class="highlight">number</span>, <span class="highlight">string</span>, or <span class="highlight">boolean</span></li>
+                <li>These can then be referenced in commands or screens (by using <span class="keyboard-shortcut">{}</span> brackets with the variable <span class="highlight">NAME</span>, not value, in the middle)</li>
+            </ul>
+        </section>
+
+        <section id="settings" class="section">
+            <h2>⚙️ Settings Tab</h2>
+            <ul>
+                <li>Settings tab allows you to change the name and start scene of your project</li>
+                <li>Add dialogue and choice box images, and change their font</li>
+                <li>You can also manage screens here, and even add screens to be <span class="highlight">Game HUDs</span> if you like</li>
+            </ul>
+        </section>
+
+        <section id="templates" class="section">
+            <h2>📋 Templates</h2>
+            <ul>
+                <li>Lastly, we have templates, a list of template systems to help you get started</li>
+                <li>Includes character creator or shop system templates</li>
+                <li>This will create a screen, along with elements and variables to use in the system</li>
+            </ul>
+        </section>
+
+        <section id="tips" class="tips-section">
+            <h2>💡 Tips & Best Practices</h2>
+
+            <div class="tip-item">
+                <h3>🎵 Audio & Video in UI Screens</h3>
+                <p>You can add music and SFX to UI screens, as well as videos. If you want the music to continue to play through certain screens, you can select a playback policy that will continue to play on screens with the same music or SFX selected.</p>
+            </div>
+
+            <div class="tip-item">
+                <h3>👤 Character Creator System</h3>
+                <p>When using the character creator, you will need a variable for each of the layers in your sprite, for each layer, all of the assets for that specific layer.</p>
+                <ul style="margin-top: 1rem;">
+                    <li>In UI, select the character creator screen and look at the asset cyclers (boxes with left and right arrows)</li>
+                    <li>Each of these will need a layer selected and a variable assigned to it</li>
+                    <li>There is also a character preview window next to these</li>
+                    <li>Click it and you will assign a character, a default expression, and map your layers to the variables</li>
+                    <li>Then when you use your creator in game, you can click the arrows to cycle through the assets in each layer, which sets the variable to the selected asset in the layer</li>
+                    <li>Then, when you use the show character command in scene, you will see the selected assets for the character!</li>
+                </ul>
+            </div>
+
+            <div class="tip-item">
+                <h3>🔘 Screen Navigation</h3>
+                <p>Buttons can take players to screens, and there is a <span class="highlight">show screen</span> command as well. It's a good idea to have a button that will take the player from the creator or shop screen to a scene or another screen.</p>
+            </div>
+
+            <div class="tip-item">
+                <h3>🔀 Conditionals & Branching</h3>
+                <p>You can use conditionals on all commands and even on some UI elements. This is useful when used with the <span class="highlight">set variable</span> command or with choice or button commands that set variables.</p>
+                <p style="margin-top: 0.5rem;">Conditionals make it so that commands only run when a variable condition is met. If it is not met, the command is skipped entirely.</p>
+                <p style="margin-top: 0.5rem;"><strong>Using this with a Branch command creates entire scene sequences and story paths that are affected by player's actions.</strong></p>
+            </div>
+        </section>
+
+        <footer>
+            <p>Flourish Visual Novel Engine © 2025</p>
+            <p style="margin-top: 0.5rem; font-size: 0.9rem;">Build amazing visual novels with ease</p>
+        </footer>
+    </div>
+</body>
+</html>

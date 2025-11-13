@@ -675,15 +675,33 @@ const UIElementInspector: React.FC<{
                 const character = el.characterId ? project.characters[el.characterId] : null;
                 const stringVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'string');
                 
+                // Auto-select first character if none selected but characters exist
+                React.useEffect(() => {
+                    if (!el.characterId && Object.keys(project.characters).length > 0) {
+                        const firstCharId = Object.keys(project.characters)[0];
+                        const firstChar = project.characters[firstCharId];
+                        const firstExprId = Object.keys(firstChar.expressions)[0];
+                        updateElement({ characterId: firstCharId, expressionId: firstExprId, layerVariableMap: {} });
+                    }
+                }, [el.characterId, project.characters]);
+                
+                // Auto-select first expression if character has one but none selected
+                React.useEffect(() => {
+                    if (character && !el.expressionId && Object.keys(character.expressions).length > 0) {
+                        const firstExprId = Object.keys(character.expressions)[0];
+                        updateElement({ expressionId: firstExprId });
+                    }
+                }, [character, el.expressionId]);
+                
                 return <>
                     <FormField label="Character">
-                        <Select value={el.characterId} onChange={e => {
+                        <Select value={el.characterId || ''} onChange={e => {
                             const newCharId = e.target.value;
                             const newChar = project.characters[newCharId];
                             const firstExprId = newChar ? Object.keys(newChar.expressions)[0] : undefined;
                             updateElement({ characterId: newCharId, expressionId: firstExprId, layerVariableMap: {} });
                         }}>
-                            {Object.keys(project.characters).length === 0 && <option value="">No characters available</option>}
+                            <option value="">Select Character...</option>
                             {Object.values(project.characters).map((char: unknown) => {
                                 const c = char as VNCharacter;
                                 return <option key={c.id} value={c.id}>{c.name}</option>;
@@ -746,6 +764,15 @@ const UIElementInspector: React.FC<{
             }
             case UIElementType.TextInput: {
                 const el = element as UITextInputElement;
+                
+                // Auto-select first variable if only one exists
+                React.useEffect(() => {
+                    const variableIds = Object.keys(project.variables);
+                    if (!el.variableId && variableIds.length === 1) {
+                        updateElement({ variableId: variableIds[0] });
+                    }
+                }, [el.variableId, project.variables]);
+                
                 return <>
                     <FormField label="Placeholder Text">
                         <TextInput value={el.placeholder} onChange={e => updateElement({ placeholder: e.target.value })} />
@@ -793,6 +820,39 @@ const UIElementInspector: React.FC<{
             case UIElementType.Dropdown: {
                 const el = element as UIDropdownElement;
                 const variable = project.variables[el.variableId];
+                
+                // Auto-select first variable if only one exists
+                React.useEffect(() => {
+                    const variableIds = Object.keys(project.variables);
+                    if (!el.variableId && variableIds.length === 1) {
+                        const newVariable = project.variables[variableIds[0]];
+                        
+                        // Update variable and reset options based on variable type
+                        let newOptions: DropdownOption[] = [];
+                        if (newVariable) {
+                            if (newVariable.type === 'boolean') {
+                                newOptions = [
+                                    { id: crypto.randomUUID(), label: 'True', value: true },
+                                    { id: crypto.randomUUID(), label: 'False', value: false }
+                                ];
+                            } else if (newVariable.type === 'number') {
+                                newOptions = [
+                                    { id: crypto.randomUUID(), label: 'Option 1', value: 1 },
+                                    { id: crypto.randomUUID(), label: 'Option 2', value: 2 },
+                                    { id: crypto.randomUUID(), label: 'Option 3', value: 3 }
+                                ];
+                            } else {
+                                newOptions = [
+                                    { id: crypto.randomUUID(), label: 'Option 1', value: 'option1' },
+                                    { id: crypto.randomUUID(), label: 'Option 2', value: 'option2' },
+                                    { id: crypto.randomUUID(), label: 'Option 3', value: 'option3' }
+                                ];
+                            }
+                        }
+                        
+                        updateElement({ variableId: variableIds[0], options: newOptions });
+                    }
+                }, [el.variableId, project.variables]);
                 
                 return <>
                     <h3 className="font-bold my-2 text-slate-400">Variable Settings</h3>
@@ -983,6 +1043,37 @@ const UIElementInspector: React.FC<{
                 const el = element as UICheckboxElement;
                 const variable = project.variables[el.variableId];
                 
+                // Auto-select first variable if only one exists
+                React.useEffect(() => {
+                    const variableIds = Object.keys(project.variables);
+                    if (!el.variableId && variableIds.length === 1) {
+                        const newVariable = project.variables[variableIds[0]];
+                        
+                        // Update variable and reset values based on variable type
+                        let checkedValue: string | number | boolean = true;
+                        let uncheckedValue: string | number | boolean = false;
+                        
+                        if (newVariable) {
+                            if (newVariable.type === 'boolean') {
+                                checkedValue = true;
+                                uncheckedValue = false;
+                            } else if (newVariable.type === 'number') {
+                                checkedValue = 1;
+                                uncheckedValue = 0;
+                            } else {
+                                checkedValue = 'checked';
+                                uncheckedValue = 'unchecked';
+                            }
+                        }
+                        
+                        updateElement({ 
+                            variableId: variableIds[0], 
+                            checkedValue, 
+                            uncheckedValue 
+                        });
+                    }
+                }, [el.variableId, project.variables]);
+                
                 return <>
                     <h3 className="font-bold my-2 text-slate-400">Label</h3>
                     <FormField label="Label Text">
@@ -1126,6 +1217,39 @@ const UIElementInspector: React.FC<{
                 const el = element as UIAssetCyclerElement;
                 const character = project.characters[el.characterId];
                 const layer = character?.layers[el.layerId];
+                
+                // Auto-select first character if only one exists
+                React.useEffect(() => {
+                    const characterIds = Object.keys(project.characters);
+                    if (!el.characterId && characterIds.length === 1) {
+                        const char = project.characters[characterIds[0]];
+                        const firstLayerId = char ? Object.keys(char.layers)[0] : '';
+                        const firstLayer = firstLayerId && char ? char.layers[firstLayerId] : null;
+                        const assetIds = firstLayer ? Object.keys(firstLayer.assets) : [];
+                        
+                        updateElement({ 
+                            characterId: characterIds[0],
+                            layerId: firstLayerId,
+                            assetIds
+                        });
+                    }
+                }, [el.characterId, project.characters]);
+                
+                // Auto-select first layer if only one exists
+                React.useEffect(() => {
+                    if (character && !el.layerId) {
+                        const layerIds = Object.keys(character.layers);
+                        if (layerIds.length === 1) {
+                            const newLayer = character.layers[layerIds[0]];
+                            const assetIds = newLayer ? Object.keys(newLayer.assets) : [];
+                            
+                            updateElement({ 
+                                layerId: layerIds[0],
+                                assetIds
+                            });
+                        }
+                    }
+                }, [el.layerId, character]);
                 
                 return <>
                     <h3 className="font-bold my-2 text-slate-400">Character & Layer</h3>

@@ -466,6 +466,15 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.Dialogue: {
                 const cmd = command as DialogueCommand;
+                
+                // Auto-select first character if only one exists
+                React.useEffect(() => {
+                    const characterIds = Object.keys(project.characters);
+                    if (!cmd.characterId && characterIds.length === 1) {
+                        updateCommand({ characterId: characterIds[0] });
+                    }
+                }, [cmd.characterId, project.characters]);
+                
                 return <>
                     <FormField label="Character">
                         <Select value={cmd.characterId || ''} onChange={e => updateCommand({ characterId: e.target.value || null })}>
@@ -480,6 +489,19 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.SetBackground: {
                 const cmd = command as SetBackgroundCommand;
+                
+                // Auto-select first background/image if only one exists
+                React.useEffect(() => {
+                    const bgIds = Object.keys(project.backgrounds);
+                    const imgIds = Object.keys(project.images);
+                    const totalAssets = bgIds.length + imgIds.length;
+                    
+                    if (!cmd.backgroundId && totalAssets === 1) {
+                        const firstId = bgIds.length > 0 ? bgIds[0] : imgIds[0];
+                        updateCommand({ backgroundId: firstId });
+                    }
+                }, [cmd.backgroundId, project.backgrounds, project.images]);
+                
                 return <>
                     <FormField label="Background">
                         <Select value={cmd.backgroundId} onChange={e => updateCommand({ backgroundId: e.target.value })}>
@@ -517,6 +539,26 @@ const PropertiesInspector: React.FC<{
                  const cmd = command as ShowCharacterCommand;
                  const character = project.characters[cmd.characterId];
                  const isSlideTransition = cmd.transition === 'slide';
+                 
+                 // Auto-select first character if only one exists
+                 React.useEffect(() => {
+                     const characterIds = Object.keys(project.characters);
+                     if (!cmd.characterId && characterIds.length === 1) {
+                         const firstChar = project.characters[characterIds[0]];
+                         const firstExprId = firstChar ? Object.keys(firstChar.expressions)[0] : '';
+                         updateCommand({ characterId: characterIds[0], expressionId: firstExprId || '' });
+                     }
+                 }, [cmd.characterId, project.characters]);
+                 
+                 // Auto-select first expression if only one exists
+                 React.useEffect(() => {
+                     if (character && !cmd.expressionId) {
+                         const expressionIds = Object.keys(character.expressions);
+                         if (expressionIds.length === 1) {
+                             updateCommand({ expressionId: expressionIds[0] });
+                         }
+                     }
+                 }, [cmd.expressionId, character]);
                  
                  return <>
                     <FormField label="Character"><Select value={cmd.characterId} onChange={e => {
@@ -570,6 +612,15 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.HideCharacter: {
                  const cmd = command as HideCharacterCommand;
+                 
+                 // Auto-select first character if only one exists
+                 React.useEffect(() => {
+                     const characterIds = Object.keys(project.characters);
+                     if (!cmd.characterId && characterIds.length === 1) {
+                         updateCommand({ characterId: characterIds[0] });
+                     }
+                 }, [cmd.characterId, project.characters]);
+                 
                  return <>
                     <FormField label="Character"><Select value={cmd.characterId} onChange={e => updateCommand({ characterId: e.target.value })}>
                         {Object.keys(project.characters).length === 0 && <option disabled>No characters defined</option>}
@@ -838,6 +889,14 @@ const PropertiesInspector: React.FC<{
             case CommandType.SetVariable: {
                 const cmd = command as SetVariableCommand;
                 const variable = project.variables[cmd.variableId];
+                
+                // Auto-select first variable if only one exists
+                React.useEffect(() => {
+                    const variableIds = Object.keys(project.variables);
+                    if (!cmd.variableId && variableIds.length === 1) {
+                        updateCommand({ variableId: variableIds[0] });
+                    }
+                }, [cmd.variableId, project.variables]);
             
                 // Normalize value if variable type changed
                 React.useEffect(() => {

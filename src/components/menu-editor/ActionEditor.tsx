@@ -100,22 +100,42 @@ const ActionEditor: React.FC<{
             </FormField>
             
             {action.type === UIActionType.GoToScreen && (
-                <FormField label="Target Screen">
-                    <Select value={(action as GoToScreenAction).targetScreenId} onChange={e => onActionChange({ ...(action as GoToScreenAction), targetScreenId: e.target.value })}>
-                        {Object.values(project.uiScreens).map((s: VNUIScreen) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                    </Select>
-                </FormField>
+                <>
+                    {/* Auto-select first screen if only one exists */}
+                    {React.useEffect(() => {
+                        const screenIds = Object.keys(project.uiScreens);
+                        if (!(action as GoToScreenAction).targetScreenId && screenIds.length === 1) {
+                            onActionChange({ ...(action as GoToScreenAction), targetScreenId: screenIds[0] });
+                        }
+                    }, [(action as GoToScreenAction).targetScreenId, project.uiScreens])}
+                    
+                    <FormField label="Target Screen">
+                        <Select value={(action as GoToScreenAction).targetScreenId} onChange={e => onActionChange({ ...(action as GoToScreenAction), targetScreenId: e.target.value })}>
+                            {Object.values(project.uiScreens).map((s: VNUIScreen) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                </>
             )}
              {action.type === UIActionType.JumpToScene && (
-                <FormField label="Target Scene">
-                    <Select value={(action as JumpToSceneAction).targetSceneId} onChange={e => onActionChange({ ...(action as JumpToSceneAction), targetSceneId: e.target.value })}>
-                        {Object.values(project.scenes).map((s: VNScene) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                    </Select>
-                </FormField>
+                <>
+                    {/* Auto-select first scene if only one exists */}
+                    {React.useEffect(() => {
+                        const sceneIds = Object.keys(project.scenes);
+                        if (!(action as JumpToSceneAction).targetSceneId && sceneIds.length === 1) {
+                            onActionChange({ ...(action as JumpToSceneAction), targetSceneId: sceneIds[0] });
+                        }
+                    }, [(action as JumpToSceneAction).targetSceneId, project.scenes])}
+                    
+                    <FormField label="Target Scene">
+                        <Select value={(action as JumpToSceneAction).targetSceneId} onChange={e => onActionChange({ ...(action as JumpToSceneAction), targetSceneId: e.target.value })}>
+                            {Object.values(project.scenes).map((s: VNScene) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                </>
             )}
             {action.type === UIActionType.JumpToLabel && (() => {
                 // Collect all labels from all scenes
@@ -132,6 +152,13 @@ const ActionEditor: React.FC<{
                     });
                 });
                 
+                // Auto-select first label if only one exists
+                React.useEffect(() => {
+                    if (!(action as JumpToLabelAction).targetLabel && allLabels.length === 1) {
+                        onActionChange({ ...(action as JumpToLabelAction), targetLabel: allLabels[0].labelId });
+                    }
+                }, [(action as JumpToLabelAction).targetLabel, allLabels.length]);
+                
                 return (
                     <FormField label="Target Label">
                         <Select value={(action as JumpToLabelAction).targetLabel} onChange={e => onActionChange({ ...(action as JumpToLabelAction), targetLabel: e.target.value })}>
@@ -147,6 +174,14 @@ const ActionEditor: React.FC<{
             })()}
             {action.type === UIActionType.SetVariable && (
                 <div className="space-y-2 p-2 border border-slate-700 rounded">
+                    {/* Auto-select first variable if only one exists */}
+                    {React.useEffect(() => {
+                        const variableIds = Object.keys(project.variables);
+                        if (!(action as SetVariableAction).variableId && variableIds.length === 1) {
+                            onActionChange({ ...(action as SetVariableAction), variableId: variableIds[0] });
+                        }
+                    }, [(action as SetVariableAction).variableId, project.variables])}
+                    
                     <FormField label="Variable"><Select value={(action as SetVariableAction).variableId} onChange={e => {
                         const newVarId = e.target.value;
                         const newVar = project.variables[newVarId];
@@ -191,6 +226,36 @@ const ActionEditor: React.FC<{
             )}
             {action.type === UIActionType.CycleLayerAsset && (
                 <div className="space-y-2 p-2 border border-slate-700 rounded">
+                    {/* Auto-select first character if only one exists */}
+                    {React.useEffect(() => {
+                        const characterIds = Object.keys(project.characters);
+                        if (!(action as CycleLayerAssetAction).characterId && characterIds.length === 1) {
+                            const firstChar = project.characters[characterIds[0]];
+                            const firstLayerId = firstChar ? Object.keys(firstChar.layers)[0] || '' : '';
+                            onActionChange({ ...(action as CycleLayerAssetAction), characterId: characterIds[0], layerId: firstLayerId });
+                        }
+                    }, [(action as CycleLayerAssetAction).characterId, project.characters])}
+                    
+                    {/* Auto-select first layer if only one exists */}
+                    {React.useEffect(() => {
+                        const charId = (action as CycleLayerAssetAction).characterId;
+                        const character = charId ? project.characters[charId] : null;
+                        if (character && !(action as CycleLayerAssetAction).layerId) {
+                            const layerIds = Object.keys(character.layers);
+                            if (layerIds.length === 1) {
+                                onActionChange({ ...(action as CycleLayerAssetAction), layerId: layerIds[0] });
+                            }
+                        }
+                    }, [(action as CycleLayerAssetAction).layerId, (action as CycleLayerAssetAction).characterId, project.characters])}
+                    
+                    {/* Auto-select first variable if only one exists */}
+                    {React.useEffect(() => {
+                        const numericVars = Object.values(project.variables).filter((v: VNVariable) => v.type === 'number') as VNVariable[];
+                        if (!(action as CycleLayerAssetAction).variableId && numericVars.length === 1) {
+                            onActionChange({ ...(action as CycleLayerAssetAction), variableId: numericVars[0].id });
+                        }
+                    }, [(action as CycleLayerAssetAction).variableId, project.variables])}
+                    
                     <FormField label="Character">
                         <Select value={(action as CycleLayerAssetAction).characterId} onChange={e => {
                             const newCharId = e.target.value;
