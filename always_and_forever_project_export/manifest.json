@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2025-11-18T12:14:02.058Z",
+  "project": {
+    "id": "proj-1760399227295",
+    "title": "Always and Forever"
+  },
+  "embedded": {
+    "backgrounds": [
+      "assets/backgrounds/back-rvo8s4c_mainmenu.png",
+      "assets/backgrounds/back-a6ljrt7__s-1824911215_5_.png",
+      "assets/backgrounds/back-lw0mvuf_closeupstreet.png",
+      "assets/backgrounds/back-5ywq260__s-1824911215_upscale.png",
+      "assets/backgrounds/back-y6dbj96_kai_s_house_-_far_away.png",
+      "assets/backgrounds/back-32uztir_kai_s_porch.png",
+      "assets/backgrounds/back-smzabwu_upscalemedia-transformed.png",
+      "assets/backgrounds/back-zc4i43e_backgorundcharact.jpg"
+    ],
+    "images": [],
+    "audio": [
+      "assets/audio/audi-n3neivq_whispers_of_warmth_ext_v2.mp3",
+      "assets/audio/audi-16tl4bo_firsttime.mp3",
+      "assets/audio/audi-ieh16hz_sandrahuh.wav",
+      "assets/audio/audi-i4r89zz_sandrahi.wav",
+      "assets/audio/audi-hvy3knf_beach_breeze_melody_ext_v2.mp3",
+      "assets/audio/audi-8nvs6c4_computer-mouse-click-351398.mp3",
+      "assets/audio/audi-1t0652n_kai_mom_giggle.wav",
+      "assets/audio/audi-dkqnin1_kai_mom_sigh.wav",
+      "assets/audio/audi-zab7pwu_rippling-waves-on-sand-beach-63258.mp3"
+    ],
+    "videos": [],
+    "characters": [
+      "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-kmzbb6e_mai_mom_surprised.png",
+      "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-zxxnucm_kai_mom_grin.png",
+      "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-bq9yh4c_kai_mom_worried2.png",
+      "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-6wqri2n_corectedkia_mom_content2.png",
+      "assets/characters/char-5q3wdt9/layer-s6ykcau/asset-phh886o_kai_mom_worried.png",
+      "assets/characters/char-iwun3cg/layer-qm2lxgw/asset-w8kq3w1_boy_tan.png",
+      "assets/characters/char-iwun3cg/layer-qm2lxgw/asset-9p62htu_boy_brown.png",
+      "assets/characters/char-iwun3cg/layer-954we1v/asset-gbp65ys_hair_curly_black.png",
+      "assets/characters/char-iwun3cg/layer-954we1v/asset-yq5d9cf_hair_curly_blonde.png",
+      "assets/characters/char-iwun3cg/layer-954we1v/asset-9o8ikye_hair_curly_orange.png",
+      "assets/characters/char-iwun3cg/layer-954we1v/asset-c981bsi_hair_curly_brown.png"
+    ],
+    "ui": []
+  },
+  "fetchFailures": []
+}

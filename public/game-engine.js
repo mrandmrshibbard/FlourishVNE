@@ -1127,6 +1127,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
   };
+  const normalizeSetVariableOperator$1 = (variableType, variableName, operator) => {
+    if ((operator === "add" || operator === "subtract") && variableType !== "number") {
+      console.warn(
+        `[SetVariable:command] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
+      );
+      return "set";
+    }
+    if (operator === "random" && variableType !== "number") {
+      console.warn(
+        `[SetVariable:command] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
+      );
+      return "set";
+    }
+    return operator;
+  };
+  const toNumeric$1 = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
   const handleSetVariable = (command, context) => {
     const { project, playerState } = context;
     console.log("[DEBUG SetVariable] Executing - Variable:", command.variableId, "Operator:", command.operator, "Value:", command.value);
@@ -1140,25 +1162,45 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     const currentVal = playerState.variables[command.variableId];
     const changeValStr = String(command.value);
+    const originalOperator = command.operator;
+    const effectiveOperator = normalizeSetVariableOperator$1(variable.type, variable.name, originalOperator);
+    const wasCoercedOperator = originalOperator !== effectiveOperator;
     let newVal = command.value;
-    if (command.operator === "add") {
-      newVal = (Number(currentVal) || 0) + (Number(changeValStr) || 0);
-    } else if (command.operator === "subtract") {
-      newVal = (Number(currentVal) || 0) - (Number(changeValStr) || 0);
-    } else if (command.operator === "random") {
+    if (effectiveOperator === "add") {
+      newVal = toNumeric$1(currentVal) + toNumeric$1(changeValStr);
+    } else if (effectiveOperator === "subtract") {
+      newVal = toNumeric$1(currentVal) - toNumeric$1(changeValStr);
+    } else if (effectiveOperator === "random") {
       const min = command.randomMin ?? 0;
       const max = command.randomMax ?? 100;
       newVal = Math.floor(Math.random() * (max - min + 1)) + min;
     } else {
       switch (variable.type) {
         case "number":
-          newVal = Number(changeValStr) || 0;
+          newVal = toNumeric$1(changeValStr);
           break;
         case "boolean":
+          if (wasCoercedOperator) {
+            if (originalOperator === "add") {
+              newVal = true;
+              console.log("[DEBUG SetVariable] Normalized add -> set TRUE for", variable.name);
+              break;
+            }
+            if (originalOperator === "subtract") {
+              newVal = false;
+              console.log("[DEBUG SetVariable] Normalized subtract -> set FALSE for", variable.name);
+              break;
+            }
+            if (originalOperator === "random") {
+              newVal = Math.random() >= 0.5;
+              console.log("[DEBUG SetVariable] Normalized random -> set", newVal, "for", variable.name);
+              break;
+            }
+          }
           if (typeof command.value === "boolean") {
             newVal = command.value;
           } else {
-            const normalized = String(command.value).trim().toLowerCase();
+            const normalized = changeValStr.trim().toLowerCase();
             if (normalized === "true" || normalized === "1") {
               newVal = true;
             } else if (normalized === "false" || normalized === "0" || normalized === "") {
@@ -1174,7 +1216,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           break;
       }
     }
-    console.log("[DEBUG SetVariable] New value:", newVal);
+    console.log("[DEBUG SetVariable] New value:", newVal, "| operator:", `${command.operator} => ${effectiveOperator}`);
     return {
       advance: true,
       // Auto-advance for variable commands
@@ -2232,6 +2274,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3
+  };
+  const normalizeSetVariableOperator = (variable, operator, context) => {
+    if ((operator === "add" || operator === "subtract") && variable.type !== "number") {
+      console.warn(
+        `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
+      );
+      return "set";
+    }
+    if (operator === "random" && variable.type !== "number") {
+      console.warn(
+        `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
+      );
+      return "set";
+    }
+    return operator;
+  };
+  const toNumeric = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   };
   const buildSlideStyle = (x, _y, action, stageSize) => {
     const horizontalBias = x <= 50 ? -60 : 60;
@@ -3838,6 +3902,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       return null;
     }, [project]);
+    const normalizeToBoolean = React2.useCallback((value) => {
+      if (typeof value === "boolean") {
+        return value;
+      }
+      if (typeof value === "number") {
+        if (value === 1) return true;
+        if (value === 0) return false;
+        return null;
+      }
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (normalized.length === 0) {
+          return null;
+        }
+        if (["true", "1", "yes", "on"].includes(normalized)) return true;
+        if (["false", "0", "no", "off"].includes(normalized)) return false;
+        return null;
+      }
+      return null;
+    }, []);
     const evaluateConditions2 = React2.useCallback((conditions, variables) => {
       if (!conditions || conditions.length === 0) {
         return true;
@@ -3861,77 +3945,192 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         let result = false;
         const stringVarValue = String(effectiveVarValue);
         const stringCondValue = String(condition.value);
+        const normVarString = stringVarValue.toLowerCase();
+        const normCondString = stringCondValue.toLowerCase();
+        const normalizedVarBool = normalizeToBoolean(effectiveVarValue);
+        const normalizedCondBool = normalizeToBoolean(condition.value);
+        const boolNumericForComparison = normalizedVarBool === null ? null : normalizedVarBool ? 100 : 0;
+        const condBoolNumericForComparison = normalizedCondBool === null ? null : normalizedCondBool ? 100 : 0;
         let assetName = null;
+        const varIsNumeric = typeof effectiveVarValue === "number" || typeof effectiveVarValue === "string" && effectiveVarValue.trim().length > 0 && !Number.isNaN(Number(effectiveVarValue));
+        const condIsNumeric = typeof condition.value === "number" || typeof condition.value === "string" && condition.value.trim().length > 0 && !Number.isNaN(Number(condition.value));
         if (stringVarValue.startsWith("asset-")) {
           assetName = getAssetNameFromId2(stringVarValue);
           console.log("[DEBUG evaluateConditions] Variable contains asset ID, resolved name:", assetName);
         }
         switch (condition.operator) {
-          case "is true":
-            result = !!effectiveVarValue;
+          case "is true": {
+            if (normalizedVarBool !== null) {
+              result = normalizedVarBool === true;
+            } else {
+              result = String(effectiveVarValue).trim().toLowerCase() === "true";
+            }
             break;
-          case "is false":
-            result = !effectiveVarValue;
+          }
+          case "is false": {
+            if (normalizedVarBool !== null) {
+              result = normalizedVarBool === false;
+            } else {
+              const normalizedString = String(effectiveVarValue).trim().toLowerCase();
+              result = normalizedString === "false" || normalizedString.length === 0;
+            }
             break;
-          case "==":
-            result = stringVarValue.toLowerCase() === stringCondValue.toLowerCase() || assetName && assetName.toLowerCase() === stringCondValue.toLowerCase();
+          }
+          case "==": {
+            if (normalizedVarBool !== null && normalizedCondBool !== null) {
+              result = normalizedVarBool === normalizedCondBool;
+            } else if ((projectVar == null ? void 0 : projectVar.type) === "boolean" && normCondString.length === 0) {
+              result = normalizedVarBool === true;
+            } else if (varIsNumeric && condIsNumeric) {
+              result = Number(effectiveVarValue) === Number(condition.value);
+            } else {
+              const matchesString = normVarString === normCondString;
+              const matchesAsset = assetName ? assetName.toLowerCase() === normCondString : false;
+              result = matchesString || matchesAsset;
+            }
             break;
-          case "!=":
-            result = stringVarValue.toLowerCase() !== stringCondValue.toLowerCase() && (!assetName || assetName.toLowerCase() !== stringCondValue.toLowerCase());
+          }
+          case "!=": {
+            if (normalizedVarBool !== null && normalizedCondBool !== null) {
+              result = normalizedVarBool !== normalizedCondBool;
+            } else if ((projectVar == null ? void 0 : projectVar.type) === "boolean" && normCondString.length === 0) {
+              result = normalizedVarBool !== true;
+            } else if (varIsNumeric && condIsNumeric) {
+              result = Number(effectiveVarValue) !== Number(condition.value);
+            } else {
+              const matchesString = normVarString === normCondString;
+              const matchesAsset = assetName ? assetName.toLowerCase() === normCondString : false;
+              result = !matchesString && !matchesAsset;
+            }
             break;
-          case ">":
-            result = Number(effectiveVarValue) > Number(condition.value);
+          }
+          case ">": {
+            if ((projectVar == null ? void 0 : projectVar.type) === "boolean" && boolNumericForComparison !== null) {
+              const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+              if (condTarget !== null && Number.isFinite(condTarget)) {
+                result = boolNumericForComparison > condTarget;
+                console.log("[DEBUG evaluateConditions] Boolean comparison >", {
+                  effectiveVarValue,
+                  conditionValue: condition.value,
+                  boolNumericValue: boolNumericForComparison,
+                  numericCond: condTarget,
+                  result
+                });
+                break;
+              }
+            }
+            const numericVar = Number(effectiveVarValue);
+            const numericCond = Number(condition.value);
+            result = numericVar > numericCond;
             console.log("[DEBUG evaluateConditions] Numeric comparison >", {
               effectiveVarValue,
               conditionValue: condition.value,
-              numericVar: Number(effectiveVarValue),
-              numericCond: Number(condition.value),
+              numericVar,
+              numericCond,
               result
             });
             break;
-          case "<":
-            result = Number(effectiveVarValue) < Number(condition.value);
+          }
+          case "<": {
+            if ((projectVar == null ? void 0 : projectVar.type) === "boolean" && boolNumericForComparison !== null) {
+              const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+              if (condTarget !== null && Number.isFinite(condTarget)) {
+                result = boolNumericForComparison < condTarget;
+                console.log("[DEBUG evaluateConditions] Boolean comparison <", {
+                  effectiveVarValue,
+                  conditionValue: condition.value,
+                  boolNumericValue: boolNumericForComparison,
+                  numericCond: condTarget,
+                  result
+                });
+                break;
+              }
+            }
+            const numericVar = Number(effectiveVarValue);
+            const numericCond = Number(condition.value);
+            result = numericVar < numericCond;
             console.log("[DEBUG evaluateConditions] Numeric comparison <", {
               effectiveVarValue,
               conditionValue: condition.value,
-              numericVar: Number(effectiveVarValue),
-              numericCond: Number(condition.value),
+              numericVar,
+              numericCond,
               result
             });
             break;
-          case ">=":
-            result = Number(effectiveVarValue) >= Number(condition.value);
+          }
+          case ">=": {
+            if ((projectVar == null ? void 0 : projectVar.type) === "boolean" && boolNumericForComparison !== null) {
+              const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+              if (condTarget !== null && Number.isFinite(condTarget)) {
+                result = boolNumericForComparison >= condTarget;
+                console.log("[DEBUG evaluateConditions] Boolean comparison >=", {
+                  effectiveVarValue,
+                  conditionValue: condition.value,
+                  boolNumericValue: boolNumericForComparison,
+                  numericCond: condTarget,
+                  result
+                });
+                break;
+              }
+            }
+            const numericVar = Number(effectiveVarValue);
+            const numericCond = Number(condition.value);
+            result = numericVar >= numericCond;
             console.log("[DEBUG evaluateConditions] Numeric comparison >=", {
               effectiveVarValue,
               conditionValue: condition.value,
-              numericVar: Number(effectiveVarValue),
-              numericCond: Number(condition.value),
+              numericVar,
+              numericCond,
               result
             });
             break;
-          case "<=":
-            result = Number(effectiveVarValue) <= Number(condition.value);
+          }
+          case "<=": {
+            if ((projectVar == null ? void 0 : projectVar.type) === "boolean" && boolNumericForComparison !== null) {
+              const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+              if (condTarget !== null && Number.isFinite(condTarget)) {
+                result = boolNumericForComparison <= condTarget;
+                console.log("[DEBUG evaluateConditions] Boolean comparison <=", {
+                  effectiveVarValue,
+                  conditionValue: condition.value,
+                  boolNumericValue: boolNumericForComparison,
+                  numericCond: condTarget,
+                  result
+                });
+                break;
+              }
+            }
+            const numericVar = Number(effectiveVarValue);
+            const numericCond = Number(condition.value);
+            result = numericVar <= numericCond;
             console.log("[DEBUG evaluateConditions] Numeric comparison <=", {
               effectiveVarValue,
               conditionValue: condition.value,
-              numericVar: Number(effectiveVarValue),
-              numericCond: Number(condition.value),
+              numericVar,
+              numericCond,
               result
             });
             break;
-          case "contains":
-            result = stringVarValue.toLowerCase().includes(stringCondValue.toLowerCase()) || assetName && assetName.toLowerCase().includes(stringCondValue.toLowerCase());
+          }
+          case "contains": {
+            const varContains = normVarString.includes(normCondString);
+            const assetContains = assetName ? assetName.toLowerCase().includes(normCondString) : false;
+            result = varContains || assetContains;
             break;
-          case "startsWith":
-            result = stringVarValue.toLowerCase().startsWith(stringCondValue.toLowerCase()) || assetName && assetName.toLowerCase().startsWith(stringCondValue.toLowerCase());
+          }
+          case "startsWith": {
+            const varStartsWith = normVarString.startsWith(normCondString);
+            const assetStartsWith = assetName ? assetName.toLowerCase().startsWith(normCondString) : false;
+            result = varStartsWith || assetStartsWith;
             break;
+          }
           default:
             result = false;
         }
         console.log("[DEBUG evaluateConditions] Result:", result);
         return result;
       });
-    }, [project.variables, getAssetNameFromId2]);
+    }, [project.variables, getAssetNameFromId2, normalizeToBoolean]);
     const navigateToScene = React2.useCallback((targetSceneId, variables) => {
       let sceneToPlay = targetSceneId;
       let attempts = 0;
@@ -4803,6 +5002,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           actions.push({ type: UIActionType.JumpToScene, targetSceneId: choice.targetSceneId });
         }
         for (const action of actions) {
+          console.log("[CHOICE] Processing action:", action.type, action);
           if (action.type === UIActionType.SetVariable) {
             const setVarAction = action;
             const variable = project.variables[setVarAction.variableId];
@@ -4810,28 +5010,48 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               console.warn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
               continue;
             }
+            const originalOperator = setVarAction.operator;
+            const effectiveOperator = normalizeSetVariableOperator(variable, originalOperator, "choice");
+            const wasCoercedOperator = originalOperator !== effectiveOperator;
             const currentVal = newState.variables[setVarAction.variableId];
             const changeValStr = String(setVarAction.value);
             let newVal = setVarAction.value;
-            if (setVarAction.operator === "add") {
-              newVal = (Number(currentVal) || 0) + (Number(changeValStr) || 0);
-            } else if (setVarAction.operator === "subtract") {
-              newVal = (Number(currentVal) || 0) - (Number(changeValStr) || 0);
-            } else if (setVarAction.operator === "random") {
+            if (effectiveOperator === "add") {
+              newVal = toNumeric(currentVal) + toNumeric(changeValStr);
+            } else if (effectiveOperator === "subtract") {
+              newVal = toNumeric(currentVal) - toNumeric(changeValStr);
+            } else if (effectiveOperator === "random") {
               const min = setVarAction.randomMin ?? 0;
               const max = setVarAction.randomMax ?? 100;
               newVal = Math.floor(Math.random() * (max - min + 1)) + min;
             } else {
               switch (variable.type) {
                 case "number":
-                  newVal = Number(changeValStr) || 0;
+                  newVal = toNumeric(changeValStr);
                   break;
                 case "boolean":
+                  if (wasCoercedOperator) {
+                    if (originalOperator === "add") {
+                      newVal = true;
+                      console.log("[Choice Boolean Promotion] Normalized add -> set TRUE for", variable.name);
+                      break;
+                    }
+                    if (originalOperator === "subtract") {
+                      newVal = false;
+                      console.log("[Choice Boolean Promotion] Normalized subtract -> set FALSE for", variable.name);
+                      break;
+                    }
+                    if (originalOperator === "random") {
+                      newVal = Math.random() >= 0.5;
+                      console.log("[Choice Boolean Promotion] Normalized random -> set", newVal, "for", variable.name);
+                      break;
+                    }
+                  }
                   if (typeof setVarAction.value === "boolean") {
                     newVal = setVarAction.value;
                   } else {
-                    const normalized = String(setVarAction.value).trim().toLowerCase();
-                    if (normalized === "" && setVarAction.operator === "set") {
+                    const normalized = changeValStr.trim().toLowerCase();
+                    if (normalized === "" && effectiveOperator === "set") {
                       console.log("[Choice Boolean Toggle] Empty value detected, toggling from", currentVal, "to", !currentVal);
                       newVal = !currentVal;
                     } else if (normalized === "true" || normalized === "1") {
@@ -4850,8 +5070,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
             }
             newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
+            console.log(
+              "[CHOICE] Set variable result:",
+              setVarAction.variableId,
+              "=>",
+              newVal,
+              "(type:",
+              typeof newVal,
+              "| operator:",
+              `${setVarAction.operator} => ${effectiveOperator}`,
+              ")"
+            );
           }
         }
+        console.log("[CHOICE] Variables after actions:", JSON.stringify(newState.variables, null, 2));
         newState.uiState = { ...newState.uiState, choices: null };
         const jumpAction = actions.find((a) => a.type === UIActionType.JumpToScene);
         if (jumpAction) {
@@ -5208,28 +5440,46 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           actionValueType: typeof setVarAction.value,
           operator: setVarAction.operator
         });
+        const originalOperator = setVarAction.operator;
+        const effectiveOperator = normalizeSetVariableOperator(variable, originalOperator, "ui");
+        const wasCoercedOperator = originalOperator !== effectiveOperator;
         const computeNewValue = (currentVal) => {
           const changeValStr = String(setVarAction.value);
-          if (setVarAction.operator === "add") {
-            return (Number(currentVal) || 0) + (Number(changeValStr) || 0);
+          if (effectiveOperator === "add") {
+            return toNumeric(currentVal) + toNumeric(changeValStr);
           }
-          if (setVarAction.operator === "subtract") {
-            return (Number(currentVal) || 0) - (Number(changeValStr) || 0);
+          if (effectiveOperator === "subtract") {
+            return toNumeric(currentVal) - toNumeric(changeValStr);
           }
-          if (setVarAction.operator === "random") {
+          if (effectiveOperator === "random") {
             const min = setVarAction.randomMin ?? 0;
             const max = setVarAction.randomMax ?? 100;
             return Math.floor(Math.random() * (max - min + 1)) + min;
           }
           switch (variable.type) {
             case "number":
-              return Number(changeValStr) || 0;
+              return toNumeric(changeValStr);
             case "boolean":
+              if (wasCoercedOperator) {
+                if (originalOperator === "add") {
+                  console.log("[Boolean Promotion] Normalized add -> set TRUE for", variable.name);
+                  return true;
+                }
+                if (originalOperator === "subtract") {
+                  console.log("[Boolean Promotion] Normalized subtract -> set FALSE for", variable.name);
+                  return false;
+                }
+                if (originalOperator === "random") {
+                  const randomVal = Math.random() >= 0.5;
+                  console.log("[Boolean Promotion] Normalized random -> set", randomVal, "for", variable.name);
+                  return randomVal;
+                }
+              }
               if (typeof setVarAction.value === "boolean") {
                 return setVarAction.value;
               }
               const normalized = changeValStr.trim().toLowerCase();
-              if (normalized === "" && setVarAction.operator === "set") {
+              if (normalized === "" && effectiveOperator === "set") {
                 console.log("[Boolean Toggle] Empty value detected, toggling from", currentVal, "to", !currentVal);
                 return !currentVal;
               }
@@ -5255,7 +5505,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 variable: variable.name,
                 variableId: setVarAction.variableId,
                 rawValue: setVarAction.value,
-                operator: setVarAction.operator,
+                operator: `${setVarAction.operator} => ${effectiveOperator}`,
                 previousValue: currentVal,
                 nextValue: newVal,
                 type: variable.type
@@ -5272,7 +5522,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 variable: variable.name,
                 variableId: setVarAction.variableId,
                 rawValue: setVarAction.value,
-                operator: setVarAction.operator,
+                operator: `${setVarAction.operator} => ${effectiveOperator}`,
                 previousValue: currentVal,
                 nextValue: newVal,
                 type: variable.type

@@ -172,6 +172,13 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
       
       if (content instanceof Buffer) {
         fs.writeFileSync(filePath, content);
+      } else if (content instanceof ArrayBuffer) {
+        fs.writeFileSync(filePath, Buffer.from(content));
+      } else if (ArrayBuffer.isView(content)) {
+        fs.writeFileSync(filePath, Buffer.from(content.buffer));
+      } else if (content && typeof content === 'object' && content.type === 'Buffer' && Array.isArray(content.data)) {
+        // Handle Buffer serialized through JSON (fallback)
+        fs.writeFileSync(filePath, Buffer.from(content.data));
       } else {
         fs.writeFileSync(filePath, content, 'utf8');
       }

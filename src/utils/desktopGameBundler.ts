@@ -41,7 +41,7 @@ export async function buildDesktopGame(
   onProgress({ step: 'assets', progress: 25, message: 'Collecting assets...' });
   
   const assetUrls = collectAllAssets(project);
-  const gameFiles: Record<string, string | Buffer> = {
+  const gameFiles: Record<string, string | ArrayBuffer> = {
     'index.html': htmlContent
   };
   
@@ -59,8 +59,8 @@ export async function buildDesktopGame(
 
     if (dataUrl.startsWith('data:')) {
       const blob = dataURLToBlob(dataUrl);
-      const buffer = await blob.arrayBuffer();
-      gameFiles[`assets/${name}`] = Buffer.from(buffer);
+      const arrayBuffer = await blob.arrayBuffer();
+      gameFiles[`assets/${name}`] = arrayBuffer;
     }
   }
   

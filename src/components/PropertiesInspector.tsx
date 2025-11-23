@@ -205,6 +205,173 @@ const ConditionsEditor: React.FC<{
     );
 }
 
+const useCommandDefaults = (
+    command: VNCommand | undefined,
+    project: VNProject,
+    updateCommand: (updates: Partial<VNCommand>) => void
+) => {
+    React.useEffect(() => {
+        if (!command) {
+            return;
+        }
+
+        switch (command.type) {
+            case CommandType.Dialogue: {
+                const dialogue = command as DialogueCommand;
+                if (!dialogue.characterId) {
+                    const characterIds = Object.keys(project.characters);
+                    if (characterIds.length === 1) {
+                        updateCommand({ characterId: characterIds[0] });
+                        return;
+                    }
+                }
+                break;
+            }
+            case CommandType.SetBackground: {
+                const setBackground = command as SetBackgroundCommand;
+                if (!setBackground.backgroundId) {
+                    const backgroundIds = Object.keys(project.backgrounds);
+                    const imageIds = Object.keys(project.images);
+                    const totalAssets = backgroundIds.length + imageIds.length;
+                    if (totalAssets === 1) {
+                        const firstId = backgroundIds.length > 0 ? backgroundIds[0] : imageIds[0];
+                        updateCommand({ backgroundId: firstId });
+                        return;
+                    }
+                }
+                break;
+            }
+            case CommandType.ShowCharacter: {
+                const showCharacter = command as ShowCharacterCommand;
+                const characterIds = Object.keys(project.characters);
+
+                if (!showCharacter.characterId && characterIds.length === 1) {
+                    const firstCharacterId = characterIds[0];
+                    const firstCharacter = project.characters[firstCharacterId];
+                    const firstExpressionId = firstCharacter ? Object.keys(firstCharacter.expressions)[0] || '' : '';
+                    updateCommand({ characterId: firstCharacterId, expressionId: firstExpressionId });
+                    return;
+                }
+
+                if (showCharacter.characterId && !showCharacter.expressionId) {
+                    const selectedCharacter = project.characters[showCharacter.characterId];
+                    if (selectedCharacter) {
+                        const expressionIds = Object.keys(selectedCharacter.expressions);
+                        if (expressionIds.length === 1) {
+                            updateCommand({ expressionId: expressionIds[0] });
+                            return;
+                        }
+                    }
+                }
+                break;
+            }
+            case CommandType.HideCharacter: {
+                const hideCharacter = command as HideCharacterCommand;
+                if (!hideCharacter.characterId) {
+                    const characterIds = Object.keys(project.characters);
+                    if (characterIds.length === 1) {
+                        updateCommand({ characterId: characterIds[0] });
+                        return;
+                    }
+                }
+                break;
+            }
+            case CommandType.SetVariable: {
+                const setVariable = command as SetVariableCommand;
+                const variableIds = Object.keys(project.variables);
+
+                if (!setVariable.variableId && variableIds.length === 1) {
+                    updateCommand({ variableId: variableIds[0] });
+                    return;
+                }
+
+                if (setVariable.variableId) {
+                    const variable = project.variables[setVariable.variableId];
+                    if (variable) {
+                        if (variable.type === 'boolean' && typeof setVariable.value !== 'boolean') {
+                            const normalizedValue = (() => {
+                                if (typeof setVariable.value === 'number') {
+                                    return setVariable.value === 1;
+                                }
+                                const serialized = String(setVariable.value).trim().toLowerCase();
+                                if (serialized.length === 0) {
+                                    return false;
+                                }
+                                return ['true', '1', 'yes', 'on'].includes(serialized);
+                            })();
+                            updateCommand({ value: normalizedValue });
+                            return;
+                        }
+
+                        if (variable.type === 'number' && typeof setVariable.value === 'boolean') {
+                            updateCommand({ value: setVariable.value ? 1 : 0 });
+                            return;
+                        }
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }, [command, project.characters, project.backgrounds, project.images, project.variables, updateCommand]);
+};
+
+const useChoiceActionNormalization = (
+    command: VNCommand | undefined,
+    project: VNProject,
+    updateCommand: (updates: Partial<VNCommand>) => void
+) => {
+    React.useEffect(() => {
+        if (!command || command.type !== CommandType.Choice) {
+            return;
+        }
+
+        const choiceCommand = command as ChoiceCommand;
+        let needsUpdate = false;
+
+        const fixedOptions = choiceCommand.options.map(option => {
+            const normalizedActions = (option.actions || []).map(action => {
+                if (action.type !== UIActionType.SetVariable) {
+                    return action;
+                }
+
+                const setVariableAction = action as SetVariableAction;
+                const variable = project.variables[setVariableAction.variableId];
+                if (!variable) {
+                    return action;
+                }
+
+                if (variable.type === 'boolean' && typeof setVariableAction.value !== 'boolean') {
+                    needsUpdate = true;
+                    const serialized = String(setVariableAction.value).trim().toLowerCase();
+                    const normalizedValue = ['true', '1', 'yes', 'on'].includes(serialized);
+                    return { ...setVariableAction, value: normalizedValue };
+                }
+
+                if (variable.type === 'number' && typeof setVariableAction.value === 'string') {
+                    const parsedValue = parseFloat(setVariableAction.value);
+                    const normalizedValue = Number.isNaN(parsedValue) ? 0 : parsedValue;
+                    needsUpdate = true;
+                    return { ...setVariableAction, value: normalizedValue };
+                }
+
+                return action;
+            });
+
+            if (needsUpdate) {
+                return { ...option, actions: normalizedActions };
+            }
+
+            return { ...option, actions: normalizedActions };
+        });
+
+        if (needsUpdate) {
+            updateCommand({ options: fixedOptions });
+        }
+    }, [command, project.variables, updateCommand]);
+};
+
 const TransitionFields: React.FC<{
     transition: VNTransition;
     duration: number;
@@ -391,10 +558,16 @@ const PropertiesInspector: React.FC<{
     const command = activeScene.commands[selectedCommandIndex];
     const generateId = () => `opt-${Math.random().toString(36).substring(2, 9)}`;
 
-    const updateCommand = (updatedProps: Partial<VNCommand>) => {
+    const updateCommand = React.useCallback((updatedProps: Partial<VNCommand>) => {
+        if (!command) {
+            return;
+        }
         const newCommand = { ...command, ...updatedProps };
         dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex, command: newCommand as VNCommand } });
-    };
+    }, [command, dispatch, activeSceneId, selectedCommandIndex]);
+
+    useCommandDefaults(command, project, updateCommand);
+    useChoiceActionNormalization(command, project, updateCommand);
 
     const handleDelete = () => {
       // Check if it's a group with commands
@@ -466,15 +639,6 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.Dialogue: {
                 const cmd = command as DialogueCommand;
-                
-                // Auto-select first character if only one exists
-                React.useEffect(() => {
-                    const characterIds = Object.keys(project.characters);
-                    if (!cmd.characterId && characterIds.length === 1) {
-                        updateCommand({ characterId: characterIds[0] });
-                    }
-                }, [cmd.characterId, project.characters]);
-                
                 return <>
                     <FormField label="Character">
                         <Select value={cmd.characterId || ''} onChange={e => updateCommand({ characterId: e.target.value || null })}>
@@ -489,19 +653,6 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.SetBackground: {
                 const cmd = command as SetBackgroundCommand;
-                
-                // Auto-select first background/image if only one exists
-                React.useEffect(() => {
-                    const bgIds = Object.keys(project.backgrounds);
-                    const imgIds = Object.keys(project.images);
-                    const totalAssets = bgIds.length + imgIds.length;
-                    
-                    if (!cmd.backgroundId && totalAssets === 1) {
-                        const firstId = bgIds.length > 0 ? bgIds[0] : imgIds[0];
-                        updateCommand({ backgroundId: firstId });
-                    }
-                }, [cmd.backgroundId, project.backgrounds, project.images]);
-                
                 return <>
                     <FormField label="Background">
                         <Select value={cmd.backgroundId} onChange={e => updateCommand({ backgroundId: e.target.value })}>
@@ -539,27 +690,6 @@ const PropertiesInspector: React.FC<{
                  const cmd = command as ShowCharacterCommand;
                  const character = project.characters[cmd.characterId];
                  const isSlideTransition = cmd.transition === 'slide';
-                 
-                 // Auto-select first character if only one exists
-                 React.useEffect(() => {
-                     const characterIds = Object.keys(project.characters);
-                     if (!cmd.characterId && characterIds.length === 1) {
-                         const firstChar = project.characters[characterIds[0]];
-                         const firstExprId = firstChar ? Object.keys(firstChar.expressions)[0] : '';
-                         updateCommand({ characterId: characterIds[0], expressionId: firstExprId || '' });
-                     }
-                 }, [cmd.characterId, project.characters]);
-                 
-                 // Auto-select first expression if only one exists
-                 React.useEffect(() => {
-                     if (character && !cmd.expressionId) {
-                         const expressionIds = Object.keys(character.expressions);
-                         if (expressionIds.length === 1) {
-                             updateCommand({ expressionId: expressionIds[0] });
-                         }
-                     }
-                 }, [cmd.expressionId, character]);
-                 
                  return <>
                     <FormField label="Character"><Select value={cmd.characterId} onChange={e => {
                         const newChar = project.characters[e.target.value];
@@ -612,15 +742,6 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.HideCharacter: {
                  const cmd = command as HideCharacterCommand;
-                 
-                 // Auto-select first character if only one exists
-                 React.useEffect(() => {
-                     const characterIds = Object.keys(project.characters);
-                     if (!cmd.characterId && characterIds.length === 1) {
-                         updateCommand({ characterId: characterIds[0] });
-                     }
-                 }, [cmd.characterId, project.characters]);
-                 
                  return <>
                     <FormField label="Character"><Select value={cmd.characterId} onChange={e => updateCommand({ characterId: e.target.value })}>
                         {Object.keys(project.characters).length === 0 && <option disabled>No characters defined</option>}
@@ -645,41 +766,6 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.Choice: {
                 const cmd = command as ChoiceCommand;
-
-                // Auto-fix broken boolean values in SetVariable actions
-                React.useEffect(() => {
-                    let needsUpdate = false;
-                    const fixedOptions = cmd.options.map(opt => {
-                        const fixedActions = (opt.actions || []).map(action => {
-                            if (action.type === UIActionType.SetVariable) {
-                                const setVarAction = action as SetVariableAction;
-                                const variable = project.variables[setVarAction.variableId];
-                                
-                                // Fix boolean variables with string values
-                                if (variable?.type === 'boolean' && typeof setVarAction.value !== 'boolean') {
-                                    needsUpdate = true;
-                                    // Convert string to proper boolean
-                                    const strValue = String(setVarAction.value).trim().toLowerCase();
-                                    const boolValue = strValue === 'true' || strValue === '1' ? true : false;
-                                    return { ...setVarAction, value: boolValue };
-                                }
-                                
-                                // Fix number variables with string values
-                                if (variable?.type === 'number' && typeof setVarAction.value === 'string') {
-                                    needsUpdate = true;
-                                    return { ...setVarAction, value: parseFloat(setVarAction.value) || 0 };
-                                }
-                            }
-                            return action;
-                        });
-                        return { ...opt, actions: fixedActions };
-                    });
-                    
-                    if (needsUpdate) {
-                        console.log('[AUTO-FIX] Correcting boolean/number values in choice actions');
-                        updateCommand({ options: fixedOptions });
-                    }
-                }, [cmd.options, project.variables]);
 
                 const updateOption = (index: number, updatedProps: Partial<ChoiceOption>) => {
                     const newOptions = [...cmd.options];
@@ -762,14 +848,19 @@ const PropertiesInspector: React.FC<{
                                     {(migratedOpt.actions || []).map((action, actionIndex) => (
                                         <div key={actionIndex} className="p-1 bg-slate-800 rounded-md">
                                             {action.type === UIActionType.JumpToScene ? (
+                                                (() => {
+                                                    const actionAsJump = action as ChoiceAction & { targetSceneId: VNID };
+                                                    return (
                                                 <FormField label="Jump to Scene">
                                                     <div className="flex items-center gap-1">
-                                                        <Select value={action.targetSceneId} onChange={e => updateAction(i, actionIndex, { targetSceneId: e.target.value })}>
+                                                        <Select value={actionAsJump.targetSceneId} onChange={e => updateAction(i, actionIndex, { targetSceneId: e.target.value })}>
                                                             {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                         </Select>
                                                         <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
                                                     </div>
                                                 </FormField>
+                                                    );
+                                                })()
                                             ) : action.type === UIActionType.SetVariable ? (
                                                 <div className="space-y-1">
                                                     <div className="flex justify-between items-center">
@@ -889,30 +980,6 @@ const PropertiesInspector: React.FC<{
             case CommandType.SetVariable: {
                 const cmd = command as SetVariableCommand;
                 const variable = project.variables[cmd.variableId];
-                
-                // Auto-select first variable if only one exists
-                React.useEffect(() => {
-                    const variableIds = Object.keys(project.variables);
-                    if (!cmd.variableId && variableIds.length === 1) {
-                        updateCommand({ variableId: variableIds[0] });
-                    }
-                }, [cmd.variableId, project.variables]);
-            
-                // Normalize value if variable type changed
-                React.useEffect(() => {
-                    if (variable) {
-                        if (variable.type === 'boolean' && typeof cmd.value !== 'boolean') {
-                            // Convert non-boolean to boolean
-                            const normalizedValue = String(cmd.value) === 'true' || cmd.value === 1 || String(cmd.value) === '1';
-                            updateCommand({ value: normalizedValue });
-                        } else if (variable.type === 'number' && typeof cmd.value === 'boolean') {
-                            // Convert boolean to number  
-                            const normalizedValue = cmd.value ? 1 : 0;
-                            updateCommand({ value: normalizedValue });
-                        }
-                    }
-                }, [variable?.type, cmd.value]);
-            
                 return <>
                     <FormField label="Variable"><Select value={cmd.variableId} onChange={e => {
                         const newVarId = e.target.value;
