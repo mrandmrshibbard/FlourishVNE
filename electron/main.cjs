@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
@@ -138,6 +139,9 @@ function createWindow() {
 // App ready
 app.whenReady().then(() => {
   createWindow();
+
+  // Check for updates
+  autoUpdater.checkForUpdatesAndNotify();
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked

@@ -32,6 +32,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3",
+    "electron-updater": "^6.6.2",
     "jszip": "^3.10.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
@@ -41,6 +42,11 @@
     "productName": "Flourish Visual Novel Engine",
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "mrandmrshibbard",
+      "repo": "FlourishVNE"
     },
     "files": [
       "dist/**/*",
