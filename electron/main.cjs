@@ -498,6 +498,11 @@ ipcMain.on('confirm-quit', () => {
   }
 });
 
+// Get app version
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 // Cancel quit
 ipcMain.on('cancel-quit', () => {
   // Just do nothing, window won't close

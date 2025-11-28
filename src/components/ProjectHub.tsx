@@ -1,13 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { VNProject } from '../types/project';
 import { createInitialProject } from '../constants';
 import { PlusIcon, UploadIcon } from './icons';
 import { importProject } from '../utils/projectPackager';
+import { ChangelogModal } from './ChangelogModal';
 
 export const ProjectHub: React.FC<{
     onProjectSelect: (project: VNProject) => void;
 }> = ({ onProjectSelect }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [showChangelog, setShowChangelog] = useState(false);
 
     useEffect(() => {
         (window as any).__IS_MANAGER_WINDOW__ = false;
@@ -15,12 +17,36 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(true);
         }
 
+        // Check for updates on app start
+        checkForUpdates();
+
         return () => {
             if ((window as any).electronAPI?.setHubActive) {
                 (window as any).electronAPI.setHubActive(false);
             }
         };
     }, []);
+
+    const checkForUpdates = async () => {
+        try {
+            const currentVersion = await (window as any).electronAPI?.getAppVersion();
+            if (!currentVersion) return;
+
+            const response = await fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest');
+            if (!response.ok) return;
+
+            const release = await response.json();
+            const latestVersion = release.tag_name.replace('v', '');
+
+            const lastShown = localStorage.getItem('lastShownChangelogVersion');
+            if (latestVersion !== lastShown && latestVersion !== currentVersion) {
+                setShowChangelog(true);
+                localStorage.setItem('lastShownChangelogVersion', latestVersion);
+            }
+        } catch (error) {
+            console.error('Failed to check for updates:', error);
+        }
+    };
 
     const handleCreateNew = () => {
         if ((window as any).electronAPI?.setHubActive) {
@@ -90,8 +116,15 @@ export const ProjectHub: React.FC<{
                 </main>
                  <footer className="text-center mt-12 text-[var(--text-secondary)]">
                     <p>Your work is now managed in memory. Please use the 'Export' button in the editor to save your project.</p>
+                    <button
+                        onClick={() => setShowChangelog(true)}
+                        className="mt-2 text-sm underline hover:text-[var(--accent-cyan)]"
+                    >
+                        View Latest Changes
+                    </button>
                 </footer>
             </div>
+            <ChangelogModal visible={showChangelog} onClose={() => setShowChangelog(false)} />
         </div>
     );
 };

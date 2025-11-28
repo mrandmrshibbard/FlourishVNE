@@ -48,5 +48,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   setHubActive: (isActive) =>
     ipcRenderer.send('set-hub-active', isActive),
+
+  getAppVersion: () =>
+    ipcRenderer.invoke('get-app-version'),
 });
 
