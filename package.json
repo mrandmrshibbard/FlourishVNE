@@ -51,7 +51,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "docs/**/*",
+      "public/**/*",
       "package.json"
     ],
     "win": {
@@ -69,7 +69,7 @@
           ]
         }
       ],
-      "icon": "docs/Flourish.png",
+      "icon": "public/Flourish.png",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {
@@ -85,7 +85,7 @@
         "zip"
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "docs/Flourish.png"
+      "icon": "public/Flourish.png"
     },
     "linux": {
       "target": [
@@ -93,7 +93,7 @@
         "deb"
       ],
       "category": "Development",
-      "icon": "docs/Flourish.png"
+      "icon": "public/Flourish.png"
     }
   }
 }

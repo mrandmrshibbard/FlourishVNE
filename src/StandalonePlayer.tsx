@@ -4,7 +4,7 @@ import { VNProject } from './types/project';
 import LivePreview from './components/LivePreview';
 import { ProjectProvider } from './contexts/ProjectContext';
 // @ts-ignore - Importing logo as base64
-import flourishLogo from '../docs/Flourish.png';
+import flourishLogo from '../public/Flourish.png';
 
 interface StandalonePlayerProps {
     project: VNProject;

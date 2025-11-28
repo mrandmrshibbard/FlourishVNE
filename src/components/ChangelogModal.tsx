@@ -20,7 +20,12 @@ export const ChangelogModal: React.FC<{
       setError(null);
       fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest')
         .then(response => {
-          if (!response.ok) throw new Error('Failed to fetch changelog');
+          if (!response.ok) {
+            if (response.status === 404) {
+              throw new Error('No releases found. Check back later for updates!');
+            }
+            throw new Error(`Failed to fetch changelog (${response.status})`);
+          }
           return response.json();
         })
         .then((data: Release) => {
