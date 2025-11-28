@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flourish Visual Novel Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Configure Tailwind to use CSS variables for theme support
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                400: 'var(--slate-400)',
+                500: 'var(--slate-500)',
+                600: 'var(--slate-600)',
+                700: 'var(--slate-700)',
+                800: 'var(--slate-800)',
+                900: 'var(--slate-900)',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">

@@ -14,9 +14,11 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
     switch (element.type) {
         case UIElementType.Button:
             const btn = element as UIButtonElement;
+            // Use stored backgroundColor or default purple theme color
+            const buttonBg = btn.backgroundColor || '#4D3273';
             return <div
-                style={{ ...fontSettingsToStyle(btn.font), pointerEvents: 'none' }}
-                className="w-full h-full bg-[var(--bg-tertiary)] border border-[var(--text-secondary)] rounded flex items-center justify-center"
+                style={{ ...fontSettingsToStyle(btn.font), backgroundColor: buttonBg, pointerEvents: 'none' }}
+                className="w-full h-full border border-white/20 rounded flex items-center justify-center"
             >{btn.text}</div>;
         case UIElementType.Text: {
             const txt = element as UITextElement;
@@ -76,12 +78,44 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 style={{ objectFit }}
             />;
         }
-        case UIElementType.SaveSlotGrid:
-             return <div className="w-full h-full bg-[var(--bg-primary)]/50 border-2 border-dashed border-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-secondary)]">Save/Load Slots</div>;
-        case UIElementType.SettingsSlider:
-            return <div className="w-full h-full flex items-center justify-center p-2">
-                <input type="range" className="w-full" disabled />
-            </div>;
+        case UIElementType.SaveSlotGrid: {
+            const slotEl = element as UISaveSlotGridElement;
+            const slotBgColor = slotEl.slotBackgroundColor || '#1e293b';
+            const slotBorderColor = slotEl.slotBorderColor || '#475569';
+            const slotHeaderColor = slotEl.slotHeaderColor || '#7dd3fc';
+            return (
+                <div className="w-full h-full grid grid-cols-2 gap-2 p-2 overflow-hidden">
+                    {Array.from({ length: Math.min(slotEl.slotCount, 4) }).map((_, i) => (
+                        <div 
+                            key={i} 
+                            className="rounded-md border-2 p-2 flex flex-col"
+                            style={{ 
+                                backgroundColor: slotBgColor,
+                                borderColor: slotBorderColor,
+                            }}
+                        >
+                            <span className="text-xs font-bold" style={{ color: slotHeaderColor }}>Slot {i + 1}</span>
+                            <span className="text-[10px] opacity-50" style={fontSettingsToStyle(slotEl.font)}>{slotEl.emptySlotText}</span>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+        case UIElementType.SettingsSlider: {
+            const sliderEl = element as UISettingsSliderElement;
+            const thumbColor = sliderEl.thumbColor || '#8a2be2';
+            const trackColor = sliderEl.trackColor || '#4D3273';
+            return (
+                <div className="w-full h-full flex items-center justify-center p-2">
+                    <div className="w-full h-2 rounded-full relative" style={{ backgroundColor: trackColor }}>
+                        <div 
+                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white/30"
+                            style={{ backgroundColor: thumbColor }}
+                        />
+                    </div>
+                </div>
+            );
+        }
         case UIElementType.SettingsToggle:
             const tog = element as UISettingsToggleElement;
             return <div className="w-full h-full flex items-center gap-2" style={fontSettingsToStyle(tog.font)}>

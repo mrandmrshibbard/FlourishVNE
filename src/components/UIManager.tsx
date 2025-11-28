@@ -6,6 +6,7 @@ import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
 import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon } from './icons';
 import ConfirmationModal from './ui/ConfirmationModal';
+import UIScreenThemeSelector from './UIScreenThemeSelector';
 
 interface UIManagerProps {
     project: VNProject;
@@ -128,6 +129,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                         <PlusIcon className="w-4 h-4" />
                         Add UI Screen
                     </button>
+                    <UIScreenThemeSelector label="Apply Theme to All" className="w-full [&>button]:w-full [&>button]:justify-center" />
                     <button
                         onClick={openRestoreModal}
                         className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"

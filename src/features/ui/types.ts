@@ -66,6 +66,8 @@ export interface UIButtonElement extends BaseUIElement {
     hoverImage: UIAsset | null;
     clickSoundId: VNID | null;
     hoverSoundId: VNID | null;
+    backgroundColor?: string; // Background color when no image is set
+    hoverBackgroundColor?: string; // Background color on hover when no image is set
 }
 
 export interface UITextElement extends BaseUIElement {
@@ -86,6 +88,10 @@ export interface UISaveSlotGridElement extends BaseUIElement {
     slotCount: number;
     font: VNFontSettings;
     emptySlotText: string;
+    slotBackgroundColor?: string;
+    slotBorderColor?: string;
+    slotHoverBorderColor?: string;
+    slotHeaderColor?: string;
 }
 export type GameSetting = 'musicVolume' | 'sfxVolume' | 'textSpeed';
 export interface UISettingsSliderElement extends BaseUIElement {

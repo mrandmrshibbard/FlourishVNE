@@ -743,6 +743,10 @@ const ButtonElement: React.FC<{
         otherActions.forEach(action => onAction(action));
     };
     
+    // Use stored backgroundColor or default purple theme color
+    const buttonBg = element.backgroundColor || '#4D3273';
+    const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? undefined : '#6B4C9A');
+    
     return (
         <button
             key={element.id}
@@ -755,7 +759,10 @@ const ButtonElement: React.FC<{
             {displayUrl ? (
                 <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
             ) : (
-                <div className="absolute inset-0 w-full h-full bg-slate-700/80"></div>
+                <div 
+                    className="absolute inset-0 w-full h-full rounded"
+                    style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }}
+                />
             )}
             <span className="relative z-10" style={{...textStyle, display: 'inline-block', pointerEvents: 'none'}}>
                 {interpolatedText}
@@ -1228,14 +1235,18 @@ const UIScreenRenderer: React.FC<{
                 const thumbUrl = el.thumbImage ? getElementAssetUrl(el.thumbImage) : null;
                 const trackUrl = el.trackImage ? getElementAssetUrl(el.trackImage) : null;
                 
+                // Use stored colors or defaults
+                const thumbColor = el.thumbColor || '#8a2be2';
+                const trackColor = el.trackColor || '#4D3273';
+                
                 const customSliderStyle: React.CSSProperties = {
                     // Custom thumb via CSS variable (if no image)
-                    ...(el.thumbColor && !thumbUrl ? {
-                        ['--slider-thumb-color' as any]: el.thumbColor,
+                    ...(!thumbUrl ? {
+                        ['--slider-thumb-color' as any]: thumbColor,
                     } : {}),
                     // Custom track via CSS variable (if no image)
-                    ...(el.trackColor && !trackUrl ? {
-                        ['--slider-track-color' as any]: el.trackColor,
+                    ...(!trackUrl ? {
+                        ['--slider-track-color' as any]: trackColor,
                     } : {}),
                     // Thumb image as background
                     ...(thumbUrl ? {
@@ -1339,6 +1350,12 @@ const UIScreenRenderer: React.FC<{
                 const el = element as UISaveSlotGridElement;
                 const isSaveMode = screenId === project.ui.saveScreenId;
                 
+                // Use stored colors or defaults
+                const slotBgColor = el.slotBackgroundColor || '#1e293b';
+                const slotBorderColor = el.slotBorderColor || '#475569';
+                const slotHoverBorderColor = el.slotHoverBorderColor || '#38bdf8';
+                const slotHeaderColor = el.slotHeaderColor || '#7dd3fc';
+                
                 return (
                     <div key={el.id} style={style} className="grid grid-cols-2 gap-4 overflow-y-auto p-2">
                         {Array.from({ length: el.slotCount }).map((_, i) => {
@@ -1355,17 +1372,30 @@ const UIScreenRenderer: React.FC<{
                                         onAction(action);
                                     }}
                                     disabled={!isSaveMode && !slotData}
-                                    className="aspect-video bg-slate-800/80 p-3 rounded-lg border-2 border-slate-600 hover:border-sky-400 disabled:opacity-50 disabled:hover:border-slate-600 flex flex-col justify-between text-left"
-                                    style={fontSettingsToStyle(el.font)}
+                                    className="aspect-video p-3 rounded-lg border-2 disabled:opacity-50 flex flex-col justify-between text-left transition-colors"
+                                    style={{
+                                        ...fontSettingsToStyle(el.font),
+                                        backgroundColor: slotBgColor,
+                                        borderColor: slotBorderColor,
+                                        '--hover-border-color': slotHoverBorderColor,
+                                    } as React.CSSProperties}
+                                    onMouseEnter={(e) => {
+                                        if (!e.currentTarget.disabled) {
+                                            e.currentTarget.style.borderColor = slotHoverBorderColor;
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.borderColor = slotBorderColor;
+                                    }}
                                 >
-                                    <p className="font-bold text-sky-300">Slot {i + 1}</p>
+                                    <p className="font-bold" style={{ color: slotHeaderColor }}>Slot {i + 1}</p>
                                     {slotData ? (
                                         <div className="text-sm">
                                             <p className="truncate">{slotData.sceneName}</p>
-                                            <p className="text-slate-400">{new Date(slotData.timestamp).toLocaleString()}</p>
+                                            <p style={{ opacity: 0.7 }}>{new Date(slotData.timestamp).toLocaleString()}</p>
                                         </div>
                                     ) : (
-                                        <div className="flex-grow flex items-center justify-center text-slate-500">{el.emptySlotText}</div>
+                                        <div className="flex-grow flex items-center justify-center" style={{ opacity: 0.5 }}>{el.emptySlotText}</div>
                                     )}
                                 </button>
                             )
@@ -1687,6 +1717,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     useEffect(() => {
         playerStateRef.current = playerState;
+        if (playerState?.mode === 'playing') {
+            const stage = playerState.stageState;
+            if (
+                stage.backgroundUrl ||
+                Object.keys(stage.characters).length > 0 ||
+                stage.textOverlays.length > 0 ||
+                stage.imageOverlays.length > 0 ||
+                stage.buttonOverlays.length > 0
+            ) {
+                hasRenderedSceneRef.current = true;
+            }
+        } else {
+            hasRenderedSceneRef.current = false;
+        }
     }, [playerState]);
     const [gameSaves, setGameSaves] = useState<Record<number, GameStateSave>>({});
     const [isJustLoaded, setIsJustLoaded] = useState(false);
@@ -1774,6 +1818,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Track active one-shot SFX so we can stop them when a scene ends
     const sfxPoolRef = useRef<HTMLAudioElement[]>([]);
     const commandSchedulerRef = useRef(new CommandScheduler());
+    const hasRenderedSceneRef = useRef(false);
     const runtimeDiagnosticsRef = useRef(new RuntimeDiagnostics());
     const variableStoreRef = useRef<RuntimeVariableStore | null>(null);
     const uiDirtyVariableIdsRef = useRef<Set<VNID>>(new Set());
@@ -2742,20 +2787,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     if (nextScene) {
                         console.log(`Advancing to next scene: ${nextSceneId}`);
                         
-                        // Start visual fade out transition
-                        setSceneTransitionFading(true);
-                        
-                        // Fade out music before transitioning scenes
+                        const shouldFade = hasRenderedSceneRef.current;
                         const audio = musicAudioRef.current;
-                        if (!audio.paused) {
-                            fadeAudio(audio, 0, 0.5, () => {
+                        if (audio && !audio.paused) {
+                            if (shouldFade) {
+                                fadeAudio(audio, 0, 0.5, () => {
+                                    audio.pause();
+                                    audio.currentTime = 0;
+                                });
+                            } else {
                                 audio.pause();
                                 audio.currentTime = 0;
-                            });
+                            }
                         }
-                        
-                        // Wait for fade transition before changing scene
-                        setTimeout(() => {
+
+                        if (shouldFade) {
+                            setSceneTransitionFading(true);
+                        }
+
+                        const executeSceneChange = () => {
                             updatePlayerState(p => p ? {
                                 ...p,
                                 currentSceneId: nextSceneId,
@@ -2791,10 +2841,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     screenSceneId: null
                                 }
                             } : null);
-                            
-                            // End fade transition after scene change
-                            setSceneTransitionFading(false);
-                        }, 500); // Match fade duration (0.5s)
+                            if (shouldFade) {
+                                setSceneTransitionFading(false);
+                            }
+                        };
+
+                        if (shouldFade) {
+                            setTimeout(executeSceneChange, 500); // Match fade duration (0.5s)
+                        } else {
+                            executeSceneChange();
+                        }
                     } else {
                         // No valid next scene found, return to title
                         console.log('No valid next scene - returning to title');
@@ -3118,26 +3174,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.Jump: {
-                    // Start visual fade out transition for scene change
-                    setSceneTransitionFading(true);
-                    
-                    // Fade out music before transitioning scenes
+                    const shouldFade = hasRenderedSceneRef.current;
                     const audio = musicAudioRef.current;
-                    if (!audio.paused) {
-                        fadeAudio(audio, 0, 0.5, () => {
+                    if (audio && !audio.paused) {
+                        if (shouldFade) {
+                            fadeAudio(audio, 0, 0.5, () => {
+                                audio.pause();
+                                audio.currentTime = 0;
+                            });
+                        } else {
                             audio.pause();
                             audio.currentTime = 0;
-                        });
+                        }
                     }
-                    
-                    // Wait for fade transition before executing the jump
-                    setTimeout(() => {
+
+                    if (shouldFade) {
+                        setSceneTransitionFading(true);
+                    }
+
+                    const runJump = () => {
                         const result = handleJump(command as JumpCommand, commandContext);
                         applyResult(result);
-                        
-                        // End fade transition after scene change
-                        setSceneTransitionFading(false);
-                    }, 500); // Match fade duration (0.5s)
+                        if (shouldFade) {
+                            setSceneTransitionFading(false);
+                        }
+                    };
+
+                    if (shouldFade) {
+                        setTimeout(runJump, 500);
+                    } else {
+                        runJump();
+                    }
                     break;
                 }
                 case CommandType.PlayMusic: {
@@ -3714,20 +3781,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return;
             }
             
-            // Start visual fade out transition
-            setSceneTransitionFading(true);
-            
-            // Fade out music before transitioning scenes
+            const shouldFade = hasRenderedSceneRef.current;
             const audio = musicAudioRef.current;
-            if (!audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => {
+            if (audio && !audio.paused) {
+                if (shouldFade) {
+                    fadeAudio(audio, 0, 0.5, () => {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    });
+                } else {
                     audio.pause();
                     audio.currentTime = 0;
-                });
+                }
             }
-            
-            // Wait for fade transition to complete before changing scene
-            setTimeout(() => {
+
+            if (shouldFade) {
+                setSceneTransitionFading(true);
+            }
+
+            const executeJump = () => {
                 console.log('[JumpToScene] Clearing screen and HUD stacks');
                 // Clear screen and HUD stacks when jumping to a scene
                 setScreenStack([]);
@@ -3868,8 +3940,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 
                 // End fade transition after scene change
-                setSceneTransitionFading(false);
-            }, 500); // Match fade duration (0.5s)
+                if (shouldFade) {
+                    setSceneTransitionFading(false);
+                }
+            };
+
+            if (shouldFade) {
+                setTimeout(executeJump, 500); // Match fade duration (0.5s)
+            } else {
+                executeJump();
+            }
         } else if (action.type === UIActionType.SetVariable) {
             const setVarAction = action as SetVariableAction;
             const variable = project.variables[setVarAction.variableId];

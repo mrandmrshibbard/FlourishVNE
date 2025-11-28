@@ -2757,6 +2757,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       otherActions.forEach((action) => onAction(action));
     };
+    const buttonBg = element.backgroundColor || "#4D3273";
+    const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? void 0 : "#6B4C9A");
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "button",
       {
@@ -2772,7 +2774,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         onMouseLeave: () => setIsHovered(false),
         onClick: handleClick,
         children: [
-          displayUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, className: "absolute inset-0 w-full h-full object-fill" }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 w-full h-full bg-slate-700/80" }),
+          displayUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, className: "absolute inset-0 w-full h-full object-fill" }) : /* @__PURE__ */ jsxRuntime2.jsx(
+            "div",
+            {
+              className: "absolute inset-0 w-full h-full rounded",
+              style: { backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }
+            }
+          ),
           /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: { ...textStyle, display: "inline-block", pointerEvents: "none" }, children: interpolatedText })
         ]
       },
@@ -3160,14 +3168,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
           const thumbUrl = el.thumbImage ? getElementAssetUrl(el.thumbImage) : null;
           const trackUrl = el.trackImage ? getElementAssetUrl(el.trackImage) : null;
+          const thumbColor = el.thumbColor || "#8a2be2";
+          const trackColor = el.trackColor || "#4D3273";
           const customSliderStyle = {
             // Custom thumb via CSS variable (if no image)
-            ...el.thumbColor && !thumbUrl ? {
-              ["--slider-thumb-color"]: el.thumbColor
+            ...!thumbUrl ? {
+              ["--slider-thumb-color"]: thumbColor
             } : {},
             // Custom track via CSS variable (if no image)
-            ...el.trackColor && !trackUrl ? {
-              ["--slider-track-color"]: el.trackColor
+            ...!trackUrl ? {
+              ["--slider-track-color"]: trackColor
             } : {},
             // Thumb image as background
             ...thumbUrl ? {
@@ -3257,6 +3267,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         case UIElementType.SaveSlotGrid: {
           const el = element;
           const isSaveMode = screenId === project2.ui.saveScreenId;
+          const slotBgColor = el.slotBackgroundColor || "#1e293b";
+          const slotBorderColor = el.slotBorderColor || "#475569";
+          const slotHoverBorderColor = el.slotHoverBorderColor || "#38bdf8";
+          const slotHeaderColor = el.slotHeaderColor || "#7dd3fc";
           return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, className: "grid grid-cols-2 gap-4 overflow-y-auto p-2", children: Array.from({ length: el.slotCount }).map((_, i) => {
             const slotData = gameSaves[i + 1];
             const action = isSaveMode ? { type: UIActionType.SaveGame, slotNumber: i + 1 } : { type: UIActionType.LoadGame, slotNumber: i + 1 };
@@ -3268,17 +3282,30 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   onAction(action);
                 },
                 disabled: !isSaveMode && !slotData,
-                className: "aspect-video bg-slate-800/80 p-3 rounded-lg border-2 border-slate-600 hover:border-sky-400 disabled:opacity-50 disabled:hover:border-slate-600 flex flex-col justify-between text-left",
-                style: fontSettingsToStyle(el.font),
+                className: "aspect-video p-3 rounded-lg border-2 disabled:opacity-50 flex flex-col justify-between text-left transition-colors",
+                style: {
+                  ...fontSettingsToStyle(el.font),
+                  backgroundColor: slotBgColor,
+                  borderColor: slotBorderColor,
+                  "--hover-border-color": slotHoverBorderColor
+                },
+                onMouseEnter: (e) => {
+                  if (!e.currentTarget.disabled) {
+                    e.currentTarget.style.borderColor = slotHoverBorderColor;
+                  }
+                },
+                onMouseLeave: (e) => {
+                  e.currentTarget.style.borderColor = slotBorderColor;
+                },
                 children: [
-                  /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "font-bold text-sky-300", children: [
+                  /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "font-bold", style: { color: slotHeaderColor }, children: [
                     "Slot ",
                     i + 1
                   ] }),
                   slotData ? /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "text-sm", children: [
                     /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "truncate", children: slotData.sceneName }),
-                    /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-slate-400", children: new Date(slotData.timestamp).toLocaleString() })
-                  ] }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "flex-grow flex items-center justify-center text-slate-500", children: el.emptySlotText })
+                    /* @__PURE__ */ jsxRuntime2.jsx("p", { style: { opacity: 0.7 }, children: new Date(slotData.timestamp).toLocaleString() })
+                  ] }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "flex-grow flex items-center justify-center", style: { opacity: 0.5 }, children: el.emptySlotText })
                 ]
               },
               i
@@ -3555,6 +3582,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, []);
     React2.useEffect(() => {
       playerStateRef.current = playerState;
+      if ((playerState == null ? void 0 : playerState.mode) === "playing") {
+        const stage = playerState.stageState;
+        if (stage.backgroundUrl || Object.keys(stage.characters).length > 0 || stage.textOverlays.length > 0 || stage.imageOverlays.length > 0 || stage.buttonOverlays.length > 0) {
+          hasRenderedSceneRef.current = true;
+        }
+      } else {
+        hasRenderedSceneRef.current = false;
+      }
     }, [playerState]);
     const [gameSaves, setGameSaves] = React2.useState({});
     const [isJustLoaded, setIsJustLoaded] = React2.useState(false);
@@ -3622,6 +3657,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const userGestureDetectedRef = React2.useRef(false);
     const sfxPoolRef = React2.useRef([]);
     const commandSchedulerRef = React2.useRef(new CommandScheduler());
+    const hasRenderedSceneRef = React2.useRef(false);
     const runtimeDiagnosticsRef = React2.useRef(new RuntimeDiagnostics());
     const variableStoreRef = React2.useRef(null);
     const uiDirtyVariableIdsRef = React2.useRef(/* @__PURE__ */ new Set());
@@ -4460,15 +4496,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const nextScene = project.scenes[nextSceneId];
             if (nextScene) {
               console.log(`Advancing to next scene: ${nextSceneId}`);
-              setSceneTransitionFading(true);
+              const shouldFade = hasRenderedSceneRef.current;
               const audio = musicAudioRef.current;
-              if (!audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => {
+              if (audio && !audio.paused) {
+                if (shouldFade) {
+                  fadeAudio(audio, 0, 0.5, () => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                  });
+                } else {
                   audio.pause();
                   audio.currentTime = 0;
-                });
+                }
               }
-              setTimeout(() => {
+              if (shouldFade) {
+                setSceneTransitionFading(true);
+              }
+              const executeSceneChange = () => {
                 updatePlayerState((p) => p ? {
                   ...p,
                   currentSceneId: nextSceneId,
@@ -4504,8 +4548,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     screenSceneId: null
                   }
                 } : null);
-                setSceneTransitionFading(false);
-              }, 500);
+                if (shouldFade) {
+                  setSceneTransitionFading(false);
+                }
+              };
+              if (shouldFade) {
+                setTimeout(executeSceneChange, 500);
+              } else {
+                executeSceneChange();
+              }
             } else {
               console.log("No valid next scene - returning to title");
               const audio = musicAudioRef.current;
@@ -4783,19 +4834,34 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               break;
             }
             case CommandType.Jump: {
-              setSceneTransitionFading(true);
+              const shouldFade = hasRenderedSceneRef.current;
               const audio = musicAudioRef.current;
-              if (!audio.paused) {
-                fadeAudio(audio, 0, 0.5, () => {
+              if (audio && !audio.paused) {
+                if (shouldFade) {
+                  fadeAudio(audio, 0, 0.5, () => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                  });
+                } else {
                   audio.pause();
                   audio.currentTime = 0;
-                });
+                }
               }
-              setTimeout(() => {
+              if (shouldFade) {
+                setSceneTransitionFading(true);
+              }
+              const runJump = () => {
                 const result = handleJump(command, commandContext);
                 applyResult(result);
-                setSceneTransitionFading(false);
-              }, 500);
+                if (shouldFade) {
+                  setSceneTransitionFading(false);
+                }
+              };
+              if (shouldFade) {
+                setTimeout(runJump, 500);
+              } else {
+                runJump();
+              }
               break;
             }
             case CommandType.PlayMusic: {
@@ -5295,15 +5361,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           console.warn(`JumpToScene action failed: Scene with ID ${jumpAction.targetSceneId} not found.`);
           return;
         }
-        setSceneTransitionFading(true);
+        const shouldFade = hasRenderedSceneRef.current;
         const audio = musicAudioRef.current;
-        if (!audio.paused) {
-          fadeAudio(audio, 0, 0.5, () => {
+        if (audio && !audio.paused) {
+          if (shouldFade) {
+            fadeAudio(audio, 0, 0.5, () => {
+              audio.pause();
+              audio.currentTime = 0;
+            });
+          } else {
             audio.pause();
             audio.currentTime = 0;
-          });
+          }
         }
-        setTimeout(() => {
+        if (shouldFade) {
+          setSceneTransitionFading(true);
+        }
+        const executeJump = () => {
           console.log("[JumpToScene] Clearing screen and HUD stacks");
           setScreenStack([]);
           setHudStack([]);
@@ -5423,8 +5497,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             console.log("[CLEAR] Dirty set cleared after JumpToScene");
             uiDirtyVariableIdsRef.current.clear();
           }
-          setSceneTransitionFading(false);
-        }, 500);
+          if (shouldFade) {
+            setSceneTransitionFading(false);
+          }
+        };
+        if (shouldFade) {
+          setTimeout(executeJump, 500);
+        } else {
+          executeJump();
+        }
       } else if (action.type === UIActionType.SetVariable) {
         const setVarAction = action;
         const variable = project.variables[setVarAction.variableId];

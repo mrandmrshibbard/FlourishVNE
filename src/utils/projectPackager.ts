@@ -321,26 +321,23 @@ export const exportProject = async (project: VNProject): Promise<boolean> => {
         for (const element of Object.values(screen.elements) as VNUIElement[]) {
             if (element.type === UIElementType.Button) {
                 const btn = element as UIButtonElement;
-                if (btn.image?.id) {
-                    if (btn.image.type === 'video') {
-                        assetsToProcess.videos.add(btn.image.id);
+                const enqueueUiAsset = (asset?: UIAsset | null) => {
+                    if (!asset?.id) return;
+                    if (asset.type === 'video') {
+                        assetsToProcess.videos.add(asset.id);
                     } else {
-                        assetsToProcess.backgrounds.add(btn.image.id);
+                        assetsToProcess.images.add(asset.id);
                     }
-                }
-                if (btn.hoverImage?.id) {
-                    if (btn.hoverImage.type === 'video') {
-                        assetsToProcess.videos.add(btn.hoverImage.id);
-                    } else {
-                        assetsToProcess.backgrounds.add(btn.hoverImage.id);
-                    }
-                }
+                };
+
+                enqueueUiAsset(btn.image);
+                enqueueUiAsset(btn.hoverImage);
                 if (btn.clickSoundId) assetsToProcess.audio.add(btn.clickSoundId);
                 if (btn.hoverSoundId) assetsToProcess.audio.add(btn.hoverSoundId);
             }
             if (element.type === UIElementType.Image) {
                 const img = element as UIImageElement;
-                if (img.image?.type === 'image' && img.image.id) assetsToProcess.backgrounds.add(img.image.id);
+                if (img.image?.type === 'image' && img.image.id) assetsToProcess.images.add(img.image.id);
                 if (img.image?.type === 'video' && img.image.id) assetsToProcess.videos.add(img.image.id);
             }
         }

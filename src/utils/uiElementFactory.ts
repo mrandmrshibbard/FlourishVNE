@@ -42,7 +42,11 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
             const el: UISaveSlotGridElement = {
                 ...base, name: 'Save Slots', type,
                 width: 80, height: 70, x: 10, y: 20,
-                slotCount: 6, font: project.ui.choiceTextFont, emptySlotText: '[ Empty Slot ]'
+                slotCount: 6, font: project.ui.choiceTextFont, emptySlotText: '[ Empty Slot ]',
+                slotBackgroundColor: '#1e1e38',
+                slotBorderColor: '#4D3273',
+                slotHoverBorderColor: '#8a2be2',
+                slotHeaderColor: '#a78bfa',
             };
             return el;
         }
@@ -51,6 +55,8 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 ...base, name: 'Settings Slider', type,
                 width: 40, height: 5,
                 setting: 'musicVolume',
+                trackColor: '#4D3273',
+                thumbColor: '#8a2be2',
             };
             return el;
         }

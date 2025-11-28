@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectProvider } from './contexts/ProjectContext';
+import { UIScreenThemeProvider } from './contexts/UIScreenThemeContext';
 import VisualNovelEditor from './components/VisualNovelEditor';
 import { ProjectHub } from './components/ProjectHub';
 import { VNProject } from './types/project';
@@ -45,7 +46,9 @@ const App = () => {
     
     return (
         <ProjectProvider key={activeProject.id} initialProject={activeProject}>
-            <VisualNovelEditor onExit={handleCloseProject} initialTab={initialTab} />
+            <UIScreenThemeProvider>
+                <VisualNovelEditor onExit={handleCloseProject} initialTab={initialTab} />
+            </UIScreenThemeProvider>
         </ProjectProvider>
     );
 };

@@ -6,6 +6,7 @@ import { GameBuilder } from './GameBuilder';
 import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
 import ConfirmationModal from './ui/ConfirmationModal';
 import InfoModal from './ui/InfoModal';
+import ThemeSelector from './ThemeSelector';
 
 const Header: React.FC<{
     onPlay: () => void;
@@ -202,6 +203,7 @@ const Header: React.FC<{
                                 <ArrowUturnRightIcon className="w-3.5 h-3.5" />
                             </button>
                         </div>
+                        <ThemeSelector />
                         <button
                             onClick={handleExport}
                             className="bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] text-white font-bold px-3 py-1.5 rounded flex items-center gap-0.5 transition-colors text-xs"
