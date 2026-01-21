@@ -11,14 +11,27 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (!id.includes('node_modules')) return;
+
+              if (id.includes('react')) return 'react-vendor';
+              if (id.includes('react-dom')) return 'react-vendor';
+
+              if (id.includes('monaco-editor')) return 'monaco';
+              if (id.includes('reactflow')) return 'reactflow';
+
+              return 'vendor';
+            },
+          },
+        },
+      },
     };
 });

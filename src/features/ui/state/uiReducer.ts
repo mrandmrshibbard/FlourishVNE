@@ -90,7 +90,8 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
             background: { type: 'color', value: '#0f172a' }, 
             music: { audioId: null, policy: 'continue' },
             ambientNoise: { audioId: null, policy: 'continue' },
-            elements: {} 
+            elements: {},
+            effects: [],
         };
         return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen }};
     }

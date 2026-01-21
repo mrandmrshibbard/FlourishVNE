@@ -3,8 +3,15 @@
  * Standalone game window with save/load functionality
  */
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
+
+// See electron/main.cjs: avoid GPU-process crashes on some Windows setups.
+if (process.platform === 'win32') {
+    app.disableHardwareAcceleration();
+    app.commandLine.appendSwitch('disable-gpu');
+    app.commandLine.appendSwitch('disable-gpu-compositing');
+}
 
 let mainWindow;
 
@@ -26,6 +33,40 @@ function createWindow() {
 
     // Load the game
     mainWindow.loadFile('index.html');
+
+    mainWindow.on('unresponsive', async () => {
+        try {
+            const result = await dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                title: 'Game is not responding',
+                message: 'The game has become unresponsive. Reload the window?',
+                buttons: ['Reload', 'Quit'],
+                defaultId: 0,
+                cancelId: 1,
+            });
+            if (result.response === 0) mainWindow.reload();
+            else app.quit();
+        } catch {
+            app.quit();
+        }
+    });
+
+    mainWindow.webContents.on('render-process-gone', async (_event, details) => {
+        try {
+            const result = await dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Renderer crashed',
+                message: `The game window crashed (${details?.reason || 'unknown reason'}).`,
+                buttons: ['Reload', 'Quit'],
+                defaultId: 0,
+                cancelId: 1,
+            });
+            if (result.response === 0) mainWindow.reload();
+            else app.quit();
+        } catch {
+            app.quit();
+        }
+    });
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {

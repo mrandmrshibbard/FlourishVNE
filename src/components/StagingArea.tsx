@@ -1,5 +1,6 @@
 import React from 'react';
 import { VNID, VNPosition, VNTransition, VNPositionPreset } from '../types';
+import type { VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
 import {
     CommandType, ShowCharacterCommand, DialogueCommand, FlashScreenCommand, ChoiceOption,
@@ -76,6 +77,7 @@ interface StageState {
         zoom: number;
         panX: number;
         panY: number;
+        overlayEffects: VNScreenOverlayEffect[];
     };
     dialogue: {
         characterName: string;
@@ -112,6 +114,7 @@ const StagingArea: React.FC<{
             zoom: 1,
             panX: 0,
             panY: 0,
+            overlayEffects: [],
         },
         dialogue: null,
         movie: null,
@@ -141,7 +144,7 @@ const StagingArea: React.FC<{
         if (!scene) {
             setStageState({
                 backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [],
-                screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0 },
+                screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, overlayEffects: [] },
                 dialogue: null, movie: null, flash: null, choices: null, commandIndicator: null, variables: {},
             });
             return;
@@ -176,7 +179,7 @@ const StagingArea: React.FC<{
         let textOverlays: TextOverlay[] = [];
         let imageOverlays: ImageOverlay[] = [];
         let buttonOverlays: ButtonOverlay[] = [];
-        let screen = { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0 };
+        let screen = { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, overlayEffects: [] as VNScreenOverlayEffect[] };
         let dialogue: StageState['dialogue'] = null;
         let movie: StageState['movie'] = null;
         let flash: StageState['flash'] = null;

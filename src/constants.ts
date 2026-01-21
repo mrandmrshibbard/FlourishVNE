@@ -127,6 +127,7 @@ export const createInitialProject = (): VNProject => {
         audio: {},
         videos: {},
         variables: {},
+        fonts: {},
         ui: {
             ...specialIds,
             gameHudScreenId: null,

@@ -14,11 +14,42 @@ export const ChangelogModal: React.FC<{
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
   useEffect(() => {
     if (visible) {
+      if (!isElectron) {
+        setRelease(null);
+        setLoading(false);
+        setError('Update notes are available in the desktop (Electron) app.');
+        return;
+      }
+
       setLoading(true);
       setError(null);
-      fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest')
+
+      const cacheKey = 'githubLatestReleaseBodyCache';
+      const cachedRaw = localStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw) as { release: Release; fetchedAt: number };
+          const twelveHoursMs = 12 * 60 * 60 * 1000;
+          if (cached?.release?.tag_name && typeof cached.fetchedAt === 'number' && Date.now() - cached.fetchedAt < twelveHoursMs) {
+            setRelease(cached.release);
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // Ignore invalid cache
+        }
+      }
+
+      fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest', {
+        headers: {
+          // Helps reduce secondary rate-limits and ensures we get JSON.
+          'Accept': 'application/vnd.github+json'
+        }
+      })
         .then(response => {
           if (!response.ok) {
             if (response.status === 404) {
@@ -30,6 +61,11 @@ export const ChangelogModal: React.FC<{
         })
         .then((data: Release) => {
           setRelease(data);
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ release: data, fetchedAt: Date.now() }));
+          } catch {
+            // Ignore storage failures
+          }
         })
         .catch(err => {
           setError(err.message);
@@ -38,7 +74,7 @@ export const ChangelogModal: React.FC<{
           setLoading(false);
         });
     }
-  }, [visible]);
+  }, [visible, isElectron]);
 
   if (!visible) return null;
 

@@ -1,35 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useProject } from '../contexts/ProjectContext';
 import Header from './Header';
-import ResourceManager from './ResourceManager';
-import SceneEditor from './SceneEditor';
 import PropertiesInspector from './PropertiesInspector';
-import StagingArea from './StagingArea';
 import { VNID } from '../types';
-import MenuEditor from './menu-editor/MenuEditor';
 import LivePreview from './LivePreview';
-import ScreenInspector from './menu-editor/ScreenInspector';
-import UIElementInspector from './menu-editor/UIElementInspector';
 import Panel from './ui/Panel';
-import CharacterEditor from './CharacterEditor';
 import CharacterInspector from './CharacterInspector';
 import NavigationTabs, { NavigationTab } from './NavigationTabs';
 import SceneManager from './SceneManager';
 import CharacterManager from './CharacterManager';
 import UIManager from './UIManager';
-import AssetManager from './AssetManager';
-import VariableManager from './VariableManager';
-import SettingsManager from './SettingsManager';
-import TemplateGallery from './templates/TemplateGallery';
+import ErrorBoundary from './ErrorBoundary';
+import ScreenInspector from './menu-editor/ScreenInspector';
+import UIElementInspector from './menu-editor/UIElementInspector';
+const AssetManager = React.lazy(() => import('./AssetManager'));
+const VariableManager = React.lazy(() => import('./VariableManager'));
+const SettingsManager = React.lazy(() => import('./SettingsManager'));
+const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
+const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
-import { Template } from '../types/template';
+import { Template, TemplateConfig as TConfig } from '../types/template';
 
 // Create service instances
 const templateService = new TemplateService();
 const templateGenerator = new TemplateGenerator();
+
+function isEditorDebugEnabled(): boolean {
+    try {
+        return window.localStorage.getItem('flourish:editorDebug') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function editorDebugLog(...args: unknown[]): void {
+    if (!isEditorDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+}
 
 
 const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationTab }> = ({ onExit, initialTab }) => {
@@ -50,6 +61,40 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
     // This prevents browser storage quota errors for large projects.
+
+    // Load custom fonts into the document so they're available in the editor
+    useEffect(() => {
+        const loadProjectFonts = async () => {
+            const projectFonts = (project as any).fonts || {};
+            for (const fontId in projectFonts) {
+                const font = projectFonts[fontId];
+                if (font?.fontUrl && font?.fontFamily) {
+                    try {
+                        const fontFace = new FontFace(font.fontFamily, `url(${font.fontUrl})`);
+                        await fontFace.load();
+                        (document as any).fonts.add(fontFace);
+                        console.log(`✓ Loaded project font: ${font.fontFamily}`);
+                    } catch (error) {
+                        console.error(`Failed to load project font ${font?.name || fontId}:`, error);
+                    }
+                }
+            }
+            // Also load character custom fonts
+            for (const charId in project.characters) {
+                const char = project.characters[charId];
+                if ((char as any).fontUrl && (char as any).fontFamily) {
+                    try {
+                        const fontFace = new FontFace((char as any).fontFamily, `url(${(char as any).fontUrl})`);
+                        await fontFace.load();
+                        (document as any).fonts.add(fontFace);
+                    } catch (error) {
+                        console.error(`Failed to load custom font for ${char.name}:`, error);
+                    }
+                }
+            }
+        };
+        loadProjectFonts();
+    }, [(project as any).fonts, project.characters]);
 
     // ADDED: Warn user before leaving the page to prevent data loss.
     // Skip this warning in Electron since it prevents the app from closing.
@@ -85,37 +130,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             setSelectedExpressionId(null);
         }
     }, [activeCharacterId, project.characters]);
-
-    // Add keyboard navigation for tabs (1-6 keys)
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Don't trigger if user is typing in an input field
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-                return;
-            }
-
-            // Map number keys 1-7 to tabs
-            const tabMap: Record<string, NavigationTab> = {
-                '1': 'scenes',
-                '2': 'characters',
-                '3': 'ui',
-                '4': 'assets',
-                '5': 'variables',
-                '6': 'settings',
-                '7': 'templates'
-            };
-
-            const newTab = tabMap[e.key];
-            if (newTab) {
-                e.preventDefault();
-                setActiveTab(newTab);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
 
     const handleTitleChange = (newTitle: string) => {
         dispatch({ type: 'UPDATE_PROJECT_TITLE', payload: { title: newTitle } });
@@ -201,6 +215,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     // Template system integration
     const [selectedTemplateId, setSelectedTemplateId] = useState<VNID | undefined>(undefined);
     const [previewTemplate, setPreviewTemplate] = useState<any | null>(null);
+    const [configuringTemplate, setConfiguringTemplate] = useState<Template | null>(null);
+    const [templateConfigDraft, setTemplateConfigDraft] = useState<TConfig | null>(null);
+    const [isTemplateConfigValid, setIsTemplateConfigValid] = useState(true);
     
     // Modal state
     const [modalState, setModalState] = useState<{
@@ -223,30 +240,28 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     
     const handleSelectTemplate = (template: any) => {
         setSelectedTemplateId(template.id);
-        console.log('Template selected:', template);
+        editorDebugLog('Template selected:', template);
     };
     
     const handlePreviewTemplate = (template: any) => {
         setPreviewTemplate(template);
-        console.log('Previewing template:', template);
+        editorDebugLog('Previewing template:', template);
         
         // Show template details in a modal
         const details = `${template.description}\n\nCategory: ${template.category}\nVersion: ${template.version}\nTags: ${template.tags.join(', ')}\n\nClick "Apply" to use this template.`;
         showModal(template.name, details);
     };
     
-    const handleApplyTemplate = async (template: Template) => {
-        console.log('Applying template:', template);
+    const applyTemplateWithConfig = async (template: Template, config: TConfig) => {
+        editorDebugLog('Applying template:', template);
         try {
-            // Use the template's default config for now
-            // TODO: Add configuration UI for users to customize before applying
             // Deep clone the config so the TemplateGenerator can inject variable IDs
-            const config = JSON.parse(JSON.stringify(template.defaultConfig));
-            
+            const clonedConfig = JSON.parse(JSON.stringify(config));
+
             // Generate the template content
             const result = await templateGenerator.generateInstance(
                 template,
-                config,
+                clonedConfig,
                 project.id,
                 {
                     validateBeforeGeneration: true,
@@ -254,24 +269,24 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     generateIds: true
                 }
             );
-            
+
             if (!result.success) {
                 showModal('Template Application Failed', result.errors.join('\n'));
                 return;
             }
-            
+
             // Add generated UI screens to project
             if (result.generatedScreens && result.generatedScreens.length > 0) {
                 result.generatedScreens.forEach(screen => {
                     // Add the screen with its ID and name
                     dispatch({
                         type: 'ADD_UI_SCREEN',
-                        payload: { 
+                        payload: {
                             name: screen.name,
-                            id: screen.id 
+                            id: screen.id
                         }
                     });
-                    
+
                     // Then update it with the full structure
                     dispatch({
                         type: 'UPDATE_UI_SCREEN',
@@ -288,7 +303,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                             }
                         }
                     });
-                    
+
                     // Add each UI element
                     Object.values(screen.elements).forEach(element => {
                         dispatch({
@@ -301,7 +316,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     });
                 });
             }
-            
+
             // Add generated variables to project
             if (result.generatedVariables && result.generatedVariables.length > 0) {
                 result.generatedVariables.forEach(variable => {
@@ -316,9 +331,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     });
                 });
             }
-            
+
             // Show success message
-            const message = `Created:\n` +
+            const message =
+                `Created:\n` +
                 `- ${result.generatedScreens.length} UI Screen(s)\n` +
                 `- ${result.generatedVariables.length} Variable(s)\n\n` +
                 `Next steps:\n` +
@@ -327,19 +343,25 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 `3. Go to UI tab and populate the asset cyclers\n` +
                 `4. Test in live preview!` +
                 (result.warnings.length > 0 ? `\n\nWarnings:\n${result.warnings.join('\n')}` : '');
-            
+
             showModal(`Template "${template.name}" Applied Successfully!`, message);
-            
+
             // Switch to UI tab to show the new screen
             if (result.generatedScreens.length > 0) {
                 setActiveTab('ui');
                 handleSetActiveMenuScreen(result.generatedScreens[0].id as VNID);
             }
-            
         } catch (error) {
             console.error('Failed to apply template:', error);
             showModal('Template Application Error', 'Failed to apply template. Please try again.');
         }
+    };
+
+    const handleApplyTemplate = async (template: Template) => {
+        // Open the configurator (no-code) instead of applying immediately.
+        setConfiguringTemplate(template);
+        setTemplateConfigDraft(JSON.parse(JSON.stringify(template.defaultConfig)));
+        setIsTemplateConfigValid(true);
     };
 
     const handleTabChange = (tab: NavigationTab) => {
@@ -366,6 +388,38 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             setIsConfiguringScene(false);
         }
     };
+
+    // Add keyboard navigation for tabs (1-7 keys)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Don't trigger if user is typing in an input field
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+
+            // Map number keys 1-7 to tabs
+            const tabMap: Record<string, NavigationTab> = {
+                '1': 'scenes',
+                '2': 'characters',
+                '3': 'ui',
+                '4': 'assets',
+                '5': 'variables',
+                '6': 'settings',
+                '7': 'templates'
+            };
+
+            const newTab = tabMap[e.key];
+            if (newTab) {
+                e.preventDefault();
+                handleTabChange(newTab);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeSceneId, project.startSceneId, project.characters, project.uiScreens]);
+
     return (
         <div className="bg-slate-900 text-slate-100 h-screen flex flex-col">
             <Header
@@ -388,7 +442,35 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             <main className="flex-grow flex overflow-hidden">
                 {/* Main Content Area - Full Width Managers */}
                 <div className="flex-1 flex flex-col min-w-0">
-                    {activeTab === 'scenes' ? (
+                    {configuringTemplate && templateConfigDraft ? (
+                        <div className="flex-1 overflow-auto p-4">
+                            <Suspense fallback={<div className="text-slate-300">Loading template configurator…</div>}>
+                                <TemplateConfigComponent
+                                    template={configuringTemplate}
+                                    initialConfig={templateConfigDraft}
+                                    onConfigChange={(cfg, isValid) => {
+                                        setTemplateConfigDraft(cfg);
+                                        setIsTemplateConfigValid(isValid);
+                                    }}
+                                    onCancel={() => {
+                                        setConfiguringTemplate(null);
+                                        setTemplateConfigDraft(null);
+                                    }}
+                                    onSave={async (cfg) => {
+                                        if (!isTemplateConfigValid) {
+                                            showModal('Fix Template Settings', 'Please resolve template configuration errors before applying.');
+                                            return;
+                                        }
+                                        const t = configuringTemplate;
+                                        setConfiguringTemplate(null);
+                                        setTemplateConfigDraft(null);
+                                        await applyTemplateWithConfig(t, cfg);
+                                    }}
+                                    showPreview={true}
+                                />
+                            </Suspense>
+                        </div>
+                    ) : activeTab === 'scenes' ? (
                         <SceneManager
                             project={project}
                             activeSceneId={activeSceneId}
@@ -412,26 +494,36 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                             setSelectedExpressionId={setSelectedExpressionId}
                         />
                     ) : activeTab === 'ui' ? (
-                        <UIManager
-                            project={project}
-                            activeMenuScreenId={activeMenuScreenId}
-                            setActiveMenuScreenId={handleSetActiveMenuScreen}
-                            selectedUIElementId={selectedUIElementId}
-                            setSelectedUIElementId={setSelectedUIElementId}
-                        />
+                        <ErrorBoundary fallback={<div className="p-4 text-red-400">UI Manager failed to load. Check console.</div>}>
+                            <UIManager
+                                project={project}
+                                activeMenuScreenId={activeMenuScreenId}
+                                setActiveMenuScreenId={handleSetActiveMenuScreen}
+                                selectedUIElementId={selectedUIElementId}
+                                setSelectedUIElementId={setSelectedUIElementId}
+                            />
+                        </ErrorBoundary>
                     ) : activeTab === 'assets' ? (
-                        <AssetManager project={project} />
+                        <Suspense fallback={<div className="text-slate-300 p-4">Loading assets…</div>}>
+                            <AssetManager project={project} />
+                        </Suspense>
                     ) : activeTab === 'variables' ? (
-                        <VariableManager project={project} />
+                        <Suspense fallback={<div className="text-slate-300 p-4">Loading variables…</div>}>
+                            <VariableManager project={project} />
+                        </Suspense>
                     ) : activeTab === 'settings' ? (
-                        <SettingsManager project={project} />
+                        <Suspense fallback={<div className="text-slate-300 p-4">Loading settings…</div>}>
+                            <SettingsManager project={project} />
+                        </Suspense>
                     ) : activeTab === 'templates' ? (
-                        <TemplateGallery 
-                            onSelectTemplate={handleSelectTemplate}
-                            onPreviewTemplate={handlePreviewTemplate}
-                            onApplyTemplate={handleApplyTemplate}
-                            selectedTemplateId={selectedTemplateId}
-                        />
+                        <Suspense fallback={<div className="text-slate-300 p-4">Loading templates…</div>}>
+                            <TemplateGallery 
+                                onSelectTemplate={handleSelectTemplate}
+                                onPreviewTemplate={handlePreviewTemplate}
+                                onApplyTemplate={handleApplyTemplate}
+                                selectedTemplateId={selectedTemplateId}
+                            />
+                        </Suspense>
                     ) : null}
                 </div>
 

@@ -1115,6 +1115,75 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                 </>;
             }
+            case CommandType.SetScreenOverlayEffect: {
+                const cmd = command as any;
+                const effectType = cmd.effectType as string;
+                const intensity = typeof cmd.intensity === 'number' ? cmd.intensity : 0;
+                const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh'].includes(effectType);
+                
+                // Default colors for each effect type
+                const defaultColors: Record<string, string> = {
+                    sunbeams: '#FFDC8C',
+                    shimmer: '#FFFFFF',
+                    rain: '#B4D2FF',
+                    snowAsh: '#FFFFFF',
+                };
+                const effectColor = cmd.color || defaultColors[effectType] || '#FFFFFF';
+                
+                return <>
+                    <FormField label="Effect">
+                        <Select value={effectType} onChange={e => updateCommand({ effectType: e.target.value, color: undefined })}>
+                            <option value="crtScanlines">CRT Scanlines</option>
+                            <option value="chromaticGlitch">Chromatic Glitch</option>
+                            <option value="sunbeams">Undulating Sunbeams</option>
+                            <option value="shimmer">Undulating Shimmer</option>
+                            <option value="rain">Rain</option>
+                            <option value="snowAsh">Snow / Ash</option>
+                        </Select>
+                    </FormField>
+
+                    <FormField label={`Intensity: ${Math.round(intensity * 100)}%`}>
+                        <input type="range" min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) })} className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-sky-500"/>
+                    </FormField>
+
+                    {supportsColor && (
+                        <FormField label="Color">
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    type="color" 
+                                    value={effectColor} 
+                                    onChange={e => updateCommand({ color: e.target.value })} 
+                                    className="w-10 h-10 p-1 bg-slate-700 rounded cursor-pointer"
+                                />
+                                <TextInput 
+                                    value={effectColor} 
+                                    onChange={e => updateCommand({ color: e.target.value })} 
+                                    placeholder="#FFFFFF"
+                                    className="flex-1"
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => updateCommand({ color: undefined })}
+                                    className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"
+                                    title="Reset to default"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </FormField>
+                    )}
+
+                    {effectType === 'snowAsh' && (
+                        <FormField label="Mode">
+                            <Select value={cmd.variant || 'snow'} onChange={e => updateCommand({ variant: e.target.value })}>
+                                <option value="snow">Snow</option>
+                                <option value="ash">Ash</option>
+                            </Select>
+                        </FormField>
+                    )}
+                    <p className="text-xs text-slate-400">Tip: set intensity to 0 to disable this effect.</p>
+                </>;
+            }
             case CommandType.ShowScreen: {
                 const cmd = command as ShowScreenCommand;
                 return <>

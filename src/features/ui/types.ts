@@ -1,4 +1,5 @@
 import { VNID } from '../../types';
+import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNUIAction, VNTextAlign, VNVAlign } from '../../types/shared';
 
 export interface VNFontSettings {
@@ -197,6 +198,7 @@ export interface VNUIScreen {
     music: { audioId: VNID | null, policy: 'continue' | 'stop' };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop' };
     elements: Record<VNID, VNUIElement>;
+    effects?: VNScreenOverlayEffect[];
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
     transitionOut?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
     transitionDuration?: number; // Duration in milliseconds (default 300)

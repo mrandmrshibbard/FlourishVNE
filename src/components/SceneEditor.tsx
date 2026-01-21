@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 // FIX: VNID is not exported from scene/types. Imported from ../types instead.
 import { VNID } from '../types';
 import { CommandType, VNCommand, ShowCharacterCommand, FlashScreenCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, VNScene, BranchStartCommand, BranchEndCommand, GroupCommand } from '../features/scene/types';
@@ -100,6 +101,8 @@ const CommandItem: React.FC<{
             case CommandType.FlashScreen:
                 const flashCmd = command as FlashScreenCommand;
                 return `Flash Screen: Color ${flashCmd.color}, Duration ${flashCmd.duration}s`;
+            case CommandType.SetScreenOverlayEffect:
+                return `Screen Overlay: ${command.effectType} (${Math.round((command.intensity ?? 0) * 100)}%)`;
             case CommandType.ShowScreen:
                  const screenName = project.uiScreens[command.screenId]?.name || 'Unknown Screen';
                  return `Show UI Screen: ${screenName}`;
@@ -362,6 +365,7 @@ const SceneEditor: React.FC<{
     onToggleCollapse?: () => void;
 }> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, setSelectedVariableId, onConfigureScene, className, isCollapsed, onToggleCollapse }) => {
     const { project, dispatch } = useProject();
+    const toast = useToast();
     const activeScene = project.scenes[activeSceneId];
     const dragItem = useRef<{ id: string; index: number; groupId?: string } | null>(null);
     const dragOverItem = useRef<number | null>(null);
@@ -504,6 +508,7 @@ const SceneEditor: React.FC<{
 
                 if (commandsToCopy.length > 0) {
                     setClipboard(commandsToCopy.map(cloneCommand));
+                    toast.success(`Copied ${commandsToCopy.length} command${commandsToCopy.length > 1 ? 's' : ''}`);
                 }
             }
 
@@ -554,11 +559,13 @@ const SceneEditor: React.FC<{
                 setSelectedCommands(new Set(insertedCommands.map(cmd => cmd.id)));
                 setLastSelectedIndex(lastInsertedIndex);
                 setSelectedVariableId(null);
+                toast.success(`Pasted ${insertedCommands.length} command${insertedCommands.length > 1 ? 's' : ''}`);
             }
 
             // Delete selected commands (Delete key)
             if (e.key === 'Delete' && selectedCommands.size > 0) {
                 e.preventDefault();
+                const deleteCount = selectedCommands.size;
                 selectedCommands.forEach(cmdId => {
                     const index = activeScene.commands.findIndex(c => c.id === cmdId);
                     if (index !== -1) {
@@ -570,6 +577,7 @@ const SceneEditor: React.FC<{
                 });
                 setSelectedCommands(new Set());
                 setSelectedCommandIndex(null);
+                toast.info(`Deleted ${deleteCount} command${deleteCount > 1 ? 's' : ''}`);
             }
 
             // Select All (Ctrl+A)
@@ -600,7 +608,8 @@ const SceneEditor: React.FC<{
         setSelectedCommandIndex,
         setSelectedCommands,
         setLastSelectedIndex,
-        setSelectedVariableId
+        setSelectedVariableId,
+        toast
     ]);
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, commandId: string, index: number) => {

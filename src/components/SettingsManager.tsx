@@ -1,8 +1,23 @@
 import React, { useState } from 'react';
-import { VNProject } from '../types/project';
+import { VNProject, VNProjectFont } from '../types/project';
 import { VNProjectUI, VNFontSettings } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
-import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, MusicalNoteIcon } from './icons';
+import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, MusicalNoteIcon, TrashIcon } from './icons';
+import { VNID } from '../types';
+
+function isEditorDebugEnabled(): boolean {
+    try {
+        return window.localStorage.getItem('flourish:editorDebug') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function editorDebugLog(...args: unknown[]): void {
+    if (!isEditorDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+}
 
 interface SettingsManagerProps {
     project: VNProject;
@@ -13,12 +28,12 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const [activeSection, setActiveSection] = useState<'general' | 'ui' | 'fonts' | 'screens'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
-        console.log('[SettingsManager] updateUI called with:', updates);
+        editorDebugLog('[SettingsManager] updateUI called with:', updates);
         dispatch({ type: 'UPDATE_UI', payload: updates });
     };
 
     const updateProject = (updates: Partial<VNProject>) => {
-        console.log('[SettingsManager] updateProject called with:', updates);
+        editorDebugLog('[SettingsManager] updateProject called with:', updates);
         dispatch({ type: 'UPDATE_PROJECT', payload: updates });
     };
 
@@ -146,7 +161,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
     const allImages = Object.values(project.images || {}) as any[];
     const allVideos = Object.values(project.videos || {}) as any[];
 
-    console.log('[UIAssetsSettings] Rendering with images:', allImages.length, allImages.map(i => i.name));
+    editorDebugLog('[UIAssetsSettings] Rendering with images:', allImages.length, allImages.map(i => i.name));
 
     const getAssetName = (assetId: string | null, type: 'image' | 'video') => {
         if (!assetId) return 'None';
@@ -166,10 +181,10 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         value={project.ui.dialogueBoxImage?.id || ''}
                         onChange={(e) => {
                             const assetId = e.target.value;
-                            console.log('[UIAssetsSettings] Dialogue box selection changed:', assetId);
-                            console.log('[UIAssetsSettings] Available images:', allImages.map(i => ({ id: i.id, name: i.name })));
+                            editorDebugLog('[UIAssetsSettings] Dialogue box selection changed:', assetId);
+                            editorDebugLog('[UIAssetsSettings] Available images:', allImages.map(i => ({ id: i.id, name: i.name })));
                             const asset = assetId ? allImages.find(img => img.id === assetId) : null;
-                            console.log('[UIAssetsSettings] Found asset:', asset);
+                            editorDebugLog('[UIAssetsSettings] Found asset:', asset);
                             onUpdate({
                                 dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null
                             });
@@ -216,14 +231,117 @@ interface FontSettingsProps {
     onUpdate: (updates: Partial<VNProjectUI>) => void;
 }
 
+const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
 const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
+    const { dispatch } = useProject();
+    
+    const projectFontsArray = Object.values((project as any).fonts || {}) as VNProjectFont[];
+    
+    // Popular fonts list for the dropdowns
+    const popularFonts = [
+        'Poppins, sans-serif',
+        'Arial, sans-serif',
+        'Helvetica, sans-serif',
+        'Verdana, sans-serif',
+        'Times New Roman, serif',
+        'Georgia, serif',
+        'Courier New, monospace',
+        'Pacifico, cursive',
+        'Lato, sans-serif',
+        'Merriweather, serif',
+        'Oswald, sans-serif',
+        'Playfair Display, serif',
+        'Roboto, sans-serif',
+        'Caveat, cursive',
+    ];
+    
+    // Build font options including project fonts
+    const getFontOptions = (currentFamily: string) => {
+        const options = [...popularFonts];
+        // Add project fonts at the top
+        for (const f of projectFontsArray) {
+            if (f?.fontFamily && !options.includes(f.fontFamily)) {
+                options.unshift(f.fontFamily);
+            }
+        }
+        // Ensure current value is in list
+        if (currentFamily && !options.includes(currentFamily)) {
+            options.unshift(currentFamily);
+        }
+        return options;
+    };
+    
     const updateFont = (fontKey: keyof VNProjectUI, updates: Partial<VNFontSettings>) => {
         const currentFont = project.ui[fontKey] as VNFontSettings;
         onUpdate({ [fontKey]: { ...currentFont, ...updates } });
     };
+    
+    const addProjectFont = async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.ttf,.otf,font/ttf,font/otf';
+        input.onchange = async (e: any) => {
+            const file: File | undefined = e.target?.files?.[0];
+            if (!file) return;
+
+            const baseName = file.name.replace(/\.(ttf|otf)$/i, '').trim() || 'Custom Font';
+            const dataUrl = await fileToBase64(file);
+
+            const newId = `font-${Math.random().toString(36).substring(2, 9)}` as VNID;
+            const existingFamilies = new Set(
+                Object.values((project as any).fonts || {}).map((f: any) => (f?.fontFamily || '').toLowerCase())
+            );
+            let fontFamily = baseName;
+            if (existingFamilies.has(fontFamily.toLowerCase())) {
+                fontFamily = `${baseName} (${newId})`;
+            }
+
+            const newFont: VNProjectFont = {
+                id: newId,
+                name: baseName,
+                fontFamily,
+                fontUrl: dataUrl,
+                fileName: file.name,
+            };
+
+            dispatch({
+                type: 'UPDATE_PROJECT',
+                payload: {
+                    fonts: {
+                        ...((project as any).fonts || {}),
+                        [newId]: newFont,
+                    },
+                } as any,
+            });
+            
+            // Load the font into the document immediately
+            try {
+                const fontFace = new FontFace(fontFamily, `url(${dataUrl})`);
+                await fontFace.load();
+                (document as any).fonts.add(fontFace);
+            } catch (err) {
+                console.error('Failed to load uploaded font:', err);
+            }
+        };
+        input.click();
+    };
+    
+    const deleteProjectFont = (fontId: VNID) => {
+        const fontsById = { ...((project as any).fonts || {}) } as Record<VNID, VNProjectFont>;
+        delete fontsById[fontId];
+        dispatch({ type: 'UPDATE_PROJECT', payload: { fonts: fontsById } as any });
+    };
 
     const FontEditor = ({ label, fontKey }: { label: string; fontKey: keyof VNProjectUI }) => {
         const font = project.ui[fontKey] as VNFontSettings;
+        const fontOptions = getFontOptions(font.family);
 
         return (
             <div className="border border-slate-700 rounded-lg p-4">
@@ -232,12 +350,15 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-1">Family</label>
-                        <input
-                            type="text"
+                        <select
                             value={font.family}
                             onChange={(e) => updateFont(fontKey, { family: e.target.value })}
                             className="w-full bg-slate-800 text-white p-2 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                        />
+                        >
+                            {fontOptions.map(f => (
+                                <option key={f} value={f}>{f.split(',')[0]}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div>
@@ -306,6 +427,45 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
     return (
         <div className="p-6">
             <h3 className="text-xl font-bold text-white mb-6">Font Settings</h3>
+
+            {/* Project Font Library */}
+            <div className="border border-slate-700 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-semibold text-white">Project Font Library (TTF/OTF)</h4>
+                    <button
+                        onClick={addProjectFont}
+                        className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded font-medium transition-colors"
+                    >
+                        Upload Font
+                    </button>
+                </div>
+                
+                {projectFontsArray.length === 0 ? (
+                    <div className="text-slate-400 text-sm bg-slate-900/50 p-4 rounded">
+                        No custom fonts uploaded yet. Upload a .ttf or .otf file to make it available in all font pickers throughout your project.
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {projectFontsArray.map((f) => (
+                            <div key={f.id} className="flex items-center justify-between bg-slate-900/50 border border-slate-600 rounded p-3">
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-white font-medium" style={{ fontFamily: f.fontFamily }}>
+                                        {f.name}
+                                    </div>
+                                    <div className="text-xs text-slate-400">{f.fontFamily}</div>
+                                </div>
+                                <button
+                                    onClick={() => deleteProjectFont(f.id)}
+                                    className="ml-4 text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded transition-colors"
+                                    title="Delete font"
+                                >
+                                    <TrashIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             <div className="space-y-6">
                 <FontEditor label="Dialogue Name Font" fontKey="dialogueNameFont" />

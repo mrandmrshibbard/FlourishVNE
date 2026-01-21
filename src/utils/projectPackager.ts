@@ -17,7 +17,7 @@ export type ExportManifest = {
     schemaVersion: 1;
     exportedAt: string;
     project: { id: VNID; title: string };
-    embedded: { backgrounds: string[]; images: string[]; audio: string[]; videos: string[]; characters: string[]; ui: string[] };
+    embedded: { backgrounds: string[]; images: string[]; audio: string[]; videos: string[]; characters: string[]; ui: string[]; fonts: string[] };
     fetchFailures: string[];
 };
 
@@ -86,6 +86,11 @@ const mimeToExtension = (mimeType: string): string => {
         'video/mp4': 'mp4',
         'video/webm': 'webm',
         'video/ogg': 'ogv',
+        'font/ttf': 'ttf',
+        'font/otf': 'otf',
+        'application/x-font-ttf': 'ttf',
+        'application/x-font-otf': 'otf',
+        'application/font-sfnt': 'ttf',
         'application/octet-stream': 'bin',
     };
 
@@ -117,6 +122,8 @@ const extensionToMime = (extension: string): string => {
         'mp4': 'video/mp4',
         'webm': 'video/webm',
         'ogv': 'video/ogg',
+        'ttf': 'font/ttf',
+        'otf': 'font/otf',
         'bin': 'application/octet-stream',
     };
     return mimeMap[ext] || 'application/octet-stream';
@@ -146,7 +153,7 @@ export const exportProject = async (project: VNProject): Promise<boolean> => {
         schemaVersion: 1,
         exportedAt: new Date().toISOString(),
         project: { id: project.id, title: project.title },
-        embedded: { backgrounds: [], images: [], audio: [], videos: [], characters: [], ui: [] },
+        embedded: { backgrounds: [], images: [], audio: [], videos: [], characters: [], ui: [], fonts: [] },
         fetchFailures: [],
     };
 
@@ -352,6 +359,37 @@ export const exportProject = async (project: VNProject): Promise<boolean> => {
     await Promise.all(processingPromises);
     
     // Process Characters (they are self-contained with direct data URLs)
+
+        // Process Project Font Library
+        if (!projectClone.fonts) projectClone.fonts = {};
+        const fontsFolder = assetFolder.folder('fonts');
+        if (fontsFolder) {
+            for (const fontId in projectClone.fonts) {
+                const font = projectClone.fonts[fontId] as any;
+                if (!font?.fontUrl || !font?.fontFamily) continue;
+
+                const safeName = sanitizeFilename(font.name || font.fontFamily || fontId, 'font');
+
+                if (font.fontUrl.startsWith('data:')) {
+                    const { blob, mimeType } = await dataUrlToBlob(font.fontUrl);
+                    const filename = `${fontId}_${safeName}.${mimeToExtension(mimeType)}`;
+                    fontsFolder.file(filename, blob);
+                    font.fontUrl = `assets/fonts/${filename}`;
+                    addEmbedded('fonts', font.fontUrl);
+                } else {
+                    const fetched = await fetchUrlToBlob(font.fontUrl);
+                    if (fetched) {
+                        const { blob, mimeType } = fetched;
+                        const filename = `${fontId}_${safeName}.${mimeToExtension(mimeType)}`;
+                        fontsFolder.file(filename, blob);
+                        font.fontUrl = `assets/fonts/${filename}`;
+                        addEmbedded('fonts', font.fontUrl);
+                    } else {
+                        addFailure(`fonts:${fontId}`);
+                    }
+                }
+            }
+        }
     const charFolder = assetFolder.folder('characters');
     if (charFolder) {
         for (const charId in projectClone.characters) {
@@ -575,6 +613,7 @@ export const importProject = async (file: File): Promise<{ project: VNProject; m
 
     // --- DATA HYDRATION: Ensure project structure is up-to-date ---
     if (!project.images) project.images = {};
+    if (!project.fonts) project.fonts = {} as any;
     if (project.characters) {
         for (const charId in project.characters) {
             const char = project.characters[charId];
@@ -662,6 +701,11 @@ export const importProject = async (file: File): Promise<{ project: VNProject; m
     for (const char of Object.values(project.characters) as VNCharacter[]) {
         hydrationPromises.push(hydrateAsset(char.baseImageUrl).then(dataUrl => { char.baseImageUrl = dataUrl; }));
         hydrationPromises.push(hydrateAsset(char.fontUrl).then(dataUrl => { char.fontUrl = dataUrl; }));
+
+            // Hydrate project-level fonts
+            for (const font of Object.values(project.fonts || {}) as any[]) {
+                hydrationPromises.push(hydrateAsset(font.fontUrl).then((dataUrl) => { font.fontUrl = dataUrl; }));
+            }
         for (const layer of Object.values(char.layers) as VNCharacterLayer[]) {
             for (const asset of Object.values(layer.assets) as VNLayerAsset[]) {
                 hydrationPromises.push(hydrateAsset(asset.imageUrl).then(dataUrl => { asset.imageUrl = dataUrl; }));

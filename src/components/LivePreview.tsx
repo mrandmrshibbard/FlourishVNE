@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { XMarkIcon, FilmIcon } from './icons';
 import { fontSettingsToStyle } from '../utils/styleUtils';
-import { VNID, VNPosition, VNPositionPreset, VNTransition } from '../types';
+import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
 import {
     VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction
@@ -18,12 +18,33 @@ import {
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand,
     PlayMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
-    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand
+    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator } from '../features/variables/types';
+import { ScreenOverlayEffects } from './live-preview/ScreenOverlayEffects';
+
+function isRuntimeDebugEnabled(): boolean {
+    try {
+        return window.localStorage.getItem('flourish:runtimeDebug') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function runtimeDebugLog(...args: unknown[]): void {
+    if (!isRuntimeDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+}
+
+function runtimeDebugWarn(...args: unknown[]): void {
+    if (!isRuntimeDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.warn(...args);
+}
 
 // Command Handlers
 import {
@@ -106,14 +127,14 @@ const normalizeSetVariableOperator = (
     context: 'choice' | 'command' | 'ui'
 ): VNSetVariableOperator => {
     if ((operator === 'add' || operator === 'subtract') && variable.type !== 'number') {
-        console.warn(
+        runtimeDebugWarn(
             `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
         );
         return 'set';
     }
 
     if (operator === 'random' && variable.type !== 'number') {
-        console.warn(
+        runtimeDebugWarn(
             `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
         );
         return 'set';
@@ -299,7 +320,7 @@ const ButtonOverlayElement: React.FC<{
     }, [overlay.id, overlay.transition, overlay.action]);
 
     const handleClick = () => {
-        console.log('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0);
+        runtimeDebugLog('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0);
         if (overlay.clickSound) {
             try {
                 playSound(overlay.clickSound);
@@ -318,7 +339,7 @@ const ButtonOverlayElement: React.FC<{
         // CRITICAL: Commit variables to playerState BEFORE any navigation
         // This ensures JumpToScene/ReturnToPreviousScreen see the updated values
         if (setVarActions.length > 0 && onCommitVariables) {
-            console.log('[Button] Committing', setVarActions.length, 'variable changes before navigation');
+            runtimeDebugLog('[Button] Committing', setVarActions.length, 'variable changes before navigation');
             onCommitVariables();
         }
         
@@ -540,15 +561,34 @@ const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
     useEffect(() => {
         if (!ref.current) return;
         const el = ref.current;
+        let rafId: number | null = null;
+        
         const obs = new ResizeObserver(() => {
-            const r = el.getBoundingClientRect();
-            setSize({ width: r.width, height: r.height });
+            // Debounce with RAF to avoid rapid updates
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+            }
+            rafId = requestAnimationFrame(() => {
+                const r = el.getBoundingClientRect();
+                setSize(prev => {
+                    // Only update if size actually changed
+                    if (prev.width === r.width && prev.height === r.height) {
+                        return prev;
+                    }
+                    return { width: r.width, height: r.height };
+                });
+            });
         });
         obs.observe(el);
         // initial measure
         const r = el.getBoundingClientRect();
         setSize({ width: r.width, height: r.height });
-        return () => obs.disconnect();
+        return () => {
+            obs.disconnect();
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+            }
+        };
     }, [ref]);
     return size;
 }
@@ -735,7 +775,7 @@ const ButtonElement: React.FC<{
         
         // CRITICAL: Commit UI variables to playerState before any navigation
         if (setVarActions.length > 0 && onCommitVariables) {
-            console.log('[UI Button] Committing', setVarActions.length, 'variable changes before navigation');
+            runtimeDebugLog('[UI Button] Committing', setVarActions.length, 'variable changes before navigation');
             onCommitVariables();
         }
         
@@ -784,7 +824,7 @@ const AssetCyclerElement: React.FC<{
     const layer = character?.layers[el.layerId];
     let currentAssetId = String(variables[el.variableId] || '');
     
-    console.log(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
+    runtimeDebugLog(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
     
     // Apply filtering if filterPattern is set
     let filteredAssetIds = el.assetIds;
@@ -793,7 +833,7 @@ const AssetCyclerElement: React.FC<{
         const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
         
         if (filterVarIds.length > 0) {
-            console.log(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
+            runtimeDebugLog(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
             
             // Get all filter variable values (as asset names, not IDs)
             const filterValues: Record<string, string> = {};
@@ -808,7 +848,7 @@ const AssetCyclerElement: React.FC<{
                 // Get the asset name from the ID
                 const asset = layer?.assets[assetId];
                 const assetName = asset?.name || assetId;
-                console.log(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
+                runtimeDebugLog(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
                 filterValues[varId] = assetName;
             }
             
@@ -834,7 +874,7 @@ const AssetCyclerElement: React.FC<{
                     pattern = pattern.replace(indexedRegex, (match, indexStr) => {
                         const index = parseInt(indexStr, 10);
                         const part = extractPart(assetName, index);
-                        console.log(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
+                        runtimeDebugLog(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
                         return part;
                     });
                     
@@ -855,7 +895,7 @@ const AssetCyclerElement: React.FC<{
                         if (indexMatch) {
                             const index = parseInt(indexMatch[1], 10);
                             const part = extractPart(assetName, index);
-                            console.log(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
+                            runtimeDebugLog(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
                             pattern = pattern.replace(/\{[^}]*\}/, part);
                         } else {
                             pattern = pattern.replace(/\{[^}]*\}/, assetName);
@@ -863,7 +903,7 @@ const AssetCyclerElement: React.FC<{
                     }
                 }
                 
-                console.log(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
+                runtimeDebugLog(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
                 
                 filteredAssetIds = el.assetIds.filter(assetId => {
                     const asset = layer?.assets[assetId];
@@ -871,13 +911,13 @@ const AssetCyclerElement: React.FC<{
                     
                     const matches = asset.name.toLowerCase().includes(pattern.toLowerCase());
                     if (matches) {
-                        console.log(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
+                        runtimeDebugLog(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
                     }
                     return matches;
                 });
-                console.log(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+                runtimeDebugLog(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
             } else {
-                console.log(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
+                runtimeDebugLog(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
             }
         }
     }
@@ -886,7 +926,7 @@ const AssetCyclerElement: React.FC<{
     React.useEffect(() => {
         if (!currentAssetId && filteredAssetIds.length > 0 && onVariableChange) {
             const firstAsset = filteredAssetIds[0];
-            console.log(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
+            runtimeDebugLog(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
             onVariableChange(el.variableId, firstAsset);
         }
     }, [currentAssetId, filteredAssetIds.length > 0 ? filteredAssetIds[0] : null, el.variableId, onVariableChange]);
@@ -896,7 +936,7 @@ const AssetCyclerElement: React.FC<{
         if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
             if (!filteredAssetIds.includes(currentAssetId)) {
                 const firstFiltered = filteredAssetIds[0];
-                console.log(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
+                runtimeDebugLog(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
                 onVariableChange(el.variableId, firstFiltered);
             }
         }
@@ -908,14 +948,14 @@ const AssetCyclerElement: React.FC<{
     const handlePrevious = () => {
         if (filteredAssetIds.length === 0) return;
         const newIndex = currentIndex <= 0 ? filteredAssetIds.length - 1 : currentIndex - 1;
-        console.log(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+        runtimeDebugLog(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
         onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
     };
     
     const handleNext = () => {
         if (filteredAssetIds.length === 0) return;
         const newIndex = currentIndex >= filteredAssetIds.length - 1 ? 0 : currentIndex + 1;
-        console.log(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+        runtimeDebugLog(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
         onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
     };
     
@@ -1077,13 +1117,13 @@ const UIScreenRenderer: React.FC<{
     };
     
     const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject, onCommitVariables?: () => void) => {
-        console.log('🎯 renderElement called:', element.type, element.name, element.id);
+        runtimeDebugLog('🎯 renderElement called:', element.type, element.name, element.id);
         
         // Check visibility conditions - if conditions exist and are not met, don't render
         if (element.conditions && element.conditions.length > 0) {
             const conditionsMet = evaluateConditions(element.conditions, variables);
             if (!conditionsMet) {
-                console.log('🚫 Element conditions not met, skipping render:', element.name);
+                runtimeDebugLog('🚫 Element conditions not met, skipping render:', element.name);
                 return null;
             }
         }
@@ -1408,8 +1448,8 @@ const UIScreenRenderer: React.FC<{
                 const character = project.characters[el.characterId];
                 if (!character) return null;
                 
-                console.log(`[CharacterPreview] layerVariableMap:`, el.layerVariableMap);
-                console.log(`[CharacterPreview] Available variables:`, Object.keys(variables));
+                runtimeDebugLog(`[CharacterPreview] layerVariableMap:`, el.layerVariableMap);
+                runtimeDebugLog(`[CharacterPreview] Available variables:`, Object.keys(variables));
                 
                 const imageUrls: string[] = [];
                 const videoUrls: string[] = [];
@@ -1433,31 +1473,31 @@ const UIScreenRenderer: React.FC<{
                     const variableId = el.layerVariableMap[layerId];
                     let asset = null;
                     
-                    console.log(`[CharacterPreview] Processing layer ${layer.name} (${layerId}), mapped variableId:`, variableId);
+                    runtimeDebugLog(`[CharacterPreview] Processing layer ${layer.name} (${layerId}), mapped variableId:`, variableId);
                     
                     if (variableId && variables) {
                         // Get asset from variable (variable contains asset ID as string)
                         const assetId = String(variables[variableId] || '');
-                        console.log(`[CharacterPreview] Layer ${layer.name} (${layerId}): variableId=${variableId}, assetId from variable="${assetId}"`);
-                        console.log(`[CharacterPreview] Available assets in layer:`, Object.keys(layer.assets));
+                        runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} (${layerId}): variableId=${variableId}, assetId from variable="${assetId}"`);
+                        runtimeDebugLog(`[CharacterPreview] Available assets in layer:`, Object.keys(layer.assets));
                         
                         if (assetId) {
                             asset = layer.assets[assetId];
                             if (asset) {
-                                console.log(`[CharacterPreview] ✓ Found asset: ${asset.name}`);
+                                runtimeDebugLog(`[CharacterPreview] ✓ Found asset: ${asset.name}`);
                             } else {
-                                console.warn(`[CharacterPreview] ✗ Asset ID "${assetId}" not found in layer ${layer.name}!`);
+                                runtimeDebugWarn(`[CharacterPreview] ✗ Asset ID "${assetId}" not found in layer ${layer.name}!`);
                             }
                         } else {
-                            console.log(`[CharacterPreview] Variable ${variableId} is empty, skipping layer`);
+                            runtimeDebugLog(`[CharacterPreview] Variable ${variableId} is empty, skipping layer`);
                         }
                     } else if (defaultExpression && defaultExpression.layerConfiguration[layerId]) {
                         // Get asset from default expression
                         const assetId = defaultExpression.layerConfiguration[layerId];
-                        console.log(`[CharacterPreview] Layer ${layer.name} using default expression asset: ${assetId}`);
+                        runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} using default expression asset: ${assetId}`);
                         asset = assetId ? layer.assets[assetId] : null;
                     } else {
-                        console.log(`[CharacterPreview] Layer ${layer.name} has no mapping and no default expression`);
+                        runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} has no mapping and no default expression`);
                     }
                     
                     if (asset) {
@@ -1768,9 +1808,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setMenuVariables(updatedVars);
     }, [project.variables]);
     
-    // Load custom character fonts
+    // Load custom fonts (project library + character overrides)
     useEffect(() => {
         const loadCustomFonts = async () => {
+            // Project-level font library
+            const projectFonts = (project as any).fonts || {};
+            for (const fontId in projectFonts) {
+                const font = projectFonts[fontId];
+                if (font?.fontUrl && font?.fontFamily) {
+                    try {
+                        const fontFace = new FontFace(font.fontFamily, `url(${font.fontUrl})`);
+                        await fontFace.load();
+                        (document as any).fonts.add(fontFace);
+                        runtimeDebugLog(`✓ Loaded project font: ${font.fontFamily}`);
+                    } catch (error) {
+                        console.error(`Failed to load project font ${font?.name || fontId}:`, error);
+                    }
+                }
+            }
+
             for (const charId in project.characters) {
                 const char = project.characters[charId];
                 if (char.fontUrl && char.fontFamily) {
@@ -1779,7 +1835,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const fontFace = new FontFace(char.fontFamily, `url(${char.fontUrl})`);
                         await fontFace.load();
                         (document as any).fonts.add(fontFace);
-                        console.log(`✓ Loaded custom font: ${char.fontFamily}`);
+                        runtimeDebugLog(`✓ Loaded custom font: ${char.fontFamily}`);
                     } catch (error) {
                         console.error(`Failed to load custom font for ${char.name}:`, error);
                     }
@@ -1787,7 +1843,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
         };
         loadCustomFonts();
-    }, [project.characters]);
+    }, [project.characters, (project as any).fonts]);
     
     const musicAudioRef = useRef<HTMLAudioElement>(new Audio());
     const ambientNoiseAudioRef = useRef<HTMLAudioElement>(new Audio());
@@ -1961,28 +2017,47 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [fadeAudio]);
 
     // --- Save/Load System ---
-    const getGameSaves = useCallback((): Record<number, GameStateSave> => {
+    const savesKey = useMemo(() => `vn-saves-${project.id}`, [project.id]);
+
+    const hasElectronStorage = useCallback((): boolean => {
+        return typeof window !== 'undefined' &&
+            typeof (window as any).electronAPI !== 'undefined' &&
+            typeof (window as any).electronAPI?.storage !== 'undefined';
+    }, []);
+
+    const getGameSaves = useCallback(async (): Promise<Record<number, GameStateSave>> => {
         try {
-            const savesJson = localStorage.getItem(`vn-saves-${project.id}`);
+            if (hasElectronStorage()) {
+                const raw = await (window as any).electronAPI.storage.getItem(savesKey);
+                if (raw == null) return {};
+                // We store the object directly in Electron storage
+                return raw as Record<number, GameStateSave>;
+            }
+
+            const savesJson = localStorage.getItem(savesKey);
             return savesJson ? JSON.parse(savesJson) : {};
         } catch (e) {
-            console.warn("Failed to load saves from localStorage:", e);
+            runtimeDebugWarn('Failed to load saves from storage:', e);
             return {};
         }
-    }, [project.id]);
+    }, [hasElectronStorage, savesKey]);
 
-    const saveGameSaves = useCallback((saves: Record<number, GameStateSave>) => {
+    const saveGameSaves = useCallback(async (saves: Record<number, GameStateSave>) => {
         try {
-            localStorage.setItem(`vn-saves-${project.id}`, JSON.stringify(saves));
+            if (hasElectronStorage()) {
+                await (window as any).electronAPI.storage.setItem(savesKey, saves);
+            } else {
+                localStorage.setItem(savesKey, JSON.stringify(saves));
+            }
             savesPersistentRef.current = true;
         } catch (e) {
-            console.error("Failed to save to localStorage:", e);
+            console.error('Failed to save to storage:', e);
             // switch to in-memory saves and mark persistence as false to avoid repeated attempts
             savesPersistentRef.current = false;
             inMemorySavesRef.current = saves;
             // Could show a user notification here
         }
-    }, [project.id]);
+    }, [hasElectronStorage, savesKey]);
 
     // Export saves to a file (user can download to keep them outside localStorage)
     const exportSavesToFile = useCallback(() => {
@@ -1999,7 +2074,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [getGameSaves, project.id]);
 
     useEffect(() => {
-        setGameSaves(getGameSaves());
+        let cancelled = false;
+        (async () => {
+            const saves = await getGameSaves();
+            if (!cancelled) setGameSaves(saves);
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [getGameSaves, screenStack]);
 
     const saveGame = (slotNumber: number) => {
@@ -2010,8 +2092,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentTime: musicCurrentTime,
             isPlaying: !musicAudioRef.current.paused,
         };
-        const saves = getGameSaves();
-        saves[slotNumber] = {
+        const createSaveRecord = async () => {
+            const saves = await getGameSaves();
+            saves[slotNumber] = {
             timestamp: Date.now(),
             sceneName: project.scenes[playerState.currentSceneId]?.name || 'Unknown Scene',
             playerStateData: {
@@ -2023,21 +2106,27 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 stageState: playerState.stageState,
                 musicState: finalMusicState,
             }
+            };
+
+            // If persistence failed previously, store in memory and avoid hitting storage repeatedly
+            if (!savesPersistentRef.current) {
+                inMemorySavesRef.current = saves;
+            } else {
+                await saveGameSaves(saves);
+            }
+            setGameSaves(saves);
         };
-        // If persistence failed previously, store in memory and avoid hitting localStorage repeatedly
-        if (!savesPersistentRef.current) {
-            inMemorySavesRef.current = saves;
-        } else {
-            saveGameSaves(saves);
-        }
-        setGameSaves(saves);
+
+        void createSaveRecord();
     };
 
     const loadGame = (slotNumber: number) => {
         stopAndResetMusic();
-        const saves = savesPersistentRef.current ? getGameSaves() : inMemorySavesRef.current;
-        const saveData = saves[slotNumber];
-        if (saveData) {
+        const doLoad = async () => {
+            const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+            const saveData = saves[slotNumber];
+            if (!saveData) return;
+
             updatePlayerState({
                 mode: 'playing',
                 currentSceneId: saveData.playerStateData.currentSceneId,
@@ -2053,7 +2142,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setScreenStack([]);
             setHudStack([]);
             setIsJustLoaded(true);
-        }
+        };
+
+        void doLoad();
     };
 
 
@@ -2091,7 +2182,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
             
             if (!conditionsMet && startScene.fallbackSceneId) {
-                console.log(`Start scene "${startScene.name}" conditions not met, using fallback`);
+                runtimeDebugLog(`Start scene "${startScene.name}" conditions not met, using fallback`);
                 startSceneId = startScene.fallbackSceneId;
             }
         }
@@ -2099,7 +2190,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Initialize uiVariables with the same initial values as game variables
     setUiVariables(initialVariables);
     uiVariablesRef.current = initialVariables;
-    console.log('[CLEAR] Dirty set cleared after startNewGame');
+    runtimeDebugLog('[CLEAR] Dirty set cleared after startNewGame');
     uiDirtyVariableIdsRef.current.clear();
         
     updatePlayerState({
@@ -2109,7 +2200,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentIndex: 0,
             commandStack: [],
             variables: initialVariables,
-            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5 } },
+            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
             history: [],
             uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
@@ -2185,7 +2276,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Use default value if runtime value is not set
             const effectiveVarValue = varValue !== undefined ? varValue : (projectVar ? projectVar.defaultValue : undefined);
     
-            console.log('[DEBUG evaluateConditions]', {
+            runtimeDebugLog('[DEBUG evaluateConditions]', {
                 variableId: condition.variableId,
                 operator: condition.operator,
                 conditionValue: condition.value,
@@ -2195,7 +2286,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
     
             if (effectiveVarValue === undefined) {
-                console.log('[DEBUG evaluateConditions] Variable undefined, returning false');
+                runtimeDebugLog('[DEBUG evaluateConditions] Variable undefined, returning false');
                 return false; // condition on non-existent variable is false
             }
             
@@ -2217,7 +2308,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // If variable contains an asset ID, try to get the asset name for comparison
             if (stringVarValue.startsWith('asset-')) {
                 assetName = getAssetNameFromId(stringVarValue);
-                console.log('[DEBUG evaluateConditions] Variable contains asset ID, resolved name:', assetName);
+                runtimeDebugLog('[DEBUG evaluateConditions] Variable contains asset ID, resolved name:', assetName);
             }
             
             switch (condition.operator) {
@@ -2273,7 +2364,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
                         if (condTarget !== null && Number.isFinite(condTarget)) {
                             result = boolNumericForComparison > condTarget;
-                            console.log('[DEBUG evaluateConditions] Boolean comparison >', {
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison >', {
                                 effectiveVarValue,
                                 conditionValue: condition.value,
                                 boolNumericValue: boolNumericForComparison,
@@ -2287,7 +2378,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const numericVar = Number(effectiveVarValue);
                     const numericCond = Number(condition.value);
                     result = numericVar > numericCond;
-                    console.log('[DEBUG evaluateConditions] Numeric comparison >', {
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison >', {
                         effectiveVarValue,
                         conditionValue: condition.value,
                         numericVar,
@@ -2301,7 +2392,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
                         if (condTarget !== null && Number.isFinite(condTarget)) {
                             result = boolNumericForComparison < condTarget;
-                            console.log('[DEBUG evaluateConditions] Boolean comparison <', {
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison <', {
                                 effectiveVarValue,
                                 conditionValue: condition.value,
                                 boolNumericValue: boolNumericForComparison,
@@ -2315,7 +2406,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const numericVar = Number(effectiveVarValue);
                     const numericCond = Number(condition.value);
                     result = numericVar < numericCond;
-                    console.log('[DEBUG evaluateConditions] Numeric comparison <', {
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison <', {
                         effectiveVarValue,
                         conditionValue: condition.value,
                         numericVar,
@@ -2329,7 +2420,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
                         if (condTarget !== null && Number.isFinite(condTarget)) {
                             result = boolNumericForComparison >= condTarget;
-                            console.log('[DEBUG evaluateConditions] Boolean comparison >=', {
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison >=', {
                                 effectiveVarValue,
                                 conditionValue: condition.value,
                                 boolNumericValue: boolNumericForComparison,
@@ -2343,7 +2434,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const numericVar = Number(effectiveVarValue);
                     const numericCond = Number(condition.value);
                     result = numericVar >= numericCond;
-                    console.log('[DEBUG evaluateConditions] Numeric comparison >=', {
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison >=', {
                         effectiveVarValue,
                         conditionValue: condition.value,
                         numericVar,
@@ -2357,7 +2448,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
                         if (condTarget !== null && Number.isFinite(condTarget)) {
                             result = boolNumericForComparison <= condTarget;
-                            console.log('[DEBUG evaluateConditions] Boolean comparison <=', {
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison <=', {
                                 effectiveVarValue,
                                 conditionValue: condition.value,
                                 boolNumericValue: boolNumericForComparison,
@@ -2371,7 +2462,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const numericVar = Number(effectiveVarValue);
                     const numericCond = Number(condition.value);
                     result = numericVar <= numericCond;
-                    console.log('[DEBUG evaluateConditions] Numeric comparison <=', {
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison <=', {
                         effectiveVarValue,
                         conditionValue: condition.value,
                         numericVar,
@@ -2396,7 +2487,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     result = false;
             }
             
-            console.log('[DEBUG evaluateConditions] Result:', result);
+            runtimeDebugLog('[DEBUG evaluateConditions] Result:', result);
             return result;
         });
     }, [project.variables, getAssetNameFromId, normalizeToBoolean]);
@@ -2421,7 +2512,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
             // Conditions failed, check for fallback
             if (scene.fallbackSceneId && project.scenes[scene.fallbackSceneId]) {
-                console.log(`Scene "${scene.name}" conditions failed, jumping to fallback: ${scene.fallbackSceneId}`);
+                runtimeDebugLog(`Scene "${scene.name}" conditions failed, jumping to fallback: ${scene.fallbackSceneId}`);
                 sceneToPlay = scene.fallbackSceneId;
             } else {
                 // No fallback, find next scene in scene list
@@ -2429,9 +2520,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const currentIndex = sceneIds.indexOf(sceneToPlay);
                 if (currentIndex !== -1 && currentIndex < sceneIds.length - 1) {
                     sceneToPlay = sceneIds[currentIndex + 1];
-                    console.log(`Scene "${scene.name}" conditions failed, trying next scene: ${sceneToPlay}`);
+                    runtimeDebugLog(`Scene "${scene.name}" conditions failed, trying next scene: ${sceneToPlay}`);
                 } else {
-                    console.log(`Scene "${scene.name}" conditions failed and no fallback/next scene available`);
+                    runtimeDebugLog(`Scene "${scene.name}" conditions failed and no fallback/next scene available`);
                     return sceneToPlay; // Can't go anywhere, return current
                 }
             }
@@ -2682,19 +2773,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, []);
 
     const playSound = useCallback((soundId: VNID | null, volume?: number) => {
-        console.log('[SFX] playSound called with soundId:', soundId, 'volume:', volume);
+        runtimeDebugLog('[SFX] playSound called with soundId:', soundId, 'volume:', volume);
         if (!soundId) return;
         
         try {
             const url = assetResolver(soundId, 'audio');
-            console.log('[SFX] assetResolver returned URL:', url, 'for soundId:', soundId);
+            runtimeDebugLog('[SFX] assetResolver returned URL:', url, 'for soundId:', soundId);
             if (!url) {
-                console.warn(`[SFX] No audio URL found for soundId: ${soundId}`);
+                runtimeDebugWarn(`[SFX] No audio URL found for soundId: ${soundId}`);
                 return;
             }
 
             // Use HTMLAudio for SFX - more reliable in packaged environments
-            console.log('[SFX] Creating HTMLAudio element for playback');
+            runtimeDebugLog('[SFX] Creating HTMLAudio element for playback');
             const audio = new Audio(url);
             audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * settings.sfxVolume;
             
@@ -2708,11 +2799,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             
             sfxPoolRef.current.push(audio);
-            console.log('[SFX] Playing audio, volume:', audio.volume);
+            runtimeDebugLog('[SFX] Playing audio, volume:', audio.volume);
             
             audio.play()
                 .then(() => {
-                    console.log('[SFX] Audio playback started successfully');
+                    runtimeDebugLog('[SFX] Audio playback started successfully');
                 })
                 .catch(e => {
                     console.error('[SFX] Audio playback failed:', e);
@@ -2720,7 +2811,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             
             // Remove from pool when ended
             audio.addEventListener('ended', () => {
-                console.log('[SFX] Audio playback ended');
+                runtimeDebugLog('[SFX] Audio playback ended');
                 sfxPoolRef.current = sfxPoolRef.current.filter(a => a !== audio);
             }, { once: true });
                 
@@ -2774,7 +2865,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
                 });
             } else {
-                console.log('End of scene - trying to advance to next scene');
+                runtimeDebugLog('End of scene - trying to advance to next scene');
                 // Try to find the next scene in the list
                 const sceneIds = Object.keys(project.scenes);
                 const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
@@ -2785,7 +2876,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const nextScene = project.scenes[nextSceneId];
                     
                     if (nextScene) {
-                        console.log(`Advancing to next scene: ${nextSceneId}`);
+                        runtimeDebugLog(`Advancing to next scene: ${nextSceneId}`);
                         
                         const shouldFade = hasRenderedSceneRef.current;
                         const audio = musicAudioRef.current;
@@ -2824,7 +2915,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         zoom: 1,
                                         panX: 0,
                                         panY: 0,
-                                        transitionDuration: 0.5
+                                        transitionDuration: 0.5,
+                                        overlayEffects: []
                                     }
                                 },
                                 // Clear UI state
@@ -2853,7 +2945,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         }
                     } else {
                         // No valid next scene found, return to title
-                        console.log('No valid next scene - returning to title');
+                        runtimeDebugLog('No valid next scene - returning to title');
                         
                         // Stop game music and SFX immediately
                         const audio = musicAudioRef.current;
@@ -2872,7 +2964,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                 } else {
                     // This is the last scene or scene not found in list
-                    console.log('Last scene completed - returning to title');
+                    runtimeDebugLog('Last scene completed - returning to title');
                     
                     // Stop game music and SFX immediately
                     const audio = musicAudioRef.current;
@@ -2938,20 +3030,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         // Check conditions for all other commands
     const conditionsMet = evaluateConditions(command.conditions, getRuntimeVariables());
-    console.log('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'Variables:', getRuntimeVariables());
+    runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'Variables:', getRuntimeVariables());
         if (!conditionsMet) {
-            console.log('[DEBUG] Skipping command due to failed conditions');
+            runtimeDebugLog('[DEBUG] Skipping command due to failed conditions');
             updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
             return;
         }
 
         const advance = () => {
-            console.log('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
+            runtimeDebugLog('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
             // Guard: Don't advance if we've already moved past this command
             if (scheduler.alreadyAdvancedPast(playerState.currentIndex)) {
                 const last = scheduler.getLastProcessed();
                 if (last) {
-                    console.log('[DEBUG advance()] Skipping - already advanced to', last.index);
+                    runtimeDebugLog('[DEBUG advance()] Skipping - already advanced to', last.index);
                 }
                 return;
             }
@@ -2992,7 +3084,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         zoom: 1,
                                         panX: 0,
                                         panY: 0,
-                                        transitionDuration: 0.5
+                                        transitionDuration: 0.5,
+                                        overlayEffects: []
                                     }
                                 },
                                 // Clear UI state
@@ -3089,7 +3182,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     
                     // If scene changed, clear UI screens (scene cleanup)
                     if (result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId) {
-                        console.log('[Scene Cleanup] Scene changed from', previousSceneId, 'to', result.updates.currentSceneId, '- clearing UI stacks');
+                        runtimeDebugLog('[Scene Cleanup] Scene changed from', previousSceneId, 'to', result.updates.currentSceneId, '- clearing UI stacks');
                         setScreenStack([]);
                         setHudStack([]);
                         
@@ -3302,7 +3395,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.ResetScreenEffects: {
                     const cmd = command as ResetScreenEffectsCommand;
-                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration }}} : null);
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] }}} : null);
                     break;
                 }
                 case CommandType.FlashScreen: {
@@ -3313,6 +3406,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     setFlashTrigger(prev => prev + 1);
                     
                     // Let the normal advance() function handle index progression
+                    break;
+                }
+                case CommandType.SetScreenOverlayEffect: {
+                    const cmd = command as SetScreenOverlayEffectCommand;
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            screen: {
+                                ...p.stageState.screen,
+                                overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                                    type: cmd.effectType,
+                                    intensity: cmd.intensity,
+                                    variant: cmd.variant,
+                                    color: (cmd as any).color,
+                                }),
+                            }
+                        }
+                    } : null);
                     break;
                 }
                 case CommandType.ShowScreen: {
@@ -3378,17 +3490,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             
             // Handle command advancement based on async modifier
-            console.log('[DEBUG] Command execution complete:', command.type, '| shouldRunAsync:', shouldRunAsync, '| instantAdvance:', instantAdvance);
+            runtimeDebugLog('[DEBUG] Command execution complete:', command.type, '| shouldRunAsync:', shouldRunAsync, '| instantAdvance:', instantAdvance);
             if (shouldRunAsync) {
                 // Run async: advance immediately, let command complete in background
-                console.log('[DEBUG] Running async - advancing immediately');
+                runtimeDebugLog('[DEBUG] Running async - advancing immediately');
                 advance();
             } else if (instantAdvance) {
                 // Normal: advance only if command was instant
-                console.log('[DEBUG] Instant advance - advancing now');
+                runtimeDebugLog('[DEBUG] Instant advance - advancing now');
                 advance();
             } else {
-                console.log('[DEBUG] Waiting for command to handle advancement (callback/user input)');
+                runtimeDebugLog('[DEBUG] Waiting for command to handle advancement (callback/user input)');
             }
             // If !shouldRunAsync && !instantAdvance, command will handle advancement itself (e.g., setTimeout)
             } catch (error) {
@@ -3428,7 +3540,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
     };
     const handleChoiceSelect = (choice: ChoiceOption) => {
-        console.log('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
+        runtimeDebugLog('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
         updatePlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
@@ -3449,12 +3561,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
 
             for (const action of actions) {
-                console.log('[CHOICE] Processing action:', action.type, action);
+                runtimeDebugLog('[CHOICE] Processing action:', action.type, action);
                 if (action.type === UIActionType.SetVariable) {
                     const setVarAction = action as SetVariableAction;
                     const variable = project.variables[setVarAction.variableId];
                     if (!variable) {
-                        console.warn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
+                        runtimeDebugWarn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
                         continue; // Skip this action
                     }
 
@@ -3484,17 +3596,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 if (wasCoercedOperator) {
                                     if (originalOperator === 'add') {
                                         newVal = true;
-                                        console.log('[Choice Boolean Promotion] Normalized add -> set TRUE for', variable.name);
+                                        runtimeDebugLog('[Choice Boolean Promotion] Normalized add -> set TRUE for', variable.name);
                                         break;
                                     }
                                     if (originalOperator === 'subtract') {
                                         newVal = false;
-                                        console.log('[Choice Boolean Promotion] Normalized subtract -> set FALSE for', variable.name);
+                                        runtimeDebugLog('[Choice Boolean Promotion] Normalized subtract -> set FALSE for', variable.name);
                                         break;
                                     }
                                     if (originalOperator === 'random') {
                                         newVal = Math.random() >= 0.5;
-                                        console.log('[Choice Boolean Promotion] Normalized random -> set', newVal, 'for', variable.name);
+                                        runtimeDebugLog('[Choice Boolean Promotion] Normalized random -> set', newVal, 'for', variable.name);
                                         break;
                                     }
                                 }
@@ -3504,7 +3616,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 } else {
                                     const normalized = changeValStr.trim().toLowerCase();
                                     if (normalized === '' && effectiveOperator === 'set') {
-                                        console.log('[Choice Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
+                                        runtimeDebugLog('[Choice Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
                                         newVal = !currentVal;
                                     } else if (normalized === 'true' || normalized === '1') {
                                         newVal = true;
@@ -3523,7 +3635,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
 
                     newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
-                    console.log(
+                    runtimeDebugLog(
                         '[CHOICE] Set variable result:',
                         setVarAction.variableId,
                         '=>',
@@ -3536,7 +3648,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     );
                 }
             }
-            console.log('[CHOICE] Variables after actions:', JSON.stringify(newState.variables, null, 2));
+            runtimeDebugLog('[CHOICE] Variables after actions:', JSON.stringify(newState.variables, null, 2));
             
             newState.uiState = { ...newState.uiState, choices: null };
     
@@ -3572,7 +3684,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
 
     const handleUIAction = (action: VNUIAction) => {
-        console.log('handleUIAction called with:', action.type, action);
+        runtimeDebugLog('handleUIAction called with:', action.type, action);
         
         if (!playerState && action.type === UIActionType.StartNewGame) {
             startNewGame();
@@ -3588,7 +3700,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const targetScreen = project.uiScreens[targetId];
             
             if (!targetScreen) {
-                console.warn(`GoToScreen failed: Screen with ID ${targetId} not found`);
+                runtimeDebugWarn(`GoToScreen failed: Screen with ID ${targetId} not found`);
                 return;
             }
             
@@ -3659,11 +3771,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 flushSync(() => {
                                     updatePlayerState(p => {
                                         if (!p) return null;
-                                        console.log('ReturnToPreviousScreen (transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
-                                        console.log('ReturnToPreviousScreen (transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
-                                        console.log('ReturnToPreviousScreen (transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
                                         const mergedVariables = mergeDirtyUiVariables(p.variables);
-                                        console.log('ReturnToPreviousScreen (transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
                                         return {
                                             ...p,
                                             variables: mergedVariables, // Merge UI variables into game variables
@@ -3676,7 +3788,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         };
                                     });
                                 });
-                                console.log('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (with transition)');
+                                runtimeDebugLog('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (with transition)');
                                 uiDirtyVariableIdsRef.current.clear();
                             }
                         }, transitionDuration);
@@ -3689,11 +3801,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 flushSync(() => {
                                     updatePlayerState(p => {
                                         if (!p) return null;
-                                        console.log('ReturnToPreviousScreen (no transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
-                                        console.log('ReturnToPreviousScreen (no transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
-                                        console.log('ReturnToPreviousScreen (no transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
                                         const mergedVariables = mergeDirtyUiVariables(p.variables);
-                                        console.log('ReturnToPreviousScreen (no transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
                                         return {
                                             ...p,
                                             variables: mergedVariables, // Merge UI variables into game variables
@@ -3706,7 +3818,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         };
                                     });
                                 });
-                                console.log('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (no transition)');
+                                runtimeDebugLog('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (no transition)');
                                 uiDirtyVariableIdsRef.current.clear();
                             }, 0);
                         }
@@ -3758,7 +3870,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
             setUiVariables(resetVars);
             uiVariablesRef.current = resetVars;
-            console.log('[CLEAR] Dirty set cleared after QuitToTitle');
+            runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
             uiDirtyVariableIdsRef.current.clear();
             if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
         } else if (action.type === UIActionType.SaveGame) {
@@ -3766,10 +3878,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         } else if (action.type === UIActionType.LoadGame) {
             loadGame((action as LoadGameAction).slotNumber);
         } else if (action.type === UIActionType.JumpToScene) {
-            console.log('[JumpToScene] Action triggered');
+            runtimeDebugLog('[JumpToScene] Action triggered');
             const jumpAction = action as JumpToSceneAction;
             const targetScene = project.scenes[jumpAction.targetSceneId];
-            console.log('JumpToScene handler triggered:', {
+            runtimeDebugLog('JumpToScene handler triggered:', {
                 targetSceneId: jumpAction.targetSceneId,
                 sceneExists: !!targetScene,
                 sceneName: targetScene?.name,
@@ -3777,7 +3889,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 hasPlayerState: !!playerState
             });
             if (!targetScene) {
-                console.warn(`JumpToScene action failed: Scene with ID ${jumpAction.targetSceneId} not found.`);
+                runtimeDebugWarn(`JumpToScene action failed: Scene with ID ${jumpAction.targetSceneId} not found.`);
                 return;
             }
             
@@ -3800,7 +3912,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
 
             const executeJump = () => {
-                console.log('[JumpToScene] Clearing screen and HUD stacks');
+                runtimeDebugLog('[JumpToScene] Clearing screen and HUD stacks');
                 // Clear screen and HUD stacks when jumping to a scene
                 setScreenStack([]);
                 setHudStack([]);
@@ -3820,7 +3932,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 
                 // If playerState is null (jumping from title screen), initialize it
                 if (!playerState) {
-                    console.log('Initializing playerState for scene jump from title');
+                    runtimeDebugLog('Initializing playerState for scene jump from title');
                     const initialVariables: Record<VNID, string | number | boolean> = {};
                     for (const varId in project.variables) {
                         const v = project.variables[varId];
@@ -3848,7 +3960,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 zoom: 1, 
                                 panX: 0, 
                                 panY: 0, 
-                                transitionDuration: 0.5 
+                                transitionDuration: 0.5,
+                                overlayEffects: []
                             } 
                         },
                         uiState: {
@@ -3868,35 +3981,35 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             currentTime: 0,
                         }
                     });
-                    console.log('[CLEAR] Dirty set cleared after title screen jump');
+                    runtimeDebugLog('[CLEAR] Dirty set cleared after title screen jump');
                     uiDirtyVariableIdsRef.current.clear();
                 } else {
                     // Jump to the target scene and reset stage state
-                    console.log('Jumping to new scene from existing game state');
-                    console.log('[DEBUG Jump] Current variables before jump:', playerState.variables);
+                    runtimeDebugLog('Jumping to new scene from existing game state');
+                    runtimeDebugLog('[DEBUG Jump] Current variables before jump:', playerState.variables);
                     
                     // Check if we're jumping to the same scene (should preserve currentIndex)
                     const isSameScene = playerState.currentSceneId === jumpAction.targetSceneId;
-                    console.log('[DEBUG Jump] Same scene?', isSameScene, 'Current:', playerState.currentSceneId, 'Target:', jumpAction.targetSceneId);
+                    runtimeDebugLog('[DEBUG Jump] Same scene?', isSameScene, 'Current:', playerState.currentSceneId, 'Target:', jumpAction.targetSceneId);
                     
                     flushSync(() => {
                         updatePlayerState(p => {
                             if (!p) return null;
-                            console.log('Setting new scene:', {
+                            runtimeDebugLog('Setting new scene:', {
                                 targetSceneId: jumpAction.targetSceneId,
                                 commandCount: targetScene.commands.length,
                                 commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
                             });
-                            console.log('[DEBUG Jump] Variables being carried over:', p.variables);
-                            console.log('[DEBUG Jump] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
-                            console.log('[DEBUG Jump] dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                            runtimeDebugLog('[DEBUG Jump] Variables being carried over:', p.variables);
+                            runtimeDebugLog('[DEBUG Jump] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+                            runtimeDebugLog('[DEBUG Jump] dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
                             const mergedVariables = mergeDirtyUiVariables(p.variables);
-                            console.log('[DEBUG Jump] Variables after merge with uiVariables:', mergedVariables);
+                            runtimeDebugLog('[DEBUG Jump] Variables after merge with uiVariables:', mergedVariables);
                             
                             // If jumping to the same scene, preserve currentIndex and advance by 1
                             // If jumping to a different scene, reset to 0
                             const newIndex = isSameScene ? p.currentIndex + 1 : 0;
-                            console.log('[DEBUG Jump] Setting currentIndex to:', newIndex, '(was:', p.currentIndex, ')');
+                            runtimeDebugLog('[DEBUG Jump] Setting currentIndex to:', newIndex, '(was:', p.currentIndex, ')');
                             
                             return {
                                 ...p,
@@ -3916,7 +4029,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         zoom: 1, 
                                         panX: 0, 
                                         panY: 0, 
-                                        transitionDuration: 0.5 
+                                        transitionDuration: 0.5,
+                                        overlayEffects: []
                                     } 
                                 },
                                 // Clear any active UI state (dialogue, choices, etc.)
@@ -3935,7 +4049,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         });
                     });
                     // Clear dirty set after state update completes
-                    console.log('[CLEAR] Dirty set cleared after JumpToScene');
+                    runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToScene');
                     uiDirtyVariableIdsRef.current.clear();
                 }
                 
@@ -3954,11 +4068,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const setVarAction = action as SetVariableAction;
             const variable = project.variables[setVarAction.variableId];
             if (!variable) {
-                console.warn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
+                runtimeDebugWarn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
                 return;
             }
 
-            console.log('[SetVariable] RAW ACTION:', {
+            runtimeDebugLog('[SetVariable] RAW ACTION:', {
                 variableId: setVarAction.variableId,
                 variableName: variable.name,
                 variableType: variable.type,
@@ -3992,16 +4106,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // Handle boolean conversion with multiple formats
                         if (wasCoercedOperator) {
                             if (originalOperator === 'add') {
-                                console.log('[Boolean Promotion] Normalized add -> set TRUE for', variable.name);
+                                runtimeDebugLog('[Boolean Promotion] Normalized add -> set TRUE for', variable.name);
                                 return true;
                             }
                             if (originalOperator === 'subtract') {
-                                console.log('[Boolean Promotion] Normalized subtract -> set FALSE for', variable.name);
+                                runtimeDebugLog('[Boolean Promotion] Normalized subtract -> set FALSE for', variable.name);
                                 return false;
                             }
                             if (originalOperator === 'random') {
                                 const randomVal = Math.random() >= 0.5;
-                                console.log('[Boolean Promotion] Normalized random -> set', randomVal, 'for', variable.name);
+                                runtimeDebugLog('[Boolean Promotion] Normalized random -> set', randomVal, 'for', variable.name);
                                 return randomVal;
                             }
                         }
@@ -4012,7 +4126,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const normalized = changeValStr.trim().toLowerCase();
                         // Empty string or whitespace for a boolean in 'set' mode = toggle current value
                         if (normalized === '' && effectiveOperator === 'set') {
-                            console.log('[Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
+                            runtimeDebugLog('[Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
                             return !currentVal;
                         }
                         // Explicit true values
@@ -4040,7 +4154,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     setUiVariables(prev => {
                         const currentVal = prev[setVarAction.variableId];
                         const newVal = computeNewValue(currentVal);
-                        console.log('[SetVariable] Details (uiVariables):', {
+                        runtimeDebugLog('[SetVariable] Details (uiVariables):', {
                             variable: variable.name,
                             variableId: setVarAction.variableId,
                             rawValue: setVarAction.value,
@@ -4057,7 +4171,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     setMenuVariables(prev => {
                         const currentVal = prev[setVarAction.variableId] ?? variable.defaultValue;
                         const newVal = computeNewValue(currentVal);
-                        console.log('[SetVariable] Details (menu):', {
+                        runtimeDebugLog('[SetVariable] Details (menu):', {
                             variable: variable.name,
                             variableId: setVarAction.variableId,
                             rawValue: setVarAction.value,
@@ -4071,10 +4185,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             });
         } else if (action.type === UIActionType.CycleLayerAsset) {
-            console.log('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
+            runtimeDebugLog('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
             
             const cycleAction = action as CycleLayerAssetAction;
-            console.log('CycleLayerAsset action details:', {
+            runtimeDebugLog('CycleLayerAsset action details:', {
                 characterId: cycleAction.characterId,
                 layerId: cycleAction.layerId,
                 variableId: cycleAction.variableId,
@@ -4083,22 +4197,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             
             const character = project.characters[cycleAction.characterId];
             if (!character) {
-                console.warn(`CycleLayerAsset action failed: Character with ID ${cycleAction.characterId} not found.`);
+                runtimeDebugWarn(`CycleLayerAsset action failed: Character with ID ${cycleAction.characterId} not found.`);
                 return;
             }
-            console.log('Character found:', character.name);
+            runtimeDebugLog('Character found:', character.name);
             
             const layer = character.layers[cycleAction.layerId];
             if (!layer) {
-                console.warn(`CycleLayerAsset action failed: Layer with ID ${cycleAction.layerId} not found.`);
+                runtimeDebugWarn(`CycleLayerAsset action failed: Layer with ID ${cycleAction.layerId} not found.`);
                 return;
             }
-            console.log('Layer found:', layer.name);
+            runtimeDebugLog('Layer found:', layer.name);
             
             const assetsCount = Object.keys(layer.assets || {}).length;
-            console.log('Assets count:', assetsCount);
+            runtimeDebugLog('Assets count:', assetsCount);
             if (assetsCount === 0) {
-                console.warn(`CycleLayerAsset action failed: Layer "${layer.name}" has no assets.`);
+                runtimeDebugWarn(`CycleLayerAsset action failed: Layer "${layer.name}" has no assets.`);
                 return;
             }
             
@@ -4116,7 +4230,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         newIndex = (currentIndex - 1 + assetsCount) % assetsCount;
                     }
                     
-                    console.log(`CycleLayerAsset (in-game): ${character.name} layer "${layer.name}" from index ${currentIndex} to ${newIndex} (${cycleAction.direction}), total assets: ${assetsCount}`);
+                    runtimeDebugLog(`CycleLayerAsset (in-game): ${character.name} layer "${layer.name}" from index ${currentIndex} to ${newIndex} (${cycleAction.direction}), total assets: ${assetsCount}`);
                     
                     return { 
                         ...p, 
@@ -4133,7 +4247,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     newIndex = (currentIndex - 1 + assetsCount) % assetsCount;
                 }
                 
-                console.log(`CycleLayerAsset (menu): ${character.name} layer "${layer.name}" from index ${currentIndex} to ${newIndex} (${cycleAction.direction}), total assets: ${assetsCount}`);
+                runtimeDebugLog(`CycleLayerAsset (menu): ${character.name} layer "${layer.name}" from index ${currentIndex} to ${newIndex} (${cycleAction.direction}), total assets: ${assetsCount}`);
                 
                 setMenuVariables(vars => ({
                     ...vars,
@@ -4147,7 +4261,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Use the screen's original scene ID if available, otherwise use current scene
             const targetSceneId = playerState.uiState.screenSceneId || playerState.currentSceneId;
             
-            console.log('JumpToLabel handler triggered:', { 
+            runtimeDebugLog('JumpToLabel handler triggered:', { 
                 targetLabel, 
                 currentSceneId: playerState.currentSceneId,
                 currentSceneName: project.scenes[playerState.currentSceneId]?.name,
@@ -4159,7 +4273,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Find the label in the target scene's commands
             const targetScene = project.scenes[targetSceneId];
             if (!targetScene) {
-                console.warn('JumpToLabel failed: Target scene not found');
+                runtimeDebugWarn('JumpToLabel failed: Target scene not found');
                 return;
             }
             
@@ -4167,21 +4281,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const allLabels = targetScene.commands
                 .filter(cmd => cmd.type === CommandType.Label)
                 .map(cmd => (cmd as LabelCommand).labelId);
-            console.log('JumpToLabel: Available labels in target scene:', allLabels);
+            runtimeDebugLog('JumpToLabel: Available labels in target scene:', allLabels);
             
             const labelIndex = targetScene.commands.findIndex((cmd) => 
                 cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
             );
             
             if (labelIndex === -1) {
-                console.warn(`JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
-                console.warn('Looking for label:', targetLabel);
-                console.warn('Available labels:', allLabels);
+                runtimeDebugWarn(`JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
+                runtimeDebugWarn('Looking for label:', targetLabel);
+                runtimeDebugWarn('Available labels:', allLabels);
                 return;
             }
             
-            console.log(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
-            console.log('JumpToLabel: Label command at that index:', targetScene.commands[labelIndex]);
+            runtimeDebugLog(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
+            runtimeDebugLog('JumpToLabel: Label command at that index:', targetScene.commands[labelIndex]);
             
             // Close any open HUD screens
             setHudStack([]);
@@ -4191,12 +4305,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             flushSync(() => {
                 updatePlayerState(p => {
                     if (!p) return null;
-                    console.log('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
-                    console.log('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
-                    console.log('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
-                    console.log('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                    runtimeDebugLog('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
+                    runtimeDebugLog('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                    runtimeDebugLog('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                    runtimeDebugLog('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
                     const mergedVariables = mergeDirtyUiVariables(p.variables);
-                    console.log('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                    runtimeDebugLog('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
                     return {
                         ...p,
                         currentSceneId: targetSceneId,
@@ -4219,37 +4333,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     };
                 });
             });
-            console.log('[CLEAR] Dirty set cleared after JumpToLabel');
+            runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToLabel');
             uiDirtyVariableIdsRef.current.clear();
         }
     };
 
     const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
-        console.log('[handleVariableChange] Called with:', { variableId, value, hasPlayerState: !!playerState });
+        runtimeDebugLog('[handleVariableChange] Called with:', { variableId, value, hasPlayerState: !!playerState });
         if (playerState) {
             // In-game UI screens: update uiVariables (separate from game variables)
-            console.log('[handleVariableChange] Updating uiVariables');
+            runtimeDebugLog('[handleVariableChange] Updating uiVariables');
             uiDirtyVariableIdsRef.current.add(variableId);
-            console.log('[handleVariableChange] ✓ Added to dirty set. Size now:', uiDirtyVariableIdsRef.current.size, 'IDs:', Array.from(uiDirtyVariableIdsRef.current));
+            runtimeDebugLog('[handleVariableChange] ✓ Added to dirty set. Size now:', uiDirtyVariableIdsRef.current.size, 'IDs:', Array.from(uiDirtyVariableIdsRef.current));
             setUiVariables(prev => {
                 const newVars = {
                     ...prev,
                     [variableId]: value
                 };
-                console.log('[handleVariableChange] uiVariables BEFORE:', JSON.stringify(prev, null, 2));
-                console.log('[handleVariableChange] uiVariables AFTER:', JSON.stringify(newVars, null, 2));
+                runtimeDebugLog('[handleVariableChange] uiVariables BEFORE:', JSON.stringify(prev, null, 2));
+                runtimeDebugLog('[handleVariableChange] uiVariables AFTER:', JSON.stringify(newVars, null, 2));
                 uiVariablesRef.current = newVars;
                 return newVars;
             });
         } else {
             // Pre-game menu: update menuVariables
-            console.log('[handleVariableChange] Updating menuVariables');
+            runtimeDebugLog('[handleVariableChange] Updating menuVariables');
             setMenuVariables(prev => {
                 const newVars = {
                     ...prev,
                     [variableId]: value
                 };
-                console.log('[handleVariableChange] New menuVariables:', JSON.stringify(newVars, null, 2));
+                runtimeDebugLog('[handleVariableChange] New menuVariables:', JSON.stringify(newVars, null, 2));
                 return newVars;
             });
         }
@@ -4272,29 +4386,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     const commitUiVariablesToPlayerState = useCallback(() => {
         if (uiDirtyVariableIdsRef.current.size === 0) {
-            console.log('[commitUiVariables] No dirty variables to commit');
+            runtimeDebugLog('[commitUiVariables] No dirty variables to commit');
             return;
         }
         
-        console.log('[commitUiVariables] Committing dirty variables:', Array.from(uiDirtyVariableIdsRef.current));
-        console.log('[commitUiVariables] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+        runtimeDebugLog('[commitUiVariables] Committing dirty variables:', Array.from(uiDirtyVariableIdsRef.current));
+        runtimeDebugLog('[commitUiVariables] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
         
         flushSync(() => {
             updatePlayerState(p => {
                 if (!p) {
-                    console.log('[commitUiVariables] No playerState, skipping commit');
+                    runtimeDebugLog('[commitUiVariables] No playerState, skipping commit');
                     return null;
                 }
-                console.log('[commitUiVariables] BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                runtimeDebugLog('[commitUiVariables] BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
                 const mergedVariables = mergeDirtyUiVariables(p.variables);
-                console.log('[commitUiVariables] AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                runtimeDebugLog('[commitUiVariables] AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
                 return {
                     ...p,
                     variables: mergedVariables,
                 };
             });
         });
-        console.log('[commitUiVariables] Clearing dirty set after successful commit');
+        runtimeDebugLog('[commitUiVariables] Clearing dirty set after successful commit');
         uiDirtyVariableIdsRef.current.clear();
     }, [mergeDirtyUiVariables]);
     
@@ -4670,6 +4784,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         ? (screenStack.length > 0 ? screenStack[screenStack.length - 1] : null)
         : null;
 
+    const hudScreenId = playerState?.mode === 'playing'
+        ? (hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId)
+        : null;
+
+    const activeMenuScreen = currentScreenId ? project.uiScreens[currentScreenId] : null;
+    const activeHudScreen = hudScreenId ? project.uiScreens[hudScreenId] : null;
+
+    const activeOverlayEffects: VNScreenOverlayEffect[] = normalizeOverlayEffects([
+        ...(playerState?.stageState.screen.overlayEffects ?? []),
+        ...(activeHudScreen?.effects ?? []),
+        ...(activeMenuScreen?.effects ?? []),
+    ]);
+
+    // Use fallback dimensions if stageSize hasn't been measured yet (width/height are 0)
+    const overlayWidth = (stageSize?.width && stageSize.width > 0) ? stageSize.width : 1280;
+    const overlayHeight = (stageSize?.height && stageSize.height > 0) ? stageSize.height : 720;
+
     const handleClose = () => {
         // Immediately stop music without fade
         const audio = musicAudioRef.current;
@@ -4826,6 +4957,120 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     from { opacity: 1; transform: translateX(0); }
                     to { opacity: 0; transform: translateX(100%); }
                 }
+
+                /* Runtime effects (editor + standalone) */
+                @keyframes shake {
+                    0%, 100% { transform: translate(0, 0); }
+                    25% { transform: translate(var(--shake-intensity-x, 5px), var(--shake-intensity-y, 5px)); }
+                    50% { transform: translate(calc(-1 * var(--shake-intensity-x, 5px)), calc(-1 * var(--shake-intensity-y, 5px))); }
+                    75% { transform: translate(var(--shake-intensity-x, 5px), calc(-1 * var(--shake-intensity-y, 5px))); }
+                }
+                .shake {
+                    animation: shake 0.2s ease-in-out infinite;
+                }
+
+                @keyframes flash-anim {
+                    0%, 100% { opacity: 0; }
+                    50% { opacity: 0.9; }
+                }
+
+                .vnfx-canvas {
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                }
+
+                .vnfx-scanlines {
+                    position: absolute;
+                    inset: 0;
+                    background: repeating-linear-gradient(
+                        to bottom,
+                        rgba(0, 0, 0, 0.35) 0px,
+                        rgba(0, 0, 0, 0.35) 1px,
+                        rgba(0, 0, 0, 0) 3px,
+                        rgba(0, 0, 0, 0) 4px
+                    );
+                    mix-blend-mode: overlay;
+                    animation: vnfx-scanlines-scroll 6s linear infinite;
+                }
+                @keyframes vnfx-scanlines-scroll {
+                    from { background-position: 0 0; }
+                    to { background-position: 0 60px; }
+                }
+
+                .vnfx-chromatic {
+                    position: absolute;
+                    inset: -2%;
+                    background:
+                        radial-gradient(circle at 20% 40%, rgba(255, 0, 80, 0.22), transparent 40%),
+                        radial-gradient(circle at 80% 55%, rgba(0, 220, 255, 0.20), transparent 45%),
+                        repeating-linear-gradient(
+                            to bottom,
+                            rgba(255, 255, 255, 0.06),
+                            rgba(255, 255, 255, 0.06) 2px,
+                            transparent 6px,
+                            transparent 10px
+                        );
+                    mix-blend-mode: screen;
+                    filter: blur(0.6px);
+                    animation: vnfx-chromatic-jitter 0.9s steps(2, end) infinite;
+                }
+                @keyframes vnfx-chromatic-jitter {
+                    0% { transform: translate3d(0, 0, 0); }
+                    20% { transform: translate3d(1px, -1px, 0); }
+                    40% { transform: translate3d(-1px, 1px, 0); }
+                    60% { transform: translate3d(2px, 0, 0); }
+                    80% { transform: translate3d(-2px, 1px, 0); }
+                    100% { transform: translate3d(0, 0, 0); }
+                }
+
+                .vnfx-sunbeams {
+                    position: absolute;
+                    inset: -30%;
+                    background: conic-gradient(
+                        from 0deg,
+                        rgba(255, 220, 120, 0.0),
+                        rgba(255, 220, 120, 0.35),
+                        rgba(255, 220, 120, 0.0) 18%,
+                        rgba(255, 190, 90, 0.28) 25%,
+                        rgba(255, 220, 120, 0.0) 40%,
+                        rgba(255, 220, 120, 0.32) 52%,
+                        rgba(255, 220, 120, 0.0) 68%,
+                        rgba(255, 200, 100, 0.26) 78%,
+                        rgba(255, 220, 120, 0.0)
+                    );
+                    mix-blend-mode: screen;
+                    filter: blur(10px);
+                    animation: vnfx-sunbeams-spin 18s linear infinite;
+                    transform-origin: 50% 50%;
+                }
+                @keyframes vnfx-sunbeams-spin {
+                    from { transform: rotate(0deg) scale(1); }
+                    to { transform: rotate(360deg) scale(1); }
+                }
+
+                .vnfx-shimmer {
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(
+                        120deg,
+                        transparent 0%,
+                        rgba(255, 255, 255, 0.10) 14%,
+                        transparent 28%,
+                        transparent 100%
+                    );
+                    background-size: 240% 240%;
+                    mix-blend-mode: overlay;
+                    filter: blur(0.4px);
+                    animation: vnfx-shimmer-move 2.8s ease-in-out infinite;
+                }
+                @keyframes vnfx-shimmer-move {
+                    0% { background-position: 0% 0%; }
+                    50% { background-position: 100% 100%; }
+                    100% { background-position: 0% 0%; }
+                }
             `}</style>
             <div className="w-full h-full aspect-video relative">
                 {playerState?.mode === 'playing' ? renderStage() : null}
@@ -4841,11 +5086,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         playSound={playSound}
                         variables={playerState ? (() => {
                             const vars = {...uiVariables};
-                            console.log('[Screen Stack UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
+                            runtimeDebugLog('[Screen Stack UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
                             return vars;
                         })() : (() => {
                             const vars = {...menuVariables};
-                            console.log('[Screen Stack UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
+                            runtimeDebugLog('[Screen Stack UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
                             return vars;
                         })()}
                         onVariableChange={handleVariableChange}
@@ -4870,11 +5115,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     playSound={playSound}
                                     variables={playerState ? (() => {
                                         const vars = {...uiVariables};
-                                        console.log('[HUD UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
+                                        runtimeDebugLog('[HUD UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
                                         return vars;
                                     })() : (() => {
                                         const vars = {...menuVariables};
-                                        console.log('[HUD UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
+                                        runtimeDebugLog('[HUD UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
                                         return vars;
                                     })()}
                                     onVariableChange={handleVariableChange}
@@ -4886,6 +5131,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         })()
                     )
                 }
+
+                {activeOverlayEffects.length > 0 && (
+                    <ScreenOverlayEffects
+                        effects={activeOverlayEffects}
+                        width={overlayWidth}
+                        height={overlayHeight}
+                        className="absolute inset-0 pointer-events-none z-40"
+                    />
+                )}
                 {renderPlayerUI()}
                 
                 {/* Scene transition fade overlay */}

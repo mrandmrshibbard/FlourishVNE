@@ -1,12 +1,48 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const os = require('os');
 
+// Windows GPU crashes can manifest as a blank/solid-color window + unresponsive UI.
+// Disabling hardware acceleration is a pragmatic fix for affected machines.
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+}
+
 let mainWindow;
 let isHubActive = false;
+
+function isSafeNavigationUrl(urlString) {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'file:';
+  } catch {
+    return false;
+  }
+}
+
+function hardenWebContents(contents) {
+  // Disallow opening new windows inside the app; open external URLs in browser.
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isSafeNavigationUrl(url)) {
+      return { action: 'allow' };
+    }
+    shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+
+  // Prevent in-app navigation away from our bundled file:// app.
+  contents.on('will-navigate', (event, url) => {
+    if (!isSafeNavigationUrl(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+    }
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -18,7 +54,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Allow loading external resources (CDNs)
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs')
     },
     backgroundColor: '#1a102c',
@@ -28,6 +64,44 @@ function createWindow() {
 
   // Load the built app from dist folder
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+
+  // If the renderer crashes/freezes, offer a recovery path instead of leaving a stuck window.
+  mainWindow.on('unresponsive', async () => {
+    try {
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Flourish is not responding',
+        message: 'The editor has become unresponsive. Reload the window?',
+        buttons: ['Reload', 'Quit'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (result.response === 0) mainWindow.reload();
+      else app.quit();
+    } catch {
+      app.quit();
+    }
+  });
+
+  mainWindow.webContents.on('render-process-gone', async (_event, details) => {
+    try {
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Renderer crashed',
+        message: `The editor window crashed (${details?.reason || 'unknown reason'}).`,
+        detail: 'You can reload the window, or quit the app.',
+        buttons: ['Reload', 'Quit'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (result.response === 0) mainWindow.reload();
+      else app.quit();
+    } catch {
+      app.quit();
+    }
+  });
+
+  hardenWebContents(mainWindow.webContents);
 
   // Show window when ready to avoid flicker
   mainWindow.once('ready-to-show', () => {
@@ -88,7 +162,6 @@ function createWindow() {
         {
           label: 'Documentation',
           click: async () => {
-            const { shell } = require('electron');
             await shell.openPath(path.join(__dirname, '../docs/index.html'));
           }
         },
@@ -123,11 +196,29 @@ function createWindow() {
       return;
     }
 
+    // If the renderer is already gone/crashed, don't block shutdown.
+    try {
+      if (!mainWindow.webContents || mainWindow.webContents.isDestroyed()) {
+        return;
+      }
+      if (typeof mainWindow.webContents.isCrashed === 'function' && mainWindow.webContents.isCrashed()) {
+        return;
+      }
+    } catch {
+      return;
+    }
+
     // Prevent the window from closing
     e.preventDefault();
     
     // Ask renderer to show save dialog
-    mainWindow.webContents.send('request-save-before-quit');
+    try {
+      mainWindow.webContents.send('request-save-before-quit');
+    } catch {
+      // If messaging fails (renderer disposed mid-flight), allow close.
+      mainWindow.forceClose = true;
+      mainWindow.destroy();
+    }
   });
 
   // Handle window closed
@@ -381,7 +472,7 @@ ipcMain.on('open-manager-window', (event, config) => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs')
     },
     backgroundColor: '#1a102c',
@@ -392,6 +483,8 @@ ipcMain.on('open-manager-window', (event, config) => {
   
   // Load the same app
   managerWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+
+  hardenWebContents(managerWindow.webContents);
   
   // Send window type and project data to renderer after load
   managerWindow.webContents.once('did-finish-load', () => {

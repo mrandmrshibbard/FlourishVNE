@@ -76,11 +76,19 @@ const ResizableDraggable: React.FC<{
         };
     }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
+    // Safely handle potential NaN values
+    const safeX = Number.isFinite(x) ? x : 0;
+    const safeY = Number.isFinite(y) ? y : 0;
+    const safeWidth = Number.isFinite(width) && width > 0 ? width : 10;
+    const safeHeight = Number.isFinite(height) && height > 0 ? height : 10;
+    const safeAnchorX = Number.isFinite(anchorX) ? anchorX : 0;
+    const safeAnchorY = Number.isFinite(anchorY) ? anchorY : 0;
+
     const style: React.CSSProperties = {
         position: 'absolute',
-        left: `${x}%`, top: `${y}%`,
-        width: `${width}%`, height: `${height}%`,
-        transform: `translate(-${anchorX * 100}%, -${anchorY * 100}%)`,
+        left: `${safeX}%`, top: `${safeY}%`,
+        width: `${safeWidth}%`, height: `${safeHeight}%`,
+        transform: `translate(-${safeAnchorX * 100}%, -${safeAnchorY * 100}%)`,
         cursor: isDragging ? 'grabbing' : 'grab',
     };
 

@@ -9,3 +9,6 @@ export type VNTransition = 'fade' | 'dissolve' | 'slide' | 'iris-in' | 'wipe-rig
 
 // Re-export context panels types
 export * from './context-panels';
+
+// Re-export screen effects types
+export * from './screen-effects';

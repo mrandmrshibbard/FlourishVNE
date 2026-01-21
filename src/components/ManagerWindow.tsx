@@ -7,6 +7,7 @@ import CharacterManager from './CharacterManager';
 import UIManager from './UIManager';
 import AssetManager from './AssetManager';
 import VariableManager from './VariableManager';
+import ErrorBoundary from './ErrorBoundary';
 import { focusMainWindow } from '../utils/windowManager';
 import { XMarkIcon } from './icons';
 
@@ -114,13 +115,15 @@ const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
                     />
                 )}
                 {activeTab === 'ui' && (
-                    <UIManager
-                        project={project}
-                        activeMenuScreenId={activeMenuScreenId}
-                        setActiveMenuScreenId={setActiveMenuScreenId}
-                        selectedUIElementId={selectedUIElementId}
-                        setSelectedUIElementId={setSelectedUIElementId}
-                    />
+                    <ErrorBoundary fallback={<div className="p-4 text-red-400">UI Manager failed to load. Check console.</div>}>
+                        <UIManager
+                            project={project}
+                            activeMenuScreenId={activeMenuScreenId}
+                            setActiveMenuScreenId={setActiveMenuScreenId}
+                            selectedUIElementId={selectedUIElementId}
+                            setSelectedUIElementId={setSelectedUIElementId}
+                        />
+                    </ErrorBoundary>
                 )}
                 {activeTab === 'assets' && <AssetManager />}
                 {activeTab === 'variables' && (

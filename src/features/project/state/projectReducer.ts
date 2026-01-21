@@ -2,12 +2,20 @@ import { VNProject } from '../../../types/project';
 
 export type ProjectAction_Project =
   | { type: 'SET_PROJECT'; payload: VNProject }
+  | { type: 'UPDATE_PROJECT'; payload: Partial<VNProject> }
   | { type: 'UPDATE_PROJECT_TITLE'; payload: { title: string } };
 
 export const projectReducer = (state: VNProject, action: ProjectAction_Project): VNProject => {
   switch (action.type) {
     case 'SET_PROJECT':
       return action.payload;
+
+    case 'UPDATE_PROJECT': {
+        return {
+            ...state,
+            ...action.payload,
+        };
+    }
     
     case 'UPDATE_PROJECT_TITLE': {
         return {

@@ -109,15 +109,13 @@ async function build() {
         console.log('📝 Assembling standalone player...');
         
         const distDir = path.join(__dirname, '..', 'dist-standalone');
-        const gameJsPath = path.join(distDir, 'game.js');
-        const gameCssPath = path.join(distDir, 'game.css');
+        const gameJsPath = path.join(distDir, 'game-engine.js');
         
         if (!fs.existsSync(gameJsPath)) {
-            throw new Error('Built game.js not found. Build may have failed.');
+            throw new Error('Built game-engine.js not found. Build may have failed.');
         }
         
         const gameJs = fs.readFileSync(gameJsPath, 'utf8');
-        const gameCss = fs.existsSync(gameCssPath) ? fs.readFileSync(gameCssPath, 'utf8') : '';
 
         // Step 6: Create the standalone HTML
         const templatePath = path.join(__dirname, '..', 'player-template.html');
@@ -129,10 +127,7 @@ async function build() {
         // Inject the game engine code
         html = html.replace('__GAME_ENGINE_CODE__', gameJs);
         
-        // Inject CSS if any
-        if (gameCss) {
-            html = html.replace('</head>', `<style>${gameCss}</style></head>`);
-        }
+        // Note: standalone build currently inlines CSS into the JS bundle.
         
         // Update title
         html = html.replace('<title>Visual Novel - Loading...</title>', `<title>${project.title}</title>`);

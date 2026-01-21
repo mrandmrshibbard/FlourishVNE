@@ -16,6 +16,7 @@
     "build:player": "node scripts/build-player.js",
     "build:full": "npm run build:engine && npm run build",
     "electron:dev": "npm run build:full && electron .",
+    "electron:dev:nogpu": "npm run build:full && electron . --disable-gpu --disable-gpu-compositing",
     "electron:build": "npm run build:full && electron-builder",
     "electron:build:win": "npm run build:full && electron-builder --win",
     "electron:build:mac": "npm run build:full && electron-builder --mac",

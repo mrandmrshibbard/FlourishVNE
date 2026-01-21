@@ -1,6 +1,7 @@
 import { VNID, VNPosition, VNTransition } from '../../types';
 import { VNSetVariableOperator } from '../variables/types';
 import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction } from '../../types/shared';
+import type { VNScreenOverlayEffectType, VNSnowAshVariant } from '../../types';
 
 /**
  * Command execution modifiers for parallel/async execution
@@ -60,6 +61,7 @@ export enum CommandType {
     PanZoomScreen = 'PanZoomScreen',
     ResetScreenEffects = 'ResetScreenEffects',
     FlashScreen = 'FlashScreen',
+    SetScreenOverlayEffect = 'SetScreenOverlayEffect',
     ShowScreen = 'ShowScreen',
     ShowText = 'ShowText',
     ShowImage = 'ShowImage',
@@ -227,6 +229,17 @@ export interface FlashScreenCommand extends BaseCommand {
     color: string;
     duration: number;
 }
+
+export interface SetScreenOverlayEffectCommand extends BaseCommand {
+    type: CommandType.SetScreenOverlayEffect;
+    effectType: VNScreenOverlayEffectType;
+    /** 0..1 (0 disables) */
+    intensity: number;
+    /** Only used for snowAsh */
+    variant?: VNSnowAshVariant;
+    /** Optional color for the effect (hex string like #FFAA00) */
+    color?: string;
+}
 export interface ShowScreenCommand extends BaseCommand {
     type: CommandType.ShowScreen;
     screenId: VNID;
@@ -328,7 +341,7 @@ export type VNCommand =
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
-  | FlashScreenCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
+    | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | GroupCommand;
 
 export interface VNScene {

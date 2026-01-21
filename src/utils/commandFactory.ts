@@ -129,6 +129,10 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             const command = { type, color: '#FFFFFF', duration: 0.5 };
             return command;
         }
+        case CommandType.SetScreenOverlayEffect: {
+            const command = { type, effectType: 'crtScanlines' as const, intensity: 0.5 };
+            return command;
+        }
         case CommandType.ShowScreen: {
             const command = { type, screenId: firstScreenId || '' };
             return command;

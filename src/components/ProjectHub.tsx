@@ -17,7 +17,7 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(true);
         }
 
-        // Check for updates on app start
+        // Check for updates on app start (Electron only)
         checkForUpdates();
 
         return () => {
@@ -27,16 +27,48 @@ export const ProjectHub: React.FC<{
         };
     }, []);
 
+    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
     const checkForUpdates = async () => {
         try {
+            if (!isElectron) return;
+
             const currentVersion = await (window as any).electronAPI?.getAppVersion();
             if (!currentVersion) return;
+
+            // Cache to avoid rate-limits / slow startups.
+            const cacheKey = 'githubLatestReleaseCache';
+            const cachedRaw = localStorage.getItem(cacheKey);
+            if (cachedRaw) {
+                try {
+                    const cached = JSON.parse(cachedRaw) as { tag: string; fetchedAt: number };
+                    const twelveHoursMs = 12 * 60 * 60 * 1000;
+                    if (cached?.tag && typeof cached.fetchedAt === 'number' && Date.now() - cached.fetchedAt < twelveHoursMs) {
+                        const latestVersion = cached.tag.replace('v', '');
+                        const lastShown = localStorage.getItem('lastShownChangelogVersion');
+                        if (latestVersion !== lastShown && latestVersion !== currentVersion) {
+                            setShowChangelog(true);
+                            localStorage.setItem('lastShownChangelogVersion', latestVersion);
+                        }
+                        return;
+                    }
+                } catch {
+                    // Ignore invalid cache
+                }
+            }
 
             const response = await fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest');
             if (!response.ok) return;
 
             const release = await response.json();
             const latestVersion = release.tag_name.replace('v', '');
+
+            // Update cache
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify({ tag: release.tag_name, fetchedAt: Date.now() }));
+            } catch {
+                // Ignore storage failures
+            }
 
             const lastShown = localStorage.getItem('lastShownChangelogVersion');
             if (latestVersion !== lastShown && latestVersion !== currentVersion) {

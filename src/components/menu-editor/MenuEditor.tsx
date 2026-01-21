@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
@@ -10,7 +10,21 @@ import { createUIElement } from '../../utils/uiElementFactory';
 import { fontSettingsToStyle } from '../../utils/styleUtils';
 import { PlusIcon } from '../icons';
 
+// Safe wrapper for element rendering to prevent crashes
+const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
+    try {
+        return <UIElementRenderer element={element} project={project} />;
+    } catch (err) {
+        console.error('Error rendering UI element:', element.id, err);
+        return <div className="w-full h-full bg-red-500/20 text-red-300 text-xs p-1">Render Error</div>;
+    }
+};
+
 const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
+    if (!element) {
+        return <div className="w-full h-full bg-yellow-500/20">No element</div>;
+    }
+    
     switch (element.type) {
         case UIElementType.Button:
             const btn = element as UIButtonElement;
@@ -282,20 +296,45 @@ const MenuEditor: React.FC<{
 
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+    const rafRef = useRef<number | null>(null);
+    
+    // Defer rendering elements to give the browser time to settle
+    const [isReady, setIsReady] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => setIsReady(true), 50);
+        return () => clearTimeout(timer);
+    }, [activeScreenId]);
 
     useLayoutEffect(() => {
         const updateSize = () => {
-            if (stageRef.current) {
-                const rect = stageRef.current.getBoundingClientRect();
-                 setStageSize({ width: rect.width, height: rect.height });
+            // Cancel any pending RAF to avoid rapid updates
+            if (rafRef.current !== null) {
+                cancelAnimationFrame(rafRef.current);
             }
+            rafRef.current = requestAnimationFrame(() => {
+                if (stageRef.current) {
+                    const rect = stageRef.current.getBoundingClientRect();
+                    // Only update if size actually changed
+                    setStageSize(prev => {
+                        if (prev.width === rect.width && prev.height === rect.height) {
+                            return prev;
+                        }
+                        return { width: rect.width, height: rect.height };
+                    });
+                }
+            });
         };
         const resizeObserver = new ResizeObserver(updateSize);
         if (stageRef.current) {
             resizeObserver.observe(stageRef.current);
         }
         updateSize();
-        return () => resizeObserver.disconnect();
+        return () => {
+            resizeObserver.disconnect();
+            if (rafRef.current !== null) {
+                cancelAnimationFrame(rafRef.current);
+            }
+        };
     }, [activeScreenId]);
 
     if (!screen) return <Panel title="Menu Editor">Screen not found</Panel>;
@@ -347,7 +386,7 @@ const MenuEditor: React.FC<{
                     onMouseDown={() => setSelectedElementId(null)}
                     style={getBackground()}
                 >
-                    {stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => (
+                    {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => (
                         <ResizableDraggable
                             key={element.id}
                             x={element.x} y={element.y}
@@ -361,7 +400,7 @@ const MenuEditor: React.FC<{
                             }}
                             onUpdate={updates => handleUpdateElement(element.id, updates)}
                         >
-                            <UIElementRenderer element={element} project={project} />
+                            <SafeUIElementRenderer element={element} project={project} />
                         </ResizableDraggable>
                     ))}
                 </div>

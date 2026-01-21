@@ -5,6 +5,7 @@ import { VNID } from '../../types';
 import { VNUIScreen } from '../../features/ui/types';
 import { FormField, TextInput, Select } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
+import { upsertOverlayEffect, type VNScreenOverlayEffectType } from '../../types';
 
 const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     const { project, dispatch } = useProject();
@@ -17,6 +18,30 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     };
 
     const isSpecialScreen = Object.values(project.ui).includes(screenId);
+
+    const currentEffects = screen.effects ?? [];
+    const getIntensity = (type: VNScreenOverlayEffectType): number => {
+        const e = currentEffects.find(x => x.type === type);
+        return e ? e.intensity : 0;
+    };
+    const getSnowAshVariant = (): 'snow' | 'ash' => {
+        const e = currentEffects.find(x => x.type === 'snowAsh');
+        return (e?.variant as any) === 'ash' ? 'ash' : 'snow';
+    };
+    const getColor = (type: VNScreenOverlayEffectType): string => {
+        const e = currentEffects.find(x => x.type === type);
+        return e?.color ?? '';
+    };
+    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string) => {
+        updateScreen({
+            effects: upsertOverlayEffect(currentEffects, {
+                type,
+                intensity,
+                variant,
+                color,
+            })
+        });
+    };
 
     return (
         <Panel title="Screen Properties" className="w-96 flex-shrink-0">
@@ -113,6 +138,98 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 <FormField label="Show Dialogue">
                     <input type="checkbox" checked={screen.showDialogue || false} onChange={e => updateScreen({ showDialogue: e.target.checked })} className="w-5 h-5" />
                 </FormField>
+
+                <hr className="border-slate-700 my-4" />
+                <h3 className="font-bold mb-2 text-slate-400">Screen Effects</h3>
+
+                {([
+                    { type: 'crtScanlines' as const, label: 'CRT Scanlines' },
+                    { type: 'chromaticGlitch' as const, label: 'Chromatic Glitch' },
+                    { type: 'sunbeams' as const, label: 'Undulating Sunbeams', supportsColor: true, defaultColor: '#FFCC66' },
+                    { type: 'shimmer' as const, label: 'Undulating Shimmer', supportsColor: true, defaultColor: '#FFFFFF' },
+                    { type: 'rain' as const, label: 'Rain', supportsColor: true, defaultColor: '#AADDFF' },
+                    { type: 'snowAsh' as const, label: 'Snow / Ash', supportsColor: true, defaultColor: '#FFFFFF' },
+                ] as const).map(({ type, label, supportsColor, defaultColor }) => {
+                    const intensity = getIntensity(type);
+                    const enabled = intensity > 0;
+                    const effectColor = getColor(type);
+                    return (
+                        <div key={type} className="mb-3">
+                            <label className="flex items-center gap-2 text-sm text-slate-200">
+                                <input
+                                    type="checkbox"
+                                    checked={enabled}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setEffect(type, 0.5, type === 'snowAsh' ? getSnowAshVariant() : undefined, supportsColor ? defaultColor : undefined);
+                                        } else {
+                                            setEffect(type, 0);
+                                        }
+                                    }}
+                                />
+                                <span>{label}</span>
+                            </label>
+
+                            {enabled && (
+                                <>
+                                    <div className="mt-2">
+                                        <div className="text-xs text-slate-300 mb-1">Intensity: {Math.round(intensity * 100)}%</div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.01"
+                                            value={intensity}
+                                            onChange={(e) => setEffect(type, parseFloat(e.target.value), type === 'snowAsh' ? getSnowAshVariant() : undefined, effectColor || undefined)}
+                                            className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                        />
+                                    </div>
+
+                                    {supportsColor && (
+                                        <div className="mt-2">
+                                            <div className="text-xs text-slate-300 mb-1">Color</div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="color"
+                                                    value={effectColor || defaultColor}
+                                                    onChange={(e) => setEffect(type, intensity, type === 'snowAsh' ? getSnowAshVariant() : undefined, e.target.value)}
+                                                    className="w-10 h-8 p-0 border-0 rounded cursor-pointer"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={effectColor || defaultColor}
+                                                    onChange={(e) => setEffect(type, intensity, type === 'snowAsh' ? getSnowAshVariant() : undefined, e.target.value)}
+                                                    placeholder={defaultColor}
+                                                    className="flex-1 px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEffect(type, intensity, type === 'snowAsh' ? getSnowAshVariant() : undefined, defaultColor)}
+                                                    className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"
+                                                    title="Reset to default color"
+                                                >
+                                                    Reset
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {type === 'snowAsh' && (
+                                        <FormField label="Mode">
+                                            <Select
+                                                value={getSnowAshVariant()}
+                                                onChange={(e) => setEffect('snowAsh', intensity, e.target.value as any, effectColor || undefined)}
+                                            >
+                                                <option value="snow">Snow</option>
+                                                <option value="ash">Ash</option>
+                                            </Select>
+                                        </FormField>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </Panel>
     );

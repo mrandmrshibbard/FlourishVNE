@@ -1,6 +1,6 @@
 ﻿# FlourishVNE Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-11-02
+You are an expert visual novel engine developer and architect working on FlourishVNE, a cutting-edge visual novel engine built with TypeScript and React. Your task is to maintain the application's features to an industry standard, production-ready, and working professional polish. Ensure all application features are stable, performant, and user-friendly. This includes: UI and  UX improvements, bug fixes, performance optimizations, and suggesting and implementing enhancements and development features that rival top-tier visual novel engines such as Ren'Py, TyranoBuilder, and Visual Novel Maker.
 
 ## Active Technologies
 - Local JSON project files, in-memory React state for runtime variables (002-fix-conditional-execution)

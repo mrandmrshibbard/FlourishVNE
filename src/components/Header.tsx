@@ -8,6 +8,20 @@ import ConfirmationModal from './ui/ConfirmationModal';
 import InfoModal from './ui/InfoModal';
 import ThemeSelector from './ThemeSelector';
 
+function isEditorDebugEnabled(): boolean {
+    try {
+        return window.localStorage.getItem('flourish:editorDebug') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function editorDebugLog(...args: unknown[]): void {
+    if (!isEditorDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+}
+
 const Header: React.FC<{
     onPlay: () => void;
     title: string;
@@ -27,14 +41,14 @@ const Header: React.FC<{
     const isChildWindow = isManagerWindow();
 
     useEffect(() => {
-        console.log('showExitModal changed:', showExitModal);
+        editorDebugLog('showExitModal changed:', showExitModal);
     }, [showExitModal]);
 
     // Listen for window close event from Electron
     useEffect(() => {
         if ((window as any).electronAPI?.onRequestSaveBeforeQuit) {
             (window as any).electronAPI.onRequestSaveBeforeQuit(() => {
-                console.log('Received quit request from Electron');
+                editorDebugLog('Received quit request from Electron');
                 setExitMode('electron');
                 setShowExitModal(true);
             });
@@ -74,7 +88,7 @@ const Header: React.FC<{
     };
 
     const handleHubClick = () => {
-        console.log('Hub button clicked, showing modal');
+        editorDebugLog('Hub button clicked, showing modal');
         setExitMode('hub');
         setShowExitModal(true);
     };

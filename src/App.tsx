@@ -1,10 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { UIScreenThemeProvider } from './contexts/UIScreenThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import VisualNovelEditor from './components/VisualNovelEditor';
 import { ProjectHub } from './components/ProjectHub';
 import { VNProject } from './types/project';
 import { NavigationTab } from './components/NavigationTabs';
+
+function isEditorDebugEnabled(): boolean {
+    try {
+        return window.localStorage.getItem('flourish:editorDebug') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function editorDebugLog(...args: unknown[]): void {
+    if (!isEditorDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+}
 
 const App = () => {
     const [activeProject, setActiveProject] = useState<VNProject | null>(null);
@@ -14,7 +29,7 @@ const App = () => {
     useEffect(() => {
         if ((window as any).electronAPI?.onWindowType) {
             (window as any).electronAPI.onWindowType((data: { type: NavigationTab; project?: VNProject }) => {
-                console.log('Received window data:', data);
+                editorDebugLog('Received window data:', data);
                 setInitialTab(data.type);
                 if (data.project) {
                     setActiveProject(data.project);
@@ -41,15 +56,21 @@ const App = () => {
     };
 
     if (!activeProject) {
-        return <ProjectHub onProjectSelect={handleProjectSelect} />;
+        return (
+            <ToastProvider>
+                <ProjectHub onProjectSelect={handleProjectSelect} />
+            </ToastProvider>
+        );
     }
     
     return (
-        <ProjectProvider key={activeProject.id} initialProject={activeProject}>
-            <UIScreenThemeProvider>
-                <VisualNovelEditor onExit={handleCloseProject} initialTab={initialTab} />
-            </UIScreenThemeProvider>
-        </ProjectProvider>
+        <ToastProvider>
+            <ProjectProvider key={activeProject.id} initialProject={activeProject}>
+                <UIScreenThemeProvider>
+                    <VisualNovelEditor onExit={handleCloseProject} initialTab={initialTab} />
+                </UIScreenThemeProvider>
+            </ProjectProvider>
+        </ToastProvider>
     );
 };
 

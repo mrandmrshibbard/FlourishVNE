@@ -399,6 +399,18 @@ export function generateStandaloneHTML(project: VNProject): string {
   
   <!-- JSX Runtime and React DOM Client for the game engine -->
   <script>
+    function __flourishRuntimeDebugEnabled() {
+      try {
+        return localStorage.getItem('flourish:runtimeDebug') === '1';
+      } catch (e) {
+        return false;
+      }
+    }
+    function __flourishRuntimeDebugLog() {
+      if (!__flourishRuntimeDebugEnabled()) return;
+      console.log.apply(console, arguments);
+    }
+
     // Verify React loaded
     if (typeof React === 'undefined') {
       alert('React failed to load! Check your internet connection.');
@@ -409,9 +421,9 @@ export function generateStandaloneHTML(project: VNProject): string {
       throw new Error('ReactDOM not loaded');
     }
     
-    console.log('✅ React version:', React.version);
-    console.log('✅ ReactDOM available');
-    console.log('✅ ReactDOM.createRoot:', typeof ReactDOM.createRoot);
+    __flourishRuntimeDebugLog('✅ React version:', React.version);
+    __flourishRuntimeDebugLog('✅ ReactDOM available');
+    __flourishRuntimeDebugLog('✅ ReactDOM.createRoot:', typeof ReactDOM.createRoot);
     
     // Provide jsx-runtime for the game engine bundle
     // The new JSX transform expects jsx(type, props, key) where props includes children
@@ -427,26 +439,26 @@ export function generateStandaloneHTML(project: VNProject): string {
       Fragment: React.Fragment
     };
     
-    console.log('✅ jsxRuntime configured');
+    __flourishRuntimeDebugLog('✅ jsxRuntime configured');
   </script>
 
   <!-- Game Data -->
   <script>
     window.GAME_PROJECT = ${projectData};
-    console.log('✅ Game project data loaded:', window.GAME_PROJECT.title);
+    __flourishRuntimeDebugLog('✅ Game project data loaded:', window.GAME_PROJECT.title);
   </script>
 
   <!-- Game Engine -->
   <script>
     try {
-      console.log('Loading game engine bundle...');
+      __flourishRuntimeDebugLog('Loading game engine bundle...');
       ${gameEngineCode}
-      console.log('Game engine script executed');
-      console.log('window.GameEngine:', window.GameEngine);
-      console.log('typeof window.GameEngine:', typeof window.GameEngine);
+      __flourishRuntimeDebugLog('Game engine script executed');
+      __flourishRuntimeDebugLog('window.GameEngine:', window.GameEngine);
+      __flourishRuntimeDebugLog('typeof window.GameEngine:', typeof window.GameEngine);
       if (window.GameEngine) {
-        console.log('GameEngine.mount:', window.GameEngine.mount);
-        console.log('typeof GameEngine.mount:', typeof window.GameEngine.mount);
+        __flourishRuntimeDebugLog('GameEngine.mount:', window.GameEngine.mount);
+        __flourishRuntimeDebugLog('typeof GameEngine.mount:', typeof window.GameEngine.mount);
       }
     } catch (err) {
       console.error('Error loading game engine:', err);
@@ -460,12 +472,12 @@ export function generateStandaloneHTML(project: VNProject): string {
   <script>
     (function() {
       try {
-        console.log('Bootstrap: Starting game initialization...');
-        console.log('React available:', typeof React !== 'undefined');
-        console.log('ReactDOM available:', typeof ReactDOM !== 'undefined');
-        console.log('GameEngine (var):', typeof GameEngine !== 'undefined');
-        console.log('window.GameEngine:', typeof window.GameEngine !== 'undefined');
-        console.log('GAME_PROJECT available:', typeof window.GAME_PROJECT !== 'undefined');
+        __flourishRuntimeDebugLog('Bootstrap: Starting game initialization...');
+        __flourishRuntimeDebugLog('React available:', typeof React !== 'undefined');
+        __flourishRuntimeDebugLog('ReactDOM available:', typeof ReactDOM !== 'undefined');
+        __flourishRuntimeDebugLog('GameEngine (var):', typeof GameEngine !== 'undefined');
+        __flourishRuntimeDebugLog('window.GameEngine:', typeof window.GameEngine !== 'undefined');
+        __flourishRuntimeDebugLog('GAME_PROJECT available:', typeof window.GAME_PROJECT !== 'undefined');
         
         const container = document.getElementById('game-container');
         const loadingScreen = document.getElementById('loading-screen');
@@ -484,11 +496,11 @@ export function generateStandaloneHTML(project: VNProject): string {
         if (window.GameEngine && window.GameEngine.GameEngine) {
           // It's the Module object, get the actual GameEngine from it
           gameEngine = window.GameEngine.GameEngine;
-          console.log('Found GameEngine in Module.GameEngine');
+          __flourishRuntimeDebugLog('Found GameEngine in Module.GameEngine');
         } else if (window.GameEngine && typeof window.GameEngine.mount === 'function') {
           // It's the actual GameEngine object
           gameEngine = window.GameEngine;
-          console.log('Found GameEngine directly on window');
+          __flourishRuntimeDebugLog('Found GameEngine directly on window');
         } else {
           throw new Error('Game engine failed to load. The bundle may be corrupted.');
         }
@@ -501,15 +513,35 @@ export function generateStandaloneHTML(project: VNProject): string {
           throw new Error('Game data is missing');
         }
         
-        console.log('All dependencies loaded successfully');
-        console.log('GameEngine:', gameEngine);
-        console.log('GameEngine.mount:', gameEngine.mount);
-        console.log('Mounting game engine...');
+        __flourishRuntimeDebugLog('All dependencies loaded successfully');
+        __flourishRuntimeDebugLog('GameEngine:', gameEngine);
+        __flourishRuntimeDebugLog('GameEngine.mount:', gameEngine.mount);
+        __flourishRuntimeDebugLog('Mounting game engine...');
+
+        // Load project-level custom fonts before mount so UI/menu text renders correctly.
+        (async function() {
+          try {
+            const fonts = (window.GAME_PROJECT && window.GAME_PROJECT.fonts) ? window.GAME_PROJECT.fonts : {};
+            const entries = Object.values(fonts);
+            for (const f of entries) {
+              if (!f || !f.fontUrl || !f.fontFamily) continue;
+              try {
+                const fontFace = new FontFace(f.fontFamily, 'url(' + f.fontUrl + ')');
+                await fontFace.load();
+                document.fonts.add(fontFace);
+              } catch (e) {
+                console.warn('Failed to load project font:', f && (f.name || f.fontFamily), e);
+              }
+            }
+          } catch (e) {
+            console.warn('Project font loading failed:', e);
+          }
+
+          // Initialize game using the resolved gameEngine
+          gameEngine.mount(container, window.GAME_PROJECT);
+        })();
         
-        // Initialize game using the resolved gameEngine
-        gameEngine.mount(container, window.GAME_PROJECT);
-        
-        console.log('Game mounted successfully');
+        __flourishRuntimeDebugLog('Game mounted successfully');
         
         // Hide loading screen
         setTimeout(() => {
@@ -578,6 +610,11 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
         addAsset(asset.videoUrl, `char_${char.id}_layer`);
       });
     });
+  });
+
+  // Collect project font library
+  Object.values((project as any).fonts || {}).forEach((font: any) => {
+    addAsset(font?.fontUrl, `font_${font?.id || 'project'}`);
   });
 
   // Collect audio

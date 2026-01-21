@@ -68,5 +68,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Check if key exists
     has: (key) => {
         return store.has(key);
+    },
+
+    // Unified async storage API (preferred)
+    storage: {
+        setItem: async (key, value) => {
+            store.set(key, value);
+        },
+        getItem: async (key) => {
+            const val = store.get(key);
+            return typeof val === 'undefined' ? null : val;
+        },
+        removeItem: async (key) => {
+            store.delete(key);
+        },
+        clear: async () => {
+            store.clear();
+        },
+        keys: async () => {
+            return Object.keys(store.store);
+        }
     }
 });

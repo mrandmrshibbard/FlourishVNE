@@ -6,6 +6,7 @@ import React from 'react';
 import { VNID, VNPosition, VNTransition } from '../../../types';
 import { VNCommand } from '../../../features/scene/types';
 import { ChoiceOption } from '../../../features/scene/types';
+import type { VNScreenOverlayEffect } from '../../../types';
 
 export type StageSize = { width: number; height: number };
 
@@ -105,6 +106,7 @@ export interface StageState {
         panX: number;
         panY: number;
         transitionDuration: number;
+        overlayEffects: VNScreenOverlayEffect[];
     };
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { VNFontSettings } from '../../features/ui/types';
+import { useProject } from '../../contexts/ProjectContext';
 import { FormField, TextInput, Select } from './Form';
 
 // A curated list of popular and suitable fonts for visual novels.
@@ -24,8 +25,18 @@ const FontEditor: React.FC<{
     font: VNFontSettings;
     onFontChange: (prop: keyof VNFontSettings, value: any) => void;
 }> = ({ font, onFontChange }) => {
+    const { project } = useProject();
     // Ensure the current font is in the list, even if it's a custom one.
     const fontOptions = [...popularFonts];
+
+    // Add project-level custom fonts (uploaded TTF/OTF)
+    const projectFonts = (project as any).fonts || {};
+    for (const f of Object.values(projectFonts) as any[]) {
+        if (f?.fontFamily && !fontOptions.includes(f.fontFamily)) {
+            fontOptions.unshift(f.fontFamily);
+        }
+    }
+
     if (!fontOptions.includes(font.family)) {
         fontOptions.unshift(font.family);
     }

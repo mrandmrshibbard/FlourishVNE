@@ -4,7 +4,9 @@ import {
   PanZoomScreenCommand,
   ResetScreenEffectsCommand,
   FlashScreenCommand,
+  SetScreenOverlayEffectCommand,
 } from '../../../features/scene/types';
+import { upsertOverlayEffect } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 
 /**
@@ -101,6 +103,34 @@ export function handleResetScreenEffects(
           panX: 0,
           panY: 0,
           transitionDuration: command.duration,
+          overlayEffects: [],
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Handles setting/clearing a screen overlay effect
+ */
+export function handleSetScreenOverlayEffect(
+  command: SetScreenOverlayEffectCommand,
+  context: CommandContext
+): CommandResult {
+  const { playerState } = context;
+
+  return {
+    advance: true,
+    updates: {
+      stageState: {
+        ...playerState.stageState,
+        screen: {
+          ...playerState.stageState.screen,
+          overlayEffects: upsertOverlayEffect(playerState.stageState.screen.overlayEffects, {
+            type: command.effectType,
+            intensity: command.intensity,
+            variant: command.variant,
+          }),
         },
       },
     },

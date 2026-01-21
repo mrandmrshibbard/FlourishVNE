@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { VNID } from '../types';
-import { VNProject } from '../types/project';
+import { VNProject, VNProjectFont } from '../types/project';
 import { VNScene } from '../features/scene/types';
 import { VNCharacter } from '../features/character/types';
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
@@ -242,6 +242,128 @@ const ResourceManager: React.FC<{
         videos: false,
     });
 
+    const projectFontsArray = Object.values((project as any).fonts || {}) as VNProjectFont[];
+
+    const getPrimaryFontFamily = (family: string | undefined | null): string => {
+        if (!family) return '';
+        return family.split(',')[0].trim();
+    };
+
+    const replaceFontFamilyIfMatches = (font: any, removedFamily: string, fallbackFamily: string): any => {
+        if (!font || typeof font !== 'object') return font;
+        if (!font.family || typeof font.family !== 'string') return font;
+
+        const currentPrimary = getPrimaryFontFamily(font.family);
+        const removedPrimary = getPrimaryFontFamily(removedFamily);
+
+        if (font.family === removedFamily || currentPrimary === removedPrimary) {
+            return { ...font, family: fallbackFamily };
+        }
+        return font;
+    };
+
+    const addProjectFont = async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.ttf,.otf,font/ttf,font/otf';
+        input.onchange = async (e: any) => {
+            const file: File | undefined = e.target?.files?.[0];
+            if (!file) return;
+
+            const baseName = file.name.replace(/\.(ttf|otf)$/i, '').trim() || 'Custom Font';
+            const dataUrl = await fileToBase64(file);
+
+            const newId = `font-${Math.random().toString(36).substring(2, 9)}`;
+            const existingFamilies = new Set(
+                Object.values((project as any).fonts || {}).map((f: any) => (f?.fontFamily || '').toLowerCase())
+            );
+            let fontFamily = baseName;
+            if (existingFamilies.has(fontFamily.toLowerCase())) {
+                fontFamily = `${baseName} (${newId})`;
+            }
+
+            const newFont: VNProjectFont = {
+                id: newId,
+                name: baseName,
+                fontFamily,
+                fontUrl: dataUrl,
+                fileName: file.name,
+            };
+
+            dispatch({
+                type: 'UPDATE_PROJECT',
+                payload: {
+                    fonts: {
+                        ...((project as any).fonts || {}),
+                        [newId]: newFont,
+                    },
+                } as any,
+            });
+        };
+        input.click();
+    };
+
+    const deleteProjectFont = (fontId: VNID) => {
+        const fontsById = { ...((project as any).fonts || {}) } as Record<VNID, VNProjectFont>;
+        const removed = fontsById[fontId];
+        const removedFamily = removed?.fontFamily;
+
+        delete (fontsById as any)[fontId];
+
+        // If nothing referenced it (or it was malformed), just delete.
+        if (!removedFamily) {
+            dispatch({ type: 'UPDATE_PROJECT', payload: { fonts: fontsById } as any });
+            return;
+        }
+
+        const fallbackFamily = 'Poppins, sans-serif';
+
+        // Update global dialogue/choice font settings
+        const uiUpdates: any = {
+            ...project.ui,
+            dialogueNameFont: replaceFontFamilyIfMatches(project.ui.dialogueNameFont, removedFamily, fallbackFamily),
+            dialogueTextFont: replaceFontFamilyIfMatches(project.ui.dialogueTextFont, removedFamily, fallbackFamily),
+            choiceTextFont: replaceFontFamilyIfMatches(project.ui.choiceTextFont, removedFamily, fallbackFamily),
+        };
+
+        // Update per-element UI screen fonts
+        let uiScreensChanged = false;
+        const newScreens: any = { ...project.uiScreens };
+
+        for (const screenId of Object.keys(project.uiScreens || {})) {
+            const screen: any = (project.uiScreens as any)[screenId];
+            if (!screen?.elements) continue;
+
+            let elementsChanged = false;
+            const newElements: any = { ...screen.elements };
+
+            for (const elementId of Object.keys(screen.elements)) {
+                const el: any = screen.elements[elementId];
+                if (!el || !el.font) continue;
+
+                const newFont = replaceFontFamilyIfMatches(el.font, removedFamily, fallbackFamily);
+                if (newFont !== el.font) {
+                    newElements[elementId] = { ...el, font: newFont };
+                    elementsChanged = true;
+                }
+            }
+
+            if (elementsChanged) {
+                newScreens[screenId] = { ...screen, elements: newElements };
+                uiScreensChanged = true;
+            }
+        }
+
+        dispatch({
+            type: 'UPDATE_PROJECT',
+            payload: {
+                fonts: fontsById,
+                ui: uiUpdates,
+                ...(uiScreensChanged ? { uiScreens: newScreens } : {}),
+            } as any,
+        });
+    };
+
     const handleCommitRename = (type: 'scene' | 'character' | 'variable' | 'uiScreen' | AssetType, id: VNID, name: string) => {
         switch(type) {
             case 'scene': dispatch({ type: 'UPDATE_SCENE', payload: { sceneId: id, name }}); break;
@@ -469,6 +591,40 @@ const ResourceManager: React.FC<{
                          <div>
                             <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-2">Choice Button Font</h4>
                             <FontEditor font={project.ui.choiceTextFont} onFontChange={(prop, value) => dispatch({ type: 'UPDATE_UI_FONT_CONFIG', payload: { target: 'choiceTextFont', property: prop, value }})} />
+                        </div>
+
+                        <div className="pt-2 border-t border-white/10">
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-medium text-[var(--text-secondary)]">Project Font Library (TTF/OTF)</h4>
+                                <button
+                                    onClick={addProjectFont}
+                                    className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded text-xs"
+                                >
+                                    Upload Font
+                                </button>
+                            </div>
+                            {projectFontsArray.length === 0 ? (
+                                <div className="text-xs text-slate-400">No custom fonts uploaded yet. Upload a .ttf/.otf to make it selectable in menu/dialogue font pickers.</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {projectFontsArray.map((f) => (
+                                        <div key={f.id} className="flex items-center justify-between bg-slate-900/40 border border-white/10 rounded px-2 py-2">
+                                            <div className="min-w-0">
+                                                <div className="text-sm text-white truncate" style={{ fontFamily: f.fontFamily }}>
+                                                    {f.name}
+                                                </div>
+                                                <div className="text-[11px] text-slate-400 truncate">{f.fontFamily}</div>
+                                            </div>
+                                            <button
+                                                onClick={() => deleteProjectFont(f.id)}
+                                                className="text-xs text-red-300 hover:text-red-200 px-2"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Section>
