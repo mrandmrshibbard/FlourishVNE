@@ -1,7 +1,35 @@
 @echo off
+setlocal
+
+:: Check for admin privileges
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo ====================================
+    echo  Flourish VNE - Build Desktop App
+    echo ====================================
+    echo.
+    echo This script needs to run as Administrator.
+    echo Requesting elevated privileges...
+    echo.
+    
+    :: Re-run as admin, passing the script's directory
+    powershell -Command "Start-Process '%~f0' -Verb RunAs -ArgumentList '%~dp0'"
+    exit /b
+)
+
+:: Change to the project directory (passed as argument or use script's location)
+if "%~1"=="" (
+    cd /d "%~dp0"
+) else (
+    cd /d "%~1"
+)
+
 echo ====================================
 echo  Flourish VNE - Build Desktop App
 echo ====================================
+echo.
+echo Running with Administrator privileges.
+echo Working directory: %CD%
 echo.
 echo This will build the complete Windows .exe file.
 echo The process includes:
@@ -12,6 +40,17 @@ echo - Packaging Electron app
 echo.
 echo Estimated time: 3-7 minutes
 echo.
+
+:: Clear corrupted electron-builder cache (winCodeSign)
+echo Clearing electron-builder cache (fixing symlink issues)...
+if exist "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign" (
+    rmdir /s /q "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign" 2>nul
+    echo Cache cleared.
+) else (
+    echo Cache already clean.
+)
+echo.
+
 pause
 
 echo.

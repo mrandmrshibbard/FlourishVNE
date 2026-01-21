@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Panel from './ui/Panel';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
 import { VNCharacter, VNCharacterExpression, VNCharacterLayer } from '../features/character/types';
 import { FormField, TextInput, Select } from './ui/Form';
@@ -93,6 +94,7 @@ const CharacterInspector: React.FC<{
     setSelectedExpressionId: (id: VNID | null) => void;
 }> = ({ activeCharacterId, selectedExpressionId, setSelectedExpressionId }) => {
     const { project, dispatch } = useProject();
+    const toast = useToast();
     const character = project.characters[activeCharacterId];
     const fileInputRef = useRef<HTMLInputElement>(null);
     const fontFileInputRef = useRef<HTMLInputElement>(null);
@@ -135,7 +137,7 @@ const CharacterInspector: React.FC<{
         if (file) {
             // Validate file type
             if (!file.name.toLowerCase().endsWith('.ttf') && !file.name.toLowerCase().endsWith('.otf')) {
-                alert('Please upload a TTF or OTF font file.');
+                toast.warning('Please upload a TTF or OTF font file.');
                 return;
             }
             
@@ -162,7 +164,7 @@ const CharacterInspector: React.FC<{
 
     const handleDeleteExprRequest = (expr: VNCharacterExpression) => {
         if (Object.keys(character.expressions).length <= 1) {
-            alert("You cannot delete the last expression.");
+            toast.warning("You cannot delete the last expression.");
             return;
         }
         setConfirmDeleteExpr(expr);

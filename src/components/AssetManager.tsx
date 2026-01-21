@@ -3,6 +3,7 @@ import { VNProject } from '../types/project';
 import { VNBackground, VNImage, VNAudio, VNVideo } from '../features/assets/types';
 import { VNVariable } from '../features/variables/types';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import { PlusIcon, TrashIcon, PhotoIcon, MusicalNoteIcon, FilmIcon, PencilIcon, FolderIcon, GridIcon, ListIcon, SearchIcon, ChevronRightIcon, XMarkIcon } from './icons';
 import { fileToBase64 } from '../utils/file';
 import { AssetType } from '../features/assets/state/assetReducer';
@@ -24,6 +25,7 @@ interface DirectoryNode {
 
 const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
+    const toast = useToast();
     const [selectedCategory, setSelectedCategory] = useState<AssetCategory>('backgrounds');
     const [selectedAsset, setSelectedAsset] = useState<{ id: string; type: AssetType } | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -958,6 +960,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description }) => 
 
 const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => void; accept?: string }> = ({ onUpload, accept }) => {
     const inputRef = useRef<HTMLInputElement>(null);
+    const toast = useToast();
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
@@ -993,7 +996,9 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
 
             // Show summary if there were any failures
             if (failCount > 0) {
-                alert(`Upload Summary:\n✓ ${successCount} succeeded\n✗ ${failCount} failed\n\n${errors.join('\n')}\n\nFailed files may be too large or in an unsupported format.`);
+                toast.warning(`Upload: ${successCount} succeeded, ${failCount} failed. ${errors.length > 0 ? errors[0] : 'Files may be too large or unsupported.'}`);
+            } else if (successCount > 0) {
+                toast.success(`Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''}`);
             }
 
             setIsUploading(false);

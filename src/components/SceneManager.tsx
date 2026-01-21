@@ -3,6 +3,7 @@ import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNScene } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import SceneEditor from './SceneEditor';
 import StagingArea from './StagingArea';
 import CommandPalette from './CommandPalette';
@@ -33,6 +34,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     onToggleCollapse
 }) => {
     const { dispatch } = useProject();
+    const toast = useToast();
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sceneId: VNID } | null>(null);
     const [draggedSceneId, setDraggedSceneId] = useState<VNID | null>(null);
@@ -47,7 +49,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
 
     const handleDeleteScene = (sceneId: VNID) => {
         if (Object.keys(project.scenes).length <= 1) {
-            alert("You cannot delete the last scene.");
+            toast.warning("You cannot delete the last scene.");
             return;
         }
         dispatch({ type: 'DELETE_SCENE', payload: { sceneId } });

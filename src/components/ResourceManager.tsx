@@ -7,6 +7,7 @@ import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/type
 import { VNVariable } from '../features/variables/types';
 import { VNUIScreen } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import Panel from './ui/Panel';
 import { PlusIcon, TrashIcon, PhotoIcon, MusicalNoteIcon, FilmIcon, SparkleIcon, BookmarkSquareIcon, BookOpenIcon, Cog6ToothIcon, PencilIcon, DuplicateIcon, LockClosedIcon } from './icons';
 import { fileToBase64 } from '../utils/file';
@@ -33,6 +34,7 @@ const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.
 
 const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => void; accept?: string; label?: string }> = ({ onUpload, accept, label = 'Upload' }) => {
     const inputRef = useRef<HTMLInputElement>(null);
+    const toast = useToast();
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -56,7 +58,7 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
                 
                 // Verify the data was actually read
                 if (!dataUrl || dataUrl.length < 100) {
-                    alert(`Error: File could not be read properly. The file may be corrupted or too large.`);
+                    toast.error(`Error: File could not be read properly. The file may be corrupted or too large.`);
                     if (inputRef.current) inputRef.current.value = '';
                     return;
                 }
@@ -64,7 +66,7 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
                 onUpload(file.name.split('.')[0], dataUrl);
             } catch (error) {
                 console.error('File upload error:', error);
-                alert(`Error uploading file: ${error}`);
+                toast.error(`Error uploading file: ${error}`);
             }
             
             if (inputRef.current) inputRef.current.value = ''; // Reset file input
@@ -229,6 +231,7 @@ const ResourceManager: React.FC<{
     setSelectedCommandIndex: (index: number | null) => void;
 }> = ({ project, activeSceneId, setActiveSceneId, activeMenuScreenId, setActiveMenuScreenId, activeCharacterId, setActiveCharacterId, selectedVariableId, setSelectedVariableId, selectedCommandIndex, setSelectedCommandIndex }) => {
     const { dispatch } = useProject();
+    const toast = useToast();
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: any[] } | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<{
@@ -420,7 +423,7 @@ const ResourceManager: React.FC<{
 
     const handleDeleteRequest = (type: 'scene' | 'character' | 'variable' | 'uiScreen' | AssetType, item: { id: VNID, name: string }) => {
         if (type === 'scene' && Object.keys(project.scenes).length <= 1) {
-            alert("You cannot delete the last scene.");
+            toast.warning("You cannot delete the last scene.");
             return;
         }
         setConfirmDelete({ type, item });
