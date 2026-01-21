@@ -30,6 +30,8 @@ import { FormField, Select, TextInput, TextArea } from './ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon } from './icons';
 import AssetSelector from './ui/AssetSelector';
 import ActionEditor from './menu-editor/ActionEditor';
+import SearchableSelect from './ui/SearchableSelect';
+import TransitionPreview from './ui/TransitionPreview';
 
 const PositionInputs: React.FC<{
     label: string;
@@ -377,20 +379,23 @@ const TransitionFields: React.FC<{
     duration: number;
     onUpdate: (updates: { transition?: VNTransition; duration?: number }) => void;
 }> = ({ transition, duration, onUpdate }) => (
-    <div className="grid grid-cols-2 gap-1">
-        <FormField label="Transition">
-            <Select value={transition} onChange={e => onUpdate({ transition: e.target.value as VNTransition })}>
-                <option value="fade">Fade</option>
-                <option value="dissolve">Dissolve</option>
-                <option value="slide">Slide</option>
-                <option value="iris-in">Iris</option>
-                <option value="wipe-right">Wipe</option>
-                <option value="instant">Instant</option>
-            </Select>
-        </FormField>
-        <FormField label="Duration (s)">
-            <TextInput type="number" min="0" step="0.1" value={duration} onChange={e => onUpdate({ duration: parseFloat(e.target.value) || 0 })} />
-        </FormField>
+    <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-1">
+            <FormField label="Transition">
+                <Select value={transition} onChange={e => onUpdate({ transition: e.target.value as VNTransition })}>
+                    <option value="fade">Fade</option>
+                    <option value="dissolve">Dissolve</option>
+                    <option value="slide">Slide</option>
+                    <option value="iris-in">Iris</option>
+                    <option value="wipe-right">Wipe</option>
+                    <option value="instant">Instant</option>
+                </Select>
+            </FormField>
+            <FormField label="Duration (s)">
+                <TextInput type="number" min="0" step="0.1" value={duration} onChange={e => onUpdate({ duration: parseFloat(e.target.value) || 0 })} />
+            </FormField>
+        </div>
+        <TransitionPreview transition={transition} duration={duration} />
     </div>
 );
 
@@ -639,12 +644,18 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.Dialogue: {
                 const cmd = command as DialogueCommand;
+                const characterOptions = [
+                    { value: '', label: 'Narrator' },
+                    ...Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }))
+                ];
                 return <>
                     <FormField label="Character">
-                        <Select value={cmd.characterId || ''} onChange={e => updateCommand({ characterId: e.target.value || null })}>
-                            <option value="">Narrator</option>
-                            {Object.values(project.characters).map((c: VNCharacter) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </Select>
+                        <SearchableSelect 
+                            options={characterOptions}
+                            value={cmd.characterId || ''} 
+                            onChange={(value) => updateCommand({ characterId: value || null })}
+                            placeholder="Select character..."
+                        />
                     </FormField>
                     <FormField label="Dialogue Text">
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
@@ -653,56 +664,62 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.SetBackground: {
                 const cmd = command as SetBackgroundCommand;
+                const backgroundOptions: { value: string; label: string; group?: string }[] = [];
+                if (Object.keys(project.backgrounds).length > 0) {
+                    Object.values(project.backgrounds).forEach((b: VNBackground) => {
+                        backgroundOptions.push({ value: b.id, label: b.name, group: 'Backgrounds' });
+                    });
+                }
+                if (Object.keys(project.images).length > 0) {
+                    Object.values(project.images).forEach((img: VNImage) => {
+                        backgroundOptions.push({ value: img.id, label: img.name, group: 'Images' });
+                    });
+                }
                 return <>
                     <FormField label="Background">
-                        <Select value={cmd.backgroundId} onChange={e => updateCommand({ backgroundId: e.target.value })}>
-                             {Object.keys(project.backgrounds).length === 0 && Object.keys(project.images).length === 0 && <option disabled>No backgrounds or images uploaded</option>}
-                            {Object.keys(project.backgrounds).length > 0 && (
-                                <optgroup label="Backgrounds">
-                                    {Object.values(project.backgrounds).map((b: VNBackground) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                </optgroup>
-                            )}
-                            {Object.keys(project.images).length > 0 && (
-                                <optgroup label="Images">
-                                    {Object.values(project.images).map((img: VNImage) => <option key={img.id} value={img.id}>{img.name}</option>)}
-                                </optgroup>
-                            )}
-                        </Select>
+                        <SearchableSelect 
+                            options={backgroundOptions}
+                            value={cmd.backgroundId} 
+                            onChange={(value) => updateCommand({ backgroundId: value })}
+                            placeholder={backgroundOptions.length === 0 ? "No backgrounds or images uploaded" : "Select background..."}
+                        />
                     </FormField>
-                    <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Transition">
-                            <Select value={cmd.transition} onChange={e => updateCommand({ transition: e.target.value as VNTransition })}>
-                                <option value="fade">Fade (to black)</option>
-                                <option value="dissolve">Dissolve</option>
-                                <option value="slide">Slide</option>
-                                <option value="iris-in">Iris In</option>
-                                <option value="wipe-right">Wipe Right</option>
-                                <option value="instant">Instant</option>
-                            </Select>
-                        </FormField>
-                        <FormField label="Duration (s)">
-                            <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} />
-                        </FormField>
-                    </div>
+                    <TransitionFields 
+                        transition={cmd.transition} 
+                        duration={cmd.duration} 
+                        onUpdate={(updates) => updateCommand(updates)} 
+                    />
                 </>;
             }
             case CommandType.ShowCharacter: {
                  const cmd = command as ShowCharacterCommand;
                  const character = project.characters[cmd.characterId];
                  const isSlideTransition = cmd.transition === 'slide';
+                 const characterOptions = Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }));
+                 const expressionOptions = character 
+                    ? Object.values(character.expressions).map((expr: VNCharacterExpression) => ({ value: expr.id, label: expr.name }))
+                    : [];
                  return <>
-                    <FormField label="Character"><Select value={cmd.characterId} onChange={e => {
-                        const newChar = project.characters[e.target.value];
-                        const firstExprId = newChar ? Object.keys(newChar.expressions)[0] : '';
-                        updateCommand({ characterId: e.target.value, expressionId: firstExprId || '' })
-                    }}>
-                        {Object.keys(project.characters).length === 0 && <option disabled>No characters defined</option>}
-                        {Object.values(project.characters).map((c: VNCharacter) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </Select></FormField>
-                    <FormField label="Expression"><Select value={cmd.expressionId} onChange={e => updateCommand({ expressionId: e.target.value })}>
-                        {(!character || Object.keys(character.expressions).length === 0) && <option disabled>No expressions</option>}
-                        {character && Object.values(character.expressions).map((expr: VNCharacterExpression) => <option key={expr.id} value={expr.id}>{expr.name}</option>)}
-                    </Select></FormField>
+                    <FormField label="Character">
+                        <SearchableSelect 
+                            options={characterOptions}
+                            value={cmd.characterId} 
+                            onChange={(value) => {
+                                const newChar = project.characters[value];
+                                const firstExprId = newChar ? Object.keys(newChar.expressions)[0] : '';
+                                updateCommand({ characterId: value, expressionId: firstExprId || '' });
+                            }}
+                            placeholder={Object.keys(project.characters).length === 0 ? "No characters defined" : "Select character..."}
+                        />
+                    </FormField>
+                    <FormField label="Expression">
+                        <SearchableSelect 
+                            options={expressionOptions}
+                            value={cmd.expressionId} 
+                            onChange={(value) => updateCommand({ expressionId: value })}
+                            placeholder={(!character || Object.keys(character.expressions).length === 0) ? "No expressions" : "Select expression..."}
+                        />
+                    </FormField>
                     
                     {isSlideTransition ? (
                         <>
@@ -725,41 +742,30 @@ const PropertiesInspector: React.FC<{
                         />
                     )}
                     
-                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Transition"><Select value={cmd.transition} onChange={e => updateCommand({ transition: e.target.value as VNTransition })}>
-                            <option value="fade">Fade</option>
-                            <option value="dissolve">Dissolve</option>
-                            <option value="slide">Slide</option>
-                            <option value="iris-in">Iris</option>
-                            <option value="wipe-right">Wipe</option>
-                            <option value="instant">Instant</option>
-                        </Select></FormField>
-                        <FormField label="Duration (s)">
-                            <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} />
-                        </FormField>
-                    </div>
+                    <TransitionFields 
+                        transition={cmd.transition} 
+                        duration={cmd.duration} 
+                        onUpdate={(updates) => updateCommand(updates)} 
+                    />
                  </>;
             }
             case CommandType.HideCharacter: {
                  const cmd = command as HideCharacterCommand;
+                 const characterOptions = Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }));
                  return <>
-                    <FormField label="Character"><Select value={cmd.characterId} onChange={e => updateCommand({ characterId: e.target.value })}>
-                        {Object.keys(project.characters).length === 0 && <option disabled>No characters defined</option>}
-                        {Object.values(project.characters).map((c: VNCharacter) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </Select></FormField>
-                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Transition"><Select value={cmd.transition} onChange={e => updateCommand({ transition: e.target.value as VNTransition })}>
-                            <option value="fade">Fade</option>
-                            <option value="dissolve">Dissolve</option>
-                            <option value="slide">Slide</option>
-                            <option value="iris-in">Iris</option>
-                            <option value="wipe-right">Wipe</option>
-                            <option value="instant">Instant</option>
-                        </Select></FormField>
-                        <FormField label="Duration (s)">
-                            <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} />
-                        </FormField>
-                    </div>
+                    <FormField label="Character">
+                        <SearchableSelect 
+                            options={characterOptions}
+                            value={cmd.characterId} 
+                            onChange={(value) => updateCommand({ characterId: value })}
+                            placeholder={Object.keys(project.characters).length === 0 ? "No characters defined" : "Select character..."}
+                        />
+                    </FormField>
+                    <TransitionFields 
+                        transition={cmd.transition} 
+                        duration={cmd.duration} 
+                        onUpdate={(updates) => updateCommand(updates)} 
+                    />
                     {cmd.transition === 'slide' && <PositionInputs label="Start Position" position={cmd.startPosition} onChange={pos => updateCommand({ startPosition: pos })} />}
                     {cmd.transition === 'slide' && <PositionInputs label="End Position" position={cmd.endPosition} onChange={pos => updateCommand({ endPosition: pos })} />}
                  </>;

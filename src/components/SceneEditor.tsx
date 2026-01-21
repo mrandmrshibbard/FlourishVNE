@@ -1283,12 +1283,15 @@ const SceneEditor: React.FC<{
                                                     return;
                                                 }
 
-                                                if (!draggedCommandId) {
+                                                // Get the dragged command ID from dataTransfer (more reliable than state)
+                                                const droppedCommandId = event.dataTransfer.getData('text/plain') || draggedCommandId;
+                                                if (!droppedCommandId) {
+                                                    console.warn('[Branch Drop] No command ID found');
                                                     setDropTarget(null);
                                                     return;
                                                 }
 
-                                                const draggedIndex = activeScene.commands.findIndex(c => c.id === draggedCommandId);
+                                                const draggedIndex = activeScene.commands.findIndex(c => c.id === droppedCommandId);
                                                 if (draggedIndex === -1) {
                                                     console.warn('[Branch Drop] Could not find dragged command index');
                                                     setDropTarget(null);
@@ -1324,8 +1327,11 @@ const SceneEditor: React.FC<{
 
                                             return (
                                                 <div 
-                                                    className="ml-6 mt-2 space-y-2 border-l-2 pl-2 min-h-[40px]" 
-                                                    style={{ borderColor: `${branchColor}4d` }}
+                                                    className="ml-6 mt-2 space-y-2 pl-4 min-h-[40px] relative" 
+                                                    style={{ 
+                                                        borderLeft: `3px solid ${branchColor}`,
+                                                        borderRadius: '0 0 0 8px'
+                                                    }}
                                                     onDragOver={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
@@ -1361,9 +1367,10 @@ const SceneEditor: React.FC<{
                                                         </div>
                                                     ) : (
                                                         <>
-                                                            {branchCommands.map((branchChildCmd) => {
+                                                            {branchCommands.map((branchChildCmd, branchChildIndex) => {
                                                                 const childIndex = activeScene.commands.findIndex(c => c.id === branchChildCmd.id);
                                                                 if (childIndex === -1) return null;
+                                                                const isLastChild = branchChildIndex === branchCommands.length - 1;
                                                                 return (
                                                                     <div 
                                                                         key={branchChildCmd.id}
@@ -1415,6 +1422,19 @@ const SceneEditor: React.FC<{
                                                                         }}
                                                                         className="cursor-pointer relative"
                                                                     >
+                                                                        {/* Connector dot */}
+                                                                        <div 
+                                                                            className="absolute -left-[21px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 pointer-events-none"
+                                                                            style={{ 
+                                                                                borderColor: branchColor,
+                                                                                backgroundColor: childIndex === selectedCommandIndex ? branchColor : 'var(--bg-primary)'
+                                                                            }}
+                                                                        />
+                                                                        {/* Horizontal connector line */}
+                                                                        <div 
+                                                                            className="absolute -left-[14px] top-1/2 w-[10px] h-[2px] pointer-events-none"
+                                                                            style={{ backgroundColor: branchColor }}
+                                                                        />
                                                                         {dropTarget?.commandId === branchChildCmd.id && (
                                                                             <DragDropIndicator 
                                                                                 position={dropTarget.position} 

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { PlayIcon, ArrowLeftOnRectangleIcon, ArrowDownTrayIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { exportProject } from '../utils/projectPackager';
+import { saveRecentProject } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
 import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
 import ConfirmationModal from './ui/ConfirmationModal';
 import InfoModal from './ui/InfoModal';
+import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
 
 function isEditorDebugEnabled(): boolean {
@@ -28,7 +30,8 @@ const Header: React.FC<{
     onExit: () => void;
     onTitleChange: (newTitle: string) => void;
     navigationTabs?: React.ReactNode;
-}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs }) => {
+    onShowKeyboardShortcuts?: () => void;
+}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
@@ -36,6 +39,7 @@ const Header: React.FC<{
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [isExporting, setIsExporting] = useState(false);
+    const [isExportingQuick, setIsExportingQuick] = useState(false);
     const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
     const { project, undo, redo, canUndo, canRedo } = useProject();
     const isChildWindow = isManagerWindow();
@@ -78,12 +82,19 @@ const Header: React.FC<{
     };
 
     const handleExport = async () => {
+        setIsExportingQuick(true);
         try {
-            await exportProject(project);
+            const didSave = await exportProject(project);
+            if (didSave) {
+                // Save to recent projects now that we have a saved file
+                saveRecentProject(project);
+            }
         } catch (error) {
             console.error("Export failed:", error);
             setErrorMessage(`Failed to export project. ${error instanceof Error ? error.message : 'Unknown error'}`);
             setShowErrorModal(true);
+        } finally {
+            setIsExportingQuick(false);
         }
     };
 
@@ -103,6 +114,10 @@ const Header: React.FC<{
                 setIsExporting(false);
                 return;
             }
+            
+            // Save to recent projects now that we have a saved file
+            saveRecentProject(project);
+            
             // Wait a moment for the export to complete
             setTimeout(() => {
                 setShowExitModal(false);
@@ -216,6 +231,15 @@ const Header: React.FC<{
                             >
                                 <ArrowUturnRightIcon className="w-3.5 h-3.5" />
                             </button>
+                            {onShowKeyboardShortcuts && (
+                                <button
+                                    onClick={onShowKeyboardShortcuts}
+                                    className="bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-white font-bold p-1.5 rounded flex items-center transition-colors ml-1"
+                                    title="Keyboard Shortcuts (?)"
+                                >
+                                    <span className="w-3.5 h-3.5 flex items-center justify-center text-xs font-bold">?</span>
+                                </button>
+                            )}
                         </div>
                         <ThemeSelector />
                         <button
@@ -272,6 +296,13 @@ const Header: React.FC<{
         >
             {errorMessage}
         </InfoModal>
+        
+        {/* Export Loading Overlay */}
+        <LoadingOverlay 
+            isVisible={isExportingQuick} 
+            message="Exporting Project..." 
+            subMessage="Packaging your project files"
+        />
     </>
     );
 };

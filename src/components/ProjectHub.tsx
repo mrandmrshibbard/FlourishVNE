@@ -1,10 +1,73 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { VNProject } from '../types/project';
 import { createInitialProject } from '../constants';
-import { PlusIcon, UploadIcon, SparkleIcon } from './icons';
+import { PlusIcon, UploadIcon, SparkleIcon, ClockIcon, TrashIcon } from './icons';
 import { importProject } from '../utils/projectPackager';
 import { ChangelogModal } from './ChangelogModal';
 import { useToast } from '../contexts/ToastContext';
+import LoadingOverlay from './ui/LoadingOverlay';
+
+// Recent project metadata (stored in localStorage)
+interface RecentProject {
+    id: string;
+    title: string;
+    lastOpened: number; // timestamp
+    sceneCount: number;
+    characterCount: number;
+}
+
+const RECENT_PROJECTS_KEY = 'flourish:recentProjects';
+const MAX_RECENT_PROJECTS = 5;
+
+// Helper to save recent project metadata - exported for use by Header on successful exports
+export function saveRecentProject(project: VNProject): void {
+    try {
+        const stored = localStorage.getItem(RECENT_PROJECTS_KEY);
+        let recents: RecentProject[] = stored ? JSON.parse(stored) : [];
+        
+        // Remove existing entry for this project
+        recents = recents.filter(r => r.id !== project.id);
+        
+        // Add to front
+        recents.unshift({
+            id: project.id,
+            title: project.title || 'Untitled Project',
+            lastOpened: Date.now(),
+            sceneCount: Object.keys(project.scenes || {}).length,
+            characterCount: Object.keys(project.characters || {}).length,
+        });
+        
+        // Trim to max
+        recents = recents.slice(0, MAX_RECENT_PROJECTS);
+        
+        localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(recents));
+    } catch (e) {
+        console.warn('Failed to save recent project:', e);
+    }
+}
+
+// Helper to load recent projects
+function loadRecentProjects(): RecentProject[] {
+    try {
+        const stored = localStorage.getItem(RECENT_PROJECTS_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+// Helper to remove a recent project
+function removeRecentProject(projectId: string): RecentProject[] {
+    try {
+        const stored = localStorage.getItem(RECENT_PROJECTS_KEY);
+        let recents: RecentProject[] = stored ? JSON.parse(stored) : [];
+        recents = recents.filter(r => r.id !== projectId);
+        localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(recents));
+        return recents;
+    } catch {
+        return [];
+    }
+}
 
 export const ProjectHub: React.FC<{
     onProjectSelect: (project: VNProject) => void;
@@ -16,10 +79,17 @@ export const ProjectHub: React.FC<{
     const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
     const [updateReady, setUpdateReady] = useState(false);
     const [autoUpdateFailed, setAutoUpdateFailed] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
     const toast = useToast();
     
     // Your itch.io page URL
     const ITCHIO_URL = 'https://memento-morii1.itch.io/flourish-visual-novel-engine';
+
+    // Load recent projects on mount
+    useEffect(() => {
+        setRecentProjects(loadRecentProjects());
+    }, []);
 
     useEffect(() => {
         (window as any).__IS_MANAGER_WINDOW__ = false;
@@ -164,6 +234,7 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(false);
         }
         const newProject = createInitialProject();
+        // Don't save to recent projects until user exports/saves the project
         // The new project is not saved to localStorage; it's passed directly to the editor state.
         onProjectSelect(newProject);
     };
@@ -179,6 +250,7 @@ export const ProjectHub: React.FC<{
         const file = event.target.files?.[0];
         if (!file) return;
 
+        setIsImporting(true);
         try {
             // importProject no longer saves to localStorage.
             // It just parses the file and returns the project object.
@@ -186,16 +258,41 @@ export const ProjectHub: React.FC<{
             if ((window as any).electronAPI?.setHubActive) {
                 (window as any).electronAPI.setHubActive(false);
             }
+            // Save to recent projects
+            saveRecentProject(project);
+            toast.success('Project imported successfully!');
             onProjectSelect(project);
         } catch (error) {
             console.error("Error importing project file:", error);
             toast.error(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setIsImporting(false);
         }
 
         // Reset file input
         if (event.target) {
             event.target.value = '';
         }
+    };
+
+    const handleRemoveRecent = (projectId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const updated = removeRecentProject(projectId);
+        setRecentProjects(updated);
+        toast.info('Removed from recent projects');
+    };
+
+    // Format relative time
+    const formatTimeAgo = (timestamp: number): string => {
+        const seconds = Math.floor((Date.now() - timestamp) / 1000);
+        if (seconds < 60) return 'Just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days < 7) return `${days}d ago`;
+        return new Date(timestamp).toLocaleDateString();
     };
 
     return (
@@ -301,6 +398,47 @@ export const ProjectHub: React.FC<{
                     </button>
                     <input type="file" ref={fileInputRef} className="hidden" accept=".zip,application/zip" onChange={handleFileChange} />
                 </main>
+                
+                {/* Recent Projects Section */}
+                {recentProjects.length > 0 && (
+                    <section className="mt-10">
+                        <h3 className="text-lg font-semibold text-[var(--text-secondary)] mb-4 flex items-center gap-2">
+                            <ClockIcon className="w-5 h-5" />
+                            Recent Projects
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {recentProjects.map((recent) => (
+                                <div
+                                    key={recent.id}
+                                    className="group relative bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg p-4 cursor-pointer transition-all hover:border-[var(--accent-cyan)]/50"
+                                    onClick={handleFileOpen}
+                                    title="Import this project to continue working on it"
+                                >
+                                    <button
+                                        onClick={(e) => handleRemoveRecent(recent.id, e)}
+                                        className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 bg-[var(--bg-primary)] hover:bg-red-500/20 text-[var(--text-secondary)] hover:text-red-400 transition-all"
+                                        title="Remove from recent"
+                                    >
+                                        <TrashIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                    <h4 className="font-semibold text-[var(--text-primary)] truncate pr-8">
+                                        {recent.title}
+                                    </h4>
+                                    <p className="text-xs text-[var(--text-secondary)] mt-1">
+                                        {recent.sceneCount} scene{recent.sceneCount !== 1 ? 's' : ''} • {recent.characterCount} character{recent.characterCount !== 1 ? 's' : ''}
+                                    </p>
+                                    <p className="text-xs text-[var(--text-secondary)] opacity-70 mt-2">
+                                        {formatTimeAgo(recent.lastOpened)}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)] opacity-60 mt-3 text-center">
+                            Click a project to import it (you'll need to select the exported .zip file)
+                        </p>
+                    </section>
+                )}
+                
                  <footer className="text-center mt-12 text-[var(--text-secondary)]">
                     <p>Your work is now managed in memory. Please use the 'Export' button in the editor to save your project.</p>
                     <button
@@ -312,6 +450,11 @@ export const ProjectHub: React.FC<{
                 </footer>
             </div>
             <ChangelogModal visible={showChangelog} onClose={() => setShowChangelog(false)} />
+            <LoadingOverlay 
+                isVisible={isImporting} 
+                message="Importing Project..." 
+                subMessage="Extracting and processing files"
+            />
         </div>
     );
 };

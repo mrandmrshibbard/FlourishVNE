@@ -19,6 +19,7 @@ const SettingsManager = React.lazy(() => import('./SettingsManager'));
 const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
+import KeyboardShortcutsModal from './ui/KeyboardShortcutsModal';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
@@ -57,6 +58,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
     const [isConfiguringScene, setIsConfiguringScene] = useState(false);
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
+    const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
 
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
@@ -119,6 +121,24 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
+    }, []);
+
+    // Keyboard shortcut for help (? key)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if in input/textarea
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+            // ? key (with or without shift)
+            if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+                e.preventDefault();
+                setShowKeyboardShortcuts(true);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
     
     useEffect(() => {
@@ -438,6 +458,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         variableCount={variableCount}
                     />
                 }
+                onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
             />
             <main className="flex-grow flex overflow-hidden">
                 {/* Main Content Area - Full Width Managers */}
@@ -540,6 +561,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             >
                 {modalState.message}
             </InfoModal>
+            
+            {/* Keyboard Shortcuts Modal */}
+            <KeyboardShortcutsModal
+                isOpen={showKeyboardShortcuts}
+                onClose={() => setShowKeyboardShortcuts(false)}
+            />
         </div>
     );
 };

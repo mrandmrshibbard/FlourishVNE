@@ -178,6 +178,33 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
     // When searching, we need to show results from all folders
     const isSearching = searchQuery.trim().length > 0;
 
+    // Handle dropping files onto the empty state
+    const handleFileDrop = async (files: File[]) => {
+        let successCount = 0;
+        let failCount = 0;
+        const errors: string[] = [];
+
+        for (const file of files) {
+            try {
+                const base64 = await fileToBase64(file);
+                const name = file.name.replace(/\.[^/.]+$/, "");
+                addAsset(selectedCategory, name, base64, currentPath);
+                successCount++;
+            } catch (error) {
+                failCount++;
+                if (error instanceof Error && error.message !== 'Upload cancelled by user') {
+                    errors.push(`${file.name}: ${error.message}`);
+                }
+            }
+        }
+
+        if (failCount > 0) {
+            toast.warning(`Upload: ${successCount} succeeded, ${failCount} failed. ${errors.length > 0 ? errors[0] : 'Files may be too large or unsupported.'}`);
+        } else if (successCount > 0) {
+            toast.success(`Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''}`);
+        }
+    };
+
     const addAsset = (category: AssetCategory, name: string, url: string, path: string = '') => {
         const newAsset = { id: `${category.slice(0, 4)}-${Math.random().toString(36).substring(2, 9)}`, name, path };
         let payload: any;
@@ -595,7 +622,9 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
                         <EmptyState
                             icon={assetCategories[selectedCategory].icon}
                             title="No assets yet"
-                            description={`Upload ${selectedCategory} to get started`}
+                            description={`Add ${selectedCategory} to your project`}
+                            onDrop={handleFileDrop}
+                            accept={assetCategories[selectedCategory].accept}
                         />
                     )}
                 </div>
@@ -943,19 +972,84 @@ interface EmptyStateProps {
     icon: React.ReactNode;
     title: string;
     description: string;
+    onDrop?: (files: File[]) => void;
+    accept?: string;
 }
 
-const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description }) => (
-    <div className="flex-1 flex items-center justify-center">
-        <div className="text-center max-w-md">
-            <div className="flex justify-center mb-4 text-slate-600">
-                {React.cloneElement(icon as React.ReactElement, { className: 'w-20 h-20' })}
+const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description, onDrop, accept }) => {
+    const [isDragOver, setIsDragOver] = useState(false);
+    
+    const handleDragOver = (e: React.DragEvent) => {
+        if (!onDrop) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+    };
+    
+    const handleDragLeave = (e: React.DragEvent) => {
+        if (!onDrop) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+    };
+    
+    const handleDrop = (e: React.DragEvent) => {
+        if (!onDrop) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+        
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+            // Filter files by accept type if specified
+            const filteredFiles = accept 
+                ? files.filter(file => {
+                    const acceptTypes = accept.split(',').map(t => t.trim());
+                    return acceptTypes.some(t => {
+                        if (t.endsWith('/*')) {
+                            return file.type.startsWith(t.replace('/*', '/'));
+                        }
+                        return file.type === t;
+                    });
+                })
+                : files;
+            
+            if (filteredFiles.length > 0) {
+                onDrop(filteredFiles);
+            }
+        }
+    };
+    
+    return (
+        <div 
+            className={`flex-1 flex items-center justify-center ${onDrop ? 'cursor-pointer' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+        >
+            <div 
+                className={`text-center max-w-md p-8 rounded-xl border-2 border-dashed transition-all ${
+                    isDragOver 
+                        ? 'border-sky-400 bg-sky-500/10 scale-105' 
+                        : onDrop 
+                            ? 'border-slate-600 hover:border-slate-500' 
+                            : 'border-transparent'
+                }`}
+            >
+                <div className={`flex justify-center mb-4 transition-colors ${isDragOver ? 'text-sky-400' : 'text-slate-600'}`}>
+                    {React.cloneElement(icon as React.ReactElement, { className: 'w-20 h-20' })}
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+                <p className="text-slate-400 mb-4">{description}</p>
+                {onDrop && (
+                    <p className={`text-sm transition-colors ${isDragOver ? 'text-sky-300' : 'text-slate-500'}`}>
+                        {isDragOver ? 'Drop files here!' : 'Drag & drop files here, or use the Upload button'}
+                    </p>
+                )}
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-            <p className="text-slate-400">{description}</p>
         </div>
-    </div>
-);
+    );
+};
 
 
 const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => void; accept?: string }> = ({ onUpload, accept }) => {
@@ -1008,8 +1102,12 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
         }
     };
 
+    const progressPercent = uploadProgress 
+        ? Math.round((uploadProgress.current / uploadProgress.total) * 100) 
+        : 0;
+
     return (
-        <>
+        <div className="relative">
             <input
                 ref={inputRef}
                 type="file"
@@ -1023,14 +1121,32 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
             <button
                 onClick={() => inputRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                className="relative flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white rounded-lg font-medium transition-all disabled:opacity-70 disabled:cursor-wait shadow-lg overflow-hidden"
             >
-                <PlusIcon className="w-4 h-4" />
-                {isUploading && uploadProgress 
-                    ? `${uploadProgress.current}/${uploadProgress.total}` 
-                    : 'Upload'}
+                {isUploading && (
+                    <div 
+                        className="absolute inset-0 bg-white/20 transition-all"
+                        style={{ width: `${progressPercent}%` }}
+                    />
+                )}
+                <span className="relative flex items-center gap-2">
+                    {isUploading ? (
+                        <>
+                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {uploadProgress && `${uploadProgress.current}/${uploadProgress.total}`}
+                        </>
+                    ) : (
+                        <>
+                            <PlusIcon className="w-4 h-4" />
+                            Upload
+                        </>
+                    )}
+                </span>
             </button>
-        </>
+        </div>
     );
 };
 
