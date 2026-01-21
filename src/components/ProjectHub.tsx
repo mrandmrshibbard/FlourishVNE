@@ -19,7 +19,7 @@ export const ProjectHub: React.FC<{
     const toast = useToast();
     
     // Your itch.io page URL
-    const ITCHIO_URL = 'https://mrandmrshibbard.itch.io/flourish-visual-novel-engine';
+    const ITCHIO_URL = 'https://memento-morii1.itch.io/flourish-visual-novel-engine';
 
     useEffect(() => {
         (window as any).__IS_MANAGER_WINDOW__ = false;
