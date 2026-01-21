@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpenIcon, SparkleIcon, BookmarkSquareIcon, PhotoIcon, Cog6ToothIcon } from './icons';
+import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, TemplatesIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
 export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings' | 'templates';
@@ -13,6 +13,17 @@ interface NavigationTabsProps {
     assetCount: number;
     variableCount: number;
 }
+
+// Rainbow colors for each tab
+const tabColors: Record<NavigationTab, { base: string; glow: string; pastel: string }> = {
+    scenes: { base: 'var(--accent-pink)', glow: 'var(--shadow-glow-pink)', pastel: 'var(--pastel-pink)' },
+    characters: { base: 'var(--accent-peach)', glow: 'var(--shadow-glow-peach)', pastel: 'var(--pastel-peach)' },
+    ui: { base: 'var(--accent-yellow)', glow: '0 0 20px rgba(255, 224, 102, 0.35)', pastel: 'var(--pastel-yellow)' },
+    assets: { base: 'var(--accent-mint)', glow: 'var(--shadow-glow-mint)', pastel: 'var(--pastel-mint)' },
+    variables: { base: 'var(--accent-cyan)', glow: 'var(--shadow-glow-cyan)', pastel: 'var(--pastel-cyan)' },
+    settings: { base: 'var(--accent-sky)', glow: '0 0 20px rgba(102, 179, 255, 0.35)', pastel: 'var(--pastel-sky)' },
+    templates: { base: 'var(--accent-lavender)', glow: 'var(--shadow-glow-purple)', pastel: 'var(--pastel-lavender)' },
+};
 
 const NavigationTabs: React.FC<NavigationTabsProps> = ({
     activeTab,
@@ -40,7 +51,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             list.push({
                 id: 'scenes',
                 label: 'Scenes',
-                icon: <BookOpenIcon className="w-3.5 h-3.5" />,
+                icon: <ScenesIcon className="w-4 h-4" />,
                 count: sceneCount,
                 description: 'Create and edit story scenes with dialogue, choices, and commands'
             });
@@ -49,43 +60,43 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         list.push(
             {
                 id: 'characters',
-                label: 'Chars',
-                icon: <SparkleIcon className="w-3.5 h-3.5" />,
+                label: 'Characters',
+                icon: <CharactersIcon className="w-4 h-4" />,
                 count: characterCount,
                 description: 'Design characters with layered sprites and expressions'
             },
             {
                 id: 'ui',
-                label: 'UI',
-                icon: <BookmarkSquareIcon className="w-3.5 h-3.5" />,
+                label: 'UI Screens',
+                icon: <UIScreensIcon className="w-4 h-4" />,
                 count: uiScreenCount,
                 description: 'Create menus, title screens, and interactive UI elements'
             },
             {
                 id: 'assets',
                 label: 'Assets',
-                icon: <PhotoIcon className="w-3.5 h-3.5" />,
+                icon: <AssetsIcon className="w-4 h-4" />,
                 count: assetCount,
                 description: 'Manage images, audio, and video files'
             },
             {
                 id: 'variables',
-                label: 'Vars',
-                icon: <Cog6ToothIcon className="w-3.5 h-3.5" />,
+                label: 'Variables',
+                icon: <VariablesIcon className="w-4 h-4" />,
                 count: variableCount,
                 description: 'Create and manage story variables and game state'
             },
             {
                 id: 'settings',
                 label: 'Settings',
-                icon: <Cog6ToothIcon className="w-3.5 h-3.5" />,
+                icon: <SettingsIcon className="w-4 h-4" />,
                 count: 0,
                 description: 'Configure project settings and preferences'
             },
             {
                 id: 'templates',
                 label: 'Templates',
-                icon: <SparkleIcon className="w-3.5 h-3.5" />,
+                icon: <TemplatesIcon className="w-4 h-4" />,
                 count: 0,
                 description: 'Browse and apply pre-built templates to your project'
             }
@@ -195,51 +206,137 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     }, [isChildWindow]);
 
     return (
-        <div className="flex items-center gap-1.5 p-1.5 panel">
-            {tabs.map((tab) => {
+        <div 
+            className="flex items-center gap-2 p-2 rounded-2xl relative overflow-hidden"
+            style={{
+                background: `linear-gradient(135deg, 
+                    color-mix(in srgb, var(--bg-secondary) 90%, var(--accent-pink) 10%) 0%,
+                    color-mix(in srgb, var(--bg-secondary) 90%, var(--accent-cyan) 10%) 50%,
+                    color-mix(in srgb, var(--bg-secondary) 90%, var(--accent-lavender) 10%) 100%
+                )`,
+                border: '1px solid var(--border-subtle)',
+                boxShadow: `
+                    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+                    0 4px 20px rgba(0, 0, 0, 0.3),
+                    0 0 40px color-mix(in srgb, var(--accent-pink) 10%, transparent)
+                `
+            }}
+        >
+            {/* Rainbow shimmer line at the top */}
+            <div 
+                className="absolute top-0 left-0 right-0 h-[2px]"
+                style={{
+                    background: 'linear-gradient(90deg, var(--accent-pink), var(--accent-peach), var(--accent-yellow), var(--accent-mint), var(--accent-cyan), var(--accent-lavender), var(--accent-pink))',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 3s linear infinite'
+                }}
+            />
+            
+            {tabs.map((tab, index) => {
                 const shortcut = getShortcutLabel(tab.id);
                 const baseTooltip = shortcut ? `${tab.description} (${shortcut})` : tab.description;
                 const rightClickHint = isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings' && tab.id !== 'templates'
                     ? ' | Right-click to focus manager window'
                     : '';
                 const tooltip = `${baseTooltip}${rightClickHint}`;
+                const colors = tabColors[tab.id];
+                const isActive = activeTab === tab.id;
 
                 return (
                     <div key={tab.id} className="relative group">
-                    <button
-                        onClick={() => onTabChange(tab.id)}
-                        onContextMenu={(e) => handleRightClick(tab.id, e)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                            activeTab === tab.id
-                                ? 'bg-sky-500 text-white shadow-lg scale-105'
-                                : 'text-slate-300 hover:text-white hover:bg-slate-700 hover:scale-102'
-                        }`}
-                        title={tooltip}
-                    >
-                        <span className={activeTab === tab.id ? 'text-white' : 'text-sky-400'}>{tab.icon}</span>
-                        <span>{tab.label}</span>
-                        {tab.count > 0 && (
-                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                activeTab === tab.id
-                                    ? 'bg-white/20 text-white'
-                                    : 'bg-slate-600/70 text-slate-300'
-                            }`}>
-                                {tab.count}
-                            </span>
-                        )}
-                    </button>
-                    
-                    {/* Pop-out Window Button - Only show in main window */}
-                    {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'templates' && (
                         <button
-                            onClick={(e) => handleOpenInWindow(tab.id, e)}
-                            className="absolute -top-1 -right-1 w-5 h-5 bg-purple-500 hover:bg-purple-600 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                            title={`Open or focus ${tab.label} in separate window`}
+                            onClick={() => onTabChange(tab.id)}
+                            onContextMenu={(e) => handleRightClick(tab.id, e)}
+                            className={`relative flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                                isActive
+                                    ? 'text-white scale-[1.02]'
+                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:scale-[1.02]'
+                            }`}
+                            style={isActive ? {
+                                background: `linear-gradient(135deg, ${colors.base} 0%, ${colors.pastel} 100%)`,
+                                boxShadow: `
+                                    0 0 20px color-mix(in srgb, ${colors.base} 50%, transparent),
+                                    0 4px 15px color-mix(in srgb, ${colors.base} 30%, transparent),
+                                    inset 0 1px 0 rgba(255, 255, 255, 0.25)
+                                `,
+                                border: '1px solid rgba(255, 255, 255, 0.2)'
+                            } : {
+                                background: 'transparent',
+                                border: '1px solid transparent'
+                            }}
+                            title={tooltip}
                         >
-                            ⧉
+                            {/* Inactive tab subtle hover glow */}
+                            {!isActive && (
+                                <div 
+                                    className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                    style={{
+                                        background: `linear-gradient(135deg, color-mix(in srgb, ${colors.base} 15%, transparent), color-mix(in srgb, ${colors.pastel} 10%, transparent))`,
+                                        border: `1px solid color-mix(in srgb, ${colors.base} 30%, transparent)`
+                                    }}
+                                />
+                            )}
+                            
+                            {/* Icon with colored glow effect */}
+                            <span 
+                                className="relative z-10 transition-all duration-300"
+                                style={{ 
+                                    color: isActive ? 'white' : colors.base,
+                                    filter: isActive ? 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' : 'none'
+                                }}
+                            >
+                                {tab.icon}
+                            </span>
+                            
+                            {/* Label */}
+                            <span className="relative z-10">{tab.label}</span>
+                            
+                            {/* Count badge with fun styling */}
+                            {tab.count > 0 && (
+                                <span 
+                                    className={`relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                        isActive
+                                            ? 'bg-white/30 text-white shadow-sm'
+                                            : 'text-[var(--text-secondary)]'
+                                    }`}
+                                    style={!isActive ? { 
+                                        backgroundColor: `color-mix(in srgb, ${colors.base} 25%, transparent)`,
+                                        border: `1px solid color-mix(in srgb, ${colors.base} 20%, transparent)`
+                                    } : {
+                                        backdropFilter: 'blur(4px)'
+                                    }}
+                                >
+                                    {tab.count}
+                                </span>
+                            )}
+                            
+                            {/* Active indicator dot */}
+                            {isActive && (
+                                <span 
+                                    className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white"
+                                    style={{
+                                        boxShadow: '0 0 8px rgba(255,255,255,0.8)'
+                                    }}
+                                />
+                            )}
                         </button>
-                    )}
-                </div>
+                    
+                        {/* Pop-out Window Button - Only show in main window */}
+                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'templates' && (
+                            <button
+                                onClick={(e) => handleOpenInWindow(tab.id, e)}
+                                className="absolute -top-2 -right-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+                                style={{ 
+                                    background: `linear-gradient(135deg, ${colors.base}, ${colors.pastel})`,
+                                    boxShadow: `0 2px 12px color-mix(in srgb, ${colors.base} 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.3)`,
+                                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                                }}
+                                title={`Open or focus ${tab.label} in separate window`}
+                            >
+                                ⧉
+                            </button>
+                        )}
+                    </div>
                 );
             })}
         </div>

@@ -29,6 +29,98 @@ export const ClockIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGE
     </svg>
 );
 
+// 🎬 Scenes - Film/Script icon
+export const ScenesIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M1 4.75C1 3.784 1.784 3 2.75 3h14.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0117.25 17H2.75A1.75 1.75 0 011 15.25V4.75zm2.5 0a.25.25 0 01.25-.25h1a.25.25 0 01.25.25v1a.25.25 0 01-.25.25h-1a.25.25 0 01-.25-.25v-1zm4 0a.25.25 0 01.25-.25h1a.25.25 0 01.25.25v1a.25.25 0 01-.25.25h-1a.25.25 0 01-.25-.25v-1zm4.25-.25a.25.25 0 00-.25.25v1c0 .138.112.25.25.25h1a.25.25 0 00.25-.25v-1a.25.25 0 00-.25-.25h-1zm3.75.25a.25.25 0 01.25-.25h1a.25.25 0 01.25.25v1a.25.25 0 01-.25.25h-1a.25.25 0 01-.25-.25v-1zM3.5 14a.25.25 0 01.25-.25h1a.25.25 0 01.25.25v1a.25.25 0 01-.25.25h-1a.25.25 0 01-.25-.25v-1zm4.25-.25a.25.25 0 00-.25.25v1c0 .138.112.25.25.25h1a.25.25 0 00.25-.25v-1a.25.25 0 00-.25-.25h-1zm3.75.25a.25.25 0 01.25-.25h1a.25.25 0 01.25.25v1a.25.25 0 01-.25.25h-1a.25.25 0 01-.25-.25v-1zm4.25-.25a.25.25 0 00-.25.25v1c0 .138.112.25.25.25h1a.25.25 0 00.25-.25v-1a.25.25 0 00-.25-.25h-1zM4 8.75A.75.75 0 014.75 8h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 8.75zm.75 2.5a.75.75 0 000 1.5h7.5a.75.75 0 000-1.5h-7.5z" clipRule="evenodd" />
+    </svg>
+);
+
+// 👤 Characters - Person/User icon  
+export const CharactersIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+    </svg>
+);
+
+// 🖼️ UI Screens - Layout/Window icon
+export const UIScreensIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M3.5 2A1.5 1.5 0 002 3.5v13A1.5 1.5 0 003.5 18h13a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0016.5 2h-13zM3.5 3.5h13v3h-13v-3zm0 4.5h4v9h-4V8zm5.5 9V8h7.5v9H9z" clipRule="evenodd" />
+    </svg>
+);
+
+// 📁 Assets - Folder with image icon
+export const AssetsIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M2 4.75C2 3.784 2.784 3 3.75 3h4.836c.464 0 .909.184 1.237.513l1.414 1.414a.25.25 0 00.177.073h4.836c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0116.25 17H3.75A1.75 1.75 0 012 15.25V4.75zm6.5 6.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm4.22.22a.75.75 0 011.06 0l1.5 1.5a.75.75 0 01-.018 1.042.75.75 0 01-1.042.018L13 12.56l-1.22 1.22a.75.75 0 01-1.042.018.75.75 0 01-.018-1.042l1.5-1.5a.75.75 0 01.5-.236z" clipRule="evenodd" />
+    </svg>
+);
+
+// 📊 Variables - Data/Database icon
+export const VariablesIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5zm4.75 6.75a.75.75 0 00-1.5 0v2.546l-.943-1.048a.75.75 0 00-1.114 1.004l2.25 2.5a.75.75 0 001.114 0l2.25-2.5a.75.75 0 10-1.114-1.004l-.943 1.048V8.75zm2.5 5.5a.75.75 0 000 1.5h2.5a.75.75 0 000-1.5h-2.5z" clipRule="evenodd" />
+    </svg>
+);
+
+// ⚙️ Settings - Gear icon
+export const SettingsIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M8.34 1.804A1 1 0 019.32 1h1.36a1 1 0 01.98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 011.262.125l.962.962a1 1 0 01.125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 01.804.98v1.361a1 1 0 01-.804.98l-1.473.295a6.95 6.95 0 01-.587 1.416l.834 1.25a1 1 0 01-.125 1.262l-.962.962a1 1 0 01-1.262.125l-1.25-.834a6.953 6.953 0 01-1.416.587l-.294 1.473a1 1 0 01-.98.804H9.32a1 1 0 01-.98-.804l-.295-1.473a6.957 6.957 0 01-1.416-.587l-1.25.834a1 1 0 01-1.262-.125l-.962-.962a1 1 0 01-.125-1.262l.834-1.25a6.957 6.957 0 01-.587-1.416l-1.473-.294A1 1 0 011 10.68V9.32a1 1 0 01.804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 01.125-1.262l.962-.962A1 1 0 015.38 3.03l1.25.834a6.957 6.957 0 011.416-.587l.294-1.473zM13 10a3 3 0 11-6 0 3 3 0 016 0z" clipRule="evenodd" />
+    </svg>
+);
+
+// ✨ Templates - Sparkle/Magic icon
+export const TemplatesIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M10 1l.894 3.578a1.5 1.5 0 001.028 1.028L15.5 6.5l-3.578.894a1.5 1.5 0 00-1.028 1.028L10 12l-.894-3.578a1.5 1.5 0 00-1.028-1.028L4.5 6.5l3.578-.894a1.5 1.5 0 001.028-1.028L10 1z" />
+        <path d="M15 11l.447 1.789a.75.75 0 00.514.514L17.75 14l-1.789.447a.75.75 0 00-.514.514L15 16.75l-.447-1.789a.75.75 0 00-.514-.514L12.25 14l1.789-.447a.75.75 0 00.514-.514L15 11z" />
+        <path d="M5 14l.298 1.192a.5.5 0 00.343.343L6.833 15.833l-1.192.298a.5.5 0 00-.343.343L5 17.666l-.298-1.192a.5.5 0 00-.343-.343L3.167 15.833l1.192-.298a.5.5 0 00.343-.343L5 14z" />
+    </svg>
+);
+
+// ⌨️ Keyboard Shortcuts - Keyboard icon (prominent)
+export const KeyboardIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75H2.75a.75.75 0 01-.75-.75V4.75zm2.25 2a.75.75 0 000 1.5h.5a.75.75 0 000-1.5h-.5zm3.25.75a.75.75 0 01.75-.75h.5a.75.75 0 010 1.5h-.5a.75.75 0 01-.75-.75zm4.25-.75a.75.75 0 000 1.5h.5a.75.75 0 000-1.5h-.5zm3.25.75a.75.75 0 01.75-.75h.5a.75.75 0 010 1.5h-.5a.75.75 0 01-.75-.75zM4.25 9.75A.75.75 0 015 9h.5a.75.75 0 010 1.5H5a.75.75 0 01-.75-.75zm3.25-.75a.75.75 0 000 1.5h.5a.75.75 0 000-1.5h-.5zm3.25.75a.75.75 0 01.75-.75h.5a.75.75 0 010 1.5h-.5a.75.75 0 01-.75-.75zm3.25-.75a.75.75 0 000 1.5h.5a.75.75 0 000-1.5h-.5zM6 12.75a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5a.75.75 0 01-.75-.75z" clipRule="evenodd" />
+    </svg>
+);
+
+// ❓ Help - Question mark circle icon
+export const HelpIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 108.94 6.94zM10 15a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+    </svg>
+);
+
+// 🏠 Home/Hub icon
+export const HomeIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M9.293 2.293a1 1 0 011.414 0l7 7A1 1 0 0117 11h-1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-3a1 1 0 00-1-1H9a1 1 0 00-1 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-6H3a1 1 0 01-.707-1.707l7-7z" clipRule="evenodd" />
+    </svg>
+);
+
+// 💾 Save/Export icon  
+export const SaveIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M3.196 12.87l-.825.483a.75.75 0 000 1.294l7.25 4.25a.75.75 0 00.758 0l7.25-4.25a.75.75 0 000-1.294l-.825-.484-5.666 3.322a2.25 2.25 0 01-2.276 0L3.196 12.87z" />
+        <path d="M3.196 8.87l-.825.483a.75.75 0 000 1.294l7.25 4.25a.75.75 0 00.758 0l7.25-4.25a.75.75 0 000-1.294l-.825-.484-5.666 3.322a2.25 2.25 0 01-2.276 0L3.196 8.87z" />
+        <path d="M10.38 1.103a.75.75 0 00-.76 0l-7.25 4.25a.75.75 0 000 1.294l7.25 4.25a.75.75 0 00.76 0l7.25-4.25a.75.75 0 000-1.294l-7.25-4.25z" />
+    </svg>
+);
+
 export const GripVerticalIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
     {title && <title>{title}</title>}

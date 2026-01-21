@@ -441,7 +441,18 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     }, [activeSceneId, project.startSceneId, project.characters, project.uiScreens]);
 
     return (
-        <div className="bg-slate-900 text-slate-100 h-screen flex flex-col">
+        <div 
+            className="text-slate-100 h-screen flex flex-col relative overflow-hidden"
+            style={{
+                background: `
+                    radial-gradient(ellipse at 10% 20%, rgba(255, 126, 179, 0.08) 0%, transparent 40%),
+                    radial-gradient(ellipse at 90% 80%, rgba(126, 255, 255, 0.06) 0%, transparent 40%),
+                    radial-gradient(ellipse at 50% 50%, rgba(184, 126, 255, 0.05) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 20%, rgba(126, 255, 184, 0.04) 0%, transparent 35%),
+                    linear-gradient(180deg, var(--bg-primary) 0%, #080510 100%)
+                `
+            }}
+        >
             <Header
                 title={project.title}
                 onTitleChange={handleTitleChange}

@@ -257,24 +257,26 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     align-items: center;
                     justify-content: space-between;
                     gap: 0.5rem;
-                    padding: 0.5rem;
+                    padding: 0.5rem 0.75rem;
                     background: var(--bg-primary);
-                    border: 1px solid var(--bg-tertiary);
-                    border-radius: 0.375rem;
+                    border: 1px solid var(--border-default);
+                    border-radius: var(--radius-lg);
                     color: var(--text-primary);
                     font-size: 0.875rem;
                     cursor: pointer;
-                    transition: border-color 0.15s, box-shadow 0.15s;
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                     text-align: left;
                 }
                 
                 .searchable-select__trigger:hover {
-                    border-color: var(--accent-cyan);
+                    border-color: var(--border-strong);
+                    background: var(--bg-secondary);
                 }
                 
                 .searchable-select--open .searchable-select__trigger {
-                    border-color: var(--accent-cyan);
-                    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+                    border-color: var(--accent-purple);
+                    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.15);
+                    background: var(--bg-secondary);
                 }
                 
                 .searchable-select__display {
@@ -286,12 +288,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 
                 .searchable-select__arrow {
                     flex-shrink: 0;
-                    opacity: 0.6;
-                    transition: transform 0.15s;
+                    opacity: 0.5;
+                    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 
                 .searchable-select--open .searchable-select__arrow {
                     transform: rotate(180deg);
+                    opacity: 0.8;
                 }
                 
                 .searchable-select__dropdown {
@@ -299,43 +302,58 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     top: 100%;
                     left: 0;
                     right: 0;
-                    margin-top: 0.25rem;
-                    background: var(--bg-primary);
-                    border: 1px solid var(--bg-tertiary);
-                    border-radius: 0.375rem;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    margin-top: 0.375rem;
+                    background: var(--bg-secondary);
+                    border: 1px solid var(--border-default);
+                    border-radius: var(--radius-lg);
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(139, 92, 246, 0.1);
                     z-index: 50;
                     overflow: hidden;
+                    animation: dropdown-enter 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                
+                @keyframes dropdown-enter {
+                    from {
+                        opacity: 0;
+                        transform: translateY(-4px) scale(0.98);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0) scale(1);
+                    }
                 }
                 
                 .searchable-select__search {
                     padding: 0.5rem;
-                    border-bottom: 1px solid var(--bg-tertiary);
+                    border-bottom: 1px solid var(--border-subtle);
+                    background: var(--bg-tertiary);
                 }
                 
                 .searchable-select__search-input {
                     width: 100%;
-                    padding: 0.375rem 0.5rem;
-                    background: var(--bg-secondary);
-                    border: 1px solid var(--bg-tertiary);
-                    border-radius: 0.25rem;
+                    padding: 0.5rem 0.75rem;
+                    background: var(--bg-primary);
+                    border: 1px solid var(--border-subtle);
+                    border-radius: var(--radius-md);
                     color: var(--text-primary);
                     font-size: 0.75rem;
                     outline: none;
+                    transition: all 0.15s;
                 }
                 
                 .searchable-select__search-input:focus {
-                    border-color: var(--accent-cyan);
+                    border-color: var(--accent-purple);
+                    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.1);
                 }
                 
                 .searchable-select__search-input::placeholder {
-                    color: var(--text-secondary);
+                    color: var(--text-muted);
                 }
                 
                 .searchable-select__list {
                     max-height: 200px;
                     overflow-y: auto;
-                    padding: 0.25rem;
+                    padding: 0.375rem;
                 }
                 
                 .searchable-select__option {
@@ -344,34 +362,39 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     padding: 0.5rem 0.75rem;
                     background: transparent;
                     border: none;
-                    border-radius: 0.25rem;
+                    border-radius: var(--radius-md);
                     color: var(--text-primary);
                     font-size: 0.75rem;
                     text-align: left;
                     cursor: pointer;
-                    transition: background 0.1s;
+                    transition: all 0.1s;
                 }
                 
                 .searchable-select__option:hover,
                 .searchable-select__option--highlighted {
-                    background: var(--bg-tertiary);
+                    background: rgba(139, 92, 246, 0.15);
                 }
                 
                 .searchable-select__option--selected {
-                    background: var(--accent-cyan)/20;
+                    background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
                     color: var(--accent-cyan);
+                    font-weight: 500;
                 }
                 
                 .searchable-select__option--selected.searchable-select__option--highlighted {
-                    background: var(--accent-cyan)/30;
+                    background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(59, 130, 246, 0.3) 100%);
                 }
                 
                 .searchable-select__group {
-                    margin-top: 0.25rem;
+                    margin-top: 0.375rem;
+                    padding-top: 0.375rem;
+                    border-top: 1px solid var(--border-subtle);
                 }
                 
                 .searchable-select__group:first-child {
                     margin-top: 0;
+                    padding-top: 0;
+                    border-top: none;
                 }
                 
                 .searchable-select__group-label {
@@ -379,14 +402,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     font-size: 0.65rem;
                     font-weight: 600;
                     text-transform: uppercase;
-                    color: var(--text-secondary);
-                    letter-spacing: 0.05em;
+                    color: var(--text-muted);
+                    letter-spacing: 0.08em;
                 }
                 
                 .searchable-select__empty {
-                    padding: 1rem;
+                    padding: 1.5rem 1rem;
                     text-align: center;
-                    color: var(--text-secondary);
+                    color: var(--text-muted);
                     font-size: 0.75rem;
                 }
                 

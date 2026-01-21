@@ -30,7 +30,7 @@ const ThemeSelector: React.FC = () => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       setDropdownPos({
-        top: rect.bottom + 4,
+        top: rect.bottom + 8,
         right: window.innerWidth - rect.right
       });
     }
@@ -43,53 +43,90 @@ const ThemeSelector: React.FC = () => {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-[var(--bg-tertiary)] hover:bg-[var(--slate-600)] text-[var(--text-primary)] font-bold px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors text-xs"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 hover:scale-[1.02]"
+        style={{
+          background: 'linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary))',
+          border: '1px solid var(--border-subtle)',
+          color: 'var(--text-primary)',
+          boxShadow: isOpen ? '0 0 15px color-mix(in srgb, var(--accent-lavender) 30%, transparent)' : 'none'
+        }}
         title="Change editor theme"
       >
+        <span className="text-base">{currentTheme?.emoji || '🎨'}</span>
         <span
           className="w-3 h-3 rounded-full border border-white/30"
-          style={{ background: `linear-gradient(135deg, ${currentTheme?.colors.bgPrimary} 50%, ${currentTheme?.colors.accentPurple} 50%)` }}
+          style={{ 
+            background: `linear-gradient(135deg, ${currentTheme?.colors.accentPink} 0%, ${currentTheme?.colors.accentCyan} 50%, ${currentTheme?.colors.accentLavender} 100%)` 
+          }}
         />
-        Theme
+        <span>Theme</span>
       </button>
 
       {isOpen && createPortal(
         <div 
           ref={dropdownRef}
-          className="fixed bg-[var(--bg-secondary)] border border-[var(--slate-700)] rounded-lg shadow-xl min-w-[180px] overflow-hidden"
+          className="fixed min-w-[220px] overflow-hidden"
           style={{ 
             top: dropdownPos.top, 
             right: dropdownPos.right,
-            zIndex: 9999
+            zIndex: 9999,
+            background: 'linear-gradient(135deg, var(--bg-secondary), var(--bg-primary))',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '16px',
+            boxShadow: `
+              0 10px 40px rgba(0, 0, 0, 0.4),
+              0 0 30px color-mix(in srgb, var(--accent-pink) 15%, transparent),
+              inset 0 1px 0 rgba(255, 255, 255, 0.05)
+            `
           }}
         >
-          <div className="p-2 border-b border-[var(--slate-700)]">
-            <span className="text-xs text-[var(--text-secondary)] font-semibold">Editor Theme</span>
+          {/* Rainbow header bar */}
+          <div 
+            className="h-1"
+            style={{
+              background: 'linear-gradient(90deg, var(--accent-pink), var(--accent-peach), var(--accent-yellow), var(--accent-mint), var(--accent-cyan), var(--accent-lavender))'
+            }}
+          />
+          <div className="p-3 border-b border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-secondary)] font-semibold tracking-wide uppercase">✨ Editor Theme</span>
           </div>
-          <div className="p-1">
-            {availableThemes.map((theme) => (
-              <button
-                key={theme.name}
-                onClick={() => {
-                  setTheme(theme.name as ThemeName);
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left text-sm transition-colors ${
-                  themeName === theme.name
-                    ? 'bg-[var(--accent-purple)]/20 text-[var(--accent-cyan)]'
-                    : 'hover:bg-[var(--slate-700)] text-[var(--text-primary)]'
-                }`}
-              >
-                <span
-                  className="w-4 h-4 rounded-full border border-white/30 flex-shrink-0"
-                  style={{ background: `linear-gradient(135deg, ${theme.colors.bgPrimary} 50%, ${theme.colors.accentPurple} 50%)` }}
-                />
-                <span>{theme.label}</span>
-                {themeName === theme.name && (
-                  <span className="ml-auto text-[var(--accent-green)]">✓</span>
-                )}
-              </button>
-            ))}
+          <div className="p-2">
+            {availableThemes.map((theme) => {
+              const isSelected = themeName === theme.name;
+              return (
+                <button
+                  key={theme.name}
+                  onClick={() => {
+                    setTheme(theme.name as ThemeName);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition-all duration-200 ${
+                    isSelected
+                      ? 'text-white'
+                      : 'hover:scale-[1.01] text-[var(--text-primary)]'
+                  }`}
+                  style={isSelected ? {
+                    background: `linear-gradient(135deg, ${theme.colors.accentPink}, ${theme.colors.accentLavender})`,
+                    boxShadow: `0 0 15px color-mix(in srgb, ${theme.colors.accentPink} 40%, transparent)`
+                  } : {
+                    background: 'transparent'
+                  }}
+                >
+                  <span className="text-lg">{theme.emoji}</span>
+                  <span
+                    className="w-5 h-5 rounded-full border-2 flex-shrink-0 transition-transform duration-200"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${theme.colors.bgPrimary} 25%, ${theme.colors.accentPink} 50%, ${theme.colors.accentCyan} 75%, ${theme.colors.accentLavender} 100%)`,
+                      borderColor: isSelected ? 'white' : 'rgba(255,255,255,0.2)'
+                    }}
+                  />
+                  <span className="font-medium">{theme.label}</span>
+                  {isSelected && (
+                    <span className="ml-auto text-white">✓</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>,
         document.body

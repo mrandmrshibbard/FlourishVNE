@@ -296,29 +296,51 @@ export const ProjectHub: React.FC<{
     };
 
     return (
-        <div className="h-screen w-screen bg-[var(--bg-primary)] text-[var(--text-primary)] flex items-center justify-center p-4">
+        <div className="h-screen w-screen text-[var(--text-primary)] flex items-center justify-center p-4 overflow-hidden"
+            style={{
+                background: `
+                    radial-gradient(ellipse at 20% 30%, rgba(255, 126, 179, 0.12) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 70%, rgba(126, 255, 255, 0.1) 0%, transparent 50%),
+                    radial-gradient(ellipse at 50% 100%, rgba(184, 126, 255, 0.08) 0%, transparent 40%),
+                    linear-gradient(180deg, var(--bg-primary) 0%, #0a0612 100%)
+                `
+            }}
+        >
+            {/* Floating decorative elements */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute top-20 left-10 w-32 h-32 rounded-full bg-gradient-to-br from-[var(--accent-pink)]/10 to-transparent blur-2xl animate-float" style={{ animationDelay: '0s' }} />
+                <div className="absolute top-40 right-20 w-40 h-40 rounded-full bg-gradient-to-br from-[var(--accent-cyan)]/10 to-transparent blur-2xl animate-float" style={{ animationDelay: '1s' }} />
+                <div className="absolute bottom-32 left-1/4 w-24 h-24 rounded-full bg-gradient-to-br from-[var(--accent-lavender)]/10 to-transparent blur-2xl animate-float" style={{ animationDelay: '2s' }} />
+                <div className="absolute bottom-20 right-1/3 w-36 h-36 rounded-full bg-gradient-to-br from-[var(--accent-mint)]/8 to-transparent blur-2xl animate-float" style={{ animationDelay: '1.5s' }} />
+            </div>
+            
             {/* Update Available Banner */}
             {(updateAvailable || updateReady) && (
                 <div className="fixed top-0 left-0 right-0 z-40">
                     <div 
                         className={`
-                            flex items-center justify-center gap-3 py-3 px-4 flex-wrap
+                            flex items-center justify-center gap-3 py-3 px-4 flex-wrap backdrop-blur-md
                             ${updateReady 
-                                ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
+                                ? 'bg-gradient-to-r from-[var(--accent-mint)]/90 to-[var(--accent-cyan)]/90' 
                                 : updateAvailable?.isNew 
-                                    ? 'bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)]' 
-                                    : 'bg-[var(--accent-cyan)]/20 border-b border-[var(--accent-cyan)]/30'
+                                    ? 'bg-gradient-to-r from-[var(--accent-pink)]/90 via-[var(--accent-lavender)]/90 to-[var(--accent-cyan)]/90' 
+                                    : 'bg-[var(--bg-secondary)]/80 border-b border-[var(--accent-cyan)]/30'
                             }
                         `}
+                        style={{
+                            boxShadow: updateReady || updateAvailable?.isNew 
+                                ? '0 4px 30px rgba(184, 126, 255, 0.3)' 
+                                : 'none'
+                        }}
                     >
-                        <SparkleIcon className="w-5 h-5" />
+                        <SparkleIcon className="w-5 h-5 animate-glow" />
                         
                         {updateReady ? (
                             <>
-                                <span className="font-medium">✅ Update v{updateAvailable?.version} ready to install!</span>
+                                <span className="font-semibold">✅ Update v{updateAvailable?.version} ready to install!</span>
                                 <button
                                     onClick={handleInstallUpdate}
-                                    className="ml-2 px-4 py-1 bg-white text-green-700 rounded-full font-bold text-sm hover:bg-green-100 transition-colors"
+                                    className="ml-2 px-4 py-1.5 bg-white text-[var(--accent-mint)] rounded-full font-bold text-sm hover:bg-white/90 transition-all shadow-lg hover:scale-105"
                                 >
                                     Install & Restart
                                 </button>
@@ -328,15 +350,18 @@ export const ProjectHub: React.FC<{
                                 <span className="font-medium">Downloading update...</span>
                                 <div className="w-32 h-2 bg-white/30 rounded-full overflow-hidden">
                                     <div 
-                                        className="h-full bg-white rounded-full transition-all duration-300"
-                                        style={{ width: `${downloadProgress || 0}%` }}
+                                        className="h-full rounded-full transition-all duration-300"
+                                        style={{ 
+                                            width: `${downloadProgress || 0}%`,
+                                            background: 'linear-gradient(90deg, var(--accent-pink), var(--accent-cyan))'
+                                        }}
                                     />
                                 </div>
-                                <span className="text-sm">{downloadProgress}%</span>
+                                <span className="text-sm font-medium">{downloadProgress}%</span>
                             </>
                         ) : (
                             <>
-                                <span className="font-medium">
+                                <span className="font-semibold">
                                     {updateAvailable?.isNew 
                                         ? `🎉 New Update Available: v${updateAvailable.version}!` 
                                         : `Version ${updateAvailable?.version} available`
@@ -347,7 +372,7 @@ export const ProjectHub: React.FC<{
                                 {!autoUpdateFailed && (
                                     <button
                                         onClick={handleDownloadUpdate}
-                                        className="ml-2 px-4 py-1 bg-white/20 hover:bg-white/30 rounded-full font-medium text-sm transition-colors"
+                                        className="ml-2 px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all hover:scale-105"
                                     >
                                         Auto-Update
                                     </button>
@@ -356,14 +381,14 @@ export const ProjectHub: React.FC<{
                                 {/* Always show itch.io link */}
                                 <button
                                     onClick={handleOpenItchio}
-                                    className="px-4 py-1 bg-white/20 hover:bg-white/30 rounded-full font-medium text-sm transition-colors flex items-center gap-1"
+                                    className="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
                                 >
                                     📥 Download from itch.io
                                 </button>
                                 
                                 <button
                                     onClick={() => setShowChangelog(true)}
-                                    className="px-3 py-1 text-sm opacity-80 hover:opacity-100 underline"
+                                    className="px-3 py-1 text-sm opacity-80 hover:opacity-100 underline decoration-dotted underline-offset-2"
                                 >
                                     What's new?
                                 </button>
@@ -373,79 +398,198 @@ export const ProjectHub: React.FC<{
                 </div>
             )}
             
-            <div className="w-full max-w-4xl p-8">
-                <header className="text-center mb-12">
-                    <h1 className="font-heading text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-cyan)]">Flourish Visual Novel Engine</h1>
-                    <p className="text-[var(--text-secondary)] mt-2">🌈🌸 Create Without Limits 🌸🌈</p>
+            <div className="w-full max-w-5xl p-8 relative z-10">
+                <header className="text-center mb-14">
+                    {/* Logo/Icon */}
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6 animate-float"
+                        style={{
+                            background: 'linear-gradient(135deg, var(--accent-pink) 0%, var(--accent-lavender) 50%, var(--accent-cyan) 100%)',
+                            boxShadow: 'var(--shadow-glow-rainbow), var(--shadow-lg)'
+                        }}
+                    >
+                        <span className="text-4xl">🌸</span>
+                    </div>
+                    
+                    <h1 className="font-heading text-5xl md:text-6xl font-bold mb-4"
+                        style={{
+                            background: 'linear-gradient(135deg, var(--accent-pink) 0%, var(--pastel-peach) 25%, var(--accent-lavender) 50%, var(--accent-cyan) 75%, var(--accent-mint) 100%)',
+                            backgroundSize: '200% auto',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            animation: 'rainbow-text 6s linear infinite',
+                            textShadow: '0 0 80px rgba(184, 126, 255, 0.4)'
+                        }}
+                    >
+                        Flourish
+                    </h1>
+                    <p className="text-[var(--text-secondary)] text-lg font-medium">Visual Novel Engine</p>
+                    <p className="text-[var(--text-muted)] mt-2 text-sm flex items-center justify-center gap-2">
+                        <span className="inline-block w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-pink)]" />
+                        Create Without Limits
+                        <span className="inline-block w-8 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-cyan)]" />
+                    </p>
                 </header>
 
-                <main className="flex flex-col md:flex-row items-center justify-center gap-8">
+                <main className="flex flex-col md:flex-row items-stretch justify-center gap-6">
+                    {/* Create New Project Card */}
                     <button 
                         onClick={handleCreateNew}
-                        className="w-full md:w-1/2 h-64 text-center p-6 bg-[var(--accent-purple)]/20 hover:bg-[var(--accent-purple)]/30 border-2 border-[var(--accent-purple)]/50 rounded-lg shadow-lg transition-all transform hover:scale-105 flex flex-col items-center justify-center"
+                        className="group relative w-full md:w-1/2 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
+                        style={{
+                            background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
+                            border: '1px solid var(--border-subtle)',
+                            boxShadow: 'var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.03)'
+                        }}
                     >
-                        <div className="bg-[var(--accent-purple)]/20 p-4 rounded-full mb-4"><PlusIcon className="w-8 h-8" /></div>
-                        <h2 className="text-2xl font-semibold">Create New Project</h2>
-                        <p className="text-[var(--text-secondary)]">Start from a blank canvas.</p>
+                        {/* Animated gradient border on hover */}
+                        <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                            style={{
+                                padding: '1px',
+                                background: 'linear-gradient(135deg, var(--accent-pink), var(--accent-lavender))',
+                                WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+                                WebkitMaskComposite: 'xor',
+                                maskComposite: 'exclude',
+                            }}
+                        />
+                        
+                        {/* Glow effect */}
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-3xl"
+                            style={{ boxShadow: 'inset 0 0 60px rgba(255, 126, 179, 0.1), 0 0 40px rgba(255, 126, 179, 0.15)' }}
+                        />
+                        
+                        <div className="relative z-10 p-5 rounded-2xl mb-5 group-hover:scale-110 transition-transform duration-300"
+                            style={{
+                                background: 'linear-gradient(135deg, rgba(255, 126, 179, 0.2) 0%, rgba(184, 126, 255, 0.15) 100%)',
+                                boxShadow: '0 0 30px rgba(255, 126, 179, 0.2)'
+                            }}
+                        >
+                            <PlusIcon className="w-10 h-10 text-[var(--accent-pink)]" />
+                        </div>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Create New Project</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Start your story from scratch</p>
+                        
+                        {/* Decorative sparkles */}
+                        <div className="absolute top-6 right-8 text-[var(--accent-pink)] opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
+                        <div className="absolute bottom-8 left-10 text-[var(--accent-lavender)] opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
                     </button>
+                    
+                    {/* Import Project Card */}
                     <button 
                         onClick={handleFileOpen}
-                        className="w-full md:w-1/2 h-64 text-center p-6 bg-[var(--accent-cyan)]/20 hover:bg-[var(--accent-cyan)]/30 border-2 border-[var(--accent-cyan)]/50 rounded-lg shadow-lg transition-all transform hover:scale-105 flex flex-col items-center justify-center"
+                        className="group relative w-full md:w-1/2 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
+                        style={{
+                            background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
+                            border: '1px solid var(--border-subtle)',
+                            boxShadow: 'var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.03)'
+                        }}
                     >
-                         <div className="bg-[var(--accent-cyan)]/20 p-4 rounded-full mb-4"><UploadIcon className="w-8 h-8" /></div>
-                        <h2 className="text-2xl font-semibold">Import Project</h2>
-                        <p className="text-[var(--text-secondary)]">Load a .zip project file.</p>
+                        {/* Animated gradient border on hover */}
+                        <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                            style={{
+                                padding: '1px',
+                                background: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-mint))',
+                                WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+                                WebkitMaskComposite: 'xor',
+                                maskComposite: 'exclude',
+                            }}
+                        />
+                        
+                        {/* Glow effect */}
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-3xl"
+                            style={{ boxShadow: 'inset 0 0 60px rgba(126, 255, 255, 0.1), 0 0 40px rgba(126, 255, 255, 0.15)' }}
+                        />
+                        
+                        <div className="relative z-10 p-5 rounded-2xl mb-5 group-hover:scale-110 transition-transform duration-300"
+                            style={{
+                                background: 'linear-gradient(135deg, rgba(126, 255, 255, 0.2) 0%, rgba(126, 184, 255, 0.15) 100%)',
+                                boxShadow: '0 0 30px rgba(126, 255, 255, 0.2)'
+                            }}
+                        >
+                            <UploadIcon className="w-10 h-10 text-[var(--accent-cyan)]" />
+                        </div>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Import Project</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Load a .zip project file</p>
+                        
+                        {/* Decorative sparkles */}
+                        <div className="absolute top-8 left-8 text-[var(--accent-cyan)] opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
+                        <div className="absolute bottom-6 right-10 text-[var(--accent-mint)] opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
                     </button>
                     <input type="file" ref={fileInputRef} className="hidden" accept=".zip,application/zip" onChange={handleFileChange} />
                 </main>
                 
                 {/* Recent Projects Section */}
                 {recentProjects.length > 0 && (
-                    <section className="mt-10">
-                        <h3 className="text-lg font-semibold text-[var(--text-secondary)] mb-4 flex items-center gap-2">
-                            <ClockIcon className="w-5 h-5" />
+                    <section className="mt-14">
+                        <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-5 flex items-center gap-3 uppercase tracking-widest">
+                            <span className="w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-lavender)]" />
+                            <ClockIcon className="w-4 h-4 text-[var(--accent-lavender)]" />
                             Recent Projects
+                            <span className="w-8 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-lavender)]" />
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {recentProjects.map((recent) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {recentProjects.map((recent, index) => (
                                 <div
                                     key={recent.id}
-                                    className="group relative bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg p-4 cursor-pointer transition-all hover:border-[var(--accent-cyan)]/50"
+                                    className="group relative rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:scale-[1.02]"
+                                    style={{
+                                        background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
+                                        border: '1px solid var(--border-subtle)',
+                                        boxShadow: 'var(--shadow-md)',
+                                        animationDelay: `${index * 0.1}s`
+                                    }}
                                     onClick={handleFileOpen}
                                     title="Import this project to continue working on it"
                                 >
+                                    {/* Color accent bar */}
+                                    <div 
+                                        className="absolute top-0 left-4 right-4 h-[2px] rounded-full"
+                                        style={{
+                                            background: `linear-gradient(90deg, 
+                                                ${['var(--accent-pink)', 'var(--accent-cyan)', 'var(--accent-mint)', 'var(--accent-lavender)', 'var(--accent-peach)'][index % 5]}, 
+                                                transparent)`
+                                        }}
+                                    />
+                                    
                                     <button
                                         onClick={(e) => handleRemoveRecent(recent.id, e)}
-                                        className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 bg-[var(--bg-primary)] hover:bg-red-500/20 text-[var(--text-secondary)] hover:text-red-400 transition-all"
+                                        className="absolute top-4 right-4 p-2 rounded-xl opacity-0 group-hover:opacity-100 bg-[var(--bg-primary)]/80 hover:bg-red-500/20 text-[var(--text-muted)] hover:text-red-400 transition-all backdrop-blur-sm"
                                         title="Remove from recent"
                                     >
                                         <TrashIcon className="w-3.5 h-3.5" />
                                     </button>
-                                    <h4 className="font-semibold text-[var(--text-primary)] truncate pr-8">
+                                    <h4 className="font-bold text-[var(--text-primary)] truncate pr-10 mb-3">
                                         {recent.title}
                                     </h4>
-                                    <p className="text-xs text-[var(--text-secondary)] mt-1">
-                                        {recent.sceneCount} scene{recent.sceneCount !== 1 ? 's' : ''} • {recent.characterCount} character{recent.characterCount !== 1 ? 's' : ''}
-                                    </p>
-                                    <p className="text-xs text-[var(--text-secondary)] opacity-70 mt-2">
+                                    <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                                        <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[var(--bg-primary)]/50">
+                                            📖 {recent.sceneCount}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[var(--bg-primary)]/50">
+                                            👤 {recent.characterCount}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-[var(--text-tertiary)] mt-3 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-mint)]" />
                                         {formatTimeAgo(recent.lastOpened)}
                                     </p>
                                 </div>
                             ))}
                         </div>
-                        <p className="text-xs text-[var(--text-secondary)] opacity-60 mt-3 text-center">
+                        <p className="text-xs text-[var(--text-muted)] mt-5 text-center opacity-70">
                             Click a project to import it (you'll need to select the exported .zip file)
                         </p>
                     </section>
                 )}
                 
-                 <footer className="text-center mt-12 text-[var(--text-secondary)]">
-                    <p>Your work is now managed in memory. Please use the 'Export' button in the editor to save your project.</p>
+                 <footer className="text-center mt-14 text-[var(--text-muted)] text-sm">
+                    <p className="opacity-70">Your work is managed in memory. Use the 'Export' button in the editor to save.</p>
                     <button
                         onClick={() => setShowChangelog(true)}
-                        className="mt-2 text-sm underline hover:text-[var(--accent-cyan)]"
+                        className="mt-4 text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
                     >
-                        View Latest Changes
+                        View Latest Changes 
+                        <span className="group-hover:translate-x-1 transition-transform">→</span>
                     </button>
                 </footer>
             </div>
