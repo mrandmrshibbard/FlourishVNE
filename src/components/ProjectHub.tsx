@@ -12,7 +12,14 @@ export const ProjectHub: React.FC<{
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showChangelog, setShowChangelog] = useState(false);
     const [updateAvailable, setUpdateAvailable] = useState<{ version: string; isNew: boolean } | null>(null);
+    const [updateDownloading, setUpdateDownloading] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+    const [updateReady, setUpdateReady] = useState(false);
+    const [autoUpdateFailed, setAutoUpdateFailed] = useState(false);
     const toast = useToast();
+    
+    // Your itch.io page URL
+    const ITCHIO_URL = 'https://mrandmrshibbard.itch.io/flourish-visual-novel-engine';
 
     useEffect(() => {
         (window as any).__IS_MANAGER_WINDOW__ = false;
@@ -31,6 +38,67 @@ export const ProjectHub: React.FC<{
     }, []);
 
     const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
+    // Listen for native auto-updater events
+    useEffect(() => {
+        if (!isElectron) return;
+        
+        const api = (window as any).electronAPI;
+        
+        // Update available from electron-updater
+        api.onUpdateAvailable?.((info: { version: string }) => {
+            console.log('Native update available:', info.version);
+            setUpdateAvailable({ version: info.version, isNew: true });
+            toast.info(`🎉 Update v${info.version} is available! Click to download.`, { duration: 6000 });
+        });
+        
+        // Download progress
+        api.onUpdateDownloadProgress?.((progress: { percent: number }) => {
+            setDownloadProgress(Math.round(progress.percent));
+        });
+        
+        // Update downloaded and ready to install
+        api.onUpdateDownloaded?.((info: { version: string }) => {
+            setUpdateDownloading(false);
+            setDownloadProgress(null);
+            setUpdateReady(true);
+            toast.success(`Update v${info.version} downloaded! Click to install and restart.`, { duration: 0 }); // Don't auto-dismiss
+        });
+        
+        // Update error
+        api.onUpdateError?.((error: string) => {
+            console.error('Update error:', error);
+            setUpdateDownloading(false);
+            setDownloadProgress(null);
+            setAutoUpdateFailed(true);
+            // Fall back to showing itch.io link
+            toast.warning('Auto-update unavailable. You can download manually from itch.io.');
+        });
+    }, [isElectron, toast]);
+
+    const handleDownloadUpdate = async () => {
+        if (!isElectron) return;
+        setUpdateDownloading(true);
+        setDownloadProgress(0);
+        toast.info('Downloading update...', { duration: 2000 });
+        
+        const result = await (window as any).electronAPI.downloadUpdate?.();
+        if (!result?.success) {
+            setUpdateDownloading(false);
+            setAutoUpdateFailed(true);
+            toast.warning('Auto-download failed. Use the itch.io link instead.');
+        }
+    };
+
+    const handleOpenItchio = () => {
+        window.open(ITCHIO_URL, '_blank');
+    };
+
+    const handleInstallUpdate = () => {
+        if (!isElectron) return;
+        toast.info('Installing update and restarting...');
+        (window as any).electronAPI.installUpdate?.();
+    };
 
     const checkForUpdates = async () => {
         try {
@@ -133,26 +201,77 @@ export const ProjectHub: React.FC<{
     return (
         <div className="h-screen w-screen bg-[var(--bg-primary)] text-[var(--text-primary)] flex items-center justify-center p-4">
             {/* Update Available Banner */}
-            {updateAvailable && (
+            {(updateAvailable || updateReady) && (
                 <div className="fixed top-0 left-0 right-0 z-40">
                     <div 
                         className={`
-                            flex items-center justify-center gap-3 py-3 px-4 cursor-pointer
-                            ${updateAvailable.isNew 
-                                ? 'bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] animate-pulse' 
-                                : 'bg-[var(--accent-cyan)]/20 border-b border-[var(--accent-cyan)]/30'
+                            flex items-center justify-center gap-3 py-3 px-4 flex-wrap
+                            ${updateReady 
+                                ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
+                                : updateAvailable?.isNew 
+                                    ? 'bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)]' 
+                                    : 'bg-[var(--accent-cyan)]/20 border-b border-[var(--accent-cyan)]/30'
                             }
                         `}
-                        onClick={() => setShowChangelog(true)}
                     >
                         <SparkleIcon className="w-5 h-5" />
-                        <span className="font-medium">
-                            {updateAvailable.isNew 
-                                ? `🎉 New Update Available: v${updateAvailable.version}!` 
-                                : `Version ${updateAvailable.version} available`
-                            }
-                        </span>
-                        <span className="text-sm opacity-80">Click to see what's new →</span>
+                        
+                        {updateReady ? (
+                            <>
+                                <span className="font-medium">✅ Update v{updateAvailable?.version} ready to install!</span>
+                                <button
+                                    onClick={handleInstallUpdate}
+                                    className="ml-2 px-4 py-1 bg-white text-green-700 rounded-full font-bold text-sm hover:bg-green-100 transition-colors"
+                                >
+                                    Install & Restart
+                                </button>
+                            </>
+                        ) : updateDownloading ? (
+                            <>
+                                <span className="font-medium">Downloading update...</span>
+                                <div className="w-32 h-2 bg-white/30 rounded-full overflow-hidden">
+                                    <div 
+                                        className="h-full bg-white rounded-full transition-all duration-300"
+                                        style={{ width: `${downloadProgress || 0}%` }}
+                                    />
+                                </div>
+                                <span className="text-sm">{downloadProgress}%</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="font-medium">
+                                    {updateAvailable?.isNew 
+                                        ? `🎉 New Update Available: v${updateAvailable.version}!` 
+                                        : `Version ${updateAvailable?.version} available`
+                                    }
+                                </span>
+                                
+                                {/* Show auto-update button if not failed */}
+                                {!autoUpdateFailed && (
+                                    <button
+                                        onClick={handleDownloadUpdate}
+                                        className="ml-2 px-4 py-1 bg-white/20 hover:bg-white/30 rounded-full font-medium text-sm transition-colors"
+                                    >
+                                        Auto-Update
+                                    </button>
+                                )}
+                                
+                                {/* Always show itch.io link */}
+                                <button
+                                    onClick={handleOpenItchio}
+                                    className="px-4 py-1 bg-white/20 hover:bg-white/30 rounded-full font-medium text-sm transition-colors flex items-center gap-1"
+                                >
+                                    📥 Download from itch.io
+                                </button>
+                                
+                                <button
+                                    onClick={() => setShowChangelog(true)}
+                                    className="px-3 py-1 text-sm opacity-80 hover:opacity-100 underline"
+                                >
+                                    What's new?
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

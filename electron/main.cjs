@@ -231,8 +231,64 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  // Check for updates
-  autoUpdater.checkForUpdatesAndNotify();
+  // Configure auto-updater
+  autoUpdater.autoDownload = false; // Don't auto-download, let user decide
+  autoUpdater.autoInstallOnAppQuit = true;
+  
+  // Auto-updater events - send to renderer
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for updates...');
+  });
+  
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', {
+        version: info.version,
+        releaseDate: info.releaseDate,
+        releaseNotes: info.releaseNotes
+      });
+    }
+  });
+  
+  autoUpdater.on('update-not-available', () => {
+    console.log('No updates available');
+    if (mainWindow) {
+      mainWindow.webContents.send('update-not-available');
+    }
+  });
+  
+  autoUpdater.on('download-progress', (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-download-progress', {
+        percent: progress.percent,
+        bytesPerSecond: progress.bytesPerSecond,
+        transferred: progress.transferred,
+        total: progress.total
+      });
+    }
+  });
+  
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', {
+        version: info.version
+      });
+    }
+  });
+  
+  autoUpdater.on('error', (error) => {
+    console.error('Auto-updater error:', error);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', error.message);
+    }
+  });
+
+  // Check for updates on startup (silently)
+  autoUpdater.checkForUpdates().catch(err => {
+    console.log('Update check failed (this is normal if no releases exist):', err.message);
+  });
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked
@@ -594,6 +650,29 @@ ipcMain.on('confirm-quit', () => {
 // Get app version
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+// Auto-updater IPC handlers
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { success: true, version: result?.updateInfo?.version };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('download-update', async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.on('install-update', () => {
+  autoUpdater.quitAndInstall(false, true);
 });
 
 // Cancel quit
