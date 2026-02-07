@@ -42,8 +42,7 @@ export async function buildStandaloneGame(
     message: 'Generating game files...'
   });
 
-  // Create the standalone HTML file
-  const htmlContent = generateStandaloneHTML(project);
+  const htmlContent = await generateStandaloneHTML(project);
   zip.file('index.html', htmlContent);
 
   // Step 3: Copy all assets (50%)
@@ -98,13 +97,41 @@ export async function buildStandaloneGame(
   return blob;
 }
 
+const vendorCache: Record<string, string> = {};
+
+async function fetchVendorScript(url: string): Promise<string> {
+  if (vendorCache[url]) return vendorCache[url];
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    vendorCache[url] = text;
+    return text;
+  } catch {
+    return '';
+  }
+}
+
+async function fetchVendorScripts(): Promise<{ react: string; reactDom: string; tailwind: string }> {
+  const [react, reactDom, tailwind] = await Promise.all([
+    fetchVendorScript('https://unpkg.com/react@18/umd/react.production.min.js'),
+    fetchVendorScript('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js'),
+    fetchVendorScript('https://cdn.tailwindcss.com'),
+  ]);
+  return { react, reactDom, tailwind };
+}
+
 /**
  * Generates a self-contained HTML file with the game engine embedded
+ * Fetches React/ReactDOM/Tailwind at build time and inlines them for true offline play
  */
-export function generateStandaloneHTML(project: VNProject): string {
-  // Inline the minimal game engine code
+export async function generateStandaloneHTML(project: VNProject): Promise<string> {
   const gameEngineCode = getMinimalGameEngine();
   const projectData = JSON.stringify(project);
+
+  const vendor = await fetchVendorScripts();
+  const hasInlinedReact = vendor.react.length > 0 && vendor.reactDom.length > 0;
+  const hasInlinedTailwind = vendor.tailwind.length > 0;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -369,8 +396,10 @@ export function generateStandaloneHTML(project: VNProject): string {
     }
   </style>
   
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (inlined for offline play) -->
+  ${hasInlinedTailwind 
+    ? `<script>${vendor.tailwind}</script>` 
+    : `<script src="https://cdn.tailwindcss.com"></script>`}
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -393,9 +422,10 @@ export function generateStandaloneHTML(project: VNProject): string {
   
   <div id="game-container"></div>
 
-  <!-- React from CDN -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- React (inlined for offline play) -->
+  ${hasInlinedReact
+    ? `<script>${vendor.react}</script>\n  <script>${vendor.reactDom}</script>`
+    : `<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>\n  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>`}
   
   <!-- JSX Runtime and React DOM Client for the game engine -->
   <script>

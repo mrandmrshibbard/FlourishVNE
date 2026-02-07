@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon } from './icons';
+import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { exportProject } from '../utils/projectPackager';
 import { saveRecentProject } from './ProjectHub';
@@ -9,6 +9,7 @@ import ConfirmationModal from './ui/ConfirmationModal';
 import InfoModal from './ui/InfoModal';
 import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
+import ContentWizardModal from './ContentWizardModal';
 
 function isEditorDebugEnabled(): boolean {
     try {
@@ -35,6 +36,7 @@ const Header: React.FC<{
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
+    const [showWizardModal, setShowWizardModal] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -269,6 +271,14 @@ const Header: React.FC<{
                         </div>
                         <ThemeSelector />
                         <button
+                            onClick={() => setShowWizardModal(true)}
+                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
+                            title="Content Wizards"
+                        >
+                            <SparklesIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                            Wizards
+                        </button>
+                        <button
                             onClick={handleExport}
                             className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
                             title="Export Project as .zip"
@@ -295,6 +305,16 @@ const Header: React.FC<{
             )}
         </header>
         {!isChildWindow && showBuilder && <GameBuilder project={project} onClose={() => setShowBuilder(false)} />}
+        
+        {!isChildWindow && (
+            <ContentWizardModal
+                isOpen={showWizardModal}
+                onClose={() => setShowWizardModal(false)}
+                onComplete={(result) => {
+                    console.log('Wizard completed:', result);
+                }}
+            />
+        )}
         
         {/* Exit Confirmation Modal */}
         <ConfirmationModal

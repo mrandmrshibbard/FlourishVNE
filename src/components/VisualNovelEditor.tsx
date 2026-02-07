@@ -20,6 +20,7 @@ const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
 import KeyboardShortcutsModal from './ui/KeyboardShortcutsModal';
+import GuidedTour from './GuidedTour';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
@@ -59,6 +60,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [isConfiguringScene, setIsConfiguringScene] = useState(false);
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
     const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+    const [showTour, setShowTour] = useState(() => !localStorage.getItem('flourish:tourCompleted'));
 
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
@@ -582,6 +584,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 isOpen={showKeyboardShortcuts}
                 onClose={() => setShowKeyboardShortcuts(false)}
             />
+            
+            {/* Guided Tour */}
+            <GuidedTour isActive={showTour} onComplete={() => setShowTour(false)} />
         </div>
     );
 };

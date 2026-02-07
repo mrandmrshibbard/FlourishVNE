@@ -12,6 +12,9 @@ import { UIElementType, UIButtonElement, UIImageElement, UIAsset, VNUIScreen, VN
 
 import { fileToBase64 } from './file';
 import { createInitialProject, createDefaultUIScreens } from '../constants';
+import { MigrationService } from '../features/migration/MigrationService';
+
+const migrationService = new MigrationService();
 
 export type ExportManifest = {
     schemaVersion: 1;
@@ -589,6 +592,26 @@ export const importProject = async (file: File): Promise<{ project: VNProject; m
         project = JSON.parse(projectContent);
     } catch (e) {
         throw new Error('Could not parse project.json. The file may be corrupt.');
+    }
+
+    if (migrationService.needsMigration(project)) {
+        try {
+            const plan = await migrationService.createMigrationPlan(project);
+            const result = await migrationService.executeMigration(project, plan);
+
+            if (result.warnings.length > 0) {
+                result.warnings.forEach(w => console.warn('[Migration]', w));
+            }
+            if (result.errors.length > 0) {
+                result.errors.forEach(err => console.error('[Migration]', err.message));
+            }
+
+            if (!result.success) {
+                console.error('[Migration] Migration failed, using original project data.');
+            }
+        } catch (migrationError) {
+            console.error('[Migration] Unexpected error during migration:', migrationError);
+        }
     }
 
     // Optionally read manifest

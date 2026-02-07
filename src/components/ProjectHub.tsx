@@ -246,9 +246,25 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(false);
         }
         const newProject = createInitialProject();
-        // Don't save to recent projects until user exports/saves the project
-        // The new project is not saved to localStorage; it's passed directly to the editor state.
         onProjectSelect(newProject);
+    };
+
+    const handleStartTutorial = async () => {
+        try {
+            const response = await fetch('welcome_onboarding_export/project.json');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch tutorial project: ${response.statusText}`);
+            }
+            const project = (await response.json()) as VNProject;
+            if ((window as any).electronAPI?.setHubActive) {
+                (window as any).electronAPI.setHubActive(false);
+            }
+            onProjectSelect(project);
+            toast.success('Tutorial project loaded!');
+        } catch (error) {
+            console.error('Error loading tutorial project:', error);
+            toast.error(`Failed to load tutorial: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     };
 
     const handleFileOpen = () => {
@@ -507,7 +523,7 @@ export const ProjectHub: React.FC<{
                     {/* Create New Project Card */}
                     <button 
                         onClick={handleCreateNew}
-                        className="group relative w-full md:w-1/2 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
+                        className="group relative w-full md:w-1/3 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
                         style={{
                             background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
                             border: '1px solid var(--border-subtle)',
@@ -546,10 +562,49 @@ export const ProjectHub: React.FC<{
                         <div className="absolute bottom-8 left-10 text-[var(--accent-lavender)] opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
                     </button>
                     
+                    {/* Start Tutorial Card */}
+                    <button 
+                        onClick={handleStartTutorial}
+                        className="group relative w-full md:w-1/3 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
+                        style={{
+                            background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
+                            border: '1px solid var(--border-subtle)',
+                            boxShadow: 'var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.03)'
+                        }}
+                    >
+                        <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                            style={{
+                                padding: '1px',
+                                background: 'linear-gradient(135deg, #f5c542, #e6a817)',
+                                WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+                                WebkitMaskComposite: 'xor',
+                                maskComposite: 'exclude',
+                            }}
+                        />
+                        
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-3xl"
+                            style={{ boxShadow: 'inset 0 0 60px rgba(245, 197, 66, 0.1), 0 0 40px rgba(245, 197, 66, 0.15)' }}
+                        />
+                        
+                        <div className="relative z-10 p-5 rounded-2xl mb-5 group-hover:scale-110 transition-transform duration-300"
+                            style={{
+                                background: 'linear-gradient(135deg, rgba(245, 197, 66, 0.2) 0%, rgba(230, 168, 23, 0.15) 100%)',
+                                boxShadow: '0 0 30px rgba(245, 197, 66, 0.2)'
+                            }}
+                        >
+                            <span className="text-4xl">🎓</span>
+                        </div>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Start Tutorial</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Learn the basics with a guided project</p>
+                        
+                        <div className="absolute top-6 right-8 text-yellow-400 opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
+                        <div className="absolute bottom-8 left-10 text-amber-300 opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
+                    </button>
+                    
                     {/* Import Project Card */}
                     <button 
                         onClick={handleFileOpen}
-                        className="group relative w-full md:w-1/2 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
+                        className="group relative w-full md:w-1/3 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
                         style={{
                             background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
                             border: '1px solid var(--border-subtle)',

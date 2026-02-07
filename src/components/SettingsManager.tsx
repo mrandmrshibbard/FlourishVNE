@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { VNProject, VNProjectFont } from '../types/project';
 import { VNProjectUI, VNFontSettings } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
-import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, MusicalNoteIcon, TrashIcon } from './icons';
+import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, MusicalNoteIcon, TrashIcon, SparklesIcon, ClockIcon } from './icons';
 import { VNID } from '../types';
+import { AccessibilityManager, A11yPreferences } from '../features/accessibility/AccessibilityManager';
+import { WorkflowTracker, WorkflowStats } from '../features/analytics/WorkflowTracker';
 
 function isEditorDebugEnabled(): boolean {
     try {
@@ -25,7 +27,7 @@ interface SettingsManagerProps {
 
 const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
-    const [activeSection, setActiveSection] = useState<'general' | 'ui' | 'fonts' | 'screens'>('general');
+    const [activeSection, setActiveSection] = useState<'general' | 'ui' | 'fonts' | 'screens' | 'accessibility' | 'analytics'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
         editorDebugLog('[SettingsManager] updateUI called with:', updates);
@@ -42,6 +44,8 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
         { id: 'ui' as const, name: 'UI Assets', icon: PhotoIcon },
         { id: 'fonts' as const, name: 'Fonts', icon: BookOpenIcon },
         { id: 'screens' as const, name: 'Screens', icon: MusicalNoteIcon },
+        { id: 'accessibility' as const, name: 'Accessibility', icon: SparklesIcon },
+        { id: 'analytics' as const, name: 'Analytics', icon: ClockIcon },
     ];
 
     return (
@@ -86,6 +90,12 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                 )}
                 {activeSection === 'screens' && (
                     <ScreenSettings project={project} onUpdate={updateUI} />
+                )}
+                {activeSection === 'accessibility' && (
+                    <AccessibilitySettings />
+                )}
+                {activeSection === 'analytics' && (
+                    <AnalyticsSettings />
                 )}
             </div>
         </div>
@@ -713,6 +723,139 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                             </option>
                         ))}
                     </select>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AccessibilitySettings: React.FC = () => {
+    const a11yManager = AccessibilityManager.getInstance();
+    const [preferences, setPreferences] = useState<A11yPreferences>(a11yManager.getPreferences());
+
+    const handleToggle = (key: keyof A11yPreferences) => {
+        const newValue = !preferences[key];
+        a11yManager.updatePreference(key, newValue);
+        setPreferences(a11yManager.getPreferences());
+    };
+
+    const toggleItems: { key: keyof A11yPreferences; label: string; description: string }[] = [
+        { key: 'highContrast', label: 'High Contrast Mode', description: 'Increases contrast for better visibility' },
+        { key: 'reducedMotion', label: 'Reduced Motion', description: 'Reduces animations for motion sensitivity' },
+        { key: 'largeText', label: 'Large Text', description: 'Increases text size throughout the editor' },
+        { key: 'keyboardOnly', label: 'Keyboard Navigation', description: 'Optimized for keyboard-only use' },
+        { key: 'screenReaderMode', label: 'Screen Reader Mode', description: 'Enhanced compatibility with screen readers' },
+    ];
+
+    return (
+        <div className="p-6">
+            <h3 className="text-xl font-bold text-white mb-6">Accessibility Settings</h3>
+
+            <div className="space-y-4 max-w-md">
+                {toggleItems.map(({ key, label, description }) => (
+                    <div
+                        key={key}
+                        className="flex items-center justify-between p-4 bg-slate-800 rounded-md border border-slate-700"
+                    >
+                        <div>
+                            <label className="block text-sm font-medium text-white">{label}</label>
+                            <span className="text-xs text-slate-400">{description}</span>
+                        </div>
+                        <button
+                            role="switch"
+                            aria-checked={preferences[key]}
+                            onClick={() => handleToggle(key)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                                preferences[key] ? 'bg-sky-500' : 'bg-slate-600'
+                            }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    preferences[key] ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                            />
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const AnalyticsSettings: React.FC = () => {
+    const [stats, setStats] = useState<WorkflowStats>(WorkflowTracker.getInstance().getStatistics());
+
+    const refreshStats = () => {
+        setStats(WorkflowTracker.getInstance().getStatistics());
+    };
+
+    const formatDuration = (ms: number): string => {
+        if (ms < 1000) return `${Math.round(ms)}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        return `${(ms / 60000).toFixed(1)}m`;
+    };
+
+    const sessionStart = React.useRef(Date.now());
+    const sessionDuration = Date.now() - sessionStart.current;
+
+    const formatSessionDuration = (ms: number): string => {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+        return `${seconds}s`;
+    };
+
+    return (
+        <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-white">Analytics</h3>
+                <button
+                    onClick={refreshStats}
+                    className="px-3 py-1.5 text-sm bg-sky-500/20 text-sky-300 rounded-md border border-sky-500/50 hover:bg-sky-500/30 transition-colors"
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div className="space-y-6 max-w-md">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-slate-800 rounded-md border border-slate-700">
+                        <span className="block text-xs text-slate-400 mb-1">Total Actions</span>
+                        <span className="text-2xl font-bold text-white">{stats.totalActions}</span>
+                    </div>
+                    <div className="p-4 bg-slate-800 rounded-md border border-slate-700">
+                        <span className="block text-xs text-slate-400 mb-1">Avg Action Time</span>
+                        <span className="text-2xl font-bold text-white">{formatDuration(stats.averageActionTime)}</span>
+                    </div>
+                    <div className="p-4 bg-slate-800 rounded-md border border-slate-700">
+                        <span className="block text-xs text-slate-400 mb-1">Session Duration</span>
+                        <span className="text-2xl font-bold text-white">{formatSessionDuration(sessionDuration)}</span>
+                    </div>
+                    <div className="p-4 bg-slate-800 rounded-md border border-slate-700">
+                        <span className="block text-xs text-slate-400 mb-1">Efficiency Score</span>
+                        <span className="text-2xl font-bold text-white">{stats.efficiencyScore}%</span>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-slate-800 rounded-md border border-slate-700">
+                    <h4 className="text-sm font-medium text-slate-300 mb-3">Most Common Actions (Top 5)</h4>
+                    {stats.mostCommonActions.length === 0 ? (
+                        <p className="text-xs text-slate-400">No actions tracked yet. Start editing to see analytics.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {stats.mostCommonActions.map((item, index) => (
+                                <div key={item.action} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-slate-500 w-4">{index + 1}.</span>
+                                        <span className="text-sm text-white font-mono">{item.action}</span>
+                                    </div>
+                                    <span className="text-xs text-slate-400">{item.count}x</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

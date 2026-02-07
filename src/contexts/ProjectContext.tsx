@@ -4,6 +4,7 @@ import { ProjectAction } from '../state/actions';
 import { rootReducer } from '../state/rootReducer';
 import { saveProjectToIDB } from '../utils/storage';
 import { createLogger } from '../utils/logger';
+import { WorkflowTracker } from '../features/analytics/WorkflowTracker';
 
 interface UndoRedoState {
   past: VNProject[];
@@ -54,6 +55,8 @@ export const ProjectProvider: React.FC<{
       if (newPresent === prev.present) {
         return prev;
       }
+
+      WorkflowTracker.getInstance().trackAction(action.type, 'editor');
 
       const now = Date.now();
       const shouldCoalesce =
