@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { VNProject } from '../types/project';
 import { createInitialProject } from '../constants';
 import { PlusIcon, UploadIcon, SparkleIcon, ClockIcon, TrashIcon } from './icons';
@@ -7,6 +7,7 @@ import { ChangelogModal } from './ChangelogModal';
 import { useToast } from '../contexts/ToastContext';
 import LoadingOverlay from './ui/LoadingOverlay';
 import { getAutoSaveMetadata, loadProjectFromIDB, deleteAutoSave } from '../utils/storage';
+import { toggleBackgroundMusic } from '../utils/hubAudio';
 
 // Recent project metadata (stored in localStorage)
 interface RecentProject {
@@ -84,6 +85,7 @@ export const ProjectHub: React.FC<{
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
     const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
     const [showRecovery, setShowRecovery] = useState(false);
+    const [isMusicPlaying, setIsMusicPlaying] = useState(false);
     const toast = useToast();
     
     const ITCHIO_URL = 'https://memento-morii1.itch.io/flourish-visual-novel-engine';
@@ -116,8 +118,15 @@ export const ProjectHub: React.FC<{
             if ((window as any).electronAPI?.setHubActive) {
                 (window as any).electronAPI.setHubActive(false);
             }
+            toggleBackgroundMusic(false);
         };
     }, []);
+
+    const handleMusicToggle = useCallback(() => {
+        const newState = !isMusicPlaying;
+        setIsMusicPlaying(newState);
+        toggleBackgroundMusic(newState);
+    }, [isMusicPlaying]);
 
     const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
@@ -769,6 +778,39 @@ export const ProjectHub: React.FC<{
                 message="Importing Project..." 
                 subMessage="Extracting and processing files"
             />
+            <button
+                onClick={handleMusicToggle}
+                className="fixed bottom-6 right-6 z-50 group"
+                title={isMusicPlaying ? 'Turn off ambient music' : 'Play ambient music'}
+            >
+                <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg hover:shadow-xl border"
+                    style={{
+                        background: isMusicPlaying
+                            ? 'linear-gradient(135deg, var(--accent-pink), var(--accent-lavender))'
+                            : 'var(--bg-secondary)',
+                        borderColor: isMusicPlaying ? 'var(--accent-pink)' : 'var(--border-subtle)',
+                    }}
+                >
+                    {isMusicPlaying ? (
+                        <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                        </svg>
+                    ) : (
+                        <svg className="w-5 h-5 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                            <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                    )}
+                </div>
+                {isMusicPlaying && (
+                    <div className="absolute -top-1 -right-1 flex gap-[2px]">
+                        <span className="w-[3px] h-3 bg-[var(--accent-cyan)] rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                        <span className="w-[3px] h-2 bg-[var(--accent-mint)] rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                        <span className="w-[3px] h-3.5 bg-[var(--accent-pink)] rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                    </div>
+                )}
+            </button>
         </div>
     );
 };
