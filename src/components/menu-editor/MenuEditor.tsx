@@ -8,7 +8,8 @@ import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
 import { fontSettingsToStyle } from '../../utils/styleUtils';
-import { PlusIcon } from '../icons';
+import { PlusIcon, SparklesIcon } from '../icons';
+import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustomizationWizard';
 
 // Safe wrapper for element rendering to prevent crashes
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
@@ -293,6 +294,8 @@ const MenuEditor: React.FC<{
 }> = ({ activeScreenId, selectedElementId, setSelectedElementId }) => {
     const { project, dispatch } = useProject();
     const screen = project.uiScreens[activeScreenId];
+    const [showWizard, setShowWizard] = useState(false);
+    const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -362,6 +365,77 @@ const MenuEditor: React.FC<{
             setSelectedElementId(newElement.id);
         }
     };
+
+    const handleWizardGenerate = (config: GeneratedConfig) => {
+        const character = project.characters[config.characterId];
+        if (!character) return;
+
+        // 1. Create variables
+        config.variables.forEach(varConfig => {
+            dispatch({
+                type: 'ADD_VARIABLE',
+                payload: {
+                    id: varConfig.id,
+                    name: varConfig.name,
+                    type: 'string',
+                    defaultValue: ''
+                }
+            });
+        });
+
+        // 2. Create asset cyclers (positioned vertically on the left)
+        let yPosition = 10;
+        config.cyclers.forEach((cyclerConfig, index) => {
+            const layer = character.layers[cyclerConfig.layerId];
+            const cyclerElement = createUIElement(UIElementType.AssetCycler, project) as UIAssetCyclerElement;
+            if (cyclerElement) {
+                cyclerElement.name = `${cyclerConfig.label} Cycler`;
+                cyclerElement.characterId = config.characterId;
+                cyclerElement.layerId = cyclerConfig.layerId;
+                cyclerElement.variableId = cyclerConfig.variableId;
+                cyclerElement.assetIds = cyclerConfig.assetIds;
+                cyclerElement.label = cyclerConfig.label;
+                cyclerElement.x = 5;
+                cyclerElement.y = yPosition;
+                cyclerElement.width = 35;
+                cyclerElement.height = 12;
+                
+                // Add asset conditions if this is a conditional cycler
+                if (cyclerConfig.assetConditions && cyclerConfig.assetConditions.length > 0) {
+                    cyclerElement.assetConditions = cyclerConfig.assetConditions;
+                }
+                
+                dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: cyclerElement } });
+                yPosition += 15;
+            }
+        });
+
+        // 3. Create character preview (on the right side)
+        const previewElement = createUIElement(UIElementType.CharacterPreview, project) as UICharacterPreviewElement;
+        if (previewElement) {
+            previewElement.name = `${character.name} Preview`;
+            previewElement.characterId = config.characterId;
+            previewElement.layerVariableMap = config.preview.layerVariableMap;
+            previewElement.x = 45;
+            previewElement.y = 5;
+            previewElement.width = 50;
+            previewElement.height = 85;
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: previewElement } });
+        }
+
+        // 4. Create a "Done" button at the bottom
+        const buttonElement = createUIElement(UIElementType.Button, project) as UIButtonElement;
+        if (buttonElement) {
+            buttonElement.name = 'Done Button';
+            buttonElement.text = 'Done';
+            buttonElement.x = 5;
+            buttonElement.y = 85;
+            buttonElement.width = 35;
+            buttonElement.height = 8;
+            buttonElement.actions = [{ type: 'CloseScreen' }];
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
+        }
+    };
     
     const getBackground = () => {
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
@@ -407,19 +481,90 @@ const MenuEditor: React.FC<{
             </Panel>
             
             {/* Element Toolbar - Always Visible */}
-            <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-11 gap-2">
-                <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
-                <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
-                <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
-                <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
-                <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
-                <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
-                <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
-                <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
-                <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Cycler</button>
-                <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
-                <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
+            <div className="flex-shrink-0 space-y-2">
+                {/* Template Wizard Button - Prominent placement */}
+                <button 
+                    onClick={() => setShowTemplateSelector(true)} 
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 p-3 rounded-md flex items-center justify-center gap-2 font-semibold text-sm shadow-lg border border-purple-400/30"
+                >
+                    <SparklesIcon className="w-5 h-5" /> Template Wizard
+                </button>
+                
+                {/* Individual Element Buttons */}
+                <div className="grid grid-cols-2 md:grid-cols-11 gap-2">
+                    <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
+                    <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
+                    <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
+                    <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
+                    <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
+                    <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
+                    <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
+                    <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
+                    <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Cycler</button>
+                    <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
+                    <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
+                </div>
             </div>
+            
+            {/* Template Selector Modal */}
+            {showTemplateSelector && (
+                <div 
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm"
+                    onClick={(e) => e.target === e.currentTarget && setShowTemplateSelector(false)}
+                >
+                    <div className="bg-gradient-to-b from-[var(--bg-tertiary)] to-[var(--bg-secondary)] rounded-xl shadow-2xl w-full max-w-md p-6 m-4 border border-[var(--border-default)]">
+                        <h2 className="text-xl font-bold mb-2 text-center">✨ Template Wizard</h2>
+                        <p className="text-sm text-slate-400 text-center mb-6">Choose a template to get started quickly</p>
+                        
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => {
+                                    setShowTemplateSelector(false);
+                                    setShowWizard(true);
+                                }}
+                                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 p-4 rounded-lg flex items-center gap-4 text-left transition-all hover:scale-[1.02]"
+                            >
+                                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">👤</div>
+                                <div>
+                                    <div className="font-semibold">Character Customizer</div>
+                                    <div className="text-xs text-white/70">Create a character customization screen with layer cyclers</div>
+                                </div>
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    setShowTemplateSelector(false);
+                                    // TODO: Open shop wizard
+                                    alert('Shop Template coming soon!');
+                                }}
+                                className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 p-4 rounded-lg flex items-center gap-4 text-left transition-all hover:scale-[1.02]"
+                            >
+                                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">🛒</div>
+                                <div>
+                                    <div className="font-semibold">Shop Template</div>
+                                    <div className="text-xs text-white/70">Create an in-game shop with items and currency</div>
+                                </div>
+                            </button>
+                        </div>
+                        
+                        <button
+                            onClick={() => setShowTemplateSelector(false)}
+                            className="w-full mt-6 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+            
+            {/* Character Customization Wizard */}
+            <CharacterCustomizationWizard
+                isOpen={showWizard}
+                onClose={() => setShowWizard(false)}
+                project={project}
+                screenId={activeScreenId}
+                onGenerate={handleWizardGenerate}
+            />
         </div>
     );
 };

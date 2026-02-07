@@ -169,6 +169,17 @@ export interface UICheckboxElement extends BaseUIElement {
     actions?: VNUIAction[]; // Multiple actions on toggle
 }
 
+// Asset condition for the new simplified filtering system
+// Instead of complex filter patterns, users define explicit rules:
+// "When variable X = value AND variable Y = value, show this asset"
+export interface AssetCondition {
+    assetId: VNID; // The asset to show when conditions are met
+    conditions: {
+        variableId: VNID; // The variable to check
+        value: string; // The value it must equal (asset ID from another cycler)
+    }[];
+}
+
 export interface UIAssetCyclerElement extends BaseUIElement {
     type: UIElementType.AssetCycler;
     characterId: VNID; // Which character to pull assets from
@@ -182,6 +193,9 @@ export interface UIAssetCyclerElement extends BaseUIElement {
     arrowSize?: number; // Size of arrows in pixels
     backgroundColor?: string; // Background color of the cycler
     visible?: boolean; // Whether the cycler is visible (defaults to true)
+    // NEW: Simple condition-based filtering (replaces filterPattern)
+    assetConditions?: AssetCondition[]; // Define which assets to show based on other variable values
+    // DEPRECATED: Old filter pattern system (kept for backwards compatibility)
     filterPattern?: string; // Pattern to filter assets (e.g., "{body_type}_{skin_tone}" supports multiple variables)
     filterVariableId?: VNID; // DEPRECATED: Use filterVariableIds instead
     filterVariableIds?: VNID[]; // Array of variables to use for filtering (pattern uses {varId} placeholder syntax)

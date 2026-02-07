@@ -33,7 +33,11 @@ export const variableReducer = (state: VNProject, action: VariableAction): VNPro
 
     case 'DELETE_VARIABLE': {
       const { variableId } = action.payload;
-      const { [variableId]: _, ...remainingVars } = state.variables;
+      console.log('[variableReducer] DELETE_VARIABLE received for:', variableId);
+      console.log('[variableReducer] Current variables:', Object.keys(state.variables));
+      const { [variableId]: deletedVar, ...remainingVars } = state.variables;
+      console.log('[variableReducer] Deleted variable:', deletedVar?.name || 'NOT FOUND');
+      console.log('[variableReducer] Remaining variables:', Object.keys(remainingVars));
 
       // Clean up commands that use the deleted variable
       const newScenes = { ...state.scenes };

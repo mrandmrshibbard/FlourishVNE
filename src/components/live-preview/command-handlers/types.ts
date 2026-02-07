@@ -6,6 +6,7 @@
 import React from 'react';
 import { VNID } from '../../../types';
 import { VNProject } from '../../../types/project';
+import { VNCondition } from '../../../types/shared';
 import { PlayerState, StageState, MusicState } from '../types/gameState';
 import { CommandScheduler } from '../runtime/commandScheduler';
 import { RuntimeVariableStore } from '../runtime/runtimeVariableStore';
@@ -40,6 +41,8 @@ export interface CommandContext {
     setPlayerState: React.Dispatch<React.SetStateAction<PlayerState | null>>;
     activeEffectTimeoutsRef: React.MutableRefObject<number[]>;
     runtime?: RuntimeCommandHelpers;
+    // Condition evaluation for ShowButton and other conditional commands
+    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
 }
 
 /**

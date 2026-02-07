@@ -42,29 +42,32 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'asset' | 'folder'; id?: string; path?: string; name: string } | null>(null);
     const [draggedAsset, setDraggedAsset] = useState<{ id: string; type: AssetType } | null>(null);
 
+    // Universal accept string for all asset types (used for auto-detection upload)
+    const universalAccept = 'image/*,video/*,audio/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.mp4,.webm,.mov,.avi,.mkv,.mp3,.wav,.ogg,.m4a,.flac,.aac,.wma,audio/mpeg';
+
     const assetCategories: Record<AssetCategory, { label: string; icon: React.ReactNode; accept?: string; color: string }> = {
         backgrounds: {
             label: 'Backgrounds',
             icon: <PhotoIcon className="w-5 h-5" />,
-            accept: 'image/*,video/*',
+            accept: 'image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.mp4,.webm,.mov',
             color: 'text-purple-400'
         },
         images: {
             label: 'Images',
             icon: <PhotoIcon className="w-5 h-5" />,
-            accept: 'image/*,video/*',
+            accept: 'image/*,video/*,.png,.jpg,.jpeg,.gif,.webp,.mp4,.webm,.mov',
             color: 'text-blue-400'
         },
         audio: {
             label: 'Audio',
             icon: <MusicalNoteIcon className="w-5 h-5" />,
-            accept: 'audio/*',
+            accept: '.mp3,.wav,.ogg,.m4a,.flac,.aac,.wma,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/flac,audio/aac,audio/*',
             color: 'text-green-400'
         },
         videos: {
             label: 'Videos',
             icon: <FilmIcon className="w-5 h-5" />,
-            accept: 'video/*',
+            accept: 'video/*,.mp4,.webm,.mov,.avi,.mkv',
             color: 'text-pink-400'
         },
     };
@@ -77,6 +80,53 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
             case 'videos': return Object.values(project.videos || {});
             default: return [];
         }
+    };
+
+    // Detect the appropriate asset category based on file type
+    const detectCategoryFromFile = (file: File): AssetCategory => {
+        const mimeType = file.type.toLowerCase();
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        
+        // Check audio first (most specific)
+        if (mimeType.startsWith('audio/') || 
+            ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma'].includes(extension)) {
+            return 'audio';
+        }
+        
+        // Check video
+        if (mimeType.startsWith('video/') || 
+            ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension)) {
+            return 'videos';
+        }
+        
+        // Check image - default to images category (not backgrounds)
+        if (mimeType.startsWith('image/') || 
+            ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(extension)) {
+            return 'images';
+        }
+        
+        // Default to selected category if can't determine
+        return selectedCategory;
+    };
+
+    // Detect category from just filename (used when we don't have File object)
+    const detectCategoryFromFilename = (filename: string): AssetCategory => {
+        const extension = filename.split('.').pop()?.toLowerCase() || '';
+        
+        if (['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma'].includes(extension)) {
+            return 'audio';
+        }
+        
+        if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension)) {
+            return 'videos';
+        }
+        
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(extension)) {
+            return 'images';
+        }
+        
+        // Default to selected category
+        return selectedCategory;
     };
 
     // Build directory tree from assets
@@ -178,22 +228,35 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
     // When searching, we need to show results from all folders
     const isSearching = searchQuery.trim().length > 0;
 
-    // Handle dropping files onto the empty state
+    // Handle dropping files onto the empty state - auto-detect category based on file type
     const handleFileDrop = async (files: File[]) => {
         let successCount = 0;
         let failCount = 0;
         const errors: string[] = [];
+        const categorizedFiles: Map<AssetCategory, File[]> = new Map();
 
+        // Group files by detected category
         for (const file of files) {
-            try {
-                const base64 = await fileToBase64(file);
-                const name = file.name.replace(/\.[^/.]+$/, "");
-                addAsset(selectedCategory, name, base64, currentPath);
-                successCount++;
-            } catch (error) {
-                failCount++;
-                if (error instanceof Error && error.message !== 'Upload cancelled by user') {
-                    errors.push(`${file.name}: ${error.message}`);
+            const category = detectCategoryFromFile(file);
+            if (!categorizedFiles.has(category)) {
+                categorizedFiles.set(category, []);
+            }
+            categorizedFiles.get(category)!.push(file);
+        }
+
+        // Process files by category
+        for (const [category, categoryFiles] of categorizedFiles) {
+            for (const file of categoryFiles) {
+                try {
+                    const base64 = await fileToBase64(file);
+                    const name = file.name.replace(/\.[^/.]+$/, "");
+                    addAsset(category, name, base64, currentPath);
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    if (error instanceof Error && error.message !== 'Upload cancelled by user') {
+                        errors.push(`${file.name}: ${error.message}`);
+                    }
                 }
             }
         }
@@ -201,7 +264,13 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
         if (failCount > 0) {
             toast.warning(`Upload: ${successCount} succeeded, ${failCount} failed. ${errors.length > 0 ? errors[0] : 'Files may be too large or unsupported.'}`);
         } else if (successCount > 0) {
-            toast.success(`Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''}`);
+            // Show which categories were added to
+            const categories = Array.from(categorizedFiles.keys());
+            if (categories.length > 1) {
+                toast.success(`Uploaded ${successCount} file${successCount > 1 ? 's' : ''} to ${categories.join(', ')}`);
+            } else {
+                toast.success(`Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''}`);
+            }
         }
     };
 
@@ -497,8 +566,11 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
                         </button>
 
                         <AssetUploader 
-                            onUpload={(name, url) => addAsset(selectedCategory, name, url, currentPath)}
-                            accept={assetCategories[selectedCategory].accept}
+                            onUpload={(name, url, originalFilename) => {
+                                const category = detectCategoryFromFilename(originalFilename);
+                                addAsset(category, name, url, currentPath);
+                            }}
+                            accept={universalAccept}
                         />
                     </div>
                 </div>
@@ -624,7 +696,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project }) => {
                             title="No assets yet"
                             description={`Add ${selectedCategory} to your project`}
                             onDrop={handleFileDrop}
-                            accept={assetCategories[selectedCategory].accept}
+                            accept={universalAccept}
                         />
                     )}
                 </div>
@@ -1052,7 +1124,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description, onDro
 };
 
 
-const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => void; accept?: string }> = ({ onUpload, accept }) => {
+const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string, originalFilename: string) => void; accept?: string }> = ({ onUpload, accept }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const toast = useToast();
     const [isUploading, setIsUploading] = useState(false);
@@ -1076,7 +1148,7 @@ const AssetUploader: React.FC<{ onUpload: (name: string, dataUrl: string) => voi
                 try {
                     const base64 = await fileToBase64(file);
                     const name = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
-                    onUpload(name, base64);
+                    onUpload(name, base64, file.name);
                     console.log('[AssetUploader] Successfully uploaded:', name);
                     successCount++;
                 } catch (error) {

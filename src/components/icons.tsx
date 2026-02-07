@@ -87,6 +87,16 @@ export const TemplatesIcon = ({ className, title, ...props }: React.SVGProps<SVG
     </svg>
 );
 
+// ✨ Sparkles - Magic/Wizard icon (alias for TemplatesIcon but with different semantics)
+export const SparklesIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M10 1l.894 3.578a1.5 1.5 0 001.028 1.028L15.5 6.5l-3.578.894a1.5 1.5 0 00-1.028 1.028L10 12l-.894-3.578a1.5 1.5 0 00-1.028-1.028L4.5 6.5l3.578-.894a1.5 1.5 0 001.028-1.028L10 1z" />
+        <path d="M15 11l.447 1.789a.75.75 0 00.514.514L17.75 14l-1.789.447a.75.75 0 00-.514.514L15 16.75l-.447-1.789a.75.75 0 00-.514-.514L12.25 14l1.789-.447a.75.75 0 00.514-.514L15 11z" />
+        <path d="M5 14l.298 1.192a.5.5 0 00.343.343L6.833 15.833l-1.192.298a.5.5 0 00-.343.343L5 17.666l-.298-1.192a.5.5 0 00-.343-.343L3.167 15.833l1.192-.298a.5.5 0 00.343-.343L5 14z" />
+    </svg>
+);
+
 // ⌨️ Keyboard Shortcuts - Keyboard icon (prominent)
 export const KeyboardIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
@@ -262,6 +272,13 @@ export const ArrowUturnLeftIcon = ({ className, title, ...props }: React.SVGProp
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
         {title && <title>{title}</title>}
         <path fillRule="evenodd" d="M7.793 2.232a.75.75 0 01-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 010 10.75H10.75a.75.75 0 010-1.5h2.875a3.875 3.875 0 000-7.75H3.622l4.146 3.957a.75.75 0 01-1.036 1.085l-5.5-5.25a.75.75 0 010-1.085l5.5-5.25a.75.75 0 011.06.025z" clipRule="evenodd" />
+    </svg>
+);
+
+export const CheckIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
     </svg>
 );
 

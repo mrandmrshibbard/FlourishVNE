@@ -3,7 +3,7 @@ import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNCondition, VNConditionOperator } from '../../types/shared';
-import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption, GameSetting, GameToggleSetting } from '../../features/ui/types';
+import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption, GameSetting, GameToggleSetting, AssetCondition } from '../../features/ui/types';
 import { VNVariable, VNVariableType } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { VNProject } from '../../types/project';
@@ -1427,6 +1427,172 @@ const UIElementInspector: React.FC<{
                             <br />Example: If variables are "slim" and "light", pattern "{'{body_type}'}_{'{skin_tone}'}" matches "slim_light"
                         </div>
                     </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Asset Conditions (Simpler Alternative)</h3>
+                    <p className="text-xs text-slate-400 mb-2">
+                        Define when each asset should appear based on other variable values. 
+                        This is easier than filter patterns for most use cases.
+                    </p>
+                    {/* Asset Conditions Editor */}
+                    {el.assetConditions && el.assetConditions.length > 0 ? (
+                        <div className="space-y-3 max-h-60 overflow-y-auto">
+                            {el.assetConditions.map((assetCond, condIndex) => {
+                                const asset = layer?.assets[assetCond.assetId];
+                                return (
+                                    <div key={condIndex} className="p-2 bg-slate-800 rounded border border-slate-600">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-sm font-medium text-purple-300">
+                                                {asset?.name || assetCond.assetId}
+                                            </span>
+                                            <button
+                                                onClick={() => {
+                                                    const newConditions = el.assetConditions!.filter((_, i) => i !== condIndex);
+                                                    updateElement({ assetConditions: newConditions.length > 0 ? newConditions : undefined });
+                                                }}
+                                                className="text-red-400 hover:text-red-300 text-xs"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
+                                        
+                                        {assetCond.conditions.length === 0 && (
+                                            <div className="text-xs text-slate-500 italic mb-2">No conditions (always visible)</div>
+                                        )}
+                                        
+                                        {assetCond.conditions.map((cond, subIndex) => {
+                                            const condVar = project.variables[cond.variableId];
+                                            return (
+                                                <div key={subIndex} className="flex gap-1 items-center mb-1 text-xs">
+                                                    <Select 
+                                                        value={cond.variableId}
+                                                        onChange={e => {
+                                                            const newConditions = [...el.assetConditions!];
+                                                            newConditions[condIndex] = {
+                                                                ...newConditions[condIndex],
+                                                                conditions: newConditions[condIndex].conditions.map((c, i) => 
+                                                                    i === subIndex ? { ...c, variableId: e.target.value as VNID } : c
+                                                                )
+                                                            };
+                                                            updateElement({ assetConditions: newConditions });
+                                                        }}
+                                                        className="flex-1 text-xs"
+                                                    >
+                                                        <option value="">-- Variable --</option>
+                                                        {Object.values(project.variables).map(v => {
+                                                            const varItem = v as VNVariable;
+                                                            return <option key={varItem.id} value={varItem.id}>{varItem.name}</option>;
+                                                        })}
+                                                    </Select>
+                                                    <span>=</span>
+                                                    <TextInput 
+                                                        value={cond.value}
+                                                        onChange={e => {
+                                                            const newConditions = [...el.assetConditions!];
+                                                            newConditions[condIndex] = {
+                                                                ...newConditions[condIndex],
+                                                                conditions: newConditions[condIndex].conditions.map((c, i) => 
+                                                                    i === subIndex ? { ...c, value: e.target.value } : c
+                                                                )
+                                                            };
+                                                            updateElement({ assetConditions: newConditions });
+                                                        }}
+                                                        placeholder="value"
+                                                        className="w-20 text-xs"
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            const newConditions = [...el.assetConditions!];
+                                                            newConditions[condIndex] = {
+                                                                ...newConditions[condIndex],
+                                                                conditions: newConditions[condIndex].conditions.filter((_, i) => i !== subIndex)
+                                                            };
+                                                            updateElement({ assetConditions: newConditions });
+                                                        }}
+                                                        className="text-red-400 hover:text-red-300 px-1"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                        
+                                        <button
+                                            onClick={() => {
+                                                const newConditions = [...el.assetConditions!];
+                                                const firstVarId = Object.keys(project.variables)[0] || '';
+                                                newConditions[condIndex] = {
+                                                    ...newConditions[condIndex],
+                                                    conditions: [...newConditions[condIndex].conditions, { variableId: firstVarId as VNID, value: '' }]
+                                                };
+                                                updateElement({ assetConditions: newConditions });
+                                            }}
+                                            className="text-xs text-purple-400 hover:text-purple-300 mt-1"
+                                        >
+                                            + Add Condition
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-xs text-slate-500 italic mb-2">No asset conditions defined</div>
+                    )}
+                    
+                    {/* Add Asset Condition Button */}
+                    <div className="mt-2">
+                        <FormField label="Add Condition for Asset">
+                            <div className="flex gap-2">
+                                <Select 
+                                    id="add-asset-condition-select"
+                                    value=""
+                                    onChange={e => {
+                                        const assetId = e.target.value as VNID;
+                                        if (!assetId) return;
+                                        
+                                        const existingConditions = el.assetConditions || [];
+                                        // Check if this asset already has conditions
+                                        if (existingConditions.some(c => c.assetId === assetId)) {
+                                            alert('This asset already has conditions defined');
+                                            return;
+                                        }
+                                        
+                                        const newCondition: AssetCondition = {
+                                            assetId,
+                                            conditions: []
+                                        };
+                                        updateElement({ assetConditions: [...existingConditions, newCondition] });
+                                        
+                                        // Reset the select
+                                        (document.getElementById('add-asset-condition-select') as HTMLSelectElement).value = '';
+                                    }}
+                                    className="flex-1"
+                                >
+                                    <option value="">-- Select Asset --</option>
+                                    {layer && Object.values(layer.assets)
+                                        .filter(asset => el.assetIds.includes((asset as VNLayerAsset).id))
+                                        .map(asset => {
+                                            const a = asset as VNLayerAsset;
+                                            const hasCondition = el.assetConditions?.some(c => c.assetId === a.id);
+                                            return (
+                                                <option key={a.id} value={a.id} disabled={hasCondition}>
+                                                    {a.name} {hasCondition ? '(has conditions)' : ''}
+                                                </option>
+                                            );
+                                        })
+                                    }
+                                </Select>
+                            </div>
+                        </FormField>
+                    </div>
+                    
+                    {el.assetConditions && el.assetConditions.length > 0 && (
+                        <button
+                            onClick={() => updateElement({ assetConditions: undefined })}
+                            className="text-xs text-red-400 hover:text-red-300 mt-2"
+                        >
+                            Clear All Asset Conditions
+                        </button>
+                    )}
 
                     <h3 className="font-bold my-2 text-slate-400">Styling</h3>
                     <div className="grid grid-cols-2 gap-2">

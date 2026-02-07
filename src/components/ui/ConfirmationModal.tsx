@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 const ConfirmationModal: React.FC<{
     isOpen: boolean;
@@ -18,9 +19,9 @@ const ConfirmationModal: React.FC<{
         }
     };
 
-    return (
+    const modalContent = (
         <div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fadeIn" 
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fadeIn" 
             onClick={handleBackdropClick}
             style={{ animation: 'fade-in 0.2s ease-out' }}
         >
@@ -52,6 +53,9 @@ const ConfirmationModal: React.FC<{
             </div>
         </div>
     );
+
+    // Use portal to render at document body level, escaping any overflow:hidden containers
+    return createPortal(modalContent, document.body);
 };
 
 export default ConfirmationModal;

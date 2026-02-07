@@ -418,15 +418,14 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 return;
             }
 
-            // Map number keys 1-7 to tabs
+            // Map number keys 1-6 to tabs
             const tabMap: Record<string, NavigationTab> = {
                 '1': 'scenes',
                 '2': 'characters',
                 '3': 'ui',
                 '4': 'assets',
                 '5': 'variables',
-                '6': 'settings',
-                '7': 'templates'
+                '6': 'settings'
             };
 
             const newTab = tabMap[e.key];
@@ -546,15 +545,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     ) : activeTab === 'settings' ? (
                         <Suspense fallback={<div className="text-slate-300 p-4">Loading settings…</div>}>
                             <SettingsManager project={project} />
-                        </Suspense>
-                    ) : activeTab === 'templates' ? (
-                        <Suspense fallback={<div className="text-slate-300 p-4">Loading templates…</div>}>
-                            <TemplateGallery 
-                                onSelectTemplate={handleSelectTemplate}
-                                onPreviewTemplate={handlePreviewTemplate}
-                                onApplyTemplate={handleApplyTemplate}
-                                selectedTemplateId={selectedTemplateId}
-                            />
                         </Suspense>
                     ) : null}
                 </div>

@@ -39,7 +39,8 @@ export function handleJump(command: JumpCommand, context: CommandContext): Comma
           zoom: 1,
           panX: 0,
           panY: 0,
-          transitionDuration: 0.5
+          transitionDuration: 0.5,
+          overlayEffects: []
         }
       },
       // Clear UI state

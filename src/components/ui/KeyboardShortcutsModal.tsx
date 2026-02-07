@@ -11,11 +11,10 @@ const shortcutCategories: ShortcutCategory[] = [
         shortcuts: [
             { keys: 'Shift + 1', description: 'Go to Scenes tab' },
             { keys: 'Shift + 2', description: 'Go to Characters tab' },
-            { keys: 'Shift + 3', description: 'Go to Assets tab' },
-            { keys: 'Shift + 4', description: 'Go to Variables tab' },
-            { keys: 'Shift + 5', description: 'Go to UI Editor tab' },
+            { keys: 'Shift + 3', description: 'Go to UI Screens tab' },
+            { keys: 'Shift + 4', description: 'Go to Assets tab' },
+            { keys: 'Shift + 5', description: 'Go to Variables tab' },
             { keys: 'Shift + 6', description: 'Go to Settings tab' },
-            { keys: 'Shift + 7', description: 'Go to Templates tab' },
             { keys: 'Esc', description: 'Deselect / Close panels' },
         ]
     },

@@ -25,6 +25,10 @@ import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator } from '../features/variables/types';
 import { ScreenOverlayEffects } from './live-preview/ScreenOverlayEffects';
+import { 
+    normalizeSetVariableOperator as normalizeOperator,
+    calculateVariableValue 
+} from '../utils/variableUtils';
 
 function isRuntimeDebugEnabled(): boolean {
     try {
@@ -119,37 +123,6 @@ const defaultSettings: GameSettings = {
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3,
-};
-
-const normalizeSetVariableOperator = (
-    variable: VNVariable,
-    operator: VNSetVariableOperator,
-    context: 'choice' | 'command' | 'ui'
-): VNSetVariableOperator => {
-    if ((operator === 'add' || operator === 'subtract') && variable.type !== 'number') {
-        runtimeDebugWarn(
-            `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
-        );
-        return 'set';
-    }
-
-    if (operator === 'random' && variable.type !== 'number') {
-        runtimeDebugWarn(
-            `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
-        );
-        return 'set';
-    }
-
-    return operator;
-};
-
-const toNumeric = (value: unknown): number => {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-    }
-
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
 };
 
 // --- Utility Functions (keeping these until they can be extracted) ---
@@ -826,9 +799,50 @@ const AssetCyclerElement: React.FC<{
     
     runtimeDebugLog(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
     
-    // Apply filtering if filterPattern is set
+    // Apply filtering - NEW: Support assetConditions system first, fall back to filterPattern
     let filteredAssetIds = el.assetIds;
-    if (el.filterPattern) {
+    
+    // NEW: Asset conditions-based filtering (simpler, more explicit)
+    if (el.assetConditions && el.assetConditions.length > 0) {
+        runtimeDebugLog(`[AssetCycler] Using assetConditions filtering for ${el.variableId}`);
+        
+        // Filter assets based on which conditions match the current variable state
+        filteredAssetIds = el.assetConditions
+            .filter(condition => {
+                // Check if ALL conditions for this asset are met
+                const allConditionsMet = condition.conditions.every(cond => {
+                    const currentVarValue = String(variables[cond.variableId] || '');
+                    const conditionMet = currentVarValue === cond.value;
+                    runtimeDebugLog(`[AssetCycler] Condition check: var ${cond.variableId} = "${currentVarValue}" === "${cond.value}" ? ${conditionMet}`);
+                    return conditionMet;
+                });
+                
+                if (allConditionsMet) {
+                    runtimeDebugLog(`[AssetCycler] ✓ All conditions met for asset ${condition.assetId}`);
+                }
+                return allConditionsMet;
+            })
+            .map(condition => condition.assetId);
+        
+        // If no conditions match yet (no selections made), show all assets as fallback
+        if (filteredAssetIds.length === 0) {
+            // Check if any condition variables have values
+            const conditionVars = new Set(el.assetConditions.flatMap(c => c.conditions.map(cond => cond.variableId)));
+            const anyVarsSet = Array.from(conditionVars).some(varId => variables[varId]);
+            
+            if (!anyVarsSet) {
+                // No condition variables set yet, show all assets
+                filteredAssetIds = el.assetIds;
+                runtimeDebugLog(`[AssetCycler] No condition variables set yet, showing all ${filteredAssetIds.length} assets`);
+            } else {
+                runtimeDebugLog(`[AssetCycler] Conditions set but no matches, filtered to 0 assets`);
+            }
+        }
+        
+        runtimeDebugLog(`[AssetCycler] Condition-filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+    }
+    // OLD: Pattern-based filtering (for backwards compatibility)
+    else if (el.filterPattern) {
         // Support both old single variable and new multi-variable filtering
         const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
         
@@ -931,16 +945,19 @@ const AssetCyclerElement: React.FC<{
         }
     }, [currentAssetId, filteredAssetIds.length > 0 ? filteredAssetIds[0] : null, el.variableId, onVariableChange]);
     
-    // Update variable when filtered results change (for filter-driven cyclers)
+    // Update variable when filtered results change (for filter-driven cyclers OR condition-driven cyclers)
     React.useEffect(() => {
-        if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
+        const hasConditionFiltering = el.assetConditions && el.assetConditions.length > 0;
+        const hasPatternFiltering = el.filterVariableIds && el.filterVariableIds.length > 0;
+        
+        if ((hasConditionFiltering || hasPatternFiltering) && filteredAssetIds.length > 0 && onVariableChange) {
             if (!filteredAssetIds.includes(currentAssetId)) {
                 const firstFiltered = filteredAssetIds[0];
                 runtimeDebugLog(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
                 onVariableChange(el.variableId, firstFiltered);
             }
         }
-    }, [filteredAssetIds.join(','), el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
+    }, [filteredAssetIds.join(','), el.assetConditions, el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
     
     const currentIndex = filteredAssetIds.indexOf(currentAssetId);
     const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
@@ -3145,6 +3162,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             advance,
             setPlayerState: updatePlayerState,
             activeEffectTimeoutsRef,
+            evaluateConditions,
         };
         
         let instantAdvance = true;
@@ -3332,15 +3350,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
                     // If waitForInput is enabled, allow user input (click or key) to advance early
                     if (cmd.waitForInput) {
-                        // Don't set isWaitingForInput - it blocks the game loop
-                        // Instead, just set up listeners that will call advance() directly
+                        // Track whether we've already advanced to prevent double-advance
+                        let hasAdvanced = false;
                         let timeoutId: number | null = window.setTimeout(() => {
                             // timeout elapsed, advance
-                            advance();
+                            if (!hasAdvanced) {
+                                hasAdvanced = true;
+                                advance();
+                            }
                             removeListeners();
                         }, durationMs);
 
                         const onUserAdvance = () => {
+                            if (hasAdvanced) return; // Prevent double-advance
+                            hasAdvanced = true;
+                            
                             if (timeoutId) {
                                 clearTimeout(timeoutId);
                                 timeoutId = null;
@@ -3350,17 +3374,27 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         };
 
                         const keyHandler = (e: KeyboardEvent) => {
-                            if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') onUserAdvance();
+                            if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onUserAdvance();
+                            }
                         };
-                        const clickHandler = () => onUserAdvance();
+                        const clickHandler = (e: MouseEvent) => {
+                            // Only respond to clicks within the game stage area
+                            if (stageRef.current && stageRef.current.contains(e.target as Node)) {
+                                onUserAdvance();
+                            }
+                        };
 
                         const removeListeners = () => {
-                            window.removeEventListener('keydown', keyHandler);
-                            window.removeEventListener('click', clickHandler);
+                            window.removeEventListener('keydown', keyHandler, true);
+                            window.removeEventListener('click', clickHandler, true);
                         };
 
-                        window.addEventListener('keydown', keyHandler);
-                        window.addEventListener('click', clickHandler);
+                        // Use capture phase to get events before other handlers
+                        window.addEventListener('keydown', keyHandler, true);
+                        window.addEventListener('click', clickHandler, true);
                     } else {
                         // No user input allowed, just wait for duration
                         setTimeout(() => advance(), durationMs);
@@ -3571,68 +3605,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
 
                     const originalOperator = setVarAction.operator;
-                    const effectiveOperator = normalizeSetVariableOperator(variable, originalOperator, 'choice');
+                    const effectiveOperator = normalizeOperator(variable.type, variable.name, originalOperator);
                     const wasCoercedOperator = originalOperator !== effectiveOperator;
                     const currentVal = newState.variables[setVarAction.variableId];
-                    const changeValStr = String(setVarAction.value);
-                    let newVal: string | number | boolean = setVarAction.value;
-
-                    if (effectiveOperator === 'add') {
-                        newVal = toNumeric(currentVal) + toNumeric(changeValStr);
-                    } else if (effectiveOperator === 'subtract') {
-                        newVal = toNumeric(currentVal) - toNumeric(changeValStr);
-                    } else if (effectiveOperator === 'random') {
-                        // Generate random number within range (inclusive)
-                        const min = setVarAction.randomMin ?? 0;
-                        const max = setVarAction.randomMax ?? 100;
-                        newVal = Math.floor(Math.random() * (max - min + 1)) + min;
-                    } else { // 'set' operator (possibly normalized from another op)
-                        // Coerce the value to the correct type based on variable definition
-                        switch (variable.type) {
-                            case 'number':
-                                newVal = toNumeric(changeValStr);
-                                break;
-                            case 'boolean':
-                                if (wasCoercedOperator) {
-                                    if (originalOperator === 'add') {
-                                        newVal = true;
-                                        runtimeDebugLog('[Choice Boolean Promotion] Normalized add -> set TRUE for', variable.name);
-                                        break;
-                                    }
-                                    if (originalOperator === 'subtract') {
-                                        newVal = false;
-                                        runtimeDebugLog('[Choice Boolean Promotion] Normalized subtract -> set FALSE for', variable.name);
-                                        break;
-                                    }
-                                    if (originalOperator === 'random') {
-                                        newVal = Math.random() >= 0.5;
-                                        runtimeDebugLog('[Choice Boolean Promotion] Normalized random -> set', newVal, 'for', variable.name);
-                                        break;
-                                    }
-                                }
-
-                                if (typeof setVarAction.value === 'boolean') {
-                                    newVal = setVarAction.value;
-                                } else {
-                                    const normalized = changeValStr.trim().toLowerCase();
-                                    if (normalized === '' && effectiveOperator === 'set') {
-                                        runtimeDebugLog('[Choice Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
-                                        newVal = !currentVal;
-                                    } else if (normalized === 'true' || normalized === '1') {
-                                        newVal = true;
-                                    } else if (normalized === 'false' || normalized === '0') {
-                                        newVal = false;
-                                    } else {
-                                        newVal = !!setVarAction.value;
-                                    }
-                                }
-                                break;
-                            case 'string':
-                            default:
-                                newVal = changeValStr;
-                                break;
-                        }
-                    }
+                    
+                    // Use consolidated calculateVariableValue for all value computations
+                    const newVal = calculateVariableValue(
+                        effectiveOperator,
+                        variable.type,
+                        currentVal,
+                        setVarAction.value,
+                        setVarAction.randomMin,
+                        setVarAction.randomMax,
+                        wasCoercedOperator ? originalOperator : undefined
+                    );
 
                     newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
                     runtimeDebugLog(
@@ -3652,9 +3638,42 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             
             newState.uiState = { ...newState.uiState, choices: null };
     
-            // Handle jump last
+            // Handle jump actions (JumpToScene or JumpToLabel) last
             const jumpAction = actions.find(a => a.type === UIActionType.JumpToScene) as JumpToSceneAction | undefined;
-            if (jumpAction) {
+            const labelAction = actions.find(a => a.type === UIActionType.JumpToLabel) as JumpToLabelAction | undefined;
+            
+            if (labelAction) {
+                // JumpToLabel - go to a specific label within the current scene
+                const targetLabel = labelAction.targetLabel;
+                const targetSceneId = newState.currentSceneId;
+                const targetScene = project.scenes[targetSceneId];
+                
+                if (targetScene) {
+                    const labelIndex = targetScene.commands.findIndex((cmd) => 
+                        cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
+                    );
+                    
+                    if (labelIndex !== -1) {
+                        runtimeDebugLog(`[CHOICE] JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex}`);
+                        newState.currentSceneId = targetSceneId;
+                        newState.currentCommands = targetScene.commands;
+                        newState.currentIndex = labelIndex;
+                        // Clear overlays when jumping to label
+                        newState.stageState = {
+                            ...newState.stageState,
+                            buttonOverlays: [],
+                            imageOverlays: [],
+                            textOverlays: []
+                        };
+                    } else {
+                        runtimeDebugWarn(`[CHOICE] JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
+                        newState.currentIndex = newState.currentIndex + 1;
+                    }
+                } else {
+                    console.error(`[CHOICE] Scene not found for JumpToLabel: ${targetSceneId}`);
+                    newState.currentIndex = newState.currentIndex + 1;
+                }
+            } else if (jumpAction) {
                 const actualSceneId = navigateToScene(jumpAction.targetSceneId, newState.variables);
                 const newScene = project.scenes[actualSceneId];
                 if (newScene) {
@@ -4082,67 +4101,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
 
             const originalOperator = setVarAction.operator;
-            const effectiveOperator = normalizeSetVariableOperator(variable, originalOperator, 'ui');
+            const effectiveOperator = normalizeOperator(variable.type, variable.name, originalOperator);
             const wasCoercedOperator = originalOperator !== effectiveOperator;
 
             const computeNewValue = (currentVal: string | number | boolean | undefined): string | number | boolean => {
-                const changeValStr = String(setVarAction.value);
-                if (effectiveOperator === 'add') {
-                    return toNumeric(currentVal) + toNumeric(changeValStr);
-                }
-                if (effectiveOperator === 'subtract') {
-                    return toNumeric(currentVal) - toNumeric(changeValStr);
-                }
-                if (effectiveOperator === 'random') {
-                    const min = setVarAction.randomMin ?? 0;
-                    const max = setVarAction.randomMax ?? 100;
-                    return Math.floor(Math.random() * (max - min + 1)) + min;
-                }
-
-                switch (variable.type) {
-                    case 'number':
-                        return toNumeric(changeValStr);
-                    case 'boolean':
-                        // Handle boolean conversion with multiple formats
-                        if (wasCoercedOperator) {
-                            if (originalOperator === 'add') {
-                                runtimeDebugLog('[Boolean Promotion] Normalized add -> set TRUE for', variable.name);
-                                return true;
-                            }
-                            if (originalOperator === 'subtract') {
-                                runtimeDebugLog('[Boolean Promotion] Normalized subtract -> set FALSE for', variable.name);
-                                return false;
-                            }
-                            if (originalOperator === 'random') {
-                                const randomVal = Math.random() >= 0.5;
-                                runtimeDebugLog('[Boolean Promotion] Normalized random -> set', randomVal, 'for', variable.name);
-                                return randomVal;
-                            }
-                        }
-
-                        if (typeof setVarAction.value === 'boolean') {
-                            return setVarAction.value;
-                        }
-                        const normalized = changeValStr.trim().toLowerCase();
-                        // Empty string or whitespace for a boolean in 'set' mode = toggle current value
-                        if (normalized === '' && effectiveOperator === 'set') {
-                            runtimeDebugLog('[Boolean Toggle] Empty value detected, toggling from', currentVal, 'to', !currentVal);
-                            return !currentVal;
-                        }
-                        // Explicit true values
-                        if (normalized === 'true' || normalized === '1') {
-                            return true;
-                        }
-                        // Explicit false values
-                        if (normalized === 'false' || normalized === '0') {
-                            return false;
-                        }
-                        // Any other truthy string = true
-                        return !!changeValStr;
-                    case 'string':
-                    default:
-                        return changeValStr;
-                }
+                // Use consolidated calculateVariableValue for all value computations
+                return calculateVariableValue(
+                    effectiveOperator,
+                    variable.type,
+                    currentVal,
+                    setVarAction.value,
+                    setVarAction.randomMin,
+                    setVarAction.randomMax,
+                    wasCoercedOperator ? originalOperator : undefined
+                );
             };
 
             // Use flushSync to ensure variable updates are applied immediately and synchronously
@@ -4863,6 +4835,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 try { src.stop(); } catch (e) {}
             });
             sfxSourceNodesRef.current = [];
+            
+            // Clear all active effect timeouts (shake, tint, etc.)
+            activeEffectTimeoutsRef.current.forEach(timeoutId => {
+                try { clearTimeout(timeoutId); } catch (e) {}
+            });
+            activeEffectTimeoutsRef.current = [];
             
             // Stop all videos (including background videos on screens)
             const allVideos = document.querySelectorAll('video');

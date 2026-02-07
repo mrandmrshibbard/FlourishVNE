@@ -244,15 +244,15 @@ export function handleShowButton(
   command: ShowButtonCommand,
   context: CommandContext
 ): CommandResult {
-  const { playerState, assetResolver, setPlayerState } = context;
+  const { playerState, assetResolver, setPlayerState, evaluateConditions } = context;
   
-  // Check show conditions
+  // Check show conditions - if conditions not met, skip showing the button
   if (command.showConditions && command.showConditions.length > 0) {
-    const conditionsMet = command.showConditions.every((cond) =>
-      context.project.variables // Need evaluateConditions but it's in systems
-      // This needs the evaluateConditions function - we'll need to pass it through context
-    );
-    // For now, skip condition check - will need to refactor
+    const conditionsMet = evaluateConditions(command.showConditions, playerState.variables);
+    if (!conditionsMet) {
+      // Conditions not met - don't show the button, just advance
+      return { advance: true };
+    }
   }
 
   const buttonOverlay: ButtonOverlay = {

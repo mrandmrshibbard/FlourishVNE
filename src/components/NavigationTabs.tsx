@@ -1,8 +1,8 @@
 import React from 'react';
-import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, TemplatesIcon } from './icons';
+import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
-export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings' | 'templates';
+export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings';
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -22,7 +22,6 @@ const tabColors: Record<NavigationTab, { base: string; glow: string; pastel: str
     assets: { base: 'var(--accent-mint)', glow: 'var(--shadow-glow-mint)', pastel: 'var(--pastel-mint)' },
     variables: { base: 'var(--accent-cyan)', glow: 'var(--shadow-glow-cyan)', pastel: 'var(--pastel-cyan)' },
     settings: { base: 'var(--accent-sky)', glow: '0 0 20px rgba(102, 179, 255, 0.35)', pastel: 'var(--pastel-sky)' },
-    templates: { base: 'var(--accent-lavender)', glow: 'var(--shadow-glow-purple)', pastel: 'var(--pastel-lavender)' },
 };
 
 const NavigationTabs: React.FC<NavigationTabsProps> = ({
@@ -92,13 +91,6 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 icon: <SettingsIcon className="w-4 h-4" />,
                 count: 0,
                 description: 'Configure project settings and preferences'
-            },
-            {
-                id: 'templates',
-                label: 'Templates',
-                icon: <TemplatesIcon className="w-4 h-4" />,
-                count: 0,
-                description: 'Browse and apply pre-built templates to your project'
             }
         );
 

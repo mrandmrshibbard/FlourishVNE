@@ -25,7 +25,84 @@ export interface SaveSlot {
 
 const SAVE_KEY_PREFIX = 'vn_save_';
 const MAX_SAVE_SLOTS = 10;
-const SAVE_VERSION = '1.0.0';
+const SAVE_VERSION = '1.1.0'; // Bump version when save format changes
+
+/**
+ * Migration functions for different save versions
+ * Maps old version to migration function that upgrades to next version
+ */
+const MIGRATIONS: Record<string, (save: any) => any> = {
+    // Migration from 1.0.0 to 1.1.0
+    '1.0.0': (save: any) => {
+        // Initialize missing stageState if not present
+        if (!save.stageState) {
+            save.stageState = {
+                background: null,
+                characters: [],
+                screen: { tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0, overlayEffects: [] },
+                textOverlays: [],
+                imageOverlays: [],
+                buttonOverlays: [],
+            };
+        }
+        // Ensure overlayEffects array exists in screen state
+        if (save.stageState?.screen && !save.stageState.screen.overlayEffects) {
+            save.stageState.screen.overlayEffects = [];
+        }
+        save.version = '1.1.0';
+        return save;
+    },
+    // Add future migrations here:
+    // '1.1.0': (save: any) => { ... return migrated save with version '1.2.0'; }
+};
+
+/**
+ * Migrate a save from its current version to the latest version
+ * @param saveData The save data to migrate
+ * @returns Migrated save data, or null if migration failed
+ */
+function migrateSave(saveData: any): GameSaveData | null {
+    if (!saveData || typeof saveData !== 'object') {
+        console.warn('Invalid save data for migration');
+        return null;
+    }
+
+    let currentVersion = saveData.version || '1.0.0'; // Assume 1.0.0 if no version
+    let migratedSave = { ...saveData };
+    let migrationCount = 0;
+    const maxMigrations = 100; // Prevent infinite loops
+
+    // Apply migrations sequentially until we reach current version
+    while (currentVersion !== SAVE_VERSION && migrationCount < maxMigrations) {
+        const migration = MIGRATIONS[currentVersion];
+        
+        if (!migration) {
+            // No migration path from this version
+            console.warn(`No migration path from version ${currentVersion} to ${SAVE_VERSION}`);
+            // Still return the save - better to load potentially stale data than lose it
+            migratedSave.version = SAVE_VERSION;
+            break;
+        }
+
+        try {
+            console.log(`Migrating save from version ${currentVersion}...`);
+            migratedSave = migration(migratedSave);
+            currentVersion = migratedSave.version;
+            migrationCount++;
+        } catch (error) {
+            console.error(`Migration from ${currentVersion} failed:`, error);
+            // Return partially migrated save rather than nothing
+            migratedSave.version = SAVE_VERSION;
+            break;
+        }
+    }
+
+    if (migrationCount > 0) {
+        console.log(`Save migrated through ${migrationCount} version(s) to ${SAVE_VERSION}`);
+    }
+
+    return migratedSave as GameSaveData;
+}
 
 /**
  * Check if running in Electron desktop build
@@ -95,15 +172,33 @@ export function loadGame(slotId: number): GameSaveData | null {
 
         if (!saveDataStr) return null;
 
-        const saveData: GameSaveData = JSON.parse(saveDataStr);
+        const rawSaveData = JSON.parse(saveDataStr);
         
-        // Version check
-        if (saveData.version !== SAVE_VERSION) {
-            console.warn('Save file version mismatch');
-            // Could implement migration logic here
+        // Version check and migration
+        if (rawSaveData.version !== SAVE_VERSION) {
+            console.log(`Save version ${rawSaveData.version} differs from current ${SAVE_VERSION}, attempting migration...`);
+            const migratedData = migrateSave(rawSaveData);
+            
+            if (migratedData) {
+                // Optionally persist the migrated save so we don't migrate again
+                try {
+                    if (isDesktopBuild()) {
+                        (window as any).electronAPI.saveGame(saveKey, migratedData);
+                    } else {
+                        localStorage.setItem(saveKey, JSON.stringify(migratedData));
+                    }
+                    console.log('Migrated save persisted successfully');
+                } catch (persistError) {
+                    console.warn('Could not persist migrated save:', persistError);
+                }
+                return migratedData;
+            }
+            
+            // Migration failed but we can still try to use the raw data
+            console.warn('Migration failed, using raw save data');
         }
 
-        return saveData;
+        return rawSaveData as GameSaveData;
     } catch (error) {
         console.error('Failed to load game:', error);
         return null;

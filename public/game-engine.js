@@ -889,7 +889,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       case "DELETE_VARIABLE": {
         const { variableId } = action.payload;
-        const { [variableId]: _, ...remainingVars } = state.variables;
+        console.log("[variableReducer] DELETE_VARIABLE received for:", variableId);
+        console.log("[variableReducer] Current variables:", Object.keys(state.variables));
+        const { [variableId]: deletedVar, ...remainingVars } = state.variables;
+        console.log("[variableReducer] Deleted variable:", (deletedVar == null ? void 0 : deletedVar.name) || "NOT FOUND");
+        console.log("[variableReducer] Remaining variables:", Object.keys(remainingVars));
         const newScenes = { ...state.scenes };
         for (const sceneId in newScenes) {
           newScenes[sceneId].commands = newScenes[sceneId].commands.filter((cmd) => !(cmd.type === CommandType.SetVariable && cmd.variableId === variableId)).map((cmd) => {
@@ -1532,6 +1536,92 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
+  const normalizeSetVariableOperator = (variableType, variableName, operator) => {
+    if ((operator === "add" || operator === "subtract") && variableType !== "number") {
+      console.warn(
+        `[SetVariable] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
+      );
+      return "set";
+    }
+    if (operator === "random" && variableType !== "number") {
+      console.warn(
+        `[SetVariable] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
+      );
+      return "set";
+    }
+    return operator;
+  };
+  const normalizeSetVariableOperatorByType = (variableType, variableName, operator) => {
+    const effectiveOperator = normalizeSetVariableOperator(variableType, variableName, operator);
+    return {
+      effectiveOperator,
+      wasCoerced: effectiveOperator !== operator
+    };
+  };
+  const toNumeric = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const coerceValueToType = (value, variableType, currentValue) => {
+    const changeValStr = String(value);
+    switch (variableType) {
+      case "number":
+        return toNumeric(changeValStr);
+      case "boolean":
+        if (typeof value === "boolean") {
+          return value;
+        }
+        const normalized = changeValStr.trim().toLowerCase();
+        if (normalized === "") {
+          return !currentValue;
+        }
+        if (normalized === "true" || normalized === "1") {
+          return true;
+        }
+        if (normalized === "false" || normalized === "0") {
+          return false;
+        }
+        return !!value;
+      case "string":
+      default:
+        return changeValStr;
+    }
+  };
+  const calculateVariableValue = (operator, variableType, currentValue, changeValue, randomMin, randomMax, originalOperator) => {
+    const changeValStr = String(changeValue);
+    switch (operator) {
+      case "add":
+        return toNumeric(currentValue) + toNumeric(changeValStr);
+      case "subtract":
+        return toNumeric(currentValue) - toNumeric(changeValStr);
+      case "random": {
+        const min = randomMin ?? 0;
+        const max = randomMax ?? 100;
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+      case "set":
+      default:
+        if (variableType === "boolean" && originalOperator) {
+          if (originalOperator === "add") {
+            console.log("[Boolean Promotion] Normalized add -> set TRUE");
+            return true;
+          }
+          if (originalOperator === "subtract") {
+            console.log("[Boolean Promotion] Normalized subtract -> set FALSE");
+            return false;
+          }
+          if (originalOperator === "random") {
+            const randomVal = Math.random() >= 0.5;
+            console.log("[Boolean Promotion] Normalized random -> set", randomVal);
+            return randomVal;
+          }
+        }
+        return coerceValueToType(changeValue, variableType, currentValue);
+    }
+  };
   const handleDialogue = (command, context) => {
     const { project } = context;
     const char = command.characterId ? project.characters[command.characterId] : null;
@@ -1551,28 +1641,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
   };
-  const normalizeSetVariableOperator$1 = (variableType, variableName, operator) => {
-    if ((operator === "add" || operator === "subtract") && variableType !== "number") {
-      console.warn(
-        `[SetVariable:command] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
-      );
-      return "set";
-    }
-    if (operator === "random" && variableType !== "number") {
-      console.warn(
-        `[SetVariable:command] Operator "${operator}" is not valid for ${variableType} variable "${variableName}". Forcing operator to "set".`
-      );
-      return "set";
-    }
-    return operator;
-  };
-  const toNumeric$1 = (value) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
   const handleSetVariable = (command, context) => {
     const { project, playerState } = context;
     console.log("[DEBUG SetVariable] Executing - Variable:", command.variableId, "Operator:", command.operator, "Value:", command.value);
@@ -1585,61 +1653,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
     }
     const currentVal = playerState.variables[command.variableId];
-    const changeValStr = String(command.value);
     const originalOperator = command.operator;
-    const effectiveOperator = normalizeSetVariableOperator$1(variable.type, variable.name, originalOperator);
-    const wasCoercedOperator = originalOperator !== effectiveOperator;
-    let newVal = command.value;
-    if (effectiveOperator === "add") {
-      newVal = toNumeric$1(currentVal) + toNumeric$1(changeValStr);
-    } else if (effectiveOperator === "subtract") {
-      newVal = toNumeric$1(currentVal) - toNumeric$1(changeValStr);
-    } else if (effectiveOperator === "random") {
-      const min = command.randomMin ?? 0;
-      const max = command.randomMax ?? 100;
-      newVal = Math.floor(Math.random() * (max - min + 1)) + min;
-    } else {
-      switch (variable.type) {
-        case "number":
-          newVal = toNumeric$1(changeValStr);
-          break;
-        case "boolean":
-          if (wasCoercedOperator) {
-            if (originalOperator === "add") {
-              newVal = true;
-              console.log("[DEBUG SetVariable] Normalized add -> set TRUE for", variable.name);
-              break;
-            }
-            if (originalOperator === "subtract") {
-              newVal = false;
-              console.log("[DEBUG SetVariable] Normalized subtract -> set FALSE for", variable.name);
-              break;
-            }
-            if (originalOperator === "random") {
-              newVal = Math.random() >= 0.5;
-              console.log("[DEBUG SetVariable] Normalized random -> set", newVal, "for", variable.name);
-              break;
-            }
-          }
-          if (typeof command.value === "boolean") {
-            newVal = command.value;
-          } else {
-            const normalized = changeValStr.trim().toLowerCase();
-            if (normalized === "true" || normalized === "1") {
-              newVal = true;
-            } else if (normalized === "false" || normalized === "0" || normalized === "") {
-              newVal = false;
-            } else {
-              newVal = !!command.value;
-            }
-          }
-          break;
-        case "string":
-        default:
-          newVal = changeValStr;
-          break;
-      }
-    }
+    const { effectiveOperator, wasCoerced } = normalizeSetVariableOperatorByType(
+      variable.type,
+      variable.name,
+      originalOperator
+    );
+    const newVal = calculateVariableValue(
+      effectiveOperator,
+      variable.type,
+      currentVal,
+      command.value,
+      command.randomMin,
+      command.randomMax,
+      wasCoerced ? originalOperator : void 0
+    );
     console.log("[DEBUG SetVariable] New value:", newVal, "| operator:", `${command.operator} => ${effectiveOperator}`);
     return {
       advance: true,
@@ -2329,13 +2357,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
   }
   function handleShowButton(command, context) {
-    const { playerState, assetResolver, setPlayerState } = context;
+    const { playerState, assetResolver, setPlayerState, evaluateConditions: evaluateConditions2 } = context;
     if (command.showConditions && command.showConditions.length > 0) {
-      command.showConditions.every(
-        (cond) => context.project.variables
-        // Need evaluateConditions but it's in systems
-        // This needs the evaluateConditions function - we'll need to pass it through context
-      );
+      const conditionsMet = evaluateConditions2(command.showConditions, playerState.variables);
+      if (!conditionsMet) {
+        return { advance: true };
+      }
     }
     const buttonOverlay = {
       id: command.id,
@@ -2481,7 +2508,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             zoom: 1,
             panX: 0,
             panY: 0,
-            transitionDuration: 0.5
+            transitionDuration: 0.5,
+            overlayEffects: []
           }
         },
         // Clear UI state
@@ -2713,28 +2741,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3
-  };
-  const normalizeSetVariableOperator = (variable, operator, context) => {
-    if ((operator === "add" || operator === "subtract") && variable.type !== "number") {
-      runtimeDebugWarn(
-        `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
-      );
-      return "set";
-    }
-    if (operator === "random" && variable.type !== "number") {
-      runtimeDebugWarn(
-        `[SetVariable:${context}] Operator "${operator}" is not valid for ${variable.type} variable "${variable.name}". Forcing operator to "set".`
-      );
-      return "set";
-    }
-    return operator;
-  };
-  const toNumeric = (value) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
   };
   const buildSlideStyle = (x, _y, action, stageSize) => {
     const horizontalBias = x <= 50 ? -60 : 60;
@@ -3250,7 +3256,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     let currentAssetId = String(variables[el.variableId] || "");
     runtimeDebugLog(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
     let filteredAssetIds = el.assetIds;
-    if (el.filterPattern) {
+    if (el.assetConditions && el.assetConditions.length > 0) {
+      runtimeDebugLog(`[AssetCycler] Using assetConditions filtering for ${el.variableId}`);
+      filteredAssetIds = el.assetConditions.filter((condition) => {
+        const allConditionsMet = condition.conditions.every((cond) => {
+          const currentVarValue = String(variables[cond.variableId] || "");
+          const conditionMet = currentVarValue === cond.value;
+          runtimeDebugLog(`[AssetCycler] Condition check: var ${cond.variableId} = "${currentVarValue}" === "${cond.value}" ? ${conditionMet}`);
+          return conditionMet;
+        });
+        if (allConditionsMet) {
+          runtimeDebugLog(`[AssetCycler] ✓ All conditions met for asset ${condition.assetId}`);
+        }
+        return allConditionsMet;
+      }).map((condition) => condition.assetId);
+      if (filteredAssetIds.length === 0) {
+        const conditionVars = new Set(el.assetConditions.flatMap((c) => c.conditions.map((cond) => cond.variableId)));
+        const anyVarsSet = Array.from(conditionVars).some((varId) => variables[varId]);
+        if (!anyVarsSet) {
+          filteredAssetIds = el.assetIds;
+          runtimeDebugLog(`[AssetCycler] No condition variables set yet, showing all ${filteredAssetIds.length} assets`);
+        } else {
+          runtimeDebugLog(`[AssetCycler] Conditions set but no matches, filtered to 0 assets`);
+        }
+      }
+      runtimeDebugLog(`[AssetCycler] Condition-filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+    } else if (el.filterPattern) {
       const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
       if (filterVarIds.length > 0) {
         runtimeDebugLog(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
@@ -3328,14 +3359,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }, [currentAssetId, filteredAssetIds.length > 0 ? filteredAssetIds[0] : null, el.variableId, onVariableChange]);
     React2.useEffect(() => {
-      if (el.filterVariableIds && el.filterVariableIds.length > 0 && filteredAssetIds.length > 0 && onVariableChange) {
+      const hasConditionFiltering = el.assetConditions && el.assetConditions.length > 0;
+      const hasPatternFiltering = el.filterVariableIds && el.filterVariableIds.length > 0;
+      if ((hasConditionFiltering || hasPatternFiltering) && filteredAssetIds.length > 0 && onVariableChange) {
         if (!filteredAssetIds.includes(currentAssetId)) {
           const firstFiltered = filteredAssetIds[0];
           runtimeDebugLog(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
           onVariableChange(el.variableId, firstFiltered);
         }
       }
-    }, [filteredAssetIds.join(","), el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
+    }, [filteredAssetIds.join(","), el.assetConditions, el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
     const currentIndex = filteredAssetIds.indexOf(currentAssetId);
     const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
     const handlePrevious = () => {
@@ -5217,7 +5250,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         settings,
         advance,
         setPlayerState: updatePlayerState,
-        activeEffectTimeoutsRef
+        activeEffectTimeoutsRef,
+        evaluateConditions: evaluateConditions2
       };
       let instantAdvance = true;
       (async () => {
@@ -5391,11 +5425,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const cmd = command;
               const durationMs = (cmd.duration ?? 1) * 1e3;
               if (cmd.waitForInput) {
+                let hasAdvanced = false;
                 let timeoutId = window.setTimeout(() => {
-                  advance();
+                  if (!hasAdvanced) {
+                    hasAdvanced = true;
+                    advance();
+                  }
                   removeListeners();
                 }, durationMs);
                 const onUserAdvance = () => {
+                  if (hasAdvanced) return;
+                  hasAdvanced = true;
                   if (timeoutId) {
                     clearTimeout(timeoutId);
                     timeoutId = null;
@@ -5404,15 +5444,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   removeListeners();
                 };
                 const keyHandler = (e) => {
-                  if (e.key === " " || e.key === "Enter" || e.key === "Escape") onUserAdvance();
+                  if (e.key === " " || e.key === "Enter" || e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onUserAdvance();
+                  }
                 };
-                const clickHandler = () => onUserAdvance();
+                const clickHandler = (e) => {
+                  if (stageRef.current && stageRef.current.contains(e.target)) {
+                    onUserAdvance();
+                  }
+                };
                 const removeListeners = () => {
-                  window.removeEventListener("keydown", keyHandler);
-                  window.removeEventListener("click", clickHandler);
+                  window.removeEventListener("keydown", keyHandler, true);
+                  window.removeEventListener("click", clickHandler, true);
                 };
-                window.addEventListener("keydown", keyHandler);
-                window.addEventListener("click", clickHandler);
+                window.addEventListener("keydown", keyHandler, true);
+                window.addEventListener("click", clickHandler, true);
               } else {
                 setTimeout(() => advance(), durationMs);
               }
@@ -5593,64 +5641,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               continue;
             }
             const originalOperator = setVarAction.operator;
-            const effectiveOperator = normalizeSetVariableOperator(variable, originalOperator, "choice");
+            const effectiveOperator = normalizeSetVariableOperator(variable.type, variable.name, originalOperator);
             const wasCoercedOperator = originalOperator !== effectiveOperator;
             const currentVal = newState.variables[setVarAction.variableId];
-            const changeValStr = String(setVarAction.value);
-            let newVal = setVarAction.value;
-            if (effectiveOperator === "add") {
-              newVal = toNumeric(currentVal) + toNumeric(changeValStr);
-            } else if (effectiveOperator === "subtract") {
-              newVal = toNumeric(currentVal) - toNumeric(changeValStr);
-            } else if (effectiveOperator === "random") {
-              const min = setVarAction.randomMin ?? 0;
-              const max = setVarAction.randomMax ?? 100;
-              newVal = Math.floor(Math.random() * (max - min + 1)) + min;
-            } else {
-              switch (variable.type) {
-                case "number":
-                  newVal = toNumeric(changeValStr);
-                  break;
-                case "boolean":
-                  if (wasCoercedOperator) {
-                    if (originalOperator === "add") {
-                      newVal = true;
-                      runtimeDebugLog("[Choice Boolean Promotion] Normalized add -> set TRUE for", variable.name);
-                      break;
-                    }
-                    if (originalOperator === "subtract") {
-                      newVal = false;
-                      runtimeDebugLog("[Choice Boolean Promotion] Normalized subtract -> set FALSE for", variable.name);
-                      break;
-                    }
-                    if (originalOperator === "random") {
-                      newVal = Math.random() >= 0.5;
-                      runtimeDebugLog("[Choice Boolean Promotion] Normalized random -> set", newVal, "for", variable.name);
-                      break;
-                    }
-                  }
-                  if (typeof setVarAction.value === "boolean") {
-                    newVal = setVarAction.value;
-                  } else {
-                    const normalized = changeValStr.trim().toLowerCase();
-                    if (normalized === "" && effectiveOperator === "set") {
-                      runtimeDebugLog("[Choice Boolean Toggle] Empty value detected, toggling from", currentVal, "to", !currentVal);
-                      newVal = !currentVal;
-                    } else if (normalized === "true" || normalized === "1") {
-                      newVal = true;
-                    } else if (normalized === "false" || normalized === "0") {
-                      newVal = false;
-                    } else {
-                      newVal = !!setVarAction.value;
-                    }
-                  }
-                  break;
-                case "string":
-                default:
-                  newVal = changeValStr;
-                  break;
-              }
-            }
+            const newVal = calculateVariableValue(
+              effectiveOperator,
+              variable.type,
+              currentVal,
+              setVarAction.value,
+              setVarAction.randomMin,
+              setVarAction.randomMax,
+              wasCoercedOperator ? originalOperator : void 0
+            );
             newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
             runtimeDebugLog(
               "[CHOICE] Set variable result:",
@@ -5668,7 +5670,35 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("[CHOICE] Variables after actions:", JSON.stringify(newState.variables, null, 2));
         newState.uiState = { ...newState.uiState, choices: null };
         const jumpAction = actions.find((a) => a.type === UIActionType.JumpToScene);
-        if (jumpAction) {
+        const labelAction = actions.find((a) => a.type === UIActionType.JumpToLabel);
+        if (labelAction) {
+          const targetLabel = labelAction.targetLabel;
+          const targetSceneId = newState.currentSceneId;
+          const targetScene = project.scenes[targetSceneId];
+          if (targetScene) {
+            const labelIndex = targetScene.commands.findIndex(
+              (cmd) => cmd.type === CommandType.Label && cmd.labelId === targetLabel
+            );
+            if (labelIndex !== -1) {
+              runtimeDebugLog(`[CHOICE] JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex}`);
+              newState.currentSceneId = targetSceneId;
+              newState.currentCommands = targetScene.commands;
+              newState.currentIndex = labelIndex;
+              newState.stageState = {
+                ...newState.stageState,
+                buttonOverlays: [],
+                imageOverlays: [],
+                textOverlays: []
+              };
+            } else {
+              runtimeDebugWarn(`[CHOICE] JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
+              newState.currentIndex = newState.currentIndex + 1;
+            }
+          } else {
+            console.error(`[CHOICE] Scene not found for JumpToLabel: ${targetSceneId}`);
+            newState.currentIndex = newState.currentIndex + 1;
+          }
+        } else if (jumpAction) {
           const actualSceneId = navigateToScene(jumpAction.targetSceneId, newState.variables);
           const newScene = project.scenes[actualSceneId];
           if (newScene) {
@@ -6040,59 +6070,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           operator: setVarAction.operator
         });
         const originalOperator = setVarAction.operator;
-        const effectiveOperator = normalizeSetVariableOperator(variable, originalOperator, "ui");
+        const effectiveOperator = normalizeSetVariableOperator(variable.type, variable.name, originalOperator);
         const wasCoercedOperator = originalOperator !== effectiveOperator;
         const computeNewValue = (currentVal) => {
-          const changeValStr = String(setVarAction.value);
-          if (effectiveOperator === "add") {
-            return toNumeric(currentVal) + toNumeric(changeValStr);
-          }
-          if (effectiveOperator === "subtract") {
-            return toNumeric(currentVal) - toNumeric(changeValStr);
-          }
-          if (effectiveOperator === "random") {
-            const min = setVarAction.randomMin ?? 0;
-            const max = setVarAction.randomMax ?? 100;
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-          }
-          switch (variable.type) {
-            case "number":
-              return toNumeric(changeValStr);
-            case "boolean":
-              if (wasCoercedOperator) {
-                if (originalOperator === "add") {
-                  runtimeDebugLog("[Boolean Promotion] Normalized add -> set TRUE for", variable.name);
-                  return true;
-                }
-                if (originalOperator === "subtract") {
-                  runtimeDebugLog("[Boolean Promotion] Normalized subtract -> set FALSE for", variable.name);
-                  return false;
-                }
-                if (originalOperator === "random") {
-                  const randomVal = Math.random() >= 0.5;
-                  runtimeDebugLog("[Boolean Promotion] Normalized random -> set", randomVal, "for", variable.name);
-                  return randomVal;
-                }
-              }
-              if (typeof setVarAction.value === "boolean") {
-                return setVarAction.value;
-              }
-              const normalized = changeValStr.trim().toLowerCase();
-              if (normalized === "" && effectiveOperator === "set") {
-                runtimeDebugLog("[Boolean Toggle] Empty value detected, toggling from", currentVal, "to", !currentVal);
-                return !currentVal;
-              }
-              if (normalized === "true" || normalized === "1") {
-                return true;
-              }
-              if (normalized === "false" || normalized === "0") {
-                return false;
-              }
-              return !!changeValStr;
-            case "string":
-            default:
-              return changeValStr;
-          }
+          return calculateVariableValue(
+            effectiveOperator,
+            variable.type,
+            currentVal,
+            setVarAction.value,
+            setVarAction.randomMin,
+            setVarAction.randomMax,
+            wasCoercedOperator ? originalOperator : void 0
+          );
         };
         reactDom.flushSync(() => {
           if (playerState) {
@@ -6686,6 +6675,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         });
         sfxSourceNodesRef.current = [];
+        activeEffectTimeoutsRef.current.forEach((timeoutId) => {
+          try {
+            clearTimeout(timeoutId);
+          } catch (e) {
+          }
+        });
+        activeEffectTimeoutsRef.current = [];
         const allVideos = document.querySelectorAll("video");
         allVideos.forEach((video) => {
           video.pause();

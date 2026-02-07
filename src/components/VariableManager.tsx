@@ -21,7 +21,10 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
     // Check all scenes for commands using this variable
     for (const sceneId in project.scenes) {
         const scene = project.scenes[sceneId];
-        scene.commands.forEach((cmd, index) => {
+        const commands = scene.commands || [];
+        if (!Array.isArray(commands)) continue;
+        
+        commands.forEach((cmd, index) => {
             // SetVariable command
             if (cmd.type === CommandType.SetVariable && (cmd as SetVariableCommand).variableId === variableId) {
                 usages.push({
@@ -52,24 +55,30 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
             // Check Choice options for conditions and actions
             if (cmd.type === CommandType.Choice) {
                 const choiceCmd = cmd as ChoiceCommand;
-                choiceCmd.options.forEach((opt, optIndex) => {
-                    if (opt.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
-                        usages.push({
-                            location: `Scene: ${scene.name}`,
-                            type: 'condition',
-                            detail: `Command ${index + 1}, Option ${optIndex + 1}: Has condition`
-                        });
-                    }
-                    opt.actions?.forEach(action => {
-                        if (action.type === UIActionType.SetVariable && (action as SetVariableAction).variableId === variableId) {
+                const options = choiceCmd.options || [];
+                if (Array.isArray(options)) {
+                    options.forEach((opt, optIndex) => {
+                        if (opt.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
                             usages.push({
                                 location: `Scene: ${scene.name}`,
-                                type: 'ui-action',
-                                detail: `Command ${index + 1}, Option ${optIndex + 1}: Sets variable`
+                                type: 'condition',
+                                detail: `Command ${index + 1}, Option ${optIndex + 1}: Has condition`
+                            });
+                        }
+                        const actions = opt.actions || [];
+                        if (Array.isArray(actions)) {
+                            actions.forEach(action => {
+                                if (action.type === UIActionType.SetVariable && (action as SetVariableAction).variableId === variableId) {
+                                    usages.push({
+                                        location: `Scene: ${scene.name}`,
+                                        type: 'ui-action',
+                                        detail: `Command ${index + 1}, Option ${optIndex + 1}: Sets variable`
+                                    });
+                                }
                             });
                         }
                     });
-                });
+                }
             }
             
             // Check Dialogue text for variable references like {variableName} or {variableId}
@@ -89,7 +98,10 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
     // Check UI screens for variable usages
     for (const screenId in project.uiScreens) {
         const screen = project.uiScreens[screenId];
-        checkUIElementsForVariableUsage(screen.elements, variableId, variableName, `UI Screen: ${screen.name}`, usages);
+        const elements = screen.elements || [];
+        if (Array.isArray(elements)) {
+            checkUIElementsForVariableUsage(elements, variableId, variableName, `UI Screen: ${screen.name}`, usages);
+        }
     }
     
     return usages;
@@ -102,6 +114,8 @@ function checkUIElementsForVariableUsage(
     locationPrefix: string, 
     usages: VariableUsage[]
 ): void {
+    if (!Array.isArray(elements)) return;
+    
     elements.forEach(element => {
         // Check element conditions
         if (element.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
@@ -113,8 +127,9 @@ function checkUIElementsForVariableUsage(
         }
         
         // Check element actions (for buttons)
-        if (element.actions) {
-            element.actions.forEach(action => {
+        const actions = element.actions || [];
+        if (Array.isArray(actions)) {
+            actions.forEach(action => {
                 if (action.type === UIActionType.SetVariable && (action as SetVariableAction).variableId === variableId) {
                     usages.push({
                         location: locationPrefix,
@@ -142,7 +157,7 @@ function checkUIElementsForVariableUsage(
         }
         
         // Recursively check children
-        if (element.children) {
+        if (element.children && Array.isArray(element.children)) {
             checkUIElementsForVariableUsage(element.children, variableId, variableName, locationPrefix, usages);
         }
     });
@@ -186,22 +201,25 @@ const VariableManager: React.FC<VariableManagerProps> = ({
     };
 
     const handleRequestDelete = (variableId: string) => {
+        console.log('[VariableManager] handleRequestDelete called for:', variableId);
         const variable = project.variables[variableId];
-        if (!variable) return;
+        if (!variable) {
+            console.log('[VariableManager] Variable not found!');
+            return;
+        }
         
         const usages = findVariableUsages(project, variableId, variable.name);
+        console.log('[VariableManager] Found usages:', usages.length);
         
-        if (usages.length > 0) {
-            // Show confirmation with usage info
-            setDeleteConfirm({ variableId, usages });
-        } else {
-            // No usages, delete directly
-            handleDeleteVariable(variableId);
-        }
+        // Always show confirmation dialog
+        console.log('[VariableManager] Setting deleteConfirm state');
+        setDeleteConfirm({ variableId, usages });
     };
 
     const handleDeleteVariable = (variableId: string) => {
+        console.log('[VariableManager] Deleting variable:', variableId);
         dispatch({ type: 'DELETE_VARIABLE', payload: { variableId } });
+        console.log('[VariableManager] Dispatch sent');
         if (selectedVariableId === variableId) {
             setSelectedVariableId(null);
         }
@@ -279,40 +297,46 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                     isOpen={true}
                     onClose={() => setDeleteConfirm(null)}
                     onConfirm={() => handleDeleteVariable(deleteConfirm.variableId)}
-                    title="⚠️ Variable In Use"
-                    confirmLabel="Delete Anyway"
+                    title={deleteConfirm.usages.length > 0 ? "⚠️ Variable In Use" : "🗑️ Delete Variable"}
+                    confirmLabel={deleteConfirm.usages.length > 0 ? "Delete Anyway" : "Delete"}
                 >
-                    <div className="space-y-3">
-                        <p className="text-[var(--text-primary)]">
-                            This variable is used in <strong>{deleteConfirm.usages.length}</strong> place{deleteConfirm.usages.length !== 1 ? 's' : ''}. 
-                            Deleting it may break your game!
-                        </p>
-                        <div className="max-h-48 overflow-y-auto bg-[var(--bg-tertiary)] rounded-lg p-3">
-                            <p className="text-xs font-semibold text-[var(--text-secondary)] mb-2">Usages found:</p>
-                            <ul className="space-y-1.5 text-sm">
-                                {deleteConfirm.usages.slice(0, 10).map((usage, i) => (
-                                    <li key={i} className="flex items-start gap-2 text-[var(--text-secondary)]">
-                                        <span className="flex-shrink-0">
-                                            {usage.type === 'command' && '📜'}
-                                            {usage.type === 'condition' && '❓'}
-                                            {usage.type === 'ui-action' && '🔘'}
-                                            {usage.type === 'text-reference' && '💬'}
-                                        </span>
-                                        <span>
-                                            <strong>{usage.location}</strong>
-                                            <br />
-                                            <span className="text-xs opacity-75">{usage.detail}</span>
-                                        </span>
-                                    </li>
-                                ))}
-                                {deleteConfirm.usages.length > 10 && (
-                                    <li className="text-xs text-[var(--text-secondary)] italic pt-1">
-                                        ...and {deleteConfirm.usages.length - 10} more
-                                    </li>
-                                )}
+                    {deleteConfirm.usages.length > 0 ? (
+                        <div className="space-y-3">
+                            <p className="text-[var(--text-primary)]">
+                                This variable is used in <strong>{deleteConfirm.usages.length}</strong> place{deleteConfirm.usages.length !== 1 ? 's' : ''}. 
+                                Deleting it may break your game!
+                            </p>
+                            <div className="max-h-48 overflow-y-auto bg-[var(--bg-tertiary)] rounded-lg p-3">
+                                <p className="text-xs font-semibold text-[var(--text-secondary)] mb-2">Usages found:</p>
+                                <ul className="space-y-1.5 text-sm">
+                                    {deleteConfirm.usages.slice(0, 10).map((usage, i) => (
+                                        <li key={i} className="flex items-start gap-2 text-[var(--text-secondary)]">
+                                            <span className="flex-shrink-0">
+                                                {usage.type === 'command' && '📜'}
+                                                {usage.type === 'condition' && '❓'}
+                                                {usage.type === 'ui-action' && '🔘'}
+                                                {usage.type === 'text-reference' && '💬'}
+                                            </span>
+                                            <span>
+                                                <strong>{usage.location}</strong>
+                                                <br />
+                                                <span className="text-xs opacity-75">{usage.detail}</span>
+                                            </span>
+                                        </li>
+                                    ))}
+                                    {deleteConfirm.usages.length > 10 && (
+                                        <li className="text-xs text-[var(--text-secondary)] italic pt-1">
+                                            ...and {deleteConfirm.usages.length - 10} more
+                                        </li>
+                                    )}
                             </ul>
                         </div>
                     </div>
+                    ) : (
+                        <p className="text-[var(--text-primary)]">
+                            Are you sure you want to delete this variable? This action cannot be undone.
+                        </p>
+                    )}
                 </ConfirmationModal>
             )}
         </div>
@@ -400,15 +424,19 @@ const VariableItem: React.FC<VariableItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                    className="p-1 text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 text-slate-500 hover:text-sky-400 transition-opacity"
                     title="Rename"
                 >
                     <PencilIcon className="w-3 h-3" />
                 </button>
 
                 <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => { 
+                        e.stopPropagation(); 
+                        console.log('[VariableItem] Delete button clicked for:', variable.id);
+                        onDelete(); 
+                    }}
+                    className="p-1 text-red-500 hover:text-red-400 transition-opacity"
                     title="Delete"
                 >
                     <TrashIcon className="w-3 h-3" />
