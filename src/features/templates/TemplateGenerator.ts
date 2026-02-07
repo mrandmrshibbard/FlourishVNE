@@ -296,6 +296,70 @@ export class TemplateGenerator {
       return variables;
     }
 
+    // Stat Tracker variables
+    if (template.id === 'template-stat-tracker') {
+      const statNames = config.statNames as string[] || ['Strength', 'Intelligence', 'Charm'];
+      
+      statNames.forEach((statName: string) => {
+        variables.push({
+          id: this.generateVNID(),
+          name: `stat_${statName.toLowerCase().replace(/\s+/g, '_')}`,
+          type: 'number',
+          defaultValue: 0
+        });
+      });
+      
+      return variables;
+    }
+
+    // Dating Sim variables
+    if (template.id === 'template-dating-sim') {
+      const characterNames = config.characterNames as string[] || ['Sakura', 'Kai', 'Luna'];
+      
+      characterNames.forEach((charName: string) => {
+        variables.push({
+          id: this.generateVNID(),
+          name: `affection_${charName.toLowerCase().replace(/\s+/g, '_')}`,
+          type: 'number',
+          defaultValue: 0
+        });
+      });
+      
+      return variables;
+    }
+
+    // Inventory System variables
+    if (template.id === 'template-inventory-system') {
+      // Used slots counter
+      variables.push({
+        id: this.generateVNID(),
+        name: 'inventory_used_slots',
+        type: 'number',
+        defaultValue: 0
+      });
+
+      // Active category tracker
+      const categories = config.categories as string[] || ['Key Items', 'Consumables', 'Equipment'];
+      variables.push({
+        id: this.generateVNID(),
+        name: 'inventory_active_category',
+        type: 'string',
+        defaultValue: categories[0] || 'Key Items'
+      });
+
+      // Trading enabled flag
+      if (config.enableTrading) {
+        variables.push({
+          id: this.generateVNID(),
+          name: 'inventory_trading_active',
+          type: 'boolean',
+          defaultValue: false
+        });
+      }
+      
+      return variables;
+    }
+
     // Shop System variables
     if (template.id === 'template-shop-screen') {
       const currencyName = config.currencyName as string || 'Gold';

@@ -10,6 +10,9 @@ import InfoModal from './ui/InfoModal';
 import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
 import ContentWizardModal from './ContentWizardModal';
+import VisualLogicCanvas from './VisualLogicCanvas';
+import LocalizationPanel from './LocalizationPanel';
+import HelpPanel from './HelpPanel';
 
 function isEditorDebugEnabled(): boolean {
     try {
@@ -37,6 +40,9 @@ const Header: React.FC<{
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
     const [showWizardModal, setShowWizardModal] = useState(false);
+    const [showLogicCanvas, setShowLogicCanvas] = useState(false);
+    const [showLocalization, setShowLocalization] = useState(false);
+    const [showHelpPanel, setShowHelpPanel] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -279,6 +285,22 @@ const Header: React.FC<{
                             Wizards
                         </button>
                         <button
+                            onClick={() => setShowLogicCanvas(true)}
+                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-cyan)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
+                            title="Visual Logic Canvas"
+                        >
+                            <span className="text-sm group-hover:scale-110 transition-transform inline-block">🔀</span>
+                            Logic Canvas
+                        </button>
+                        <button
+                            onClick={() => setShowLocalization(true)}
+                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-mint)] text-[var(--text-secondary)] hover:text-[var(--accent-mint)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
+                            title="Localization Manager"
+                        >
+                            <span className="text-sm group-hover:scale-110 transition-transform inline-block">🌐</span>
+                            Localization
+                        </button>
+                        <button
                             onClick={handleExport}
                             className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
                             title="Export Project as .zip"
@@ -299,6 +321,13 @@ const Header: React.FC<{
                         >
                             <PlayIcon className="w-4 h-4" />
                             Play
+                        </button>
+                        <button
+                            onClick={() => setShowHelpPanel(true)}
+                            className="w-7 h-7 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-cyan)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] font-semibold text-xs flex items-center justify-center transition-all"
+                            title="Help & Documentation"
+                        >
+                            ?
                         </button>
                     </div>
                 </>
@@ -349,6 +378,32 @@ const Header: React.FC<{
             message="Exporting Project..." 
             subMessage="Packaging your project files"
         />
+        
+        {!isChildWindow && (
+            <VisualLogicCanvas
+                isOpen={showLogicCanvas}
+                onClose={() => setShowLogicCanvas(false)}
+                onExport={(conditions) => {
+                    console.log('Exported conditions:', conditions);
+                    setShowLogicCanvas(false);
+                }}
+            />
+        )}
+        
+        {!isChildWindow && (
+            <LocalizationPanel
+                isOpen={showLocalization}
+                onClose={() => setShowLocalization(false)}
+                project={project}
+            />
+        )}
+        
+        {!isChildWindow && (
+            <HelpPanel
+                isOpen={showHelpPanel}
+                onClose={() => setShowHelpPanel(false)}
+            />
+        )}
     </>
     );
 };

@@ -568,6 +568,155 @@ export class TemplateService {
         complexity: 'intermediate'
       }
     });
+
+    // Stat Tracker Template
+    this.addDefaultTemplate({
+      id: 'template-stat-tracker',
+      name: 'Stat Tracker System',
+      description: 'Track and display character stats like strength, intelligence, charm. Stats affect story outcomes and unlock special dialogue options.',
+      category: 'stat-tracker',
+      state: 'published',
+      configSchema: {
+        type: 'object',
+        properties: {
+          screenName: { type: 'string' },
+          statNames: { type: 'array' },
+          maxValue: { type: 'number' },
+          showUI: { type: 'boolean' },
+          backgroundColor: { type: 'string' }
+        },
+        required: ['screenName', 'statNames']
+      },
+      defaultConfig: {
+        screenName: 'Stats',
+        statNames: ['Strength', 'Intelligence', 'Charm'],
+        maxValue: 100,
+        showUI: true,
+        backgroundColor: '#1a102c'
+      },
+      tags: ['stats', 'tracker', 'rpg', 'gameplay'],
+      version: '1.0.0',
+      customizationLimits: {
+        allowStructureChanges: true,
+        allowNewComponents: true,
+        allowVariableModification: true,
+        allowLogicChanges: true,
+        maxStats: 10,
+        requiredFields: ['screenName', 'statNames'],
+        lockedComponents: []
+      },
+      preview: {
+        features: [
+          'Stat bars with labels and values',
+          'Configurable stat names and max values',
+          'Variables for each stat',
+          'Threshold conditions for story branching',
+          'Close/Back button'
+        ],
+        estimatedTime: 5,
+        complexity: 'beginner'
+      }
+    });
+
+    // Dating Sim Template
+    this.addDefaultTemplate({
+      id: 'template-dating-sim',
+      name: 'Dating Sim System',
+      description: 'Affection/relationship tracker for dating sim mechanics. Track relationship levels with characters, unlock special scenes at thresholds.',
+      category: 'dating-sim',
+      state: 'published',
+      configSchema: {
+        type: 'object',
+        properties: {
+          screenName: { type: 'string' },
+          characterNames: { type: 'array' },
+          maxAffection: { type: 'number' },
+          showHearts: { type: 'boolean' },
+          backgroundColor: { type: 'string' }
+        },
+        required: ['screenName', 'characterNames']
+      },
+      defaultConfig: {
+        screenName: 'Relationships',
+        characterNames: ['Sakura', 'Kai', 'Luna'],
+        maxAffection: 100,
+        showHearts: true,
+        backgroundColor: '#1a102c'
+      },
+      tags: ['dating', 'romance', 'affection', 'relationship'],
+      version: '1.0.0',
+      customizationLimits: {
+        allowStructureChanges: true,
+        allowNewComponents: true,
+        allowVariableModification: true,
+        allowLogicChanges: true,
+        maxCharacters: 10,
+        requiredFields: ['screenName', 'characterNames'],
+        lockedComponents: []
+      },
+      preview: {
+        features: [
+          'Affection bars per character with heart indicators',
+          'Configurable character names and max affection',
+          'Affection variables for each character',
+          'Relationship threshold conditions',
+          'Date invitation scene',
+          'Close/Back button'
+        ],
+        estimatedTime: 8,
+        complexity: 'intermediate'
+      }
+    });
+
+    // Inventory System Template
+    this.addDefaultTemplate({
+      id: 'template-inventory-system',
+      name: 'Inventory System',
+      description: 'Item-based inventory with collect, use, and trade mechanics. Perfect for adventure and RPG-style visual novels.',
+      category: 'inventory',
+      state: 'published',
+      configSchema: {
+        type: 'object',
+        properties: {
+          screenName: { type: 'string' },
+          maxSlots: { type: 'number' },
+          categories: { type: 'array' },
+          enableTrading: { type: 'boolean' },
+          backgroundColor: { type: 'string' }
+        },
+        required: ['screenName', 'categories']
+      },
+      defaultConfig: {
+        screenName: 'Inventory',
+        maxSlots: 20,
+        categories: ['Key Items', 'Consumables', 'Equipment'],
+        enableTrading: false,
+        backgroundColor: '#1a102c'
+      },
+      tags: ['inventory', 'items', 'rpg', 'adventure'],
+      version: '1.0.0',
+      customizationLimits: {
+        allowStructureChanges: true,
+        allowNewComponents: true,
+        allowVariableModification: true,
+        allowLogicChanges: true,
+        maxItems: 50,
+        requiredFields: ['screenName', 'categories'],
+        lockedComponents: []
+      },
+      preview: {
+        features: [
+          'Item grid with category tabs',
+          'Inventory slot tracking variable',
+          'Item pickup scene template',
+          'Inventory check conditions',
+          'Optional trading functionality',
+          'Close/Back button'
+        ],
+        estimatedTime: 10,
+        complexity: 'intermediate'
+      }
+    });
   }
 
   /**
@@ -608,6 +757,12 @@ export class TemplateService {
           return this.generateCharacterCreatorScreen(config);
         case 'template-shop-screen':
           return this.generateShopScreen(config);
+        case 'template-stat-tracker':
+          return this.generateStatTrackerScreen(config);
+        case 'template-dating-sim':
+          return this.generateDatingSimScreen(config);
+        case 'template-inventory-system':
+          return this.generateInventorySystemScreen(config);
         default:
           // Fallback for unknown templates
           return [{
@@ -1078,6 +1233,541 @@ export class TemplateService {
     };
     
     // Create the screen
+    return [{
+      id: screenId,
+      name: screenName,
+      background: { type: 'color', value: config.backgroundColor || '#1a102c' },
+      music: { audioId: null, policy: 'continue' },
+      ambientNoise: { audioId: null, policy: 'continue' },
+      elements: elements,
+      transitionIn: 'fade',
+      transitionOut: 'fade',
+      transitionDuration: 300,
+      showDialogue: false
+    }];
+  }
+
+  /**
+   * Generate Stat Tracker UI Screen
+   * Creates a screen with:
+   * - Title display
+   * - Stat bars with labels and current values
+   * - Close/Back button
+   */
+  private generateStatTrackerScreen(config: TemplateConfig): VNUIScreen[] {
+    const screenId = this.generateId();
+    const elements: Record<VNID, any> = {};
+
+    const screenName = config.screenName as string || 'Stats';
+    const statNames = config.statNames as string[] || ['Strength', 'Intelligence', 'Charm'];
+    const maxValue = config.maxValue as number || 100;
+    const showUI = config.showUI !== false;
+
+    // 1. Title Text
+    const titleId = this.generateId();
+    elements[titleId] = {
+      id: titleId,
+      name: 'Stats Title',
+      type: 'Text',
+      text: screenName,
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 32,
+        color: '#FFFFFF',
+        weight: 'bold',
+        italic: false
+      },
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      x: 50,
+      y: 5,
+      width: 60,
+      height: 8,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
+    // 2. Stat Bars
+    const startY = 18;
+    const statSpacing = 14;
+
+    statNames.forEach((statName: string, index: number) => {
+      const varName = `stat_${statName.toLowerCase().replace(/\s+/g, '_')}`;
+      const y = startY + (index * statSpacing);
+
+      // Stat Label
+      const labelId = this.generateId();
+      elements[labelId] = {
+        id: labelId,
+        name: `${statName} Label`,
+        type: 'Text',
+        text: statName,
+        font: {
+          family: 'Poppins, sans-serif',
+          size: 20,
+          color: '#FFFFFF',
+          weight: 'bold',
+          italic: false
+        },
+        textAlign: 'left',
+        verticalAlign: 'middle',
+        x: 15,
+        y: y,
+        width: 25,
+        height: 5,
+        anchorX: 0,
+        anchorY: 0
+      };
+
+      // Stat Value Display
+      const valueId = this.generateId();
+      elements[valueId] = {
+        id: valueId,
+        name: `${statName} Value`,
+        type: 'Text',
+        text: `{${varName}} / ${maxValue}`,
+        font: {
+          family: 'Poppins, sans-serif',
+          size: 18,
+          color: '#A78BFA',
+          weight: 'normal',
+          italic: false
+        },
+        textAlign: 'right',
+        verticalAlign: 'middle',
+        x: 85,
+        y: y,
+        width: 20,
+        height: 5,
+        anchorX: 1,
+        anchorY: 0
+      };
+
+      // Stat Bar Background
+      const barBgId = this.generateId();
+      elements[barBgId] = {
+        id: barBgId,
+        name: `${statName} Bar Background`,
+        type: 'Image',
+        background: { type: 'color', value: 'rgba(30, 41, 59, 0.8)' },
+        x: 15,
+        y: y + 6,
+        width: 70,
+        height: 4,
+        anchorX: 0,
+        anchorY: 0
+      };
+    });
+
+    // 3. Close/Back Button
+    const closeBtnId = this.generateId();
+    elements[closeBtnId] = {
+      id: closeBtnId,
+      name: 'Close Button',
+      type: 'Button',
+      text: 'Close',
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 18,
+        color: '#FFFFFF',
+        weight: 'bold',
+        italic: false
+      },
+      action: {
+        type: 'ReturnToPreviousScreen'
+      },
+      actions: [],
+      image: null,
+      hoverImage: null,
+      clickSoundId: null,
+      hoverSoundId: null,
+      x: 50,
+      y: 90,
+      width: 20,
+      height: 6,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
+    return [{
+      id: screenId,
+      name: screenName,
+      background: { type: 'color', value: config.backgroundColor || '#1a102c' },
+      music: { audioId: null, policy: 'continue' },
+      ambientNoise: { audioId: null, policy: 'continue' },
+      elements: elements,
+      transitionIn: 'fade',
+      transitionOut: 'fade',
+      transitionDuration: 300,
+      showDialogue: false
+    }];
+  }
+
+  /**
+   * Generate Dating Sim UI Screen
+   * Creates a screen with:
+   * - Title display
+   * - Affection bars per character with heart indicators
+   * - Date invitation button
+   * - Close/Back button
+   */
+  private generateDatingSimScreen(config: TemplateConfig): VNUIScreen[] {
+    const screenId = this.generateId();
+    const elements: Record<VNID, any> = {};
+
+    const screenName = config.screenName as string || 'Relationships';
+    const characterNames = config.characterNames as string[] || ['Sakura', 'Kai', 'Luna'];
+    const maxAffection = config.maxAffection as number || 100;
+    const showHearts = config.showHearts !== false;
+
+    // 1. Title Text
+    const titleId = this.generateId();
+    elements[titleId] = {
+      id: titleId,
+      name: 'Relationships Title',
+      type: 'Text',
+      text: showHearts ? `💕 ${screenName} 💕` : screenName,
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 32,
+        color: '#FFFFFF',
+        weight: 'bold',
+        italic: false
+      },
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      x: 50,
+      y: 5,
+      width: 60,
+      height: 8,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
+    // 2. Character Affection Rows
+    const startY = 18;
+    const charSpacing = 16;
+
+    characterNames.forEach((charName: string, index: number) => {
+      const varName = `affection_${charName.toLowerCase().replace(/\s+/g, '_')}`;
+      const y = startY + (index * charSpacing);
+
+      // Character Name
+      const nameId = this.generateId();
+      elements[nameId] = {
+        id: nameId,
+        name: `${charName} Name`,
+        type: 'Text',
+        text: showHearts ? `❤️ ${charName}` : charName,
+        font: {
+          family: 'Poppins, sans-serif',
+          size: 22,
+          color: '#FFFFFF',
+          weight: 'bold',
+          italic: false
+        },
+        textAlign: 'left',
+        verticalAlign: 'middle',
+        x: 15,
+        y: y,
+        width: 30,
+        height: 5,
+        anchorX: 0,
+        anchorY: 0
+      };
+
+      // Affection Value Display
+      const valueId = this.generateId();
+      elements[valueId] = {
+        id: valueId,
+        name: `${charName} Affection`,
+        type: 'Text',
+        text: `{${varName}} / ${maxAffection}`,
+        font: {
+          family: 'Poppins, sans-serif',
+          size: 18,
+          color: '#F472B6',
+          weight: 'normal',
+          italic: false
+        },
+        textAlign: 'right',
+        verticalAlign: 'middle',
+        x: 85,
+        y: y,
+        width: 20,
+        height: 5,
+        anchorX: 1,
+        anchorY: 0
+      };
+
+      // Affection Bar Background
+      const barBgId = this.generateId();
+      elements[barBgId] = {
+        id: barBgId,
+        name: `${charName} Affection Bar`,
+        type: 'Image',
+        background: { type: 'color', value: 'rgba(244, 114, 182, 0.2)' },
+        x: 15,
+        y: y + 6,
+        width: 70,
+        height: 4,
+        anchorX: 0,
+        anchorY: 0
+      };
+    });
+
+    // 3. Close/Back Button
+    const closeBtnId = this.generateId();
+    elements[closeBtnId] = {
+      id: closeBtnId,
+      name: 'Close Button',
+      type: 'Button',
+      text: 'Close',
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 18,
+        color: '#FFFFFF',
+        weight: 'bold',
+        italic: false
+      },
+      action: {
+        type: 'ReturnToPreviousScreen'
+      },
+      actions: [],
+      image: null,
+      hoverImage: null,
+      clickSoundId: null,
+      hoverSoundId: null,
+      x: 50,
+      y: 90,
+      width: 20,
+      height: 6,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
+    return [{
+      id: screenId,
+      name: screenName,
+      background: { type: 'color', value: config.backgroundColor || '#1a102c' },
+      music: { audioId: null, policy: 'continue' },
+      ambientNoise: { audioId: null, policy: 'continue' },
+      elements: elements,
+      transitionIn: 'fade',
+      transitionOut: 'fade',
+      transitionDuration: 300,
+      showDialogue: false
+    }];
+  }
+
+  /**
+   * Generate Inventory System UI Screen
+   * Creates a screen with:
+   * - Title display
+   * - Category tabs
+   * - Item grid with slot indicators
+   * - Close/Back button
+   */
+  private generateInventorySystemScreen(config: TemplateConfig): VNUIScreen[] {
+    const screenId = this.generateId();
+    const elements: Record<VNID, any> = {};
+
+    const screenName = config.screenName as string || 'Inventory';
+    const maxSlots = config.maxSlots as number || 20;
+    const categories = config.categories as string[] || ['Key Items', 'Consumables', 'Equipment'];
+    const enableTrading = config.enableTrading === true;
+
+    // 1. Title Text
+    const titleId = this.generateId();
+    elements[titleId] = {
+      id: titleId,
+      name: 'Inventory Title',
+      type: 'Text',
+      text: screenName,
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 32,
+        color: '#FFFFFF',
+        weight: 'bold',
+        italic: false
+      },
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      x: 50,
+      y: 5,
+      width: 60,
+      height: 8,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
+    // 2. Slot Counter
+    const slotCounterId = this.generateId();
+    elements[slotCounterId] = {
+      id: slotCounterId,
+      name: 'Slot Counter',
+      type: 'Text',
+      text: `{inventory_used_slots} / ${maxSlots} Slots`,
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 18,
+        color: '#94A3B8',
+        weight: 'normal',
+        italic: false
+      },
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      x: 50,
+      y: 13,
+      width: 30,
+      height: 5,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
+    // 3. Category Tabs
+    const tabWidth = Math.min(25, 80 / categories.length);
+    const tabStartX = 50 - ((categories.length * tabWidth) / 2);
+
+    categories.forEach((category: string, index: number) => {
+      const tabId = this.generateId();
+      const tabVarName = `inventory_tab_${category.toLowerCase().replace(/\s+/g, '_')}`;
+      elements[tabId] = {
+        id: tabId,
+        name: `${category} Tab`,
+        type: 'Button',
+        text: category,
+        font: {
+          family: 'Poppins, sans-serif',
+          size: 14,
+          color: '#FFFFFF',
+          weight: 'bold',
+          italic: false
+        },
+        action: {
+          type: 'SetVariable',
+          variableId: '',
+          operator: 'set',
+          value: category
+        },
+        actions: [],
+        image: null,
+        hoverImage: null,
+        clickSoundId: null,
+        hoverSoundId: null,
+        x: tabStartX + (index * tabWidth),
+        y: 20,
+        width: tabWidth - 1,
+        height: 5,
+        anchorX: 0,
+        anchorY: 0
+      };
+    });
+
+    // 4. Inventory Grid Background
+    const gridBgId = this.generateId();
+    elements[gridBgId] = {
+      id: gridBgId,
+      name: 'Inventory Grid',
+      type: 'Image',
+      background: { type: 'color', value: 'rgba(30, 41, 59, 0.8)' },
+      x: 10,
+      y: 27,
+      width: 80,
+      height: 55,
+      anchorX: 0,
+      anchorY: 0
+    };
+
+    // 5. Empty Slot Placeholder Text
+    const emptyTextId = this.generateId();
+    elements[emptyTextId] = {
+      id: emptyTextId,
+      name: 'Empty Inventory Text',
+      type: 'Text',
+      text: 'No items in this category',
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 16,
+        color: '#64748B',
+        weight: 'normal',
+        italic: true
+      },
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      x: 50,
+      y: 50,
+      width: 60,
+      height: 6,
+      anchorX: 0.5,
+      anchorY: 0.5
+    };
+
+    // 6. Trade Button (if enabled)
+    if (enableTrading) {
+      const tradeBtnId = this.generateId();
+      elements[tradeBtnId] = {
+        id: tradeBtnId,
+        name: 'Trade Button',
+        type: 'Button',
+        text: 'Trade',
+        font: {
+          family: 'Poppins, sans-serif',
+          size: 16,
+          color: '#FFFFFF',
+          weight: 'bold',
+          italic: false
+        },
+        action: {
+          type: 'SetVariable',
+          variableId: '',
+          operator: 'set',
+          value: 'true'
+        },
+        actions: [],
+        image: null,
+        hoverImage: null,
+        clickSoundId: null,
+        hoverSoundId: null,
+        x: 75,
+        y: 85,
+        width: 15,
+        height: 5,
+        anchorX: 0.5,
+        anchorY: 0
+      };
+    }
+
+    // 7. Close/Back Button
+    const closeBtnId = this.generateId();
+    elements[closeBtnId] = {
+      id: closeBtnId,
+      name: 'Close Button',
+      type: 'Button',
+      text: 'Close',
+      font: {
+        family: 'Poppins, sans-serif',
+        size: 18,
+        color: '#FFFFFF',
+        weight: 'bold',
+        italic: false
+      },
+      action: {
+        type: 'ReturnToPreviousScreen'
+      },
+      actions: [],
+      image: null,
+      hoverImage: null,
+      clickSoundId: null,
+      hoverSoundId: null,
+      x: 50,
+      y: 90,
+      width: 20,
+      height: 6,
+      anchorX: 0.5,
+      anchorY: 0
+    };
+
     return [{
       id: screenId,
       name: screenName,

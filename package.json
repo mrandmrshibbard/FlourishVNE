@@ -21,7 +21,9 @@
     "electron:build:win": "npm run build:full && electron-builder --win",
     "electron:build:mac": "npm run build:full && electron-builder --mac",
     "electron:build:linux": "npm run build:full && electron-builder --linux",
-    "dist": "npm run build:full && electron-builder --win --x64"
+    "dist": "npm run build:full && electron-builder --win --x64",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
@@ -30,12 +32,16 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3",
+    "jsdom": "^28.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^4.0.18"
   },
   "build": {
     "appId": "com.flourish.vne",
