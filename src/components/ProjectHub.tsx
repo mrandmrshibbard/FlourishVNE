@@ -256,6 +256,49 @@ export const ProjectHub: React.FC<{
                 throw new Error(`Failed to fetch tutorial project: ${response.statusText}`);
             }
             const project = (await response.json()) as VNProject;
+
+            const BASE = 'welcome_onboarding_export/';
+            const prefixUrl = (url: string | undefined): string | undefined => {
+                if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('http')) return url;
+                return url.startsWith('assets/') ? BASE + url : url;
+            };
+
+            if (project.backgrounds) {
+                for (const bg of Object.values(project.backgrounds)) {
+                    (bg as any).imageUrl = prefixUrl((bg as any).imageUrl);
+                }
+            }
+            if (project.images) {
+                for (const img of Object.values(project.images)) {
+                    (img as any).imageUrl = prefixUrl((img as any).imageUrl);
+                }
+            }
+            if (project.audio) {
+                for (const aud of Object.values(project.audio)) {
+                    (aud as any).audioUrl = prefixUrl((aud as any).audioUrl);
+                }
+            }
+            if (project.videos) {
+                for (const vid of Object.values(project.videos as Record<string, any>)) {
+                    vid.videoUrl = prefixUrl(vid.videoUrl);
+                }
+            }
+            if (project.characters) {
+                for (const char of Object.values(project.characters)) {
+                    const c = char as any;
+                    c.fontUrl = prefixUrl(c.fontUrl);
+                    if (c.layers && typeof c.layers === 'object') {
+                        for (const layer of Object.values(c.layers) as any[]) {
+                            if (layer.assets && typeof layer.assets === 'object') {
+                                for (const asset of Object.values(layer.assets) as any[]) {
+                                    asset.imageUrl = prefixUrl(asset.imageUrl);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if ((window as any).electronAPI?.setHubActive) {
                 (window as any).electronAPI.setHubActive(false);
             }

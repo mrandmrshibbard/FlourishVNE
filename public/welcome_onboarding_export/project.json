@@ -139,7 +139,7 @@
         },
         {
           "type": "ShowImage",
-          "imageId": "imag-7zkqra8",
+          "imageId": "imag-vw7jvs2",
           "x": 50,
           "y": 90,
           "width": 200,
@@ -184,7 +184,7 @@
         },
         {
           "type": "ShowImage",
-          "imageId": "imag-n99wsl2",
+          "imageId": "imag-mx7dp1p",
           "x": 50,
           "y": 90,
           "width": 200,
@@ -525,18 +525,6 @@
           ]
         },
         {
-          "type": "Jump",
-          "targetSceneId": "scene-536upln",
-          "id": "cmd-zqsadbl",
-          "conditions": [
-            {
-              "variableId": "var-u6m8xfq",
-              "operator": "is true",
-              "value": ""
-            }
-          ]
-        },
-        {
           "type": "BranchEnd",
           "branchId": "branch-4ahddrp",
           "id": "cmd-v9a97ms"
@@ -603,18 +591,6 @@
           "type": "StopMusic",
           "fadeDuration": 1,
           "id": "cmd-nxxtk3t"
-        },
-        {
-          "type": "Jump",
-          "targetSceneId": "scene-536upln",
-          "id": "cmd-iyqirl2",
-          "conditions": [
-            {
-              "variableId": "var-494x12p",
-              "operator": "is false",
-              "value": ""
-            }
-          ]
         },
         {
           "type": "BranchEnd",
@@ -805,10 +781,17 @@
         },
         {
           "type": "SetBackground",
-          "backgroundId": "back-3bqnqrf",
+          "backgroundId": "back-55y7jbp",
           "transition": "fade",
           "duration": 1,
           "id": "cmd-b9fawbs"
+        },
+        {
+          "type": "PlayMusic",
+          "audioId": "audi-r27oe5h",
+          "loop": true,
+          "fadeDuration": 1,
+          "id": "cmd-4x6sijq"
         },
         {
           "type": "ShowCharacter",
@@ -1504,6 +1487,20 @@
           "characterId": "char-ld8azvx",
           "text": "I hope you had fun and learned a lot. As for me... it's my bed time. See ya tomorrow, {name}!",
           "id": "cmd-i564ai4"
+        },
+        {
+          "type": "HideCharacter",
+          "characterId": "char-355cg48",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-dzdr6ld"
+        },
+        {
+          "type": "SetBackground",
+          "backgroundId": "back-xmpipnr",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-t48xmxj"
         }
       ]
     }
@@ -2097,7 +2094,7 @@
       "id": "char-355cg48",
       "name": "Alana_bed",
       "color": "#FFFFFF",
-      "baseImageUrl": null,
+      "baseImageUrl": "",
       "layers": {
         "layer-d3ev634": {
           "id": "layer-d3ev634",
@@ -2119,7 +2116,8 @@
             "layer-d3ev634": "asset-v0e7xrq"
           }
         }
-      }
+      },
+      "fontUrl": ""
     }
   },
   "backgrounds": {
@@ -2153,20 +2151,10 @@
       "name": "transition",
       "imageUrl": "assets/backgrounds/back-pwmdrvz_transition.png"
     },
-    "back-9rh8rmk": {
-      "id": "back-9rh8rmk",
-      "name": "_s-1397932753",
-      "imageUrl": "assets/backgrounds/back-9rh8rmk__s-1397932753.png"
-    },
     "back-2mk2136": {
       "id": "back-2mk2136",
       "name": "background",
       "imageUrl": "assets/backgrounds/back-2mk2136_background.png"
-    },
-    "back-3bqnqrf": {
-      "id": "back-3bqnqrf",
-      "name": "snackbar",
-      "imageUrl": "assets/backgrounds/back-3bqnqrf_snackbar.png"
     },
     "back-lta167r": {
       "id": "back-lta167r",
@@ -2182,19 +2170,19 @@
       "id": "back-93rn4x9",
       "name": "transition2",
       "imageUrl": "assets/backgrounds/back-93rn4x9_transition2.png"
+    },
+    "back-55y7jbp": {
+      "id": "back-55y7jbp",
+      "name": "snackbar",
+      "imageUrl": "assets/backgrounds/back-55y7jbp_snackbar.png"
+    },
+    "back-xmpipnr": {
+      "id": "back-xmpipnr",
+      "name": "blackbackground",
+      "imageUrl": "assets/backgrounds/back-xmpipnr_blackbackground.png"
     }
   },
   "images": {
-    "imag-7zkqra8": {
-      "id": "imag-7zkqra8",
-      "name": "_s-2169971041_bg-removal (2)",
-      "imageUrl": "assets/images/imag-7zkqra8__s-2169971041_bg-removal_2_.png"
-    },
-    "imag-n99wsl2": {
-      "id": "imag-n99wsl2",
-      "name": "_s-2169971041_bg-removal",
-      "imageUrl": "assets/images/imag-n99wsl2__s-2169971041_bg-removal.png"
-    },
     "imag-x8hvoqs": {
       "id": "imag-x8hvoqs",
       "name": "buttongmae",
@@ -2220,11 +2208,6 @@
       "name": "soda",
       "imageUrl": "assets/images/imag-3i8l6uq_soda.png"
     },
-    "imag-9mgpzis": {
-      "id": "imag-9mgpzis",
-      "name": "popcorn",
-      "imageUrl": "assets/images/imag-9mgpzis_popcorn.png"
-    },
     "imag-pex5chv": {
       "id": "imag-pex5chv",
       "name": "nachos",
@@ -2249,6 +2232,21 @@
       "id": "imag-gz1unn1",
       "name": "25dde2a93322c4d0298d2e71f01f2c2a",
       "imageUrl": "assets/images/imag-gz1unn1_25dde2a93322c4d0298d2e71f01f2c2a.jpg"
+    },
+    "imag-mx7dp1p": {
+      "id": "imag-mx7dp1p",
+      "name": "blossom_smile (2)",
+      "imageUrl": "assets/images/imag-mx7dp1p_blossom_smile_2_.png"
+    },
+    "imag-vw7jvs2": {
+      "id": "imag-vw7jvs2",
+      "name": "blossom_excited",
+      "imageUrl": "assets/images/imag-vw7jvs2_blossom_excited.png"
+    },
+    "imag-x2se6or": {
+      "id": "imag-x2se6or",
+      "name": "popcorn",
+      "imageUrl": "assets/images/imag-x2se6or_popcorn.png"
     }
   },
   "audio": {
@@ -2351,6 +2349,11 @@
       "id": "audi-flub88r",
       "name": "Warm Sunrise",
       "audioUrl": "assets/audio/audi-flub88r_warm_sunrise.mp3"
+    },
+    "audi-njzhpab": {
+      "id": "audi-njzhpab",
+      "name": "cash-register-kaching-376867",
+      "audioUrl": "assets/audio/audi-njzhpab_cash-register-kaching-376867.mp3"
     }
   },
   "videos": {
@@ -3602,7 +3605,7 @@
       "name": "snack_bar",
       "background": {
         "type": "image",
-        "assetId": "back-3bqnqrf"
+        "assetId": "back-55y7jbp"
       },
       "music": {
         "audioId": "audi-r27oe5h",
@@ -3712,7 +3715,7 @@
           "objectFit": "contain",
           "background": {
             "type": "image",
-            "assetId": "imag-9mgpzis"
+            "assetId": "imag-x2se6or"
           }
         },
         "elem-et8o936": {
@@ -3884,7 +3887,7 @@
           },
           "image": null,
           "hoverImage": null,
-          "clickSoundId": null,
+          "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
           "conditions": [
             {
@@ -3934,7 +3937,7 @@
           },
           "image": null,
           "hoverImage": null,
-          "clickSoundId": null,
+          "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
           "conditions": [
             {
@@ -3984,7 +3987,7 @@
           },
           "image": null,
           "hoverImage": null,
-          "clickSoundId": null,
+          "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
           "conditions": [
             {
@@ -4034,7 +4037,7 @@
           },
           "image": null,
           "hoverImage": null,
-          "clickSoundId": null,
+          "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
           "conditions": [
             {
@@ -4084,7 +4087,7 @@
           },
           "image": null,
           "hoverImage": null,
-          "clickSoundId": null,
+          "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
           "conditions": [
             {
@@ -4134,7 +4137,7 @@
           },
           "image": null,
           "hoverImage": null,
-          "clickSoundId": null,
+          "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
           "conditions": [
             {
