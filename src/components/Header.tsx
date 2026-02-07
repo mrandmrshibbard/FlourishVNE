@@ -43,6 +43,7 @@ const Header: React.FC<{
     const [showLogicCanvas, setShowLogicCanvas] = useState(false);
     const [showLocalization, setShowLocalization] = useState(false);
     const [showHelpPanel, setShowHelpPanel] = useState(false);
+    const [showToolsMenu, setShowToolsMenu] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -238,7 +239,7 @@ const Header: React.FC<{
                     <div className="flex-1 flex justify-center">
                         {navigationTabs}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
                         <div className="flex items-center gap-1 bg-[var(--bg-primary)] rounded-lg p-0.5 border border-[var(--border-subtle)]">
                             <button
                                 onClick={undo}
@@ -267,7 +268,7 @@ const Header: React.FC<{
                                             backgroundSize: '300% 300%',
                                             animation: 'rainbow-shift 4s ease infinite'
                                         }}
-                                        title="⌨️ Keyboard Shortcuts - Click to see all shortcuts!"
+                                        title="Keyboard Shortcuts"
                                     >
                                         <KeyboardIcon className="w-4 h-4 text-white relative z-10 group-hover:scale-110 transition-transform" />
                                         <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -276,33 +277,63 @@ const Header: React.FC<{
                             )}
                         </div>
                         <ThemeSelector />
-                        <button
-                            onClick={() => setShowWizardModal(true)}
-                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title="Content Wizards"
-                        >
-                            <SparklesIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                            Wizards
-                        </button>
-                        <button
-                            onClick={() => setShowLogicCanvas(true)}
-                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-cyan)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title="Visual Logic Canvas"
-                        >
-                            <span className="text-sm group-hover:scale-110 transition-transform inline-block">🔀</span>
-                            Logic Canvas
-                        </button>
-                        <button
-                            onClick={() => setShowLocalization(true)}
-                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-mint)] text-[var(--text-secondary)] hover:text-[var(--accent-mint)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title="Localization Manager"
-                        >
-                            <span className="text-sm group-hover:scale-110 transition-transform inline-block">🌐</span>
-                            Localization
-                        </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowToolsMenu(!showToolsMenu)}
+                                className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
+                                title="Tools Menu"
+                            >
+                                <SparklesIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                Tools
+                                <svg className={`w-3 h-3 transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                            {showToolsMenu && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setShowToolsMenu(false)} />
+                                    <div
+                                        className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border overflow-hidden"
+                                        style={{
+                                            background: 'var(--bg-secondary)',
+                                            borderColor: 'var(--border-subtle)',
+                                            boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                                        }}
+                                    >
+                                        <button
+                                            onClick={() => { setShowWizardModal(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)]"
+                                        >
+                                            <SparklesIcon className="w-4 h-4" />
+                                            Content Wizards
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowLogicCanvas(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)]"
+                                        >
+                                            <span className="text-sm">🔀</span>
+                                            Logic Canvas
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowLocalization(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-mint)]"
+                                        >
+                                            <span className="text-sm">🌐</span>
+                                            Localization
+                                        </button>
+                                        <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                        <button
+                                            onClick={() => { setShowHelpPanel(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)]"
+                                        >
+                                            <span className="text-sm">?</span>
+                                            Help & Docs
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                         <button
                             onClick={handleExport}
-                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
+                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
                             title="Export Project as .zip"
                         >
                             <SaveIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -310,24 +341,17 @@ const Header: React.FC<{
                         </button>
                         <button
                             onClick={() => setShowBuilder(true)}
-                            className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs shadow-md hover:shadow-lg hover:shadow-green-500/20"
+                            className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs shadow-md hover:shadow-lg hover:shadow-green-500/20"
                             title="Build standalone game (no coding required!)"
                         >
                             🎮 Build
                         </button>
                         <button
                             onClick={onPlay}
-                            className="btn-primary-gradient text-white font-semibold px-4 py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-xs"
+                            className="btn-primary-gradient text-white font-semibold px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-xs"
                         >
                             <PlayIcon className="w-4 h-4" />
                             Play
-                        </button>
-                        <button
-                            onClick={() => setShowHelpPanel(true)}
-                            className="w-7 h-7 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-cyan)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] font-semibold text-xs flex items-center justify-center transition-all"
-                            title="Help & Documentation"
-                        >
-                            ?
                         </button>
                     </div>
                 </>
