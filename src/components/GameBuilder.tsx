@@ -4,9 +4,10 @@
  * NO command line required - perfect for writers and artists!
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { VNProject } from '../types/project';
 import { buildStandaloneGame, downloadBlob, estimateBuildSize, BuildProgress } from '../utils/gameBundler';
+import { validateProjectForBuild, ValidationResult } from '../utils/buildValidator';
 
 interface GameBuilderProps {
   project: VNProject;
@@ -29,6 +30,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
   const [buildSize, setBuildSize] = useState<number>(0);
 
   const estimatedSize = estimateBuildSize(project);
+  const validation = useMemo(() => validateProjectForBuild(project), [project]);
 
   const handleBuild = async () => {
     try {
@@ -178,8 +180,45 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </div>
               </div>
 
-              <button onClick={handleBuild} style={styles.buildButton}>
-                {buildType === 'web' ? '🌐 Build Web Game' : '💾 Build Desktop App'}
+              {(validation.errors.length > 0 || validation.warnings.length > 0) && (
+                <div style={{
+                  margin: '16px 0',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  background: validation.errors.length > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(251, 191, 36, 0.15)',
+                  border: `1px solid ${validation.errors.length > 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(251, 191, 36, 0.4)'}`,
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '8px', color: validation.errors.length > 0 ? '#f87171' : '#fbbf24', fontSize: '14px' }}>
+                    {validation.errors.length > 0 ? `⛔ ${validation.errors.length} Error(s)` : ''} 
+                    {validation.errors.length > 0 && validation.warnings.length > 0 ? ' • ' : ''}
+                    {validation.warnings.length > 0 ? `⚠️ ${validation.warnings.length} Warning(s)` : ''}
+                  </div>
+                  <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '12px' }}>
+                    {validation.errors.map((e, i) => (
+                      <div key={`err-${i}`} style={{ color: '#f87171', marginBottom: '4px' }}>
+                        ⛔ {e.message} {e.location && <span style={{ opacity: 0.7 }}>({e.location})</span>}
+                      </div>
+                    ))}
+                    {validation.warnings.map((w, i) => (
+                      <div key={`warn-${i}`} style={{ color: '#fbbf24', marginBottom: '4px' }}>
+                        ⚠️ {w.message} {w.location && <span style={{ opacity: 0.7 }}>({w.location})</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button 
+                onClick={handleBuild} 
+                style={{
+                  ...styles.buildButton,
+                  ...(validation.errors.length > 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                }}
+                disabled={validation.errors.length > 0}
+              >
+                {validation.errors.length > 0 
+                  ? '⛔ Fix Errors Before Building' 
+                  : buildType === 'web' ? '🌐 Build Web Game' : '💾 Build Desktop App'}
               </button>
 
               <div style={styles.helpBox}>

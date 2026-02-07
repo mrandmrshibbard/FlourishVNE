@@ -18,6 +18,8 @@ export interface VNProject {
     title: string;
     description?: string;
     author?: string;
+    version?: string;
+    engineVersion?: string;
     startSceneId: VNID;
     scenes: Record<VNID, VNScene>;
     characters: Record<VNID, VNCharacter>;
@@ -29,4 +31,9 @@ export interface VNProject {
     fonts: Record<VNID, VNProjectFont>;
     ui: VNProjectUI;
     uiScreens: Record<VNID, VNUIScreen>;
+    gameResolution?: {
+        width: number;
+        height: number;
+        aspectRatio: string;
+    };
 }

@@ -1,13 +1,24 @@
-import React, { createContext, useReducer, Dispatch, useContext, useCallback, useRef, useState, useEffect } from 'react';
+import React, { createContext, Dispatch, useContext, useCallback, useRef, useState, useEffect } from 'react';
 import { VNProject } from '../types/project';
 import { ProjectAction } from '../state/actions';
 import { rootReducer } from '../state/rootReducer';
+import { saveProjectToIDB } from '../utils/storage';
+import { createLogger } from '../utils/logger';
 
 interface UndoRedoState {
   past: VNProject[];
   present: VNProject;
   future: VNProject[];
 }
+
+const log = createLogger('ProjectContext');
+const AUTO_SAVE_INTERVAL = 2 * 60 * 1000;
+const MAX_HISTORY = 20;
+const COALESCE_MS = 300;
+
+const NON_UNDOABLE_ACTIONS = new Set([
+  'UPDATE_PROJECT_TITLE',
+]);
 
 export const ProjectContext = createContext<{
   project: VNProject;
@@ -16,9 +27,8 @@ export const ProjectContext = createContext<{
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  lastAutoSave: number | null;
 } | null>(null);
-
-const MAX_HISTORY = 50; // Keep last 50 states
 
 export const ProjectProvider: React.FC<{
   children: React.ReactNode;
@@ -29,25 +39,44 @@ export const ProjectProvider: React.FC<{
     present: initialProject,
     future: []
   });
+  const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
 
   const isSyncing = useRef(false);
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const lastActionTime = useRef(0);
+  const lastActionType = useRef('');
 
   const dispatchWithHistory = useCallback((action: ProjectAction) => {
     setHistory(prev => {
       const newPresent = rootReducer(prev.present, action);
-      
-      // Don't add to history if reducer returned identical state reference
+
       if (newPresent === prev.present) {
         return prev;
       }
 
+      const now = Date.now();
+      const shouldCoalesce =
+        action.type === lastActionType.current &&
+        now - lastActionTime.current < COALESCE_MS;
+      const skipUndo = NON_UNDOABLE_ACTIONS.has(action.type);
+
+      lastActionTime.current = now;
+      lastActionType.current = action.type;
+
+      let newPast: VNProject[];
+      if (shouldCoalesce || skipUndo) {
+        newPast = prev.past;
+      } else {
+        newPast = [...prev.past.slice(-MAX_HISTORY + 1), prev.present];
+      }
+
       const newHistory = {
-        past: [...prev.past.slice(-MAX_HISTORY + 1), prev.present],
+        past: newPast,
         present: newPresent,
-        future: [] // Clear future when new action is performed
+        future: []
       };
 
-      // Sync to other windows if in Electron
       if (!isSyncing.current && (window as any).electronAPI?.syncProjectState) {
         (window as any).electronAPI.syncProjectState(newPresent);
       }
@@ -56,7 +85,6 @@ export const ProjectProvider: React.FC<{
     });
   }, []);
 
-  // Listen for project updates from other windows
   useEffect(() => {
     if ((window as any).electronAPI?.onProjectStateUpdate) {
       (window as any).electronAPI.onProjectStateUpdate((projectData: VNProject) => {
@@ -64,20 +92,50 @@ export const ProjectProvider: React.FC<{
         setHistory(prev => ({
           past: [...prev.past.slice(-MAX_HISTORY + 1), prev.present],
           present: projectData,
-          future: [] // Clear future on external update
+          future: []
         }));
         isSyncing.current = false;
       });
     }
   }, []);
 
+  useEffect(() => {
+    const autoSave = async () => {
+      const project = historyRef.current.present;
+      try {
+        await saveProjectToIDB(project);
+        setLastAutoSave(Date.now());
+      } catch (err) {
+        log.warn('Auto-save failed:', err);
+      }
+    };
+
+    autoSave();
+
+    const intervalId = setInterval(autoSave, AUTO_SAVE_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const project = historyRef.current.present;
+      try {
+        saveProjectToIDB(project);
+      } catch (err) {
+        log.warn('Emergency save on unload failed:', err);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const undo = useCallback(() => {
     setHistory(prev => {
       if (prev.past.length === 0) return prev;
-      
+
       const newPast = prev.past.slice(0, -1);
       const newPresent = prev.past[prev.past.length - 1];
-      
+
       return {
         past: newPast,
         present: newPresent,
@@ -89,10 +147,10 @@ export const ProjectProvider: React.FC<{
   const redo = useCallback(() => {
     setHistory(prev => {
       if (prev.future.length === 0) return prev;
-      
+
       const newFuture = prev.future.slice(1);
       const newPresent = prev.future[0];
-      
+
       return {
         past: [...prev.past, prev.present],
         present: newPresent,
@@ -101,7 +159,6 @@ export const ProjectProvider: React.FC<{
     });
   }, []);
 
-  // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
@@ -124,13 +181,14 @@ export const ProjectProvider: React.FC<{
   }, [history.present]);
 
   return (
-    <ProjectContext.Provider value={{ 
-      project: history.present, 
+    <ProjectContext.Provider value={{
+      project: history.present,
       dispatch: dispatchWithHistory,
       undo,
       redo,
       canUndo: history.past.length > 0,
-      canRedo: history.future.length > 0
+      canRedo: history.future.length > 0,
+      lastAutoSave
     }}>
       {children}
     </ProjectContext.Provider>

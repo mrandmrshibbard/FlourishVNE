@@ -180,7 +180,7 @@ export const GameEngine = {
     /**
      * Get version information
      */
-    version: '1.0.0',
+    version: __APP_VERSION__,
 
     /**
      * Check if the engine is ready

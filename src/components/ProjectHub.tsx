@@ -6,6 +6,7 @@ import { importProject } from '../utils/projectPackager';
 import { ChangelogModal } from './ChangelogModal';
 import { useToast } from '../contexts/ToastContext';
 import LoadingOverlay from './ui/LoadingOverlay';
+import { getAutoSaveMetadata, loadProjectFromIDB, deleteAutoSave } from '../utils/storage';
 
 // Recent project metadata (stored in localStorage)
 interface RecentProject {
@@ -81,14 +82,25 @@ export const ProjectHub: React.FC<{
     const [autoUpdateFailed, setAutoUpdateFailed] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+    const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
+    const [showRecovery, setShowRecovery] = useState(false);
     const toast = useToast();
     
-    // Your itch.io page URL
     const ITCHIO_URL = 'https://memento-morii1.itch.io/flourish-visual-novel-engine';
 
-    // Load recent projects on mount
     useEffect(() => {
         setRecentProjects(loadRecentProjects());
+
+        getAutoSaveMetadata().then(metas => {
+            if (metas.length > 0) {
+                setRecoveryProjects(metas.map(m => ({
+                    id: m.projectId,
+                    title: m.title,
+                    savedAt: m.savedAt
+                })));
+                setShowRecovery(true);
+            }
+        }).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -398,6 +410,66 @@ export const ProjectHub: React.FC<{
                 </div>
             )}
             
+            {showRecovery && recoveryProjects.length > 0 && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-[var(--bg-secondary)] border border-[var(--accent-cyan)]/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+                        <h2 className="text-xl font-bold mb-2 text-[var(--accent-cyan)]">Recover Unsaved Work</h2>
+                        <p className="text-[var(--text-secondary)] text-sm mb-4">
+                            Auto-saved projects were found from a previous session. Would you like to restore one?
+                        </p>
+                        <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+                            {recoveryProjects.map(rp => (
+                                <button
+                                    key={rp.id}
+                                    onClick={async () => {
+                                        try {
+                                            const project = await loadProjectFromIDB(rp.id as any);
+                                            if (project) {
+                                                saveRecentProject(project);
+                                                toast.success('Project recovered!');
+                                                onProjectSelect(project);
+                                            } else {
+                                                toast.error('Could not load saved project.');
+                                            }
+                                        } catch {
+                                            toast.error('Failed to recover project.');
+                                        }
+                                        setShowRecovery(false);
+                                    }}
+                                    className="w-full text-left p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-cyan)]/20 transition-colors border border-transparent hover:border-[var(--accent-cyan)]/30"
+                                >
+                                    <div className="font-medium text-[var(--text-primary)]">{rp.title}</div>
+                                    <div className="text-xs text-[var(--text-muted)] mt-1">
+                                        Saved {formatTimeAgo(rp.savedAt)}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowRecovery(false)}
+                                className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-tertiary)]/80 text-[var(--text-secondary)] transition-colors text-sm"
+                            >
+                                Start Fresh
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    for (const rp of recoveryProjects) {
+                                        await deleteAutoSave(rp.id as any).catch(() => {});
+                                    }
+                                    setRecoveryProjects([]);
+                                    setShowRecovery(false);
+                                    toast.info('Auto-saves cleared.');
+                                }}
+                                className="px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-300 transition-colors text-sm"
+                            >
+                                Discard All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="w-full max-w-5xl p-8 relative z-10">
                 <header className="text-center mb-14">
                     {/* Logo/Icon */}

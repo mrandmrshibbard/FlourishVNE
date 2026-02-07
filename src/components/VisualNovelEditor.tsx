@@ -502,30 +502,34 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                             </Suspense>
                         </div>
                     ) : activeTab === 'scenes' ? (
-                        <SceneManager
-                            project={project}
-                            activeSceneId={activeSceneId}
-                            setActiveSceneId={handleSetActiveScene}
-                            selectedCommandIndex={selectedCommandIndex}
-                            setSelectedCommandIndex={setSelectedCommandIndex}
-                            setSelectedVariableId={setSelectedVariableId}
-                            onConfigureScene={() => {
-                                setIsConfiguringScene(true);
-                                setSelectedCommandIndex(null);
-                            }}
-                            isCollapsed={isSceneEditorCollapsed}
-                            onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
-                        />
+                        <ErrorBoundary panelName="Scene Manager">
+                            <SceneManager
+                                project={project}
+                                activeSceneId={activeSceneId}
+                                setActiveSceneId={handleSetActiveScene}
+                                selectedCommandIndex={selectedCommandIndex}
+                                setSelectedCommandIndex={setSelectedCommandIndex}
+                                setSelectedVariableId={setSelectedVariableId}
+                                onConfigureScene={() => {
+                                    setIsConfiguringScene(true);
+                                    setSelectedCommandIndex(null);
+                                }}
+                                isCollapsed={isSceneEditorCollapsed}
+                                onToggleCollapse={() => setIsSceneEditorCollapsed(prev => !prev)}
+                            />
+                        </ErrorBoundary>
                     ) : activeTab === 'characters' ? (
-                        <CharacterManager
-                            project={project}
-                            activeCharacterId={activeCharacterId}
-                            setActiveCharacterId={handleSetActiveCharacter}
-                            selectedExpressionId={selectedExpressionId}
-                            setSelectedExpressionId={setSelectedExpressionId}
-                        />
+                        <ErrorBoundary panelName="Character Manager">
+                            <CharacterManager
+                                project={project}
+                                activeCharacterId={activeCharacterId}
+                                setActiveCharacterId={handleSetActiveCharacter}
+                                selectedExpressionId={selectedExpressionId}
+                                setSelectedExpressionId={setSelectedExpressionId}
+                            />
+                        </ErrorBoundary>
                     ) : activeTab === 'ui' ? (
-                        <ErrorBoundary fallback={<div className="p-4 text-red-400">UI Manager failed to load. Check console.</div>}>
+                        <ErrorBoundary panelName="UI Manager">
                             <UIManager
                                 project={project}
                                 activeMenuScreenId={activeMenuScreenId}
@@ -535,24 +539,34 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                             />
                         </ErrorBoundary>
                     ) : activeTab === 'assets' ? (
-                        <Suspense fallback={<div className="text-slate-300 p-4">Loading assets…</div>}>
-                            <AssetManager project={project} />
-                        </Suspense>
+                        <ErrorBoundary panelName="Asset Manager">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading assets…</div>}>
+                                <AssetManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
                     ) : activeTab === 'variables' ? (
-                        <Suspense fallback={<div className="text-slate-300 p-4">Loading variables…</div>}>
-                            <VariableManager project={project} />
-                        </Suspense>
+                        <ErrorBoundary panelName="Variable Manager">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading variables…</div>}>
+                                <VariableManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
                     ) : activeTab === 'settings' ? (
-                        <Suspense fallback={<div className="text-slate-300 p-4">Loading settings…</div>}>
-                            <SettingsManager project={project} />
-                        </Suspense>
+                        <ErrorBoundary panelName="Settings">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading settings…</div>}>
+                                <SettingsManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
                     ) : null}
                 </div>
 
                 {/* Properties Inspector Sidebar - Always Visible */}
                 {renderInspector()}
             </main>
-            {isPlaying && <LivePreview onClose={() => setIsPlaying(false)} />}
+            {isPlaying && (
+                <ErrorBoundary panelName="Live Preview">
+                    <LivePreview onClose={() => setIsPlaying(false)} />
+                </ErrorBoundary>
+            )}
             
             {/* Info Modal */}
             <InfoModal

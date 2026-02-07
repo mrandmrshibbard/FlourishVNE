@@ -129,6 +129,126 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate }) 
                     </select>
                 </div>
 
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                    <textarea
+                        value={project.description || ''}
+                        onChange={(e) => onUpdate({ description: e.target.value })}
+                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        placeholder="Enter project description"
+                        rows={3}
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Author</label>
+                    <input
+                        type="text"
+                        value={project.author || ''}
+                        onChange={(e) => onUpdate({ author: e.target.value })}
+                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        placeholder="Enter author name"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Project Version</label>
+                    <input
+                        type="text"
+                        value={project.version || ''}
+                        onChange={(e) => onUpdate({ version: e.target.value })}
+                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        placeholder="e.g. 1.0.0"
+                    />
+                </div>
+
+                <div className="pt-4 border-t border-slate-700">
+                    <h4 className="text-lg font-semibold text-white mb-4">Game Resolution</h4>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Preset</label>
+                            <select
+                                value={
+                                    project.gameResolution
+                                        ? `${project.gameResolution.width}x${project.gameResolution.height}`
+                                        : '1920x1080'
+                                }
+                                onChange={(e) => {
+                                    const presets: Record<string, { width: number; height: number; aspectRatio: string }> = {
+                                        '1920x1080': { width: 1920, height: 1080, aspectRatio: '16:9' },
+                                        '1280x720': { width: 1280, height: 720, aspectRatio: '16:9' },
+                                        '1024x768': { width: 1024, height: 768, aspectRatio: '4:3' },
+                                        '800x600': { width: 800, height: 600, aspectRatio: '4:3' },
+                                        '1080x1920': { width: 1080, height: 1920, aspectRatio: '9:16' },
+                                    };
+                                    const preset = presets[e.target.value];
+                                    if (preset) {
+                                        onUpdate({ gameResolution: preset });
+                                    }
+                                }}
+                                className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            >
+                                <option value="1920x1080">1920 x 1080 (16:9 Full HD)</option>
+                                <option value="1280x720">1280 x 720 (16:9 HD)</option>
+                                <option value="1024x768">1024 x 768 (4:3)</option>
+                                <option value="800x600">800 x 600 (4:3)</option>
+                                <option value="1080x1920">1080 x 1920 (9:16 Portrait)</option>
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Width</label>
+                                <input
+                                    type="number"
+                                    value={project.gameResolution?.width || 1920}
+                                    onChange={(e) => {
+                                        const width = parseInt(e.target.value) || 1920;
+                                        const height = project.gameResolution?.height || 1080;
+                                        const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+                                        const d = gcd(width, height);
+                                        onUpdate({
+                                            gameResolution: {
+                                                width,
+                                                height,
+                                                aspectRatio: `${width / d}:${height / d}`
+                                            }
+                                        });
+                                    }}
+                                    className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500 text-sm"
+                                    min="320"
+                                    max="3840"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Height</label>
+                                <input
+                                    type="number"
+                                    value={project.gameResolution?.height || 1080}
+                                    onChange={(e) => {
+                                        const height = parseInt(e.target.value) || 1080;
+                                        const width = project.gameResolution?.width || 1920;
+                                        const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+                                        const d = gcd(width, height);
+                                        onUpdate({
+                                            gameResolution: {
+                                                width,
+                                                height,
+                                                aspectRatio: `${width / d}:${height / d}`
+                                            }
+                                        });
+                                    }}
+                                    className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500 text-sm"
+                                    min="240"
+                                    max="2160"
+                                />
+                            </div>
+                        </div>
+                        <div className="text-xs text-slate-400">
+                            Aspect Ratio: {project.gameResolution?.aspectRatio || '16:9'}
+                        </div>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-slate-700">
                     <div>
                         <span className="text-slate-400">Project ID:</span>
@@ -145,6 +265,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate }) 
                     <div>
                         <span className="text-slate-400">Variables:</span>
                         <span className="text-white ml-2">{Object.keys(project.variables || {}).length}</span>
+                    </div>
+                    <div>
+                        <span className="text-slate-400">Engine Version:</span>
+                        <span className="text-white ml-2 font-mono text-xs">{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}</span>
                     </div>
                 </div>
             </div>
