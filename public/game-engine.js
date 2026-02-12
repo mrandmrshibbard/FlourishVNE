@@ -4417,6 +4417,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const activeFlashRef = React2.useRef(null);
     const activeShakeRef = React2.useRef(null);
     const [flashTrigger, setFlashTrigger] = React2.useState(0);
+    const [shakeTrigger, setShakeTrigger] = React2.useState(0);
     const assetResolver = React2.useCallback((assetId, type) => {
       var _a, _b, _c;
       if (!assetId) return null;
@@ -5693,11 +5694,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case CommandType.ShakeScreen: {
               const cmd = command;
               activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
-              const timeoutId = window.setTimeout(() => {
-                activeShakeRef.current = null;
-                activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== timeoutId);
-              }, cmd.duration * 1e3);
-              activeEffectTimeoutsRef.current.push(timeoutId);
+              setShakeTrigger((prev) => prev + 1);
+              if (cmd.duration > 0) {
+                const timeoutId = window.setTimeout(() => {
+                  activeShakeRef.current = null;
+                  setShakeTrigger((prev) => prev + 1);
+                  activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== timeoutId);
+                }, cmd.duration * 1e3);
+                activeEffectTimeoutsRef.current.push(timeoutId);
+              }
               break;
             }
             case CommandType.TintScreen: {
@@ -5738,6 +5743,27 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                 }
               } : null);
+              const effectDuration = cmd.duration ?? 0;
+              if (effectDuration > 0) {
+                const effectType = cmd.effectType;
+                const overlayTimeoutId = window.setTimeout(() => {
+                  updatePlayerState((p) => p ? {
+                    ...p,
+                    stageState: {
+                      ...p.stageState,
+                      screen: {
+                        ...p.stageState.screen,
+                        overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                          type: effectType,
+                          intensity: 0
+                        })
+                      }
+                    }
+                  } : null);
+                  activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter((id) => id !== overlayTimeoutId);
+                }, effectDuration * 1e3);
+                activeEffectTimeoutsRef.current.push(overlayTimeoutId);
+              }
               break;
             }
             case CommandType.ShowScreen: {

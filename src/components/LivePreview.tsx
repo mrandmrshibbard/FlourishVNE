@@ -1903,6 +1903,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const activeFlashRef = useRef<{ color: string; duration: number; key: number } | null>(null);
     const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
     const [flashTrigger, setFlashTrigger] = useState(0);
+    const [shakeTrigger, setShakeTrigger] = useState(0);
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
         if (!assetId) return null;
@@ -3381,15 +3382,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case CommandType.ShakeScreen: {
                     const cmd = command as ShakeScreenCommand;
                     
-                    // Set shake in ref
+                    // Set shake in ref and force a render so the CSS class is applied
                     activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                    setShakeTrigger(prev => prev + 1);
                     
-                    // Set up timeout to clear shake ref (no re-render needed - CSS animation handles it)
-                    const timeoutId = window.setTimeout(() => {
-                        activeShakeRef.current = null;
-                        activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
-                    }, cmd.duration * 1000);
-                    activeEffectTimeoutsRef.current.push(timeoutId);
+                    // Duration 0 = persistent (shake runs until manually cleared / scene change)
+                    if (cmd.duration > 0) {
+                        const timeoutId = window.setTimeout(() => {
+                            activeShakeRef.current = null;
+                            setShakeTrigger(prev => prev + 1); // Force re-render to remove CSS class
+                            activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
+                        }, cmd.duration * 1000);
+                        activeEffectTimeoutsRef.current.push(timeoutId);
+                    }
                     
                     // Let the normal advance() function handle index progression
                     break;
@@ -3436,6 +3441,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                         }
                     } : null);
+                    
+                    // Auto-remove overlay effect after duration (duration 0 = persistent)
+                    const effectDuration = cmd.duration ?? 0;
+                    if (effectDuration > 0) {
+                        const effectType = cmd.effectType;
+                        const overlayTimeoutId = window.setTimeout(() => {
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                stageState: {
+                                    ...p.stageState,
+                                    screen: {
+                                        ...p.stageState.screen,
+                                        overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                                            type: effectType,
+                                            intensity: 0,
+                                        }),
+                                    }
+                                }
+                            } : null);
+                            activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== overlayTimeoutId);
+                        }, effectDuration * 1000);
+                        activeEffectTimeoutsRef.current.push(overlayTimeoutId);
+                    }
                     break;
                 }
                 case CommandType.ShowScreen: {

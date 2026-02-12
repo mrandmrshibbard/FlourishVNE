@@ -1107,11 +1107,21 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.ShakeScreen: {
                 const cmd = command as ShakeScreenCommand;
+                const isShakePersistent = cmd.duration === 0;
                 return <>
-                    <FormField label="Duration (seconds)"><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/></FormField>
                     <FormField label={`Intensity: ${cmd.intensity}`}>
                         <input type="range" min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) })} className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-sky-500"/>
                     </FormField>
+                    <FormField label="Duration">
+                        <label className="flex items-center gap-2 mb-2">
+                            <input type="checkbox" checked={isShakePersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 0.5 })} />
+                            <span className="text-xs text-slate-300">Persistent (until cleared by Reset Screen Effects or scene change)</span>
+                        </label>
+                        {!isShakePersistent && (
+                            <TextInput type="number" min="0.1" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.1 })}/>
+                        )}
+                    </FormField>
+                    {isShakePersistent && <p className="text-xs text-amber-400/80">⚠ Shake will continue until a "Reset Screen Effects" command runs or the scene changes.</p>}
                 </>;
             }
             case CommandType.TintScreen: {
@@ -1227,6 +1237,22 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                     )}
+                    
+                    {(() => {
+                        const overlayDuration = typeof cmd.duration === 'number' ? cmd.duration : 0;
+                        const isPersistent = overlayDuration === 0;
+                        return <FormField label="Duration">
+                            <label className="flex items-center gap-2 mb-2">
+                                <input type="checkbox" checked={isPersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 5 })} />
+                                <span className="text-xs text-slate-300">Persistent (until cleared)</span>
+                            </label>
+                            {!isPersistent && (
+                                <TextInput type="number" min="0.1" step="0.5" value={overlayDuration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.1 })} />
+                            )}
+                            {!isPersistent && <p className="text-xs text-slate-400 mt-1">Effect will automatically remove itself after this many seconds.</p>}
+                        </FormField>;
+                    })()}
+                    
                     <p className="text-xs text-slate-400">Tip: set intensity to 0 to disable this effect.</p>
                 </>;
             }

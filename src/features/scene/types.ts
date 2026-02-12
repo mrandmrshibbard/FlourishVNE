@@ -239,6 +239,8 @@ export interface SetScreenOverlayEffectCommand extends BaseCommand {
     variant?: VNSnowAshVariant;
     /** Optional color for the effect (hex string like #FFAA00) */
     color?: string;
+    /** Duration in seconds before effect auto-removes. 0 = persistent (until cleared). */
+    duration?: number;
 }
 export interface ShowScreenCommand extends BaseCommand {
     type: CommandType.ShowScreen;
