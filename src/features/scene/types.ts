@@ -348,6 +348,8 @@ export interface VNScene {
     id: VNID;
     name: string;
     commands: VNCommand[];
-    conditions?: VNCondition[];
-    fallbackSceneId?: VNID; // Scene to jump to if conditions fail
+    conditions?: VNCondition[];     // Scene-level conditions (gate access)
+    fallbackSceneId?: VNID;         // Jump here if conditions fail
+    outTransition?: 'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'; // How this scene exits
+    outTransitionDuration?: number;  // Exit transition duration in seconds (default 0.5)
 }

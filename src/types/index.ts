@@ -6,6 +6,7 @@ export interface VNPositionCustom {
 }
 export type VNPosition = VNPositionPreset | VNPositionCustom;
 export type VNTransition = 'fade' | 'dissolve' | 'slide' | 'iris-in' | 'wipe-right' | 'instant' | 'cross-fade';
+export type VNSceneTransition = 'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant';
 
 // Re-export context panels types
 export * from './context-panels';

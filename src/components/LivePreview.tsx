@@ -1757,8 +1757,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [hudStack, setHudStack] = useState<VNID[]>([]);
     // Track screens that are currently closing with transitions
     const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
-    // Track scene transition fade out
+    // Track scene exit transition (type, duration, and active state)
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
+    const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
+    const [sceneTransitionDuration, setSceneTransitionDuration] = useState(0.5);
     const [settings, setSettings] = useState<GameSettings>(defaultSettings);
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
@@ -2551,6 +2553,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         return targetSceneId;
     }, [project.scenes, evaluateConditions]);
 
+    // --- Scene Exit Transition Helper ---
+    const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void) => {
+        const currentScene = project.scenes[currentSceneId];
+        const transType = currentScene?.outTransition || 'fade';
+        const duration = currentScene?.outTransitionDuration ?? 0.5;
+        const shouldFade = hasRenderedSceneRef.current;
+
+        if (transType === 'instant' || !shouldFade) {
+            executeChange();
+            return;
+        }
+
+        // Fade audio during transition
+        const audio = musicAudioRef.current;
+        if (audio && !audio.paused) {
+            fadeAudio(audio, 0, duration, () => {
+                audio.pause();
+                audio.currentTime = 0;
+            });
+        }
+
+        setSceneTransitionType(transType);
+        setSceneTransitionDuration(duration);
+        setSceneTransitionFading(true);
+
+        setTimeout(() => {
+            executeChange();
+            setSceneTransitionFading(false);
+        }, duration * 1000);
+    }, [project.scenes]);
+
     // --- Audio Management ---
     useEffect(() => {
         if (playerState?.mode === 'playing') {
@@ -2895,31 +2928,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     if (nextScene) {
                         runtimeDebugLog(`Advancing to next scene: ${nextSceneId}`);
                         
-                        const shouldFade = hasRenderedSceneRef.current;
-                        const audio = musicAudioRef.current;
-                        if (audio && !audio.paused) {
-                            if (shouldFade) {
-                                fadeAudio(audio, 0, 0.5, () => {
-                                    audio.pause();
-                                    audio.currentTime = 0;
-                                });
-                            } else {
-                                audio.pause();
-                                audio.currentTime = 0;
-                            }
-                        }
-
-                        if (shouldFade) {
-                            setSceneTransitionFading(true);
-                        }
-
-                        const executeSceneChange = () => {
+                        startSceneExitTransition(playerState.currentSceneId, () => {
                             updatePlayerState(p => p ? {
                                 ...p,
                                 currentSceneId: nextSceneId,
                                 currentCommands: nextScene.commands,
                                 currentIndex: 0,
-                                // Clear stage state for new scene
                                 stageState: {
                                     backgroundUrl: null,
                                     characters: {},
@@ -2936,7 +2950,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         overlayEffects: []
                                     }
                                 },
-                                // Clear UI state
                                 uiState: {
                                     dialogue: null,
                                     choices: null,
@@ -2950,16 +2963,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     screenSceneId: null
                                 }
                             } : null);
-                            if (shouldFade) {
-                                setSceneTransitionFading(false);
-                            }
-                        };
-
-                        if (shouldFade) {
-                            setTimeout(executeSceneChange, 500); // Match fade duration (0.5s)
-                        } else {
-                            executeSceneChange();
-                        }
+                        });
                     } else {
                         // No valid next scene found, return to title
                         runtimeDebugLog('No valid next scene - returning to title');
@@ -3083,42 +3087,42 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const nextScene = project.scenes[nextSceneId];
                         
                         if (nextScene) {
-                            updatePlayerState(p => p ? {
-                                ...p,
-                                currentSceneId: nextSceneId,
-                                currentCommands: nextScene.commands,
-                                currentIndex: 0,
-                                // Clear stage state for new scene
-                                stageState: {
-                                    backgroundUrl: null,
-                                    characters: {},
-                                    textOverlays: [],
-                                    imageOverlays: [],
-                                    buttonOverlays: [],
-                                    screen: {
-                                        shake: { active: false, intensity: 0 },
-                                        tint: 'transparent',
-                                        zoom: 1,
-                                        panX: 0,
-                                        panY: 0,
-                                        transitionDuration: 0.5,
-                                        overlayEffects: []
+                            startSceneExitTransition(playerState.currentSceneId, () => {
+                                updatePlayerState(p => p ? {
+                                    ...p,
+                                    currentSceneId: nextSceneId,
+                                    currentCommands: nextScene.commands,
+                                    currentIndex: 0,
+                                    stageState: {
+                                        backgroundUrl: null,
+                                        characters: {},
+                                        textOverlays: [],
+                                        imageOverlays: [],
+                                        buttonOverlays: [],
+                                        screen: {
+                                            shake: { active: false, intensity: 0 },
+                                            tint: 'transparent',
+                                            zoom: 1,
+                                            panX: 0,
+                                            panY: 0,
+                                            transitionDuration: 0.5,
+                                            overlayEffects: []
+                                        }
+                                    },
+                                    uiState: {
+                                        dialogue: null,
+                                        choices: null,
+                                        textInput: null,
+                                        movieUrl: null,
+                                        isWaitingForInput: false,
+                                        isTransitioning: false,
+                                        transitionElement: null,
+                                        flash: null,
+                                        showHistory: false,
+                                        screenSceneId: null
                                     }
-                                },
-                                // Clear UI state
-                                uiState: {
-                                    dialogue: null,
-                                    choices: null,
-                                    textInput: null,
-                                    movieUrl: null,
-                                    isWaitingForInput: false,
-                                    isTransitioning: false,
-                                    transitionElement: null,
-                                    flash: null,
-                                    showHistory: false,
-                                    screenSceneId: null
-                                }
-                            } : null);
+                                } : null);
+                            });
                             return;
                         }
                     }
@@ -3285,37 +3289,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.Jump: {
-                    const shouldFade = hasRenderedSceneRef.current;
-                    const audio = musicAudioRef.current;
-                    if (audio && !audio.paused) {
-                        if (shouldFade) {
-                            fadeAudio(audio, 0, 0.5, () => {
-                                audio.pause();
-                                audio.currentTime = 0;
-                            });
-                        } else {
-                            audio.pause();
-                            audio.currentTime = 0;
-                        }
-                    }
-
-                    if (shouldFade) {
-                        setSceneTransitionFading(true);
-                    }
-
-                    const runJump = () => {
+                    startSceneExitTransition(playerState.currentSceneId, () => {
                         const result = handleJump(command as JumpCommand, commandContext);
                         applyResult(result);
-                        if (shouldFade) {
-                            setSceneTransitionFading(false);
-                        }
-                    };
-
-                    if (shouldFade) {
-                        setTimeout(runJump, 500);
-                    } else {
-                        runJump();
-                    }
+                    });
                     break;
                 }
                 case CommandType.PlayMusic: {
@@ -3911,24 +3888,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 runtimeDebugWarn(`JumpToScene action failed: Scene with ID ${jumpAction.targetSceneId} not found.`);
                 return;
             }
-            
-            const shouldFade = hasRenderedSceneRef.current;
-            const audio = musicAudioRef.current;
-            if (audio && !audio.paused) {
-                if (shouldFade) {
-                    fadeAudio(audio, 0, 0.5, () => {
-                        audio.pause();
-                        audio.currentTime = 0;
-                    });
-                } else {
-                    audio.pause();
-                    audio.currentTime = 0;
-                }
-            }
-
-            if (shouldFade) {
-                setSceneTransitionFading(true);
-            }
 
             const executeJump = () => {
                 runtimeDebugLog('[JumpToScene] Clearing screen and HUD stacks');
@@ -4071,15 +4030,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToScene');
                     uiDirtyVariableIdsRef.current.clear();
                 }
-                
-                // End fade transition after scene change
-                if (shouldFade) {
-                    setSceneTransitionFading(false);
-                }
             };
 
-            if (shouldFade) {
-                setTimeout(executeJump, 500); // Match fade duration (0.5s)
+            // Use scene exit transition if we're in an active scene, otherwise execute immediately
+            if (playerState?.currentSceneId) {
+                startSceneExitTransition(playerState.currentSceneId, executeJump);
             } else {
                 executeJump();
             }
@@ -5120,11 +5075,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 )}
                 {renderPlayerUI()}
                 
-                {/* Scene transition fade overlay */}
+                {/* Scene exit transition overlay */}
                 {sceneTransitionFading && (
                     <div 
-                        className="absolute inset-0 bg-black transition-opacity duration-500 pointer-events-none z-50"
-                        style={{ opacity: 1 }}
+                        className={`absolute inset-0 pointer-events-none z-50 ${
+                            sceneTransitionType === 'fade' ? 'bg-black transition-base transition-dissolve' :
+                            sceneTransitionType === 'dissolve' ? 'bg-black transition-base transition-dissolve' :
+                            sceneTransitionType === 'iris-out' ? 'bg-black transition-base transition-iris-out' :
+                            sceneTransitionType === 'wipe-right' ? 'bg-black transition-base transition-wipe-right' :
+                            sceneTransitionType === 'slide-left' ? 'bg-black transition-base transition-slide-out-left' :
+                            'bg-black'
+                        }`}
+                        style={{ animationDuration: `${sceneTransitionDuration}s` }}
                     />
                 )}
             </div>

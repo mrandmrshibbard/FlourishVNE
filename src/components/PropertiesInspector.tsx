@@ -414,7 +414,7 @@ const PropertiesInspector: React.FC<{
 
     // Handle scene configuration
     if (isConfigScene && activeScene) {
-        const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId'>>) => {
+        const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration'>>) => {
             dispatch({ type: 'UPDATE_SCENE_CONFIG', payload: { sceneId: activeSceneId, updates } });
         };
 
@@ -422,6 +422,46 @@ const PropertiesInspector: React.FC<{
             <Panel title={`Scene Config: ${activeScene.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
                 <div className="flex flex-col h-full">
                     <div className="flex-grow overflow-y-auto pr-1">
+                        {/* Exit Transition Settings */}
+                        <div className="mb-4">
+                            <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Exit Transition</h3>
+                            <p className="text-xs text-[var(--text-secondary)] mb-3">
+                                How the screen transitions out when leaving this scene.
+                            </p>
+                            <FormField label="Transition Style">
+                                <Select
+                                    value={activeScene.outTransition || 'fade'}
+                                    onChange={e => updateScene({ outTransition: (e.target.value as VNScene['outTransition']) || undefined })}
+                                >
+                                    <option value="fade">Fade to Black</option>
+                                    <option value="dissolve">Dissolve</option>
+                                    <option value="iris-out">Iris Out</option>
+                                    <option value="wipe-right">Wipe Right</option>
+                                    <option value="slide-left">Slide Left</option>
+                                    <option value="instant">Instant (No Transition)</option>
+                                </Select>
+                            </FormField>
+                            {(activeScene.outTransition || 'fade') !== 'instant' && (
+                                <FormField label="Duration (seconds)">
+                                    <TextInput
+                                        type="number"
+                                        min={0.1}
+                                        max={5}
+                                        step={0.1}
+                                        value={activeScene.outTransitionDuration ?? 0.5}
+                                        onChange={e => {
+                                            const val = parseFloat(e.target.value);
+                                            if (!isNaN(val) && val >= 0.1 && val <= 5) {
+                                                updateScene({ outTransitionDuration: val });
+                                            }
+                                        }}
+                                    />
+                                </FormField>
+                            )}
+                        </div>
+
+                        <hr className="border-[var(--border-subtle)] mb-4" />
+
                         <div className="mb-4">
                             <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Scene Conditions</h3>
                             <p className="text-xs text-[var(--text-secondary)] mb-3">

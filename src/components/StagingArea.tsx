@@ -10,7 +10,7 @@ import {
 import { VNCondition } from '../types/shared';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
-import { PhotoIcon, FilmIcon, Cog6ToothIcon } from './icons';
+import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import Panel from './ui/Panel';
 import { fontSettingsToStyle } from '../utils/styleUtils';
 import { interpolateVariables } from '../utils/variableInterpolation';
@@ -534,8 +534,28 @@ const StagingArea: React.FC<{
                 )}
 
                  <div className="absolute top-2 right-2 flex flex-col gap-2 z-50">
-                    <button onClick={() => setShowCommandIndicators(s => !s)} className={`p-2 rounded-full ${showCommandIndicators ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Command Indicators"><PhotoIcon /></button>
-                    <button onClick={() => setShowVariableState(s => !s)} className={`p-2 rounded-full ${showVariableState ? 'bg-sky-500/80' : 'bg-slate-700/80'}`} title="Toggle Variable State"><Cog6ToothIcon /></button>
+                    <button
+                        onClick={() => setShowCommandIndicators(s => !s)}
+                        className={`p-2 rounded-full transition-all border ${
+                            showCommandIndicators
+                                ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
+                                : 'bg-slate-800/70 border-slate-500/40 text-slate-300 hover:bg-slate-700/80 hover:border-slate-400/50'
+                        }`}
+                        title={showCommandIndicators ? 'Hide Command Indicators' : 'Show Command Indicators'}
+                    >
+                        {showCommandIndicators ? <EyeIcon className="w-4 h-4" /> : <EyeSlashIcon className="w-4 h-4" />}
+                    </button>
+                    <button
+                        onClick={() => setShowVariableState(s => !s)}
+                        className={`p-2 rounded-full transition-all border ${
+                            showVariableState
+                                ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
+                                : 'bg-slate-800/70 border-slate-500/40 text-slate-300 hover:bg-slate-700/80 hover:border-slate-400/50'
+                        }`}
+                        title={showVariableState ? 'Hide Variable State' : 'Show Variable State'}
+                    >
+                        <VariablesIcon className="w-4 h-4" />
+                    </button>
                  </div>
                 </div>
             </div>

@@ -958,6 +958,212 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return state;
   };
+  const DB_NAME = "flourish-vne";
+  const DB_VERSION = 1;
+  const PROJECT_STORE = "projects";
+  const META_STORE = "metadata";
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(PROJECT_STORE)) {
+          db.createObjectStore(PROJECT_STORE);
+        }
+        if (!db.objectStoreNames.contains(META_STORE)) {
+          db.createObjectStore(META_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  async function saveProjectToIDB(project) {
+    const db = await openDB();
+    const tx = db.transaction([PROJECT_STORE, META_STORE], "readwrite");
+    const projectStore = tx.objectStore(PROJECT_STORE);
+    const metaStore = tx.objectStore(META_STORE);
+    const key = `autosave:${project.id}`;
+    projectStore.put(project, key);
+    const meta = {
+      key,
+      projectId: project.id,
+      title: project.title || "Untitled Project",
+      savedAt: Date.now(),
+      isAutoSave: true
+    };
+    metaStore.put(meta, key);
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error);
+      };
+    });
+  }
+  const LOG_LEVELS = {
+    debug: 0,
+    info: 1,
+    warn: 2,
+    error: 3
+  };
+  let currentLevel = "warn";
+  function shouldLog(level) {
+    return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
+  }
+  function formatPrefix(module) {
+    return `[${module}]`;
+  }
+  function createLogger(module) {
+    const prefix = formatPrefix(module);
+    return {
+      debug: (...args) => {
+        if (shouldLog("debug")) console.log(prefix, ...args);
+      },
+      info: (...args) => {
+        if (shouldLog("info")) console.info(prefix, ...args);
+      },
+      warn: (...args) => {
+        if (shouldLog("warn")) console.warn(prefix, ...args);
+      },
+      error: (...args) => {
+        if (shouldLog("error")) console.error(prefix, ...args);
+      }
+    };
+  }
+  class WorkflowTracker {
+    constructor() {
+      this.actions = [];
+      this.patterns = /* @__PURE__ */ new Map();
+      this.maxActions = 1e3;
+    }
+    static getInstance() {
+      if (!WorkflowTracker.instance) {
+        WorkflowTracker.instance = new WorkflowTracker();
+      }
+      return WorkflowTracker.instance;
+    }
+    /**
+     * Start tracking an action
+     */
+    startAction(action, context) {
+      this.currentAction = action;
+      this.currentActionStart = /* @__PURE__ */ new Date();
+    }
+    /**
+     * End tracking current action
+     */
+    endAction(success = true) {
+      if (!this.currentAction || !this.currentActionStart) return;
+      const duration = Date.now() - this.currentActionStart.getTime();
+      const workflowAction = {
+        id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        action: this.currentAction,
+        context: "",
+        timestamp: this.currentActionStart,
+        duration,
+        success
+      };
+      this.actions.unshift(workflowAction);
+      if (this.actions.length > this.maxActions) {
+        this.actions = this.actions.slice(0, this.maxActions);
+      }
+      this.analyzePatterns();
+      this.currentAction = void 0;
+      this.currentActionStart = void 0;
+    }
+    /**
+     * Track simple action without duration
+     */
+    trackAction(action, context) {
+      this.startAction(action, context);
+      this.endAction(true);
+    }
+    /**
+     * Analyze workflow patterns
+     */
+    analyzePatterns() {
+      if (this.actions.length < 3) return;
+      const recentActions = this.actions.slice(0, 5).map((a) => a.action);
+      const patternKey = recentActions.join("->");
+      const existing = this.patterns.get(patternKey);
+      if (existing) {
+        existing.frequency++;
+        existing.lastOccurred = /* @__PURE__ */ new Date();
+      } else {
+        this.patterns.set(patternKey, {
+          id: patternKey,
+          actions: recentActions,
+          frequency: 1,
+          averageDuration: 0,
+          lastOccurred: /* @__PURE__ */ new Date()
+        });
+      }
+    }
+    /**
+     * Get workflow statistics
+     */
+    getStatistics() {
+      const totalActions = this.actions.length;
+      const successfulActions = this.actions.filter((a) => a.success).length;
+      const actionsWithDuration = this.actions.filter((a) => a.duration !== void 0);
+      const averageActionTime = actionsWithDuration.length > 0 ? actionsWithDuration.reduce((sum, a) => sum + (a.duration || 0), 0) / actionsWithDuration.length : 0;
+      const actionCounts = /* @__PURE__ */ new Map();
+      this.actions.forEach((a) => {
+        actionCounts.set(a.action, (actionCounts.get(a.action) || 0) + 1);
+      });
+      const mostCommonActions = Array.from(actionCounts.entries()).map(([action, count]) => ({ action, count })).sort((a, b) => b.count - a.count).slice(0, 5);
+      const commonPatterns = Array.from(this.patterns.values()).sort((a, b) => b.frequency - a.frequency).slice(0, 5);
+      const efficiencyScore = totalActions > 0 ? Math.min(100, Math.round(successfulActions / totalActions * 100)) : 100;
+      return {
+        totalActions,
+        averageActionTime,
+        mostCommonActions,
+        commonPatterns,
+        efficiencyScore
+      };
+    }
+    /**
+     * Get optimization suggestions
+     */
+    getOptimizationSuggestions() {
+      const suggestions = [];
+      const stats = this.getStatistics();
+      if (stats.mostCommonActions.length > 0) {
+        const topAction = stats.mostCommonActions[0];
+        if (topAction.count > 10) {
+          suggestions.push(`Consider using keyboard shortcuts for "${topAction.action}" (used ${topAction.count} times)`);
+        }
+      }
+      if (stats.commonPatterns.length > 0) {
+        const topPattern = stats.commonPatterns[0];
+        if (topPattern.frequency > 3) {
+          suggestions.push(`You frequently perform: ${topPattern.actions.join(" → ")}. Consider using a template!`);
+        }
+      }
+      if (stats.efficiencyScore < 80) {
+        suggestions.push("Try using the preview feature more often to catch issues early");
+      }
+      return suggestions;
+    }
+    /**
+     * Clear tracking data
+     */
+    clearData() {
+      this.actions = [];
+      this.patterns.clear();
+    }
+  }
+  WorkflowTracker.getInstance();
+  const log = createLogger("ProjectContext");
+  const AUTO_SAVE_INTERVAL = 2 * 60 * 1e3;
+  const COALESCE_MS = 300;
+  const NON_UNDOABLE_ACTIONS = /* @__PURE__ */ new Set([
+    "UPDATE_PROJECT_TITLE"
+  ]);
   const ProjectContext = React2.createContext(null);
   const ProjectProvider = ({ children, initialProject }) => {
     const [history, setHistory] = React2.useState({
@@ -965,7 +1171,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       present: initialProject,
       future: []
     });
+    const [lastAutoSave, setLastAutoSave] = React2.useState(null);
     const isSyncing = React2.useRef(false);
+    const historyRef = React2.useRef(history);
+    historyRef.current = history;
+    const lastActionTime = React2.useRef(0);
+    const lastActionType = React2.useRef("");
     const dispatchWithHistory = React2.useCallback((action) => {
       setHistory((prev) => {
         var _a;
@@ -973,11 +1184,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (newPresent === prev.present) {
           return prev;
         }
+        WorkflowTracker.getInstance().trackAction(action.type, "editor");
+        const now = Date.now();
+        const shouldCoalesce = action.type === lastActionType.current && now - lastActionTime.current < COALESCE_MS;
+        const skipUndo = NON_UNDOABLE_ACTIONS.has(action.type);
+        lastActionTime.current = now;
+        lastActionType.current = action.type;
+        let newPast;
+        if (shouldCoalesce || skipUndo) {
+          newPast = prev.past;
+        } else {
+          newPast = [...prev.past.slice(-20 + 1), prev.present];
+        }
         const newHistory = {
-          past: [...prev.past.slice(-50 + 1), prev.present],
+          past: newPast,
           present: newPresent,
           future: []
-          // Clear future when new action is performed
         };
         if (!isSyncing.current && ((_a = window.electronAPI) == null ? void 0 : _a.syncProjectState)) {
           window.electronAPI.syncProjectState(newPresent);
@@ -991,14 +1213,39 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         window.electronAPI.onProjectStateUpdate((projectData) => {
           isSyncing.current = true;
           setHistory((prev) => ({
-            past: [...prev.past.slice(-50 + 1), prev.present],
+            past: [...prev.past.slice(-20 + 1), prev.present],
             present: projectData,
             future: []
-            // Clear future on external update
           }));
           isSyncing.current = false;
         });
       }
+    }, []);
+    React2.useEffect(() => {
+      const autoSave = async () => {
+        const project = historyRef.current.present;
+        try {
+          await saveProjectToIDB(project);
+          setLastAutoSave(Date.now());
+        } catch (err) {
+          log.warn("Auto-save failed:", err);
+        }
+      };
+      autoSave();
+      const intervalId = setInterval(autoSave, AUTO_SAVE_INTERVAL);
+      return () => clearInterval(intervalId);
+    }, []);
+    React2.useEffect(() => {
+      const handleBeforeUnload = () => {
+        const project = historyRef.current.present;
+        try {
+          saveProjectToIDB(project);
+        } catch (err) {
+          log.warn("Emergency save on unload failed:", err);
+        }
+      };
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () => window.removeEventListener("beforeunload", handleBeforeUnload);
     }, []);
     const undo = React2.useCallback(() => {
       setHistory((prev) => {
@@ -1048,7 +1295,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       undo,
       redo,
       canUndo: history.past.length > 0,
-      canRedo: history.future.length > 0
+      canRedo: history.future.length > 0,
+      lastAutoSave
     }, children });
   };
   const useProject = () => {
@@ -4058,6 +4306,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [hudStack, setHudStack] = React2.useState([]);
     const [closingScreens, setClosingScreens] = React2.useState(/* @__PURE__ */ new Set());
     const [sceneTransitionFading, setSceneTransitionFading] = React2.useState(false);
+    const [sceneTransitionType, setSceneTransitionType] = React2.useState("fade");
+    const [sceneTransitionDuration, setSceneTransitionDuration] = React2.useState(0.5);
     const [settings, setSettings] = React2.useState(defaultSettings);
     const [playerState, setPlayerState] = React2.useState(null);
     const playerStateRef = React2.useRef(null);
@@ -4727,6 +4977,30 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       console.error("Scene navigation exceeded max attempts - possible circular fallback");
       return targetSceneId;
     }, [project.scenes, evaluateConditions2]);
+    const startSceneExitTransition = React2.useCallback((currentSceneId, executeChange) => {
+      const currentScene = project.scenes[currentSceneId];
+      const transType = (currentScene == null ? void 0 : currentScene.outTransition) || "fade";
+      const duration = (currentScene == null ? void 0 : currentScene.outTransitionDuration) ?? 0.5;
+      const shouldFade = hasRenderedSceneRef.current;
+      if (transType === "instant" || !shouldFade) {
+        executeChange();
+        return;
+      }
+      const audio = musicAudioRef.current;
+      if (audio && !audio.paused) {
+        fadeAudio(audio, 0, duration, () => {
+          audio.pause();
+          audio.currentTime = 0;
+        });
+      }
+      setSceneTransitionType(transType);
+      setSceneTransitionDuration(duration);
+      setSceneTransitionFading(true);
+      setTimeout(() => {
+        executeChange();
+        setSceneTransitionFading(false);
+      }, duration * 1e3);
+    }, [project.scenes]);
     React2.useEffect(() => {
       if ((playerState == null ? void 0 : playerState.mode) === "playing") {
         return;
@@ -5024,29 +5298,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const nextScene = project.scenes[nextSceneId];
             if (nextScene) {
               runtimeDebugLog(`Advancing to next scene: ${nextSceneId}`);
-              const shouldFade = hasRenderedSceneRef.current;
-              const audio = musicAudioRef.current;
-              if (audio && !audio.paused) {
-                if (shouldFade) {
-                  fadeAudio(audio, 0, 0.5, () => {
-                    audio.pause();
-                    audio.currentTime = 0;
-                  });
-                } else {
-                  audio.pause();
-                  audio.currentTime = 0;
-                }
-              }
-              if (shouldFade) {
-                setSceneTransitionFading(true);
-              }
-              const executeSceneChange = () => {
+              startSceneExitTransition(playerState.currentSceneId, () => {
                 updatePlayerState((p) => p ? {
                   ...p,
                   currentSceneId: nextSceneId,
                   currentCommands: nextScene.commands,
                   currentIndex: 0,
-                  // Clear stage state for new scene
                   stageState: {
                     backgroundUrl: null,
                     characters: {},
@@ -5063,7 +5320,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       overlayEffects: []
                     }
                   },
-                  // Clear UI state
                   uiState: {
                     dialogue: null,
                     choices: null,
@@ -5077,15 +5333,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     screenSceneId: null
                   }
                 } : null);
-                if (shouldFade) {
-                  setSceneTransitionFading(false);
-                }
-              };
-              if (shouldFade) {
-                setTimeout(executeSceneChange, 500);
-              } else {
-                executeSceneChange();
-              }
+              });
             } else {
               runtimeDebugLog("No valid next scene - returning to title");
               const audio = musicAudioRef.current;
@@ -5181,42 +5429,42 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], getRuntimeVariables());
               const nextScene = project.scenes[nextSceneId];
               if (nextScene) {
-                updatePlayerState((p) => p ? {
-                  ...p,
-                  currentSceneId: nextSceneId,
-                  currentCommands: nextScene.commands,
-                  currentIndex: 0,
-                  // Clear stage state for new scene
-                  stageState: {
-                    backgroundUrl: null,
-                    characters: {},
-                    textOverlays: [],
-                    imageOverlays: [],
-                    buttonOverlays: [],
-                    screen: {
-                      shake: { active: false, intensity: 0 },
-                      tint: "transparent",
-                      zoom: 1,
-                      panX: 0,
-                      panY: 0,
-                      transitionDuration: 0.5,
-                      overlayEffects: []
+                startSceneExitTransition(playerState.currentSceneId, () => {
+                  updatePlayerState((p) => p ? {
+                    ...p,
+                    currentSceneId: nextSceneId,
+                    currentCommands: nextScene.commands,
+                    currentIndex: 0,
+                    stageState: {
+                      backgroundUrl: null,
+                      characters: {},
+                      textOverlays: [],
+                      imageOverlays: [],
+                      buttonOverlays: [],
+                      screen: {
+                        shake: { active: false, intensity: 0 },
+                        tint: "transparent",
+                        zoom: 1,
+                        panX: 0,
+                        panY: 0,
+                        transitionDuration: 0.5,
+                        overlayEffects: []
+                      }
+                    },
+                    uiState: {
+                      dialogue: null,
+                      choices: null,
+                      textInput: null,
+                      movieUrl: null,
+                      isWaitingForInput: false,
+                      isTransitioning: false,
+                      transitionElement: null,
+                      flash: null,
+                      showHistory: false,
+                      screenSceneId: null
                     }
-                  },
-                  // Clear UI state
-                  uiState: {
-                    dialogue: null,
-                    choices: null,
-                    textInput: null,
-                    movieUrl: null,
-                    isWaitingForInput: false,
-                    isTransitioning: false,
-                    transitionElement: null,
-                    flash: null,
-                    showHistory: false,
-                    screenSceneId: null
-                  }
-                } : null);
+                  } : null);
+                });
                 return;
               }
             }
@@ -5365,34 +5613,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               break;
             }
             case CommandType.Jump: {
-              const shouldFade = hasRenderedSceneRef.current;
-              const audio = musicAudioRef.current;
-              if (audio && !audio.paused) {
-                if (shouldFade) {
-                  fadeAudio(audio, 0, 0.5, () => {
-                    audio.pause();
-                    audio.currentTime = 0;
-                  });
-                } else {
-                  audio.pause();
-                  audio.currentTime = 0;
-                }
-              }
-              if (shouldFade) {
-                setSceneTransitionFading(true);
-              }
-              const runJump = () => {
+              startSceneExitTransition(playerState.currentSceneId, () => {
                 const result = handleJump(command, commandContext);
                 applyResult(result);
-                if (shouldFade) {
-                  setSceneTransitionFading(false);
-                }
-              };
-              if (shouldFade) {
-                setTimeout(runJump, 500);
-              } else {
-                runJump();
-              }
+              });
               break;
             }
             case CommandType.PlayMusic: {
@@ -5907,22 +6131,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           runtimeDebugWarn(`JumpToScene action failed: Scene with ID ${jumpAction.targetSceneId} not found.`);
           return;
         }
-        const shouldFade = hasRenderedSceneRef.current;
-        const audio = musicAudioRef.current;
-        if (audio && !audio.paused) {
-          if (shouldFade) {
-            fadeAudio(audio, 0, 0.5, () => {
-              audio.pause();
-              audio.currentTime = 0;
-            });
-          } else {
-            audio.pause();
-            audio.currentTime = 0;
-          }
-        }
-        if (shouldFade) {
-          setSceneTransitionFading(true);
-        }
         const executeJump = () => {
           runtimeDebugLog("[JumpToScene] Clearing screen and HUD stacks");
           setScreenStack([]);
@@ -6045,12 +6253,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             runtimeDebugLog("[CLEAR] Dirty set cleared after JumpToScene");
             uiDirtyVariableIdsRef.current.clear();
           }
-          if (shouldFade) {
-            setSceneTransitionFading(false);
-          }
         };
-        if (shouldFade) {
-          setTimeout(executeJump, 500);
+        if (playerState == null ? void 0 : playerState.currentSceneId) {
+          startSceneExitTransition(playerState.currentSceneId, executeJump);
         } else {
           executeJump();
         }
@@ -6951,8 +7156,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         sceneTransitionFading && /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
           {
-            className: "absolute inset-0 bg-black transition-opacity duration-500 pointer-events-none z-50",
-            style: { opacity: 1 }
+            className: `absolute inset-0 pointer-events-none z-50 ${sceneTransitionType === "fade" ? "bg-black transition-base transition-dissolve" : sceneTransitionType === "dissolve" ? "bg-black transition-base transition-dissolve" : sceneTransitionType === "iris-out" ? "bg-black transition-base transition-iris-out" : sceneTransitionType === "wipe-right" ? "bg-black transition-base transition-wipe-right" : sceneTransitionType === "slide-left" ? "bg-black transition-base transition-slide-out-left" : "bg-black"}`,
+            style: { animationDuration: `${sceneTransitionDuration}s` }
           }
         )
       ] }),
@@ -7097,7 +7302,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "1.0.0",
+    version: __APP_VERSION__,
     /**
      * Check if the engine is ready
      */

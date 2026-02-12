@@ -8,7 +8,7 @@ import { CommandType, VNCommand, ShowCharacterCommand, FlashScreenCommand, ShowT
 import { VNProject } from '../types/project';
 import { VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
-import { PlusIcon, GripVerticalIcon, ChevronDownIcon, Cog6ToothIcon, FolderIcon } from './icons';
+import { PlusIcon, GripVerticalIcon, ChevronDownIcon, AdjustmentsIcon, FolderIcon } from './icons';
 import { createCommand } from '../utils/commandFactory';
 import { getCommandColor } from './CommandPalette';
 import { 
@@ -979,6 +979,7 @@ const SceneEditor: React.FC<{
     const visibleCommands = getVisibleCommands();
 
     const hasConditions = activeScene.conditions && activeScene.conditions.length > 0;
+    const hasCustomTransition = activeScene.outTransition && activeScene.outTransition !== 'fade';
 
     return (
         <Panel 
@@ -989,10 +990,15 @@ const SceneEditor: React.FC<{
             rightHeaderContent={
                 <button
                     onClick={onConfigureScene}
-                    className={`p-1 rounded ${hasConditions ? 'text-[var(--accent-cyan)]' : 'text-[var(--text-secondary)]'} hover:text-[var(--text-primary)]`}
-                    title="Configure Scene Conditions"
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${
+                        hasConditions || hasCustomTransition
+                            ? 'bg-[var(--accent-cyan)]/15 text-[var(--accent-cyan)] border border-[var(--accent-cyan)]/30 hover:bg-[var(--accent-cyan)]/25'
+                            : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/40'
+                    }`}
+                    title="Configure Scene Settings"
                 >
-                    <Cog6ToothIcon className="w-5 h-5" />
+                    <AdjustmentsIcon className="w-4 h-4" />
+                    <span>Settings</span>
                 </button>
             }
         >
@@ -1000,7 +1006,7 @@ const SceneEditor: React.FC<{
                 {hasConditions && (
                     <div className="mb-2 p-2 bg-[var(--accent-cyan)]/10 border border-[var(--accent-cyan)]/30 rounded-md text-sm">
                         <div className="flex items-center gap-1">
-                            <Cog6ToothIcon className="w-4 h-4 text-[var(--accent-cyan)]" />
+                            <AdjustmentsIcon className="w-4 h-4 text-[var(--accent-cyan)]" />
                             <span className="text-[var(--text-secondary)]">
                                 This scene has {activeScene.conditions.length} condition{activeScene.conditions.length !== 1 ? 's' : ''}
                             </span>

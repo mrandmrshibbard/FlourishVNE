@@ -317,3 +317,28 @@ export const SwatchIcon = ({ className, title, ...props }: React.SVGProps<SVGSVG
         <path d="M10.719 21.75h9.156c1.036 0 1.875-.84 1.875-1.875v-5.25c0-1.036-.84-1.875-1.875-1.875h-.14l-8.742 8.743c-.09.089-.18.175-.274.257zM12.738 17.625l6.474-6.474a1.875 1.875 0 000-2.651L15.5 4.787a1.875 1.875 0 00-2.651 0l-.1.099V17.25c0 .126-.003.251-.01.375z" />
     </svg>
 );
+
+// 🎚️ Adjustments - Horizontal sliders icon (for scene settings)
+export const AdjustmentsIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M18.75 12.75h1.5a.75.75 0 000-1.5h-1.5a.75.75 0 000 1.5zM12 6a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 0112 6zM12 18a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 0112 18zM3.75 6.75h1.5a.75.75 0 100-1.5h-1.5a.75.75 0 000 1.5zM5.25 18.75h-1.5a.75.75 0 010-1.5h1.5a.75.75 0 010 1.5zM3 12a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 013 12zM9 3.75a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5zM12.75 12a2.25 2.25 0 114.5 0 2.25 2.25 0 01-4.5 0zM9 15.75a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5z" />
+    </svg>
+);
+
+// 👁️ Eye icon (for visibility toggles)
+export const EyeIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+        <path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" />
+    </svg>
+);
+
+// 👁️‍🗨️ Eye slash icon (for hidden state)
+export const EyeSlashIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M3.53 2.47a.75.75 0 00-1.06 1.06l18 18a.75.75 0 101.06-1.06l-18-18zM22.676 12.553c-1.182 3.549-4.266 6.28-8.048 7.043l-1.636-1.636a5.25 5.25 0 006.293-6.293l-1.272-1.272a3 3 0 01-4.305 4.305l-1.636-1.636C15.293 13.768 18.976 10.684 22.524 9.447a1.762 1.762 0 01.152 3.106zM15.747 15.747a3 3 0 01-4.494-4.494l4.494 4.494zM1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c1.456 0 2.858.281 4.14.793l-1.47 1.47A5.25 5.25 0 006.75 12c0 .643.116 1.259.328 1.828l-1.963 1.963C3.258 14.536 1.873 13.169 1.323 11.447a1.762 1.762 0 010-1.113z" />
+    </svg>
+);
