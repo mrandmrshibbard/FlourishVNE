@@ -107,23 +107,39 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(true);
         }
 
-        // Native auto-updater (electron-updater) checks on app start in main.cjs.
-        // No manual GitHub API fetch needed — we listen for IPC events in the
-        // useEffect below (onUpdateAvailable, onUpdateDownloadProgress, etc.).
+        // Clear stale caches that may point to the wrong repo
+        localStorage.removeItem('githubLatestReleaseCache');
+        localStorage.removeItem('githubLatestReleaseBodyCache');
+
+        // Auto-start music. Browsers require a user gesture for AudioContext,
+        // but Electron is more lenient. We try immediately and also attach a
+        // one-time click listener as a fallback.
+        const tryAutoPlay = () => {
+            try {
+                toggleBackgroundMusic(true);
+                setIsMusicPlaying(true);
+            } catch { /* will retry on click */ }
+        };
+        tryAutoPlay();
+        const clickFallback = () => { if (!isMusicPlaying) tryAutoPlay(); document.removeEventListener('click', clickFallback); };
+        document.addEventListener('click', clickFallback, { once: true });
 
         return () => {
             if ((window as any).electronAPI?.setHubActive) {
                 (window as any).electronAPI.setHubActive(false);
             }
+            document.removeEventListener('click', clickFallback);
             toggleBackgroundMusic(false);
         };
     }, []);
 
     const handleMusicToggle = useCallback(() => {
-        const newState = !isMusicPlaying;
-        setIsMusicPlaying(newState);
-        toggleBackgroundMusic(newState);
-    }, [isMusicPlaying]);
+        setIsMusicPlaying(prev => {
+            const newState = !prev;
+            toggleBackgroundMusic(newState);
+            return newState;
+        });
+    }, []);
 
     const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 

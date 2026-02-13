@@ -59,6 +59,7 @@ function createWindow() {
     backgroundColor: '#1a102c',
     title: 'Flourish Visual Novel Engine',
     show: false, // Don't show until ready
+    fullscreen: true,
   });
 
   // Load the built app from dist folder

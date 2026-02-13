@@ -47,7 +47,7 @@
     "publish": {
       "provider": "github",
       "owner": "mrandmrshibbard",
-      "repo": "FlourishVNE"
+      "repo": "FlourishVNE-releases"
     },
     "files": [
       "dist/**/*",
