@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "A browser-based visual novel engine with layered character system",
   "author": "Flourish Team",
   "type": "module",

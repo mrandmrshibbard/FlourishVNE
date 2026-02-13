@@ -53,7 +53,7 @@ export const ChangelogModal: React.FC<{
         }
       }
 
-      fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest', {
+      fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE-releases/releases/latest', {
         headers: {
           'Accept': 'application/vnd.github+json'
         }
