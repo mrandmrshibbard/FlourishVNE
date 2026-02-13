@@ -18,7 +18,8 @@ import {
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand,
     PlayMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
-    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand
+    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
+    CreditRollCommand, CreditBackground
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -83,6 +84,7 @@ import {
     handleResetScreenEffects,
     handleFlashScreen,
     handleTextInput,
+    handleCreditRoll,
 } from './live-preview/command-handlers';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
@@ -706,6 +708,121 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                     </button>
                 </form>
             </div>
+        </div>
+    );
+};
+
+// ── Save/Load Slot Grid with Pagination ──────────────────────────────────
+const SLOTS_PER_PAGE = 4;
+
+const SaveSlotGridComponent: React.FC<{
+    element: UISaveSlotGridElement;
+    style: React.CSSProperties;
+    isSaveMode: boolean;
+    gameSaves: Record<number, GameStateSave>;
+    onAction: (action: VNUIAction) => void;
+}> = ({ element, style, isSaveMode, gameSaves, onAction }) => {
+    const [currentPage, setCurrentPage] = useState(0);
+    const el = element;
+    const totalSlots = el.slotCount;
+    const totalPages = Math.max(1, Math.ceil(totalSlots / SLOTS_PER_PAGE));
+    const startIndex = currentPage * SLOTS_PER_PAGE;
+    const pageSlots = Array.from({ length: SLOTS_PER_PAGE }, (_, k) => startIndex + k).filter(i => i < totalSlots);
+
+    const slotBgColor = el.slotBackgroundColor || '#1e293b';
+    const slotBorderColor = el.slotBorderColor || '#475569';
+    const slotHoverBorderColor = el.slotHoverBorderColor || '#38bdf8';
+    const slotHeaderColor = el.slotHeaderColor || '#7dd3fc';
+
+    return (
+        <div style={style} className="flex flex-col h-full">
+            {/* 2×2 grid – each slot is a card with screenshot on top, info below */}
+            <div className="grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]">
+                {pageSlots.map(i => {
+                    const slotData = gameSaves[i + 1];
+                    const action: VNUIAction = isSaveMode
+                        ? { type: UIActionType.SaveGame, slotNumber: i + 1 }
+                        : { type: UIActionType.LoadGame, slotNumber: i + 1 };
+
+                    return (
+                        <button
+                            key={i}
+                            onClick={() => {
+                                if (!isSaveMode && !slotData) return;
+                                onAction(action);
+                            }}
+                            disabled={!isSaveMode && !slotData}
+                            className="rounded-lg border-2 disabled:opacity-50 text-left transition-colors overflow-hidden flex flex-col"
+                            style={{
+                                ...fontSettingsToStyle(el.font),
+                                backgroundColor: slotBgColor,
+                                borderColor: slotBorderColor,
+                            } as React.CSSProperties}
+                            onMouseEnter={(e) => {
+                                if (!e.currentTarget.disabled) {
+                                    e.currentTarget.style.borderColor = slotHoverBorderColor;
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = slotBorderColor;
+                            }}
+                        >
+                            {/* Screenshot area */}
+                            <div className="relative w-full" style={{ aspectRatio: '16/9', flexShrink: 0 }}>
+                                {slotData?.screenshot ? (
+                                    <img
+                                        src={slotData.screenshot}
+                                        alt={`Save slot ${i + 1}`}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center" style={{ opacity: 0.35, backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                                        {el.emptySlotText}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Info area below the screenshot */}
+                            <div className="px-2 py-1.5 flex-shrink-0" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                                <p className="font-bold text-sm" style={{ color: slotHeaderColor }}>Slot {i + 1}</p>
+                                {slotData ? (
+                                    <>
+                                        <p className="text-xs truncate opacity-90">{slotData.sceneName}</p>
+                                        <p className="text-[10px]" style={{ opacity: 0.6 }}>{new Date(slotData.timestamp).toLocaleString()}</p>
+                                    </>
+                                ) : (
+                                    <p className="text-xs" style={{ opacity: 0.5 }}>Empty</p>
+                                )}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 py-2 flex-shrink-0">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(0, p - 1)); }}
+                        disabled={currentPage === 0}
+                        className="px-3 py-1 rounded text-sm font-semibold transition-colors disabled:opacity-30"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: slotHeaderColor }}
+                    >
+                        ◀ Prev
+                    </button>
+                    <span className="text-xs" style={{ color: slotHeaderColor, opacity: 0.8 }}>
+                        Page {currentPage + 1} / {totalPages}
+                    </span>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages - 1, p + 1)); }}
+                        disabled={currentPage >= totalPages - 1}
+                        className="px-3 py-1 rounded text-sm font-semibold transition-colors disabled:opacity-30"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: slotHeaderColor }}
+                    >
+                        Next ▶
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
@@ -1407,58 +1524,16 @@ const UIScreenRenderer: React.FC<{
                 const el = element as UISaveSlotGridElement;
                 const isSaveMode = screenId === project.ui.saveScreenId;
                 
-                // Use stored colors or defaults
-                const slotBgColor = el.slotBackgroundColor || '#1e293b';
-                const slotBorderColor = el.slotBorderColor || '#475569';
-                const slotHoverBorderColor = el.slotHoverBorderColor || '#38bdf8';
-                const slotHeaderColor = el.slotHeaderColor || '#7dd3fc';
-                
                 return (
-                    <div key={el.id} style={style} className="grid grid-cols-2 gap-4 overflow-y-auto p-2">
-                        {Array.from({ length: el.slotCount }).map((_, i) => {
-                            const slotData = gameSaves[i + 1];
-                            const action: VNUIAction = isSaveMode
-                                ? { type: UIActionType.SaveGame, slotNumber: i + 1 }
-                                : { type: UIActionType.LoadGame, slotNumber: i + 1 };
-                            
-                            return (
-                                <button
-                                    key={i}
-                                    onClick={() => {
-                                        if (!isSaveMode && !slotData) return; // Can't load an empty slot
-                                        onAction(action);
-                                    }}
-                                    disabled={!isSaveMode && !slotData}
-                                    className="aspect-video p-3 rounded-lg border-2 disabled:opacity-50 flex flex-col justify-between text-left transition-colors"
-                                    style={{
-                                        ...fontSettingsToStyle(el.font),
-                                        backgroundColor: slotBgColor,
-                                        borderColor: slotBorderColor,
-                                        '--hover-border-color': slotHoverBorderColor,
-                                    } as React.CSSProperties}
-                                    onMouseEnter={(e) => {
-                                        if (!e.currentTarget.disabled) {
-                                            e.currentTarget.style.borderColor = slotHoverBorderColor;
-                                        }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.borderColor = slotBorderColor;
-                                    }}
-                                >
-                                    <p className="font-bold" style={{ color: slotHeaderColor }}>Slot {i + 1}</p>
-                                    {slotData ? (
-                                        <div className="text-sm">
-                                            <p className="truncate">{slotData.sceneName}</p>
-                                            <p style={{ opacity: 0.7 }}>{new Date(slotData.timestamp).toLocaleString()}</p>
-                                        </div>
-                                    ) : (
-                                        <div className="flex-grow flex items-center justify-center" style={{ opacity: 0.5 }}>{el.emptySlotText}</div>
-                                    )}
-                                </button>
-                            )
-                        })}
-                    </div>
-                )
+                    <SaveSlotGridComponent
+                        key={el.id}
+                        element={el}
+                        style={style}
+                        isSaveMode={isSaveMode}
+                        gameSaves={gameSaves}
+                        onAction={onAction}
+                    />
+                );
             }
             case UIElementType.CharacterPreview: {
                 const el = element as UICharacterPreviewElement;
@@ -1904,6 +1979,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
     const [flashTrigger, setFlashTrigger] = useState(0);
     const [shakeTrigger, setShakeTrigger] = useState(0);
+    const [activeCreditRoll, setActiveCreditRoll] = useState<CreditRollCommand | null>(null);
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
         if (!assetId) return null;
@@ -2112,11 +2188,98 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentTime: musicCurrentTime,
             isPlaying: !musicAudioRef.current.paused,
         };
+
+        // Capture a screenshot thumbnail from the stage
+        const captureScreenshot = (): Promise<string | undefined> => {
+            return new Promise((resolve) => {
+                try {
+                    const stage = playerState.stageState;
+                    const THUMB_W = 640;
+                    const THUMB_H = 360;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = THUMB_W;
+                    canvas.height = THUMB_H;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) { resolve(undefined); return; }
+
+                    // Collect image sources to draw in order: background, then characters
+                    const imageSources: { url: string; x: number; y: number; w: number; h: number }[] = [];
+
+                    // Background
+                    if (stage.backgroundUrl && !stage.backgroundIsVideo) {
+                        imageSources.push({ url: stage.backgroundUrl, x: 0, y: 0, w: THUMB_W, h: THUMB_H });
+                    }
+
+                    // Characters (layer images stacked at their positions)
+                    for (const char of Object.values(stage.characters)) {
+                        if (char.isVideo) continue;
+                        const pos = char.position;
+                        let xPct = 50, yPct = 10;
+                        if (typeof pos === 'string') {
+                            const presets: Record<string, { x: number; y: number }> = {
+                                'left': { x: 25, y: 10 }, 'center': { x: 50, y: 10 }, 'right': { x: 75, y: 10 },
+                                'off-left': { x: -25, y: 10 }, 'off-right': { x: 125, y: 10 },
+                            };
+                            const p = presets[pos]; if (p) { xPct = p.x; yPct = p.y; }
+                        } else if (typeof pos === 'object') {
+                            xPct = pos.x; yPct = pos.y;
+                        }
+                        // Characters are ~75% of stage width in aspect 3:4, vertically 90% height
+                        const charH = THUMB_H * 0.9;
+                        const charW = charH * 0.75;
+                        const cx = (xPct / 100) * THUMB_W - charW / 2;
+                        const cy = (yPct / 100) * THUMB_H;
+                        for (const url of char.imageUrls) {
+                            imageSources.push({ url, x: cx, y: cy, w: charW, h: charH });
+                        }
+                    }
+
+                    if (imageSources.length === 0) {
+                        // No visual content, just fill black
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                        return;
+                    }
+
+                    let loaded = 0;
+                    const images: (HTMLImageElement | null)[] = new Array(imageSources.length).fill(null);
+                    const onAllLoaded = () => {
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+                        for (let idx = 0; idx < images.length; idx++) {
+                            const img = images[idx];
+                            const src = imageSources[idx];
+                            if (img && img.complete && img.naturalWidth > 0) {
+                                ctx.drawImage(img, src.x, src.y, src.w, src.h);
+                            }
+                        }
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                    };
+
+                    for (let idx = 0; idx < imageSources.length; idx++) {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => { images[idx] = img; loaded++; if (loaded >= imageSources.length) onAllLoaded(); };
+                        img.onerror = () => { loaded++; if (loaded >= imageSources.length) onAllLoaded(); };
+                        img.src = imageSources[idx].url;
+                    }
+
+                    // Timeout fallback
+                    setTimeout(() => { if (loaded < imageSources.length) onAllLoaded(); }, 2000);
+                } catch {
+                    resolve(undefined);
+                }
+            });
+        };
+
         const createSaveRecord = async () => {
+            const screenshot = await captureScreenshot();
             const saves = await getGameSaves();
             saves[slotNumber] = {
             timestamp: Date.now(),
             sceneName: project.scenes[playerState.currentSceneId]?.name || 'Unknown Scene',
+            screenshot,
             playerStateData: {
                 currentSceneId: playerState.currentSceneId,
                 currentCommands: playerState.currentCommands,
@@ -3526,6 +3689,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                case CommandType.CreditRoll: {
+                    const cmd = command as CreditRollCommand;
+                    setActiveCreditRoll(cmd);
+                    const result = handleCreditRoll(cmd, commandContext);
+                    applyResult(result);
+                    break;
+                }
             }
             
             // Handle command advancement based on async modifier
@@ -4644,6 +4814,143 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         );
     };
 
+    // Credit Roll overlay component with optional CG background gallery
+    const CreditRollOverlay: React.FC<{
+        command: CreditRollCommand;
+        project: VNProject;
+        assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+        getAssetMetadata: (assetId: VNID | null, type: 'image') => { isVideo: boolean; loop: boolean };
+        onFinish: () => void;
+    }> = ({ command, project, assetResolver, getAssetMetadata, onFinish }) => {
+        const bgs = command.backgrounds || [];
+        const hasBgs = bgs.length > 0;
+        const [bgIndex, setBgIndex] = useState(0);
+        const [prevBgIndex, setPrevBgIndex] = useState<number | null>(null);
+        const [transitioning, setTransitioning] = useState(false);
+        const bgTimerRef = useRef<number | null>(null);
+        const bgTransTimerRef = useRef<number | null>(null);
+
+        // Cycle backgrounds
+        useEffect(() => {
+            if (!hasBgs || bgs.length <= 1) return;
+            const scheduleNext = (idx: number) => {
+                const slide = bgs[idx];
+                const displayMs = (slide?.displayDuration || 5) * 1000;
+                bgTimerRef.current = window.setTimeout(() => {
+                    const nextIdx = (idx + 1) % bgs.length;
+                    const nextSlide = bgs[nextIdx];
+                    const transDur = (nextSlide?.transitionDuration || 0.5) * 1000;
+                    const transType = nextSlide?.transition || 'fade';
+
+                    if (transType === 'instant' || transDur === 0) {
+                        setBgIndex(nextIdx);
+                        scheduleNext(nextIdx);
+                    } else {
+                        setPrevBgIndex(idx);
+                        setBgIndex(nextIdx);
+                        setTransitioning(true);
+                        bgTransTimerRef.current = window.setTimeout(() => {
+                            setTransitioning(false);
+                            setPrevBgIndex(null);
+                            scheduleNext(nextIdx);
+                        }, transDur);
+                    }
+                }, displayMs);
+            };
+            scheduleNext(bgIndex);
+            return () => {
+                if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+                if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
+            };
+        }, [hasBgs, bgs.length]); // Only re-run if backgrounds change
+
+        const renderBgSlide = (slide: CreditBackground, opacity: number, transitionDuration: number) => {
+            const url = assetResolver(slide.assetId, 'image');
+            if (!url) return null;
+            const meta = getAssetMetadata(slide.assetId, 'image');
+            const style: React.CSSProperties = {
+                position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                opacity,
+                transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
+            };
+            if (meta.isVideo) {
+                return <video src={url} autoPlay muted loop={meta.loop} style={style} />;
+            }
+            return <img src={url} alt="" style={style} />;
+        };
+
+        const currentSlide = hasBgs ? bgs[bgIndex] : null;
+        const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
+        const transDur = currentSlide?.transitionDuration || 0.5;
+
+        return (
+            <div
+                className="absolute inset-0 z-40 flex items-end justify-center overflow-hidden"
+                style={{ backgroundColor: command.backgroundColor || '#000000FF', cursor: command.allowSkip ? 'pointer' : 'default' }}
+                onClick={() => {
+                    if (!command.allowSkip) return;
+                    onFinish();
+                }}
+            >
+                {/* Background slides */}
+                {hasBgs && (
+                    <div className="absolute inset-0 z-0">
+                        {prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0)}
+                        {currentSlide && renderBgSlide(currentSlide, transitioning ? (currentSlide.transition === 'instant' ? 1 : 1) : 1, transitioning ? transDur : 0)}
+                        {/* Use a crossfade overlay approach: the new slide fades in on top */}
+                        {transitioning && currentSlide && currentSlide.transition !== 'instant' && (
+                            <div
+                                className="absolute inset-0"
+                                style={{
+                                    backgroundColor: currentSlide.transition === 'dissolve' ? 'transparent' : command.backgroundColor || '#000000FF',
+                                    animation: `credit-bg-fade-in ${transDur}s ease-in-out both`,
+                                }}
+                            />
+                        )}
+                    </div>
+                )}
+
+                {/* Semi-transparent overlay for text readability when backgrounds are present */}
+                {hasBgs && (
+                    <div className="absolute inset-0 z-[1]" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} />
+                )}
+
+                {/* Credits scroll */}
+                <div
+                    className="credits-scroll text-center px-8 relative z-[2]"
+                    style={{
+                        color: command.textColor || '#FFFFFF',
+                        animationDuration: `${command.duration || 15}s`,
+                        textShadow: hasBgs ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
+                    }}
+                    onAnimationEnd={(e) => {
+                        if (e.target === e.currentTarget) {
+                            onFinish();
+                        }
+                    }}
+                >
+                    {command.entries.map((entry, i) =>
+                        entry.kind === 'heading' ? (
+                            <h2 key={i} className="text-2xl font-bold mt-8 mb-4" style={{ color: '#FFD700' }}>{entry.label}</h2>
+                        ) : (
+                            <div key={i} className="mb-2">
+                                <span className="text-sm opacity-70">{entry.label}</span>
+                                {entry.value && <><br /><span className="text-lg">{entry.value}</span></>}
+                            </div>
+                        )
+                    )}
+                </div>
+
+                {/* Skip hint */}
+                {command.allowSkip && (
+                    <div className="absolute bottom-4 right-4 text-xs opacity-50 z-[3]" style={{ color: command.textColor || '#FFFFFF' }}>
+                        Click to skip
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // History component
     const HistoryPanel: React.FC<{ history: HistoryEntry[], onClose: () => void }> = ({ history, onClose }) => {
         return (
@@ -4713,6 +5020,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white" onClick={() => updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)}>
                     <video src={uiState.movieUrl} autoPlay className="w-full h-full" onEnded={() => updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)} />
                 </div>
+            )}
+            {activeCreditRoll && (
+                <CreditRollOverlay
+                    command={activeCreditRoll}
+                    project={project}
+                    assetResolver={assetResolver}
+                    getAssetMetadata={getAssetMetadata}
+                    onFinish={() => {
+                        const onComplete = activeCreditRoll.onComplete;
+                        setActiveCreditRoll(null);
+                        if (onComplete === 'title') {
+                            // Full quit-to-title: stop audio, null playerState, restore title screen
+                            const audio = musicAudioRef.current;
+                            if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ''; }
+                            stopAllSfx();
+                            updatePlayerState(null);
+                            setHudStack([]);
+                            if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+                        } else {
+                            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                        }
+                    }}
+                />
             )}
             {/* Show dialogue if: 1) dialogue exists, AND 2) either no HUD screen or HUD screen has showDialogue enabled */}
             {uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && (

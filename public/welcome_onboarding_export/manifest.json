@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "exportedAt": "2025-11-08T00:06:22.979Z",
+  "exportedAt": "2026-02-13T00:34:01.828Z",
   "project": {
     "id": "proj-1760830281303",
     "title": "Welcome-Onboarding"
@@ -105,7 +105,8 @@
       "assets/characters/char-hghox0c/layer-kp1ilof/asset-sqbrz8u_alana_bed.png",
       "assets/characters/char-355cg48/layer-d3ev634/asset-v0e7xrq_alana_bed.png"
     ],
-    "ui": []
+    "ui": [],
+    "fonts": []
   },
   "fetchFailures": []
 }

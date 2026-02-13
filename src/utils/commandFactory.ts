@@ -241,6 +241,22 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             };
             return command;
         }
+        case CommandType.CreditRoll: {
+            const command = {
+                type,
+                entries: [
+                    { kind: 'heading' as const, label: 'Credits' },
+                    { kind: 'credit' as const, label: 'Created with', value: 'Flourish VNE' },
+                ],
+                duration: 15,
+                backgroundColor: '#000000FF',
+                textColor: '#FFFFFF',
+                allowSkip: true,
+                onComplete: 'advance' as const,
+                backgrounds: [] as Array<{ assetId: null; displayDuration: number; transition: string; transitionDuration: number }>,
+            };
+            return command;
+        }
         default: 
             return null;
     }

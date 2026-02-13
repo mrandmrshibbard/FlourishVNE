@@ -76,11 +76,7 @@ export const ProjectHub: React.FC<{
 }> = ({ onProjectSelect }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showChangelog, setShowChangelog] = useState(false);
-    const [updateAvailable, setUpdateAvailable] = useState<{ version: string; isNew: boolean } | null>(null);
-    const [updateDownloading, setUpdateDownloading] = useState(false);
-    const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-    const [updateReady, setUpdateReady] = useState(false);
-    const [autoUpdateFailed, setAutoUpdateFailed] = useState(false);
+    const [updateAvailable, setUpdateAvailable] = useState<{ version: string; isNew: boolean; downloadUrl: string } | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
     const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
@@ -111,8 +107,9 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(true);
         }
 
-        // Check for updates on app start (Electron only)
-        checkForUpdates();
+        // Native auto-updater (electron-updater) checks on app start in main.cjs.
+        // No manual GitHub API fetch needed — we listen for IPC events in the
+        // useEffect below (onUpdateAvailable, onUpdateDownloadProgress, etc.).
 
         return () => {
             if ((window as any).electronAPI?.setHubActive) {
@@ -130,124 +127,74 @@ export const ProjectHub: React.FC<{
 
     const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
-    // Listen for native auto-updater events
+    // Check for updates via GitHub Releases API on mount
     useEffect(() => {
-        if (!isElectron) return;
-        
-        const api = (window as any).electronAPI;
-        
-        // Update available from electron-updater
-        api.onUpdateAvailable?.((info: { version: string }) => {
-            console.log('Native update available:', info.version);
-            setUpdateAvailable({ version: info.version, isNew: true });
-            toast.info(`🎉 Update v${info.version} is available! Click to download.`, { duration: 6000 });
-        });
-        
-        // Download progress
-        api.onUpdateDownloadProgress?.((progress: { percent: number }) => {
-            setDownloadProgress(Math.round(progress.percent));
-        });
-        
-        // Update downloaded and ready to install
-        api.onUpdateDownloaded?.((info: { version: string }) => {
-            setUpdateDownloading(false);
-            setDownloadProgress(null);
-            setUpdateReady(true);
-            toast.success(`Update v${info.version} downloaded! Click to install and restart.`, { duration: 0 }); // Don't auto-dismiss
-        });
-        
-        // Update error
-        api.onUpdateError?.((error: string) => {
-            console.error('Update error:', error);
-            setUpdateDownloading(false);
-            setDownloadProgress(null);
-            setAutoUpdateFailed(true);
-            // Fall back to showing itch.io link
-            toast.warning('Auto-update unavailable. You can download manually from itch.io.');
-        });
+        const checkForUpdates = async () => {
+            try {
+                // Get current app version (works in both Electron and web)
+                let currentVersion: string | null = null;
+                if (isElectron) {
+                    currentVersion = await (window as any).electronAPI?.getAppVersion();
+                }
+                if (!currentVersion) return;
+
+                // Use a cache to avoid GitHub API rate-limits
+                const cacheKey = 'githubLatestReleaseCache';
+                const cachedRaw = localStorage.getItem(cacheKey);
+                let releaseData: { version: string; downloadUrl: string } | null = null;
+
+                if (cachedRaw) {
+                    try {
+                        const cached = JSON.parse(cachedRaw);
+                        const oneHourMs = 60 * 60 * 1000;
+                        if (cached?.version && cached?.downloadUrl && Date.now() - cached.fetchedAt < oneHourMs) {
+                            releaseData = { version: cached.version, downloadUrl: cached.downloadUrl };
+                        }
+                    } catch { /* ignore bad cache */ }
+                }
+
+                if (!releaseData) {
+                    const response = await fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE-releases/releases/latest');
+                    if (!response.ok) return;
+
+                    const release = await response.json();
+                    const latestVersion = (release.tag_name || '').replace(/^v/, '');
+                    const downloadUrl = release.html_url || 'https://github.com/mrandmrshibbard/FlourishVNE-releases/releases/latest';
+
+                    releaseData = { version: latestVersion, downloadUrl };
+
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify({ ...releaseData, fetchedAt: Date.now() }));
+                    } catch { /* ignore */ }
+                }
+
+                if (releaseData.version && releaseData.version !== currentVersion) {
+                    const lastShown = localStorage.getItem('lastShownChangelogVersion');
+                    const isNewUpdate = releaseData.version !== lastShown;
+
+                    setUpdateAvailable({ version: releaseData.version, isNew: isNewUpdate, downloadUrl: releaseData.downloadUrl });
+
+                    if (isNewUpdate) {
+                        toast.info(`🎉 New version ${releaseData.version} is available!`, { duration: 5000 });
+                        setShowChangelog(true);
+                        localStorage.setItem('lastShownChangelogVersion', releaseData.version);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check for updates:', error);
+            }
+        };
+
+        checkForUpdates();
     }, [isElectron, toast]);
 
-    const handleDownloadUpdate = async () => {
-        if (!isElectron) return;
-        setUpdateDownloading(true);
-        setDownloadProgress(0);
-        toast.info('Downloading update...', { duration: 2000 });
-        
-        const result = await (window as any).electronAPI.downloadUpdate?.();
-        if (!result?.success) {
-            setUpdateDownloading(false);
-            setAutoUpdateFailed(true);
-            toast.warning('Auto-download failed. Use the itch.io link instead.');
-        }
+    const handleDownloadNewVersion = () => {
+        const url = updateAvailable?.downloadUrl || 'https://github.com/mrandmrshibbard/FlourishVNE-releases/releases/latest';
+        window.open(url, '_blank');
     };
 
     const handleOpenItchio = () => {
         window.open(ITCHIO_URL, '_blank');
-    };
-
-    const handleInstallUpdate = () => {
-        if (!isElectron) return;
-        toast.info('Installing update and restarting...');
-        (window as any).electronAPI.installUpdate?.();
-    };
-
-    const checkForUpdates = async () => {
-        try {
-            if (!isElectron) return;
-
-            const currentVersion = await (window as any).electronAPI?.getAppVersion();
-            if (!currentVersion) return;
-
-            // Cache to avoid rate-limits / slow startups.
-            const cacheKey = 'githubLatestReleaseCache';
-            const cachedRaw = localStorage.getItem(cacheKey);
-            let latestVersion: string | null = null;
-
-            if (cachedRaw) {
-                try {
-                    const cached = JSON.parse(cachedRaw) as { tag: string; fetchedAt: number };
-                    const oneHourMs = 1 * 60 * 60 * 1000; // Check more frequently (1 hour instead of 12)
-                    if (cached?.tag && typeof cached.fetchedAt === 'number' && Date.now() - cached.fetchedAt < oneHourMs) {
-                        latestVersion = cached.tag.replace('v', '');
-                    }
-                } catch {
-                    // Ignore invalid cache
-                }
-            }
-
-            // Fetch fresh data if no valid cache
-            if (!latestVersion) {
-                const response = await fetch('https://api.github.com/repos/mrandmrshibbard/FlourishVNE/releases/latest');
-                if (!response.ok) return;
-
-                const release = await response.json();
-                latestVersion = release.tag_name.replace('v', '');
-
-                // Update cache
-                try {
-                    localStorage.setItem(cacheKey, JSON.stringify({ tag: release.tag_name, fetchedAt: Date.now() }));
-                } catch {
-                    // Ignore storage failures
-                }
-            }
-
-            // Compare versions - show update banner if newer version available
-            if (latestVersion && latestVersion !== currentVersion) {
-                const lastShown = localStorage.getItem('lastShownChangelogVersion');
-                const isNewUpdate = latestVersion !== lastShown;
-                
-                setUpdateAvailable({ version: latestVersion, isNew: isNewUpdate });
-                
-                // Show toast and auto-open changelog for brand new updates
-                if (isNewUpdate) {
-                    toast.info(`🎉 New version ${latestVersion} is available!`, { duration: 5000 });
-                    setShowChangelog(true);
-                    localStorage.setItem('lastShownChangelogVersion', latestVersion);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to check for updates:', error);
-        }
     };
 
     const handleCreateNew = () => {
@@ -395,85 +342,53 @@ export const ProjectHub: React.FC<{
             </div>
             
             {/* Update Available Banner */}
-            {(updateAvailable || updateReady) && (
+            {updateAvailable && (
                 <div className="fixed top-0 left-0 right-0 z-40">
                     <div 
                         className={`
                             flex items-center justify-center gap-3 py-3 px-4 flex-wrap backdrop-blur-md
-                            ${updateReady 
-                                ? 'bg-gradient-to-r from-[var(--accent-mint)]/90 to-[var(--accent-cyan)]/90' 
-                                : updateAvailable?.isNew 
-                                    ? 'bg-gradient-to-r from-[var(--accent-pink)]/90 via-[var(--accent-lavender)]/90 to-[var(--accent-cyan)]/90' 
-                                    : 'bg-[var(--bg-secondary)]/80 border-b border-[var(--accent-cyan)]/30'
+                            ${updateAvailable.isNew 
+                                ? 'bg-gradient-to-r from-[var(--accent-pink)]/90 via-[var(--accent-lavender)]/90 to-[var(--accent-cyan)]/90' 
+                                : 'bg-[var(--bg-secondary)]/80 border-b border-[var(--accent-cyan)]/30'
                             }
                         `}
                         style={{
-                            boxShadow: updateReady || updateAvailable?.isNew 
+                            boxShadow: updateAvailable.isNew 
                                 ? '0 4px 30px rgba(184, 126, 255, 0.3)' 
                                 : 'none'
                         }}
                     >
                         <SparkleIcon className="w-5 h-5 animate-glow" />
                         
-                        {updateReady ? (
-                            <>
-                                <span className="font-semibold">✅ Update v{updateAvailable?.version} ready to install!</span>
-                                <button
-                                    onClick={handleInstallUpdate}
-                                    className="ml-2 px-4 py-1.5 bg-white text-[var(--accent-mint)] rounded-full font-bold text-sm hover:bg-white/90 transition-all shadow-lg hover:scale-105"
-                                >
-                                    Install & Restart
-                                </button>
-                            </>
-                        ) : updateDownloading ? (
-                            <>
-                                <span className="font-medium">Downloading update...</span>
-                                <div className="w-32 h-2 bg-white/30 rounded-full overflow-hidden">
-                                    <div 
-                                        className="h-full rounded-full transition-all duration-300"
-                                        style={{ 
-                                            width: `${downloadProgress || 0}%`,
-                                            background: 'linear-gradient(90deg, var(--accent-pink), var(--accent-cyan))'
-                                        }}
-                                    />
-                                </div>
-                                <span className="text-sm font-medium">{downloadProgress}%</span>
-                            </>
-                        ) : (
-                            <>
-                                <span className="font-semibold">
-                                    {updateAvailable?.isNew 
-                                        ? `🎉 New Update Available: v${updateAvailable.version}!` 
-                                        : `Version ${updateAvailable?.version} available`
-                                    }
-                                </span>
-                                
-                                {/* Show auto-update button if not failed */}
-                                {!autoUpdateFailed && (
-                                    <button
-                                        onClick={handleDownloadUpdate}
-                                        className="ml-2 px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all hover:scale-105"
-                                    >
-                                        Auto-Update
-                                    </button>
-                                )}
-                                
-                                {/* Always show itch.io link */}
-                                <button
-                                    onClick={handleOpenItchio}
-                                    className="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
-                                >
-                                    📥 Download from itch.io
-                                </button>
-                                
-                                <button
-                                    onClick={() => setShowChangelog(true)}
-                                    className="px-3 py-1 text-sm opacity-80 hover:opacity-100 underline decoration-dotted underline-offset-2"
-                                >
-                                    What's new?
-                                </button>
-                            </>
-                        )}
+                        <span className="font-semibold">
+                            {updateAvailable.isNew 
+                                ? `🎉 New Update Available: v${updateAvailable.version}!` 
+                                : `Version ${updateAvailable.version} available`
+                            }
+                        </span>
+                        
+                        {/* Download from GitHub */}
+                        <button
+                            onClick={handleDownloadNewVersion}
+                            className="ml-2 px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
+                        >
+                            📥 Download from GitHub
+                        </button>
+                        
+                        {/* Also show itch.io link */}
+                        <button
+                            onClick={handleOpenItchio}
+                            className="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
+                        >
+                            🎮 itch.io
+                        </button>
+                        
+                        <button
+                            onClick={() => setShowChangelog(true)}
+                            className="px-3 py-1 text-sm opacity-80 hover:opacity-100 underline decoration-dotted underline-offset-2"
+                        >
+                            What's new?
+                        </button>
                     </div>
                 </div>
             )}

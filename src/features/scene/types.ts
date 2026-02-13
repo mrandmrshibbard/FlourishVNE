@@ -69,6 +69,7 @@ export enum CommandType {
     HideImage = 'HideImage',
     ShowButton = 'ShowButton',
     HideButton = 'HideButton',
+    CreditRoll = 'CreditRoll',
     Group = 'Group', // Visual grouping only, no execution
 }
 
@@ -338,13 +339,53 @@ export interface GroupCommand extends BaseCommand {
     collapsed?: boolean;
 }
 
+/** A credit entry: either a heading/section title or a role+name pair */
+export interface CreditEntry {
+    /** 'heading' for section titles (e.g. "Cast"), 'credit' for role/name pairs */
+    kind: 'heading' | 'credit';
+    /** Section title or role (e.g. "Director", "Lead Writer") */
+    label: string;
+    /** Name(s) — only used when kind='credit' */
+    value?: string;
+}
+
+export interface CreditRollCommand extends BaseCommand {
+    type: CommandType.CreditRoll;
+    /** Structured credit entries */
+    entries: CreditEntry[];
+    /** Total scroll duration in seconds */
+    duration: number;
+    /** Background color behind credits (hex with alpha) */
+    backgroundColor: string;
+    /** Text color (hex) */
+    textColor: string;
+    /** Whether clicking/pressing skips the credit roll */
+    allowSkip: boolean;
+    /** What happens when credits finish: 'advance' continues to next command, 'title' returns to title screen */
+    onComplete: 'advance' | 'title';
+    /** Optional slideshow backgrounds that cycle while credits scroll */
+    backgrounds?: CreditBackground[];
+}
+
+/** A background slide shown during credit roll */
+export interface CreditBackground {
+    /** Asset ID referencing a background or image */
+    assetId: VNID | null;
+    /** How long this slide is displayed (seconds) */
+    displayDuration: number;
+    /** Transition to use when switching TO this slide */
+    transition: 'fade' | 'dissolve' | 'instant';
+    /** Transition duration in seconds */
+    transitionDuration: number;
+}
+
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
-  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | GroupCommand;
+  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand;
 
 export interface VNScene {
     id: VNID;

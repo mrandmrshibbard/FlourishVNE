@@ -12,70 +12,80 @@
           "backgroundId": "back-jk0hyo4",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-tlk3nsa"
+          "id": "cmd-tlk3nsa",
+          "modifiers": {}
         },
         {
           "type": "PlayMusic",
           "audioId": "audi-b7kvjt0",
           "loop": true,
           "fadeDuration": 1,
-          "id": "cmd-4pj40c2"
+          "id": "cmd-4pj40c2",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
           "expressionId": "expr-spsp46p",
           "position": "right",
-          "transition": "dissolve",
+          "transition": "fade",
           "duration": 1,
           "id": "cmd-pn9bjgn",
-          "endPosition": "right"
+          "endPosition": "right",
+          "modifiers": {}
         },
         {
           "type": "PlaySoundEffect",
           "audioId": "audi-1n479q6",
-          "id": "cmd-730jt76"
+          "id": "cmd-730jt76",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Oh?",
-          "id": "cmd-7z3gkgi"
+          "id": "cmd-7z3gkgi",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
           "expressionId": "expr-iderb3z",
           "position": "right",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 1,
-          "id": "cmd-fxj977p"
+          "id": "cmd-fxj977p",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Hey there. My name's Alana. Welcome to Flo...",
-          "id": "cmd-kxocakl"
+          "id": "cmd-kxocakl",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
           "expressionId": "expr-6cs1ud4",
           "position": "right",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 0.3,
-          "id": "cmd-hq0zgtm"
+          "id": "cmd-hq0zgtm",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "And I'm...... ",
-          "id": "cmd-lfd87a3"
+          "id": "cmd-lfd87a3",
+          "modifiers": {}
         },
         {
           "type": "PlaySoundEffect",
           "audioId": "audi-b56pjyn",
-          "id": "cmd-xucztt1"
+          "id": "cmd-xucztt1",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -83,16 +93,25 @@
           "expressionId": "expr-u91cvtb",
           "position": "left",
           "transition": "slide",
-          "duration": 0.3,
+          "duration": 0.1,
           "id": "cmd-dk4xprj",
           "endPosition": "left",
-          "startPosition": "right"
+          "startPosition": "right",
+          "modifiers": {}
+        },
+        {
+          "type": "ShakeScreen",
+          "duration": 1,
+          "intensity": 3,
+          "id": "cmd-23zer2q",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "BLOSSOM!!!!",
-          "id": "cmd-kr7zx49"
+          "id": "cmd-kr7zx49",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -101,41 +120,41 @@
           "position": "left",
           "transition": "instant",
           "duration": 0.1,
-          "id": "cmd-s2hxboj"
+          "id": "cmd-s2hxboj",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
           "expressionId": "expr-yn9lay8",
           "position": "right",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 1,
-          "id": "cmd-dnxa7lv"
+          "id": "cmd-dnxa7lv",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Hi, Blossom...",
-          "id": "cmd-rsl9pib"
+          "id": "cmd-rsl9pib",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Blossom's my girlfriend. And she gets waaaay too excited to meet new people.",
-          "id": "cmd-u5mmnp5"
+          "id": "cmd-u5mmnp5",
+          "modifiers": {}
         },
         {
           "type": "HideCharacter",
           "characterId": "char-2lmqqwo",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 0.1,
           "id": "cmd-gh392yp",
-          "endPosition": "left"
-        },
-        {
-          "type": "PlaySoundEffect",
-          "audioId": "audi-bwqukse",
-          "id": "cmd-fsfl7ne"
+          "endPosition": "left",
+          "modifiers": {}
         },
         {
           "type": "ShowImage",
@@ -148,24 +167,33 @@
           "opacity": 1,
           "scaleX": 5,
           "scaleY": 5,
-          "transition": "fade",
+          "transition": "instant",
           "duration": 0.1,
-          "id": "cmd-r4xuf60"
+          "id": "cmd-r4xuf60",
+          "modifiers": {}
+        },
+        {
+          "type": "PlaySoundEffect",
+          "audioId": "audi-bwqukse",
+          "id": "cmd-fsfl7ne",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
           "expressionId": "expr-6cs1ud4",
           "position": "right",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 1,
-          "id": "cmd-t3264va"
+          "id": "cmd-t3264va",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "So... what's your name?! Huh? HUH?!",
-          "id": "cmd-unu8k3z"
+          "id": "cmd-unu8k3z",
+          "modifiers": {}
         },
         {
           "type": "TextInput",
@@ -173,14 +201,16 @@
           "prompt": "My name is:",
           "placeholder": "Type here...",
           "maxLength": 50,
-          "id": "cmd-9g1nhz1"
+          "id": "cmd-9g1nhz1",
+          "modifiers": {}
         },
         {
           "type": "HideImage",
           "targetCommandId": "cmd-r4xuf60",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 0.1,
-          "id": "cmd-i8bun5m"
+          "id": "cmd-i8bun5m",
+          "modifiers": {}
         },
         {
           "type": "ShowImage",
@@ -193,28 +223,32 @@
           "opacity": 1,
           "scaleX": 5,
           "scaleY": 5,
-          "transition": "fade",
+          "transition": "instant",
           "duration": 0.1,
-          "id": "cmd-h3fa4o1"
+          "id": "cmd-h3fa4o1",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "WELCOME TO FLOURISH {name}!!!!",
-          "id": "cmd-hyx1t92"
+          "id": "cmd-hyx1t92",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Blossom... you're going to scare them away!",
-          "id": "cmd-cvwqe9n"
+          "id": "cmd-cvwqe9n",
+          "modifiers": {}
         },
         {
           "type": "HideImage",
           "targetCommandId": "cmd-h3fa4o1",
           "transition": "fade",
-          "duration": 0.5,
-          "id": "cmd-dajfxle"
+          "duration": 0.2,
+          "id": "cmd-dajfxle",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -223,27 +257,31 @@
           "position": "left",
           "transition": "fade",
           "duration": 0.1,
-          "id": "cmd-g91hfu2"
+          "id": "cmd-g91hfu2",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
           "expressionId": "expr-iderb3z",
           "position": "right",
-          "transition": "fade",
+          "transition": "instant",
           "duration": 1,
-          "id": "cmd-1mghbl6"
+          "id": "cmd-1mghbl6",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Anyways... truly, welcome. We hope you have a lot of fun creating with us!",
-          "id": "cmd-1yubsi4"
+          "id": "cmd-1yubsi4",
+          "modifiers": {}
         },
         {
           "type": "StopMusic",
           "fadeDuration": 1,
-          "id": "cmd-bh1iziq"
+          "id": "cmd-bh1iziq",
+          "modifiers": {}
         }
       ]
     },
@@ -265,7 +303,8 @@
               "value": ""
             }
           ],
-          "conditionExpression": "var-6uxozln == false"
+          "conditionExpression": "var-6uxozln == false",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
@@ -279,27 +318,31 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Wait",
           "duration": 2,
           "waitForInput": false,
-          "id": "cmd-6qjgvh0"
+          "id": "cmd-6qjgvh0",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
           "backgroundId": "back-aoss6ml",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-nwwdkb2"
+          "id": "cmd-nwwdkb2",
+          "modifiers": {}
         },
         {
           "type": "PlayMusic",
           "audioId": "audi-zb3rcm6",
           "loop": true,
           "fadeDuration": 1,
-          "id": "cmd-clc3gsf"
+          "id": "cmd-clc3gsf",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -308,13 +351,15 @@
           "position": "center",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-ritefqx"
+          "id": "cmd-ritefqx",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Uh {name}... hey. So... I kind of need your help.",
-          "id": "cmd-dp839e8"
+          "id": "cmd-dp839e8",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -323,13 +368,15 @@
           "position": "center",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-2vvm93p"
+          "id": "cmd-2vvm93p",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "I'VE GOT A DATE WITH BLOSSOM TONIGHT! I DON'T KNOW WHAT TO WEAR!",
-          "id": "cmd-vso3g68"
+          "id": "cmd-vso3g68",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -338,13 +385,15 @@
           "position": "center",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-arnxf60ep"
+          "id": "cmd-arnxf60ep",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Please... can you help me pick out an outfit?",
-          "id": "cmd-k7zw06758"
+          "id": "cmd-k7zw06758",
+          "modifiers": {}
         },
         {
           "type": "Choice",
@@ -374,7 +423,8 @@
               ]
             }
           ],
-          "id": "cmd-3t38wfwfg"
+          "id": "cmd-3t38wfwfg",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
@@ -387,7 +437,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
@@ -400,14 +451,16 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "SetVariable",
           "variableId": "var-6uxozln",
           "operator": "set",
           "value": true,
-          "id": "cmd-8ug6gx3"
+          "id": "cmd-8ug6gx3",
+          "modifiers": {}
         },
         {
           "type": "ShowScreen",
@@ -419,19 +472,22 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "BranchEnd",
           "branchId": "branch-r8joaa7",
-          "id": "cmd-k5xosfn"
+          "id": "cmd-k5xosfn",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
           "backgroundId": "back-aoss6ml",
           "transition": "dissolve",
           "duration": 0.5,
-          "id": "cmd-yv22zii"
+          "id": "cmd-yv22zii",
+          "modifiers": {}
         },
         {
           "type": "BranchStart",
@@ -446,12 +502,14 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Label",
           "labelId": "dress_check",
-          "id": "cmd-uuhv9dj"
+          "id": "cmd-uuhv9dj",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -460,13 +518,15 @@
           "position": "center",
           "transition": "fade",
           "duration": 0.5,
-          "id": "cmd-a6wewzx"
+          "id": "cmd-a6wewzx",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Oooh... nice choice. All done?",
-          "id": "cmd-q8ycrr1"
+          "id": "cmd-q8ycrr1",
+          "modifiers": {}
         },
         {
           "type": "Choice",
@@ -496,7 +556,8 @@
               ]
             }
           ],
-          "id": "cmd-8rkrro2"
+          "id": "cmd-8rkrro2",
+          "modifiers": {}
         },
         {
           "type": "ShowScreen",
@@ -508,7 +569,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "HideCharacter",
@@ -522,12 +584,14 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "BranchEnd",
           "branchId": "branch-4ahddrp",
-          "id": "cmd-v9a97ms"
+          "id": "cmd-v9a97ms",
+          "modifiers": {}
         },
         {
           "type": "BranchStart",
@@ -542,7 +606,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "HideCharacter",
@@ -556,7 +621,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -572,7 +638,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
@@ -585,17 +652,20 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "StopMusic",
           "fadeDuration": 1,
-          "id": "cmd-nxxtk3t"
+          "id": "cmd-nxxtk3t",
+          "modifiers": {}
         },
         {
           "type": "BranchEnd",
           "branchId": "branch-3fj4wh4",
-          "id": "cmd-pkgmymn"
+          "id": "cmd-pkgmymn",
+          "modifiers": {}
         }
       ]
     },
@@ -608,14 +678,16 @@
           "backgroundId": "back-lta167r",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-b8cc6cy"
+          "id": "cmd-b8cc6cy",
+          "modifiers": {}
         },
         {
           "type": "PlayMusic",
           "audioId": "audi-d4u2pz6",
           "loop": true,
           "fadeDuration": 3,
-          "id": "cmd-0w63rj7"
+          "id": "cmd-0w63rj7",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -636,7 +708,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -657,7 +730,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -678,7 +752,8 @@
               "operator": "==",
               "value": "asset-85hr8l5"
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -699,7 +774,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -715,13 +791,15 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Hey, {name}... Blossom should be here any minute.",
-          "id": "cmd-yvrkrdd"
+          "id": "cmd-yvrkrdd",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -730,19 +808,22 @@
           "position": "left",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-18dxml7"
+          "id": "cmd-18dxml7",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "Hi, Alana...",
-          "id": "cmd-y9u2dru"
+          "id": "cmd-y9u2dru",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Oh.... h-h-hey, Blossom. You look... wow",
-          "id": "cmd-bvqd6ye"
+          "id": "cmd-bvqd6ye",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -751,13 +832,15 @@
           "position": "left",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-cwfzmew"
+          "id": "cmd-cwfzmew",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "Tehehehehe",
-          "id": "cmd-g4s0hsv"
+          "id": "cmd-g4s0hsv",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -766,32 +849,37 @@
           "position": "left",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-lhuusqj"
+          "id": "cmd-lhuusqj",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "Come on!!! Let's get some snacks!",
-          "id": "cmd-cskmyr1"
+          "id": "cmd-cskmyr1",
+          "modifiers": {}
         },
         {
           "type": "ShowScreen",
           "screenId": "screen-0mpq2xi",
-          "id": "cmd-vkp55li"
+          "id": "cmd-vkp55li",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
           "backgroundId": "back-55y7jbp",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-b9fawbs"
+          "id": "cmd-b9fawbs",
+          "modifiers": {}
         },
         {
           "type": "PlayMusic",
           "audioId": "audi-r27oe5h",
           "loop": true,
           "fadeDuration": 1,
-          "id": "cmd-4x6sijq"
+          "id": "cmd-4x6sijq",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -803,7 +891,8 @@
           },
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-i4xk4rd"
+          "id": "cmd-i4xk4rd",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -822,7 +911,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -846,7 +936,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -870,7 +961,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -894,7 +986,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -918,7 +1011,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
@@ -930,8 +1024,14 @@
               "variableId": "var-a1f1wc9",
               "operator": "is true",
               "value": ""
+            },
+            {
+              "variableId": "var-gze6kdj",
+              "operator": "is false",
+              "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
@@ -943,13 +1043,39 @@
               "variableId": "var-gze6kdj",
               "operator": "is true",
               "value": ""
+            },
+            {
+              "variableId": "var-a1f1wc9",
+              "operator": "is false",
+              "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-2lmqqwo",
+          "text": "This is okay I guess!",
+          "id": "cmd-tqp6aw6",
+          "conditions": [
+            {
+              "variableId": "var-gze6kdj",
+              "operator": "is true",
+              "value": ""
+            },
+            {
+              "variableId": "var-a1f1wc9",
+              "operator": "is true",
+              "value": ""
+            }
+          ],
+          "modifiers": {}
         },
         {
           "type": "StopMusic",
           "fadeDuration": 1,
-          "id": "cmd-9ijw3eh"
+          "id": "cmd-9ijw3eh",
+          "modifiers": {}
         }
       ]
     },
@@ -960,34 +1086,39 @@
         {
           "type": "PlaySoundEffect",
           "audioId": "audi-j96tmom",
-          "id": "cmd-dypc32u"
+          "id": "cmd-dypc32u",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
           "backgroundId": "back-93rn4x9",
           "transition": "dissolve",
           "duration": 1,
-          "id": "cmd-dqctxs1"
+          "id": "cmd-dqctxs1",
+          "modifiers": {}
         },
         {
           "type": "Wait",
           "duration": 2,
           "waitForInput": false,
-          "id": "cmd-rr4xvx6"
+          "id": "cmd-rr4xvx6",
+          "modifiers": {}
         },
         {
           "type": "PlayMusic",
           "audioId": "audi-flub88r",
           "loop": true,
           "fadeDuration": 1,
-          "id": "cmd-b9lfe7q"
+          "id": "cmd-b9lfe7q",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
           "backgroundId": "back-s661ohf",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-248g0qk"
+          "id": "cmd-248g0qk",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1006,7 +1137,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1030,7 +1162,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1054,7 +1187,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1078,7 +1212,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1102,7 +1237,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1114,25 +1250,29 @@
           },
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-tyep9jx"
+          "id": "cmd-tyep9jx",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "I... uh... had a really good time tonight, Blossom!",
-          "id": "cmd-117rnyy"
+          "id": "cmd-117rnyy",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
           "text": "Me too, Alana!",
-          "id": "cmd-b2pwcyr"
+          "id": "cmd-b2pwcyr",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": null,
           "text": "Blossom stares expectantly at Alana... should she :",
-          "id": "cmd-hh48y3w"
+          "id": "cmd-hh48y3w",
+          "modifiers": {}
         },
         {
           "type": "Choice",
@@ -1162,7 +1302,8 @@
               ]
             }
           ],
-          "id": "cmd-rt12rvj"
+          "id": "cmd-rt12rvj",
+          "modifiers": {}
         },
         {
           "type": "FlashScreen",
@@ -1296,14 +1437,16 @@
               "operator": "==",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "HideImage",
           "targetCommandId": "cmd-4rvenc7",
           "transition": "fade",
           "duration": 2,
-          "id": "cmd-933m004"
+          "id": "cmd-933m004",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1315,7 +1458,8 @@
           },
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-bkzvqlo"
+          "id": "cmd-bkzvqlo",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1334,7 +1478,8 @@
               "operator": "is false",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1358,7 +1503,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1382,7 +1528,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1406,7 +1553,8 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1430,18 +1578,21 @@
               "operator": "is true",
               "value": ""
             }
-          ]
+          ],
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "hEeHeEhEe....",
-          "id": "cmd-pfphvbe"
+          "id": "cmd-pfphvbe",
+          "modifiers": {}
         },
         {
           "type": "StopMusic",
           "fadeDuration": 1,
-          "id": "cmd-u8qzae0"
+          "id": "cmd-u8qzae0",
+          "modifiers": {}
         }
       ]
     },
@@ -1454,18 +1605,21 @@
           "backgroundId": "back-aoss6ml",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-xkgks7l"
+          "id": "cmd-xkgks7l",
+          "modifiers": {}
         },
         {
           "type": "StopSoundEffect",
-          "id": "cmd-ytk959m"
+          "id": "cmd-ytk959m",
+          "modifiers": {}
         },
         {
           "type": "PlayMusic",
           "audioId": "audi-b7kvjt0",
           "loop": true,
           "fadeDuration": 1,
-          "id": "cmd-ywzaord"
+          "id": "cmd-ywzaord",
+          "modifiers": {}
         },
         {
           "type": "ShowCharacter",
@@ -1474,33 +1628,71 @@
           "position": "center",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-umiqndt"
+          "id": "cmd-umiqndt",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "Hey, {name}! Thanks so much for helping me with my date. I couldn't have done it with out you! ...literally.",
-          "id": "cmd-j54gfzb"
+          "id": "cmd-j54gfzb",
+          "modifiers": {}
         },
         {
           "type": "Dialogue",
           "characterId": "char-ld8azvx",
           "text": "I hope you had fun and learned a lot. As for me... it's my bed time. See ya tomorrow, {name}!",
-          "id": "cmd-i564ai4"
+          "id": "cmd-i564ai4",
+          "modifiers": {}
         },
         {
           "type": "HideCharacter",
           "characterId": "char-355cg48",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-dzdr6ld"
+          "id": "cmd-dzdr6ld",
+          "modifiers": {}
         },
         {
           "type": "SetBackground",
           "backgroundId": "back-xmpipnr",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-t48xmxj"
+          "id": "cmd-t48xmxj",
+          "modifiers": {}
+        },
+        {
+          "type": "CreditRoll",
+          "entries": [
+            {
+              "kind": "heading",
+              "label": "Credits"
+            },
+            {
+              "kind": "credit",
+              "label": "Created with",
+              "value": "Flourish VNE"
+            },
+            {
+              "kind": "credit",
+              "label": "Art and Story By:",
+              "value": "Memento_Morii"
+            }
+          ],
+          "duration": 10,
+          "backgroundColor": "#000000FF",
+          "textColor": "#FFFFFF",
+          "allowSkip": true,
+          "onComplete": "advance",
+          "id": "cmd-qgph2xf",
+          "backgrounds": [
+            {
+              "assetId": "back-7k3rptv",
+              "displayDuration": 10,
+              "transition": "fade",
+              "transitionDuration": 0.8
+            }
+          ]
         }
       ]
     }
@@ -2469,7 +2661,10 @@
     "pauseScreenId": "screen-do9rrh1",
     "gameHudScreenId": null,
     "dialogueBoxImage": null,
-    "choiceButtonImage": null,
+    "choiceButtonImage": {
+      "type": "image",
+      "id": "imag-x8hvoqs"
+    },
     "dialogueNameFont": {
       "family": "Poppins, sans-serif",
       "size": 22,
@@ -3883,7 +4078,7 @@
             "type": "SetVariable",
             "variableId": "var-6pe6go3",
             "operator": "subtract",
-            "value": "1"
+            "value": 1
           },
           "image": null,
           "hoverImage": null,
@@ -3901,13 +4096,13 @@
               "type": "SetVariable",
               "variableId": "var-uj0f6u6",
               "operator": "subtract",
-              "value": "1"
+              "value": 1
             },
             {
               "type": "SetVariable",
               "variableId": "var-gze6kdj",
               "operator": "set",
-              "value": ""
+              "value": true
             }
           ]
         },
@@ -3933,7 +4128,7 @@
             "type": "SetVariable",
             "variableId": "var-6pe6go3",
             "operator": "subtract",
-            "value": "2"
+            "value": 2
           },
           "image": null,
           "hoverImage": null,
@@ -3951,21 +4146,21 @@
               "type": "SetVariable",
               "variableId": "var-uj0f6u6",
               "operator": "add",
-              "value": "2"
+              "value": 2
             },
             {
               "type": "SetVariable",
               "variableId": "var-a1f1wc9",
               "operator": "set",
-              "value": ""
+              "value": true
             }
           ]
         },
         "elem-vbzz0ny": {
           "id": "elem-vbzz0ny",
           "name": "Button",
-          "x": 66.74904880888502,
-          "y": 43.76131202242172,
+          "x": 67.25614820036576,
+          "y": 43.36588145306107,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -3983,7 +4178,7 @@
             "type": "SetVariable",
             "variableId": "var-6pe6go3",
             "operator": "subtract",
-            "value": "1"
+            "value": 1
           },
           "image": null,
           "hoverImage": null,
@@ -4001,21 +4196,21 @@
               "type": "SetVariable",
               "variableId": "var-uj0f6u6",
               "operator": "subtract",
-              "value": "1"
+              "value": 1
             },
             {
               "type": "SetVariable",
               "variableId": "var-gze6kdj",
               "operator": "set",
-              "value": ""
+              "value": true
             }
           ]
         },
         "elem-nko03tb": {
           "id": "elem-nko03tb",
           "name": "Button",
-          "x": 21.901141104436,
-          "y": 84.93778047840686,
+          "x": 21.799721226139855,
+          "y": 84.80597028861999,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4033,7 +4228,7 @@
             "type": "SetVariable",
             "variableId": "var-6pe6go3",
             "operator": "subtract",
-            "value": "2"
+            "value": 2
           },
           "image": null,
           "hoverImage": null,
@@ -4051,13 +4246,13 @@
               "type": "SetVariable",
               "variableId": "var-uj0f6u6",
               "operator": "add",
-              "value": "2"
+              "value": 2
             },
             {
               "type": "SetVariable",
               "variableId": "var-a1f1wc9",
               "operator": "set",
-              "value": ""
+              "value": true
             }
           ]
         },
@@ -4083,7 +4278,7 @@
             "type": "SetVariable",
             "variableId": "var-6pe6go3",
             "operator": "subtract",
-            "value": "1"
+            "value": 1
           },
           "image": null,
           "hoverImage": null,
@@ -4101,13 +4296,13 @@
               "type": "SetVariable",
               "variableId": "var-uj0f6u6",
               "operator": "subtract",
-              "value": "1"
+              "value": 1
             },
             {
               "type": "SetVariable",
               "variableId": "var-gze6kdj",
               "operator": "set",
-              "value": ""
+              "value": true
             }
           ]
         },
@@ -4133,7 +4328,7 @@
             "type": "SetVariable",
             "variableId": "var-6pe6go3",
             "operator": "subtract",
-            "value": "2"
+            "value": 2
           },
           "image": null,
           "hoverImage": null,
@@ -4151,13 +4346,13 @@
               "type": "SetVariable",
               "variableId": "var-uj0f6u6",
               "operator": "add",
-              "value": "2"
+              "value": 2
             },
             {
               "type": "SetVariable",
               "variableId": "var-a1f1wc9",
               "operator": "set",
-              "value": ""
+              "value": true
             }
           ]
         },
@@ -4211,6 +4406,17 @@
           "verticalAlign": "middle"
         }
       }
+    }
+  },
+  "fonts": {},
+  "version": "2.0.0",
+  "metadata": {
+    "migratedAt": "2026-02-12T18:17:13.991Z",
+    "previousVersion": "1.0.0",
+    "lastMigration": {
+      "date": "2026-02-12T18:17:13.993Z",
+      "from": "1.0.0",
+      "to": "2.0.0"
     }
   }
 }

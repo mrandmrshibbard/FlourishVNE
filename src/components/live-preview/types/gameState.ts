@@ -154,6 +154,8 @@ export interface PlayerState {
 export interface GameStateSave {
     timestamp: number;
     sceneName: string;
+    /** Base64 data URL of a screenshot thumbnail */
+    screenshot?: string;
     playerStateData: {
         currentSceneId: VNID;
         currentCommands: VNCommand[];

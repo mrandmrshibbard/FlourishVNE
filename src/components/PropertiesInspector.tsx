@@ -8,7 +8,7 @@ import {
     PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, WaitCommand, ShakeScreenCommand, PlayMovieCommand,
     TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand, FlashScreenCommand, ShowScreenCommand,
     HideTextCommand, HideImageCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, HideButtonCommand,
-    LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand,
+    LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground,
     VNScene,
     ChoiceAction,
 } from '../features/scene/types';
@@ -1555,6 +1555,200 @@ const PropertiesInspector: React.FC<{
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
+            }
+            case CommandType.CreditRoll: {
+                const cmd = command as CreditRollCommand;
+                const entries = cmd.entries || [];
+                
+                const updateEntry = (index: number, field: keyof CreditEntry, value: string) => {
+                    const newEntries = [...entries];
+                    newEntries[index] = { ...newEntries[index], [field]: value };
+                    updateCommand({ entries: newEntries });
+                };
+                const removeEntry = (index: number) => {
+                    const newEntries = entries.filter((_, i) => i !== index);
+                    updateCommand({ entries: newEntries });
+                };
+                const addEntry = (kind: 'heading' | 'credit') => {
+                    const newEntry: CreditEntry = kind === 'heading'
+                        ? { kind: 'heading', label: 'Section Title' }
+                        : { kind: 'credit', label: 'Role', value: 'Name' };
+                    updateCommand({ entries: [...entries, newEntry] });
+                };
+                const moveEntry = (index: number, direction: -1 | 1) => {
+                    const newEntries = [...entries];
+                    const swapIndex = index + direction;
+                    if (swapIndex < 0 || swapIndex >= newEntries.length) return;
+                    [newEntries[index], newEntries[swapIndex]] = [newEntries[swapIndex], newEntries[index]];
+                    updateCommand({ entries: newEntries });
+                };
+                
+                return <>
+                    <FormField label="Credit Entries">
+                        <div className="space-y-2 mb-2">
+                            {entries.map((entry, i) => (
+                                <div key={i} className={`p-2 rounded-lg border ${
+                                    entry.kind === 'heading'
+                                        ? 'bg-amber-900/20 border-amber-500/30'
+                                        : 'bg-slate-700/30 border-slate-600/30'
+                                }`}>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <span className="text-[10px] uppercase font-bold text-slate-400">
+                                            {entry.kind === 'heading' ? '📌 Heading' : '👤 Credit'}
+                                        </span>
+                                        <div className="flex-1" />
+                                        <button onClick={() => moveEntry(i, -1)} className="p-0.5 text-xs text-slate-400 hover:text-white" title="Move up">▲</button>
+                                        <button onClick={() => moveEntry(i, 1)} className="p-0.5 text-xs text-slate-400 hover:text-white" title="Move down">▼</button>
+                                        <button onClick={() => removeEntry(i)} className="p-0.5 text-xs text-red-400 hover:text-red-300" title="Remove">✕</button>
+                                    </div>
+                                    {entry.kind === 'heading' ? (
+                                        <TextInput
+                                            value={entry.label}
+                                            onChange={e => updateEntry(i, 'label', e.target.value)}
+                                            placeholder="Section Title (e.g. Cast, Staff)"
+                                        />
+                                    ) : (
+                                        <div className="flex gap-1">
+                                            <TextInput
+                                                value={entry.label}
+                                                onChange={e => updateEntry(i, 'label', e.target.value)}
+                                                placeholder="Role"
+                                                className="flex-1"
+                                            />
+                                            <TextInput
+                                                value={entry.value || ''}
+                                                onChange={e => updateEntry(i, 'value', e.target.value)}
+                                                placeholder="Name"
+                                                className="flex-1"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => addEntry('heading')}
+                                className="flex-1 px-2 py-1.5 text-xs bg-amber-900/30 hover:bg-amber-800/40 border border-amber-500/30 rounded text-amber-300 transition-colors"
+                            >
+                                + Heading
+                            </button>
+                            <button
+                                onClick={() => addEntry('credit')}
+                                className="flex-1 px-2 py-1.5 text-xs bg-slate-600/30 hover:bg-slate-500/40 border border-slate-500/30 rounded text-slate-300 transition-colors"
+                            >
+                                + Credit
+                            </button>
+                        </div>
+                    </FormField>
+                    <hr className="border-slate-700 my-2" />
+                    <FormField label="Scroll Duration (seconds)">
+                        <TextInput type="number" min="5" max="300" step="1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 15 })} />
+                    </FormField>
+                    <FormField label="Background Color">
+                        <div className="flex items-center gap-2">
+                            <input type="color" value={cmd.backgroundColor.substring(0, 7)} onChange={e => updateCommand({ backgroundColor: e.target.value + 'FF' })} className="w-10 h-10 p-1 bg-slate-700 rounded cursor-pointer" />
+                            <TextInput value={cmd.backgroundColor} onChange={e => updateCommand({ backgroundColor: e.target.value })} placeholder="#000000FF" className="flex-1" />
+                        </div>
+                    </FormField>
+                    <FormField label="Text Color">
+                        <div className="flex items-center gap-2">
+                            <input type="color" value={cmd.textColor} onChange={e => updateCommand({ textColor: e.target.value })} className="w-10 h-10 p-1 bg-slate-700 rounded cursor-pointer" />
+                            <TextInput value={cmd.textColor} onChange={e => updateCommand({ textColor: e.target.value })} placeholder="#FFFFFF" className="flex-1" />
+                        </div>
+                    </FormField>
+                    <FormField label="Allow Skip">
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={cmd.allowSkip} onChange={e => updateCommand({ allowSkip: e.target.checked })} />
+                            <span className="text-xs text-slate-300">Player can click/press to skip credits</span>
+                        </label>
+                    </FormField>
+                    <FormField label="On Complete">
+                        <Select value={cmd.onComplete} onChange={e => updateCommand({ onComplete: e.target.value })}>
+                            <option value="advance">Continue to next command</option>
+                            <option value="title">Return to Title Screen</option>
+                        </Select>
+                    </FormField>
+                    <hr className="border-slate-700 my-3" />
+                    <FormField label="Background Slideshow">
+                        <p className="text-[10px] text-slate-400 mb-2">Add images/videos that cycle behind the scrolling credits. Leave empty for a solid color background.</p>
+                        {(() => {
+                            const backgrounds: CreditBackground[] = cmd.backgrounds || [];
+                            const bgAssetOptions: { value: string; label: string; group?: string }[] = [];
+                            Object.values(project.backgrounds).forEach((b: VNBackground) => {
+                                bgAssetOptions.push({ value: b.id, label: b.name, group: 'Backgrounds' });
+                            });
+                            Object.values(project.images).forEach((img: VNImage) => {
+                                bgAssetOptions.push({ value: img.id, label: img.name, group: 'Images' });
+                            });
+
+                            const updateBg = (index: number, updates: Partial<CreditBackground>) => {
+                                const newBgs = [...backgrounds];
+                                newBgs[index] = { ...newBgs[index], ...updates };
+                                updateCommand({ backgrounds: newBgs });
+                            };
+                            const removeBg = (index: number) => {
+                                updateCommand({ backgrounds: backgrounds.filter((_, i) => i !== index) });
+                            };
+                            const addBg = () => {
+                                const newBg: CreditBackground = { assetId: null, displayDuration: 5, transition: 'fade', transitionDuration: 0.8 };
+                                updateCommand({ backgrounds: [...backgrounds, newBg] });
+                            };
+                            const moveBg = (index: number, dir: -1 | 1) => {
+                                const newBgs = [...backgrounds];
+                                const swap = index + dir;
+                                if (swap < 0 || swap >= newBgs.length) return;
+                                [newBgs[index], newBgs[swap]] = [newBgs[swap], newBgs[index]];
+                                updateCommand({ backgrounds: newBgs });
+                            };
+
+                            return <>
+                                <div className="space-y-2 mb-2">
+                                    {backgrounds.map((bg, i) => (
+                                        <div key={i} className="p-2 rounded-lg border bg-indigo-900/15 border-indigo-500/25">
+                                            <div className="flex items-center gap-1 mb-1.5">
+                                                <span className="text-[10px] uppercase font-bold text-indigo-300">Slide {i + 1}</span>
+                                                <div className="flex-1" />
+                                                <button onClick={() => moveBg(i, -1)} className="p-0.5 text-xs text-slate-400 hover:text-white" title="Move up">▲</button>
+                                                <button onClick={() => moveBg(i, 1)} className="p-0.5 text-xs text-slate-400 hover:text-white" title="Move down">▼</button>
+                                                <button onClick={() => removeBg(i)} className="p-0.5 text-xs text-red-400 hover:text-red-300" title="Remove">✕</button>
+                                            </div>
+                                            <SearchableSelect
+                                                options={bgAssetOptions}
+                                                value={bg.assetId || ''}
+                                                onChange={(value) => updateBg(i, { assetId: value || null })}
+                                                placeholder={bgAssetOptions.length === 0 ? "No assets uploaded" : "Select image/video..."}
+                                            />
+                                            <div className="grid grid-cols-2 gap-1 mt-1.5">
+                                                <FormField label="Display (s)">
+                                                    <TextInput type="number" min="1" max="120" step="0.5" value={bg.displayDuration} onChange={e => updateBg(i, { displayDuration: parseFloat(e.target.value) || 5 })} />
+                                                </FormField>
+                                                <FormField label="Transition">
+                                                    <Select value={bg.transition} onChange={e => updateBg(i, { transition: e.target.value as CreditBackground['transition'] })}>
+                                                        <option value="fade">Fade</option>
+                                                        <option value="dissolve">Dissolve</option>
+                                                        <option value="instant">Instant</option>
+                                                    </Select>
+                                                </FormField>
+                                            </div>
+                                            {bg.transition !== 'instant' && (
+                                                <FormField label="Transition Duration (s)">
+                                                    <TextInput type="number" min="0.1" max="5" step="0.1" value={bg.transitionDuration} onChange={e => updateBg(i, { transitionDuration: parseFloat(e.target.value) || 0.5 })} />
+                                                </FormField>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={addBg}
+                                    className="w-full px-2 py-1.5 text-xs bg-indigo-900/25 hover:bg-indigo-800/35 border border-indigo-500/25 rounded text-indigo-300 transition-colors"
+                                >
+                                    + Add Background Slide
+                                </button>
+                            </>;
+                        })()}
+                    </FormField>
+                </>;
             }
             default: return <p>This command has no properties.</p>;
         }

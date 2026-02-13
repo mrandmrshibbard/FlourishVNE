@@ -55,6 +55,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["HideImage"] = "HideImage";
     CommandType2["ShowButton"] = "ShowButton";
     CommandType2["HideButton"] = "HideButton";
+    CommandType2["CreditRoll"] = "CreditRoll";
     CommandType2["Group"] = "Group";
     return CommandType2;
   })(CommandType || {});
@@ -2824,6 +2825,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
   }
+  function handleCreditRoll(command, _ctx) {
+    return { advance: false };
+  }
   class CommandScheduler {
     constructor() {
       this.lastProcessed = null;
@@ -3438,6 +3442,104 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     ] }) });
   };
+  const SLOTS_PER_PAGE = 4;
+  const SaveSlotGridComponent = ({ element, style, isSaveMode, gameSaves, onAction }) => {
+    const [currentPage, setCurrentPage] = React2.useState(0);
+    const el = element;
+    const totalSlots = el.slotCount;
+    const totalPages = Math.max(1, Math.ceil(totalSlots / SLOTS_PER_PAGE));
+    const startIndex = currentPage * SLOTS_PER_PAGE;
+    const pageSlots = Array.from({ length: SLOTS_PER_PAGE }, (_, k) => startIndex + k).filter((i) => i < totalSlots);
+    const slotBgColor = el.slotBackgroundColor || "#1e293b";
+    const slotBorderColor = el.slotBorderColor || "#475569";
+    const slotHoverBorderColor = el.slotHoverBorderColor || "#38bdf8";
+    const slotHeaderColor = el.slotHeaderColor || "#7dd3fc";
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style, className: "flex flex-col h-full", children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]", children: pageSlots.map((i) => {
+        const slotData = gameSaves[i + 1];
+        const action = isSaveMode ? { type: UIActionType.SaveGame, slotNumber: i + 1 } : { type: UIActionType.LoadGame, slotNumber: i + 1 };
+        return /* @__PURE__ */ jsxRuntime2.jsxs(
+          "button",
+          {
+            onClick: () => {
+              if (!isSaveMode && !slotData) return;
+              onAction(action);
+            },
+            disabled: !isSaveMode && !slotData,
+            className: "rounded-lg border-2 disabled:opacity-50 text-left transition-colors overflow-hidden flex flex-col",
+            style: {
+              ...fontSettingsToStyle(el.font),
+              backgroundColor: slotBgColor,
+              borderColor: slotBorderColor
+            },
+            onMouseEnter: (e) => {
+              if (!e.currentTarget.disabled) {
+                e.currentTarget.style.borderColor = slotHoverBorderColor;
+              }
+            },
+            onMouseLeave: (e) => {
+              e.currentTarget.style.borderColor = slotBorderColor;
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "relative w-full", style: { aspectRatio: "16/9", flexShrink: 0 }, children: (slotData == null ? void 0 : slotData.screenshot) ? /* @__PURE__ */ jsxRuntime2.jsx(
+                "img",
+                {
+                  src: slotData.screenshot,
+                  alt: `Save slot ${i + 1}`,
+                  className: "absolute inset-0 w-full h-full object-cover"
+                }
+              ) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { opacity: 0.35, backgroundColor: "rgba(0,0,0,0.3)" }, children: el.emptySlotText }) }),
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "px-2 py-1.5 flex-shrink-0", style: { backgroundColor: "rgba(0,0,0,0.25)" }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "font-bold text-sm", style: { color: slotHeaderColor }, children: [
+                  "Slot ",
+                  i + 1
+                ] }),
+                slotData ? /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-xs truncate opacity-90", children: slotData.sceneName }),
+                  /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-[10px]", style: { opacity: 0.6 }, children: new Date(slotData.timestamp).toLocaleString() })
+                ] }) : /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-xs", style: { opacity: 0.5 }, children: "Empty" })
+              ] })
+            ]
+          },
+          i
+        );
+      }) }),
+      totalPages > 1 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center justify-center gap-4 py-2 flex-shrink-0", children: [
+        /* @__PURE__ */ jsxRuntime2.jsx(
+          "button",
+          {
+            onClick: (e) => {
+              e.stopPropagation();
+              setCurrentPage((p) => Math.max(0, p - 1));
+            },
+            disabled: currentPage === 0,
+            className: "px-3 py-1 rounded text-sm font-semibold transition-colors disabled:opacity-30",
+            style: { backgroundColor: "rgba(255,255,255,0.1)", color: slotHeaderColor },
+            children: "◀ Prev"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "text-xs", style: { color: slotHeaderColor, opacity: 0.8 }, children: [
+          "Page ",
+          currentPage + 1,
+          " / ",
+          totalPages
+        ] }),
+        /* @__PURE__ */ jsxRuntime2.jsx(
+          "button",
+          {
+            onClick: (e) => {
+              e.stopPropagation();
+              setCurrentPage((p) => Math.min(totalPages - 1, p + 1));
+            },
+            disabled: currentPage >= totalPages - 1,
+            className: "px-3 py-1 rounded text-sm font-semibold transition-colors disabled:opacity-30",
+            style: { backgroundColor: "rgba(255,255,255,0.1)", color: slotHeaderColor },
+            children: "Next ▶"
+          }
+        )
+      ] })
+    ] });
+  };
   const ButtonElement = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project, onCommitVariables }) => {
     const [isHovered, setIsHovered] = React2.useState(false);
     const bgUrl = getElementAssetUrl(element.image);
@@ -4003,50 +4105,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         case UIElementType.SaveSlotGrid: {
           const el = element;
           const isSaveMode = screenId === project2.ui.saveScreenId;
-          const slotBgColor = el.slotBackgroundColor || "#1e293b";
-          const slotBorderColor = el.slotBorderColor || "#475569";
-          const slotHoverBorderColor = el.slotHoverBorderColor || "#38bdf8";
-          const slotHeaderColor = el.slotHeaderColor || "#7dd3fc";
-          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, className: "grid grid-cols-2 gap-4 overflow-y-auto p-2", children: Array.from({ length: el.slotCount }).map((_, i) => {
-            const slotData = gameSaves[i + 1];
-            const action = isSaveMode ? { type: UIActionType.SaveGame, slotNumber: i + 1 } : { type: UIActionType.LoadGame, slotNumber: i + 1 };
-            return /* @__PURE__ */ jsxRuntime2.jsxs(
-              "button",
-              {
-                onClick: () => {
-                  if (!isSaveMode && !slotData) return;
-                  onAction(action);
-                },
-                disabled: !isSaveMode && !slotData,
-                className: "aspect-video p-3 rounded-lg border-2 disabled:opacity-50 flex flex-col justify-between text-left transition-colors",
-                style: {
-                  ...fontSettingsToStyle(el.font),
-                  backgroundColor: slotBgColor,
-                  borderColor: slotBorderColor,
-                  "--hover-border-color": slotHoverBorderColor
-                },
-                onMouseEnter: (e) => {
-                  if (!e.currentTarget.disabled) {
-                    e.currentTarget.style.borderColor = slotHoverBorderColor;
-                  }
-                },
-                onMouseLeave: (e) => {
-                  e.currentTarget.style.borderColor = slotBorderColor;
-                },
-                children: [
-                  /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "font-bold", style: { color: slotHeaderColor }, children: [
-                    "Slot ",
-                    i + 1
-                  ] }),
-                  slotData ? /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "text-sm", children: [
-                    /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "truncate", children: slotData.sceneName }),
-                    /* @__PURE__ */ jsxRuntime2.jsx("p", { style: { opacity: 0.7 }, children: new Date(slotData.timestamp).toLocaleString() })
-                  ] }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "flex-grow flex items-center justify-center", style: { opacity: 0.5 }, children: el.emptySlotText })
-                ]
-              },
-              i
-            );
-          }) }, el.id);
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            SaveSlotGridComponent,
+            {
+              element: el,
+              style,
+              isSaveMode,
+              gameSaves,
+              onAction
+            },
+            el.id
+          );
         }
         case UIElementType.CharacterPreview: {
           const el = element;
@@ -4418,6 +4487,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const activeShakeRef = React2.useRef(null);
     const [flashTrigger, setFlashTrigger] = React2.useState(0);
     const [shakeTrigger, setShakeTrigger] = React2.useState(0);
+    const [activeCreditRoll, setActiveCreditRoll] = React2.useState(null);
     const assetResolver = React2.useCallback((assetId, type) => {
       var _a, _b, _c;
       if (!assetId) return null;
@@ -4587,12 +4657,103 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         currentTime: musicCurrentTime,
         isPlaying: !musicAudioRef.current.paused
       };
+      const captureScreenshot = () => {
+        return new Promise((resolve) => {
+          try {
+            const stage = playerState.stageState;
+            const THUMB_W = 640;
+            const THUMB_H = 360;
+            const canvas = document.createElement("canvas");
+            canvas.width = THUMB_W;
+            canvas.height = THUMB_H;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              resolve(void 0);
+              return;
+            }
+            const imageSources = [];
+            if (stage.backgroundUrl && !stage.backgroundIsVideo) {
+              imageSources.push({ url: stage.backgroundUrl, x: 0, y: 0, w: THUMB_W, h: THUMB_H });
+            }
+            for (const char of Object.values(stage.characters)) {
+              if (char.isVideo) continue;
+              const pos = char.position;
+              let xPct = 50, yPct = 10;
+              if (typeof pos === "string") {
+                const presets = {
+                  "left": { x: 25, y: 10 },
+                  "center": { x: 50, y: 10 },
+                  "right": { x: 75, y: 10 },
+                  "off-left": { x: -25, y: 10 },
+                  "off-right": { x: 125, y: 10 }
+                };
+                const p = presets[pos];
+                if (p) {
+                  xPct = p.x;
+                  yPct = p.y;
+                }
+              } else if (typeof pos === "object") {
+                xPct = pos.x;
+                yPct = pos.y;
+              }
+              const charH = THUMB_H * 0.9;
+              const charW = charH * 0.75;
+              const cx = xPct / 100 * THUMB_W - charW / 2;
+              const cy = yPct / 100 * THUMB_H;
+              for (const url of char.imageUrls) {
+                imageSources.push({ url, x: cx, y: cy, w: charW, h: charH });
+              }
+            }
+            if (imageSources.length === 0) {
+              ctx.fillStyle = "#000";
+              ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+              resolve(canvas.toDataURL("image/jpeg", 0.85));
+              return;
+            }
+            let loaded = 0;
+            const images = new Array(imageSources.length).fill(null);
+            const onAllLoaded = () => {
+              ctx.fillStyle = "#000";
+              ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+              for (let idx = 0; idx < images.length; idx++) {
+                const img = images[idx];
+                const src = imageSources[idx];
+                if (img && img.complete && img.naturalWidth > 0) {
+                  ctx.drawImage(img, src.x, src.y, src.w, src.h);
+                }
+              }
+              resolve(canvas.toDataURL("image/jpeg", 0.85));
+            };
+            for (let idx = 0; idx < imageSources.length; idx++) {
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => {
+                images[idx] = img;
+                loaded++;
+                if (loaded >= imageSources.length) onAllLoaded();
+              };
+              img.onerror = () => {
+                loaded++;
+                if (loaded >= imageSources.length) onAllLoaded();
+              };
+              img.src = imageSources[idx].url;
+            }
+            setTimeout(() => {
+              if (loaded < imageSources.length) onAllLoaded();
+            }, 2e3);
+          } catch {
+            resolve(void 0);
+          }
+        });
+      };
       const createSaveRecord = async () => {
         var _a;
+        const screenshot = await captureScreenshot();
         const saves = await getGameSaves();
         saves[slotNumber] = {
           timestamp: Date.now(),
           sceneName: ((_a = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a.name) || "Unknown Scene",
+          screenshot,
           playerStateData: {
             currentSceneId: playerState.currentSceneId,
             currentCommands: playerState.currentCommands,
@@ -5823,6 +5984,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               applyResult(result);
               break;
             }
+            case CommandType.CreditRoll: {
+              const cmd = command;
+              setActiveCreditRoll(cmd);
+              const result = handleCreditRoll(cmd, commandContext);
+              applyResult(result);
+              break;
+            }
           }
           runtimeDebugLog("[DEBUG] Command execution complete:", command.type, "| shouldRunAsync:", shouldRunAsync, "| instantAdvance:", instantAdvance);
           if (shouldRunAsync) {
@@ -6772,6 +6940,121 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       );
     };
+    const CreditRollOverlay = ({ command, project: project2, assetResolver: assetResolver2, getAssetMetadata: getAssetMetadata2, onFinish }) => {
+      const bgs = command.backgrounds || [];
+      const hasBgs = bgs.length > 0;
+      const [bgIndex, setBgIndex] = React2.useState(0);
+      const [prevBgIndex, setPrevBgIndex] = React2.useState(null);
+      const [transitioning, setTransitioning] = React2.useState(false);
+      const bgTimerRef = React2.useRef(null);
+      const bgTransTimerRef = React2.useRef(null);
+      React2.useEffect(() => {
+        if (!hasBgs || bgs.length <= 1) return;
+        const scheduleNext = (idx) => {
+          const slide = bgs[idx];
+          const displayMs = ((slide == null ? void 0 : slide.displayDuration) || 5) * 1e3;
+          bgTimerRef.current = window.setTimeout(() => {
+            const nextIdx = (idx + 1) % bgs.length;
+            const nextSlide = bgs[nextIdx];
+            const transDur2 = ((nextSlide == null ? void 0 : nextSlide.transitionDuration) || 0.5) * 1e3;
+            const transType = (nextSlide == null ? void 0 : nextSlide.transition) || "fade";
+            if (transType === "instant" || transDur2 === 0) {
+              setBgIndex(nextIdx);
+              scheduleNext(nextIdx);
+            } else {
+              setPrevBgIndex(idx);
+              setBgIndex(nextIdx);
+              setTransitioning(true);
+              bgTransTimerRef.current = window.setTimeout(() => {
+                setTransitioning(false);
+                setPrevBgIndex(null);
+                scheduleNext(nextIdx);
+              }, transDur2);
+            }
+          }, displayMs);
+        };
+        scheduleNext(bgIndex);
+        return () => {
+          if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+          if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
+        };
+      }, [hasBgs, bgs.length]);
+      const renderBgSlide = (slide, opacity, transitionDuration) => {
+        const url = assetResolver2(slide.assetId, "image");
+        if (!url) return null;
+        const meta = getAssetMetadata2(slide.assetId, "image");
+        const style = {
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          opacity,
+          transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
+        };
+        if (meta.isVideo) {
+          return /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, autoPlay: true, muted: true, loop: meta.loop, style });
+        }
+        return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style });
+      };
+      const currentSlide = hasBgs ? bgs[bgIndex] : null;
+      const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
+      const transDur = (currentSlide == null ? void 0 : currentSlide.transitionDuration) || 0.5;
+      return /* @__PURE__ */ jsxRuntime2.jsxs(
+        "div",
+        {
+          className: "absolute inset-0 z-40 flex items-end justify-center overflow-hidden",
+          style: { backgroundColor: command.backgroundColor || "#000000FF", cursor: command.allowSkip ? "pointer" : "default" },
+          onClick: () => {
+            if (!command.allowSkip) return;
+            onFinish();
+          },
+          children: [
+            hasBgs && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 z-0", children: [
+              prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0),
+              currentSlide && renderBgSlide(currentSlide, transitioning ? currentSlide.transition === "instant" ? 1 : 1 : 1, transitioning ? transDur : 0),
+              transitioning && currentSlide && currentSlide.transition !== "instant" && /* @__PURE__ */ jsxRuntime2.jsx(
+                "div",
+                {
+                  className: "absolute inset-0",
+                  style: {
+                    backgroundColor: currentSlide.transition === "dissolve" ? "transparent" : command.backgroundColor || "#000000FF",
+                    animation: `credit-bg-fade-in ${transDur}s ease-in-out both`
+                  }
+                }
+              )
+            ] }),
+            hasBgs && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 z-[1]", style: { backgroundColor: "rgba(0,0,0,0.4)" } }),
+            /* @__PURE__ */ jsxRuntime2.jsx(
+              "div",
+              {
+                className: "credits-scroll text-center px-8 relative z-[2]",
+                style: {
+                  color: command.textColor || "#FFFFFF",
+                  animationDuration: `${command.duration || 15}s`,
+                  textShadow: hasBgs ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none"
+                },
+                onAnimationEnd: (e) => {
+                  if (e.target === e.currentTarget) {
+                    onFinish();
+                  }
+                },
+                children: command.entries.map(
+                  (entry, i) => entry.kind === "heading" ? /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-2xl font-bold mt-8 mb-4", style: { color: "#FFD700" }, children: entry.label }, i) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "mb-2", children: [
+                    /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-sm opacity-70", children: entry.label }),
+                    entry.value && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                      /* @__PURE__ */ jsxRuntime2.jsx("br", {}),
+                      /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-lg", children: entry.value })
+                    ] })
+                  ] }, i)
+                )
+              }
+            ),
+            command.allowSkip && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 z-[3]", style: { color: command.textColor || "#FFFFFF" }, children: "Click to skip" })
+          ]
+        }
+      );
+    };
     const HistoryPanel = ({ history, onClose: onClose2 }) => {
       return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 bg-black/90 z-50 flex flex-col", children: [
         /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center justify-between p-4 border-b border-slate-600", children: [
@@ -6821,6 +7104,33 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         ),
         uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white", onClick: () => updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null), children: /* @__PURE__ */ jsxRuntime2.jsx("video", { src: uiState.movieUrl, autoPlay: true, className: "w-full h-full", onEnded: () => updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null) }) }),
+        activeCreditRoll && /* @__PURE__ */ jsxRuntime2.jsx(
+          CreditRollOverlay,
+          {
+            command: activeCreditRoll,
+            project,
+            assetResolver,
+            getAssetMetadata,
+            onFinish: () => {
+              const onComplete = activeCreditRoll.onComplete;
+              setActiveCreditRoll(null);
+              if (onComplete === "title") {
+                const audio = musicAudioRef.current;
+                if (audio) {
+                  audio.pause();
+                  audio.currentTime = 0;
+                  audio.src = "";
+                }
+                stopAllSfx();
+                updatePlayerState(null);
+                setHudStack([]);
+                if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+              } else {
+                updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+              }
+            }
+          }
+        ),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsx(DialogueBox, { dialogue: uiState.dialogue, settings, projectUI: project.ui, onFinished: handleDialogueAdvance, variables: playerState.variables, project }),
         uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(ChoiceMenu, { choices: uiState.choices, projectUI: project.ui, onSelect: handleChoiceSelect, variables: playerState.variables, project }),
         uiState.textInput && /* @__PURE__ */ jsxRuntime2.jsx(TextInputForm, { textInput: uiState.textInput, onSubmit: handleTextInputSubmit, variables: playerState.variables, project }),

@@ -59,6 +59,8 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 return `Tint`;
             case 'FlashScreen':
                 return `Flash`;
+            case 'CreditRoll':
+                return `🎬 Credit Roll`;
             default:
                 return command.type.replace(/([A-Z])/g, ' $1').trim();
         }
