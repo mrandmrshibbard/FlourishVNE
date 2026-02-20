@@ -136,6 +136,14 @@ export const createInitialProject = (): VNProject => {
             dialogueNameFont: { family: 'Poppins, sans-serif', size: 22, color: '#FFFFFF', weight: 'bold', italic: false },
             dialogueTextFont: { family: 'Poppins, sans-serif', size: 20, color: '#FFFFFF', weight: 'normal', italic: false },
             choiceTextFont: { family: 'Poppins, sans-serif', size: 18, color: '#FFFFFF', weight: 'normal', italic: false },
+            defaultGameSettings: {
+                textSpeed: 50,
+                musicVolume: 0.8,
+                sfxVolume: 0.8,
+                enableSkip: true,
+                autoAdvance: false,
+                autoAdvanceDelay: 3,
+            },
         },
         uiScreens: screens,
     };

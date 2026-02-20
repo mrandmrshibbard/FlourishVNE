@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { UIScreenThemeProvider } from './contexts/UIScreenThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
 import VisualNovelEditor from './components/VisualNovelEditor';
 import { ProjectHub } from './components/ProjectHub';
+import { MusicPlayer } from './components/MusicPlayer';
 import { VNProject } from './types/project';
 import { NavigationTab } from './components/NavigationTabs';
+import { toggleBackgroundMusic, getCurrentSongName } from './utils/hubAudio';
 
 function isEditorDebugEnabled(): boolean {
     try {
@@ -24,6 +26,37 @@ function editorDebugLog(...args: unknown[]): void {
 const App = () => {
     const [activeProject, setActiveProject] = useState<VNProject | null>(null);
     const [initialTab, setInitialTab] = useState<NavigationTab | undefined>(undefined);
+
+    // ── Global music state (persists across hub ↔ editor) ──
+    const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+    const [currentSongName, setCurrentSongName] = useState('');
+
+    // Auto-start music when the app first loads
+    useEffect(() => {
+        const tryAutoPlay = () => {
+            try {
+                toggleBackgroundMusic(true);
+                setIsMusicPlaying(true);
+                setCurrentSongName(getCurrentSongName());
+            } catch { /* will retry on click */ }
+        };
+        tryAutoPlay();
+        const clickFallback = () => {
+            if (!isMusicPlaying) tryAutoPlay();
+            document.removeEventListener('click', clickFallback);
+        };
+        document.addEventListener('click', clickFallback, { once: true });
+        return () => document.removeEventListener('click', clickFallback);
+    }, []);
+
+    const handleMusicPlayingChange = useCallback((playing: boolean) => {
+        setIsMusicPlaying(playing);
+        if (playing) setCurrentSongName(getCurrentSongName());
+    }, []);
+
+    const handleSongChange = useCallback((name: string) => {
+        setCurrentSongName(name);
+    }, []);
 
     // Listen for window-type message from Electron
     useEffect(() => {
@@ -59,6 +92,12 @@ const App = () => {
         return (
             <ToastProvider>
                 <ProjectHub onProjectSelect={handleProjectSelect} />
+                <MusicPlayer
+                    isPlaying={isMusicPlaying}
+                    onPlayingChange={handleMusicPlayingChange}
+                    currentSong={currentSongName}
+                    onSongChange={handleSongChange}
+                />
             </ToastProvider>
         );
     }
@@ -70,6 +109,12 @@ const App = () => {
                     <VisualNovelEditor onExit={handleCloseProject} initialTab={initialTab} />
                 </UIScreenThemeProvider>
             </ProjectProvider>
+            <MusicPlayer
+                isPlaying={isMusicPlaying}
+                onPlayingChange={handleMusicPlayingChange}
+                currentSong={currentSongName}
+                onSongChange={handleSongChange}
+            />
         </ToastProvider>
     );
 };

@@ -27,14 +27,28 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
     }
     
     switch (element.type) {
-        case UIElementType.Button:
+        case UIElementType.Button: {
             const btn = element as UIButtonElement;
             // Use stored backgroundColor or default purple theme color
             const buttonBg = btn.backgroundColor || '#4D3273';
+            // Resolve button image background (same logic as LivePreview)
+            const btnImageUrl = btn.image ? (
+                btn.image.type === 'video'
+                    ? project.videos[btn.image.id]?.videoUrl
+                    : project.images[btn.image.id]?.imageUrl || project.backgrounds[btn.image.id]?.imageUrl
+            ) : null;
             return <div
-                style={{ ...fontSettingsToStyle(btn.font), backgroundColor: buttonBg, pointerEvents: 'none' }}
-                className="w-full h-full border border-white/20 rounded flex items-center justify-center"
-            >{btn.text}</div>;
+                className="w-full h-full border border-white/20 rounded flex items-center justify-center relative overflow-hidden"
+                style={{ pointerEvents: 'none' }}
+            >
+                {btnImageUrl ? (
+                    <img src={btnImageUrl} alt="" className="absolute inset-0 w-full h-full object-fill" />
+                ) : (
+                    <div className="absolute inset-0 w-full h-full rounded" style={{ backgroundColor: buttonBg }} />
+                )}
+                <span className="relative z-10" style={fontSettingsToStyle(btn.font)}>{btn.text}</span>
+            </div>;
+        }
         case UIElementType.Text: {
             const txt = element as UITextElement;
             const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[txt.textAlign || 'center'];
@@ -450,11 +464,10 @@ const MenuEditor: React.FC<{
 
     return (
         <div className="flex-grow flex flex-col gap-4 min-h-0 p-4">
-            {/* Canvas Panel - Fixed Height */}
+            {/* Canvas Panel - Fills available space above the toolbar */}
             <Panel 
                 title={`Editing Menu: ${screen.name}`} 
-                className="flex-shrink-0"
-                style={{ height: 'var(--canvas-height)' }}
+                className="flex-1 min-h-0"
             >
                 <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden" ref={stageRef}
                     onMouseDown={() => setSelectedElementId(null)}

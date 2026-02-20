@@ -34,13 +34,17 @@ export async function buildDesktopGame(
   
   onProgress({ step: 'generate', progress: 20, message: 'Generating game files...' });
   
+  // Resolve file-path assets to data URLs before building
+  const { resolveProjectAssets } = await import('./gameBundler');
+  const resolvedProject = await resolveProjectAssets(project, onProgress);
+
   // Generate the same HTML as web build
-  const htmlContent = generateStandaloneHTML(project);
+  const htmlContent = await generateStandaloneHTML(resolvedProject);
   
   // Collect all assets
   onProgress({ step: 'assets', progress: 25, message: 'Collecting assets...' });
   
-  const assetUrls = collectAllAssets(project);
+  const assetUrls = collectAllAssets(resolvedProject);
   const gameFiles: Record<string, string | ArrayBuffer> = {
     'index.html': htmlContent
   };
@@ -118,6 +122,18 @@ export async function buildDesktopGame(
 const path = require('path');
 const fs = require('fs');
 
+// GPU stability on Windows + prevent renderer from being suspended when
+// the window loses focus (avoids black screen on alt-tab while maximised).
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
+}
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
+// Single-instance lock prevents duplicate background processes
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) { app.quit(); }
+
 let mainWindow;
 const saveDir = path.join(app.getPath('userData'), 'saves');
 
@@ -134,23 +150,46 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.js')
     },
     title: '${project.title || 'Visual Novel'}'
   });
 
+  // Remove the default menu bar for a clean game experience
+  mainWindow.setMenuBarVisibility(false);
+
   mainWindow.loadFile('index.html');
+
+  // Force repaint on focus to prevent stale black frames
+  mainWindow.on('focus', () => {
+    try { mainWindow.webContents.invalidate(); } catch {}
+  });
+  mainWindow.on('restore', () => {
+    try { mainWindow.webContents.invalidate(); } catch {}
+  });
   
   // Show window when ready to avoid flashing
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
   });
 }
 
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
+});
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
 });
 
 app.on('activate', () => {

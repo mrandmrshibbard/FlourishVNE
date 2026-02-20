@@ -17,6 +17,111 @@ export interface BuildProgress {
 export type ProgressCallback = (progress: BuildProgress) => void;
 
 /**
+ * Fetches a URL and returns it as a base64 data URL.
+ * Works for both relative file paths and absolute URLs.
+ */
+async function fetchAsDataURL(url: string): Promise<string> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn(`Failed to fetch asset: ${url}`, e);
+    return url; // Return original URL as fallback
+  }
+}
+
+/**
+ * Resolves all file-path asset URLs in the project to inline data URLs.
+ * This ensures the project is fully self-contained for export.
+ * Data URLs and empty strings are left unchanged.
+ */
+export async function resolveProjectAssets(
+  project: VNProject,
+  onProgress?: ProgressCallback
+): Promise<VNProject> {
+  // Deep-clone the project so we don't mutate the original in-memory state
+  const resolved: VNProject = JSON.parse(JSON.stringify(project));
+
+  const isFilePath = (url: string | undefined | null): url is string =>
+    !!url && !url.startsWith('data:') && !url.startsWith('blob:') && !url.startsWith('http') && url.length > 0;
+
+  // Collect all URL fields that need resolving
+  const tasks: { obj: any; key: string; url: string }[] = [];
+
+  // Backgrounds
+  Object.values(resolved.backgrounds || {}).forEach(bg => {
+    if (isFilePath(bg.imageUrl)) tasks.push({ obj: bg, key: 'imageUrl', url: bg.imageUrl });
+    if (isFilePath((bg as any).videoUrl)) tasks.push({ obj: bg, key: 'videoUrl', url: (bg as any).videoUrl });
+  });
+
+  // Images
+  Object.values(resolved.images || {}).forEach(img => {
+    if (isFilePath(img.imageUrl)) tasks.push({ obj: img, key: 'imageUrl', url: img.imageUrl });
+    if (isFilePath((img as any).videoUrl)) tasks.push({ obj: img, key: 'videoUrl', url: (img as any).videoUrl });
+  });
+
+  // Audio
+  Object.values(resolved.audio || {}).forEach(audio => {
+    if (isFilePath(audio.audioUrl)) tasks.push({ obj: audio, key: 'audioUrl', url: audio.audioUrl });
+  });
+
+  // Videos
+  Object.values(resolved.videos || {}).forEach(video => {
+    if (isFilePath(video.videoUrl)) tasks.push({ obj: video, key: 'videoUrl', url: video.videoUrl });
+  });
+
+  // Characters: base assets, layer assets, fonts
+  Object.values(resolved.characters || {}).forEach(char => {
+    if (isFilePath(char.baseImageUrl)) tasks.push({ obj: char, key: 'baseImageUrl', url: char.baseImageUrl });
+    if (isFilePath((char as any).baseVideoUrl)) tasks.push({ obj: char, key: 'baseVideoUrl', url: (char as any).baseVideoUrl });
+    if (isFilePath(char.fontUrl)) tasks.push({ obj: char, key: 'fontUrl', url: char.fontUrl });
+    Object.values(char.layers || {}).forEach(layer => {
+      Object.values(layer.assets || {}).forEach(asset => {
+        if (isFilePath(asset.imageUrl)) tasks.push({ obj: asset, key: 'imageUrl', url: asset.imageUrl });
+        if (isFilePath((asset as any).videoUrl)) tasks.push({ obj: asset, key: 'videoUrl', url: (asset as any).videoUrl });
+      });
+    });
+  });
+
+  // Project-level fonts
+  Object.values((resolved as any).fonts || {}).forEach((font: any) => {
+    if (font && isFilePath(font.fontUrl)) tasks.push({ obj: font, key: 'fontUrl', url: font.fontUrl });
+  });
+
+  if (tasks.length === 0) return resolved;
+
+  onProgress?.({
+    step: 'resolve-assets',
+    progress: 5,
+    message: `Resolving ${tasks.length} asset(s)...`
+  });
+
+  // Fetch all assets in parallel (batched to avoid overwhelming the browser)
+  const BATCH = 10;
+  for (let i = 0; i < tasks.length; i += BATCH) {
+    const batch = tasks.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map(t => fetchAsDataURL(t.url)));
+    batch.forEach((t, idx) => {
+      t.obj[t.key] = results[idx];
+    });
+    onProgress?.({
+      step: 'resolve-assets',
+      progress: 5 + ((i + batch.length) / tasks.length) * 5,
+      message: `Resolved ${Math.min(i + BATCH, tasks.length)}/${tasks.length} assets...`
+    });
+  }
+
+  return resolved;
+}
+
+/**
  * Bundles the entire game into a single downloadable ZIP file
  * that can be uploaded directly to itch.io or any web host
  */
@@ -26,6 +131,9 @@ export async function buildStandaloneGame(
 ): Promise<Blob> {
   const zip = new JSZip();
 
+  // Step 0: Resolve any file-path assets to data URLs (5-10%)
+  const resolvedProject = await resolveProjectAssets(project, onProgress);
+
   // Step 1: Prepare project data (10%)
   onProgress?.({
     step: 'prepare',
@@ -33,7 +141,7 @@ export async function buildStandaloneGame(
     message: 'Preparing game data...'
   });
 
-  const projectData = JSON.stringify(project, null, 2);
+  const projectData = JSON.stringify(resolvedProject, null, 2);
 
   // Step 2: Generate game files (30%)
   onProgress?.({
@@ -42,7 +150,7 @@ export async function buildStandaloneGame(
     message: 'Generating game files...'
   });
 
-  const htmlContent = await generateStandaloneHTML(project);
+  const htmlContent = await generateStandaloneHTML(resolvedProject);
   zip.file('index.html', htmlContent);
 
   // Step 3: Copy all assets (50%)
@@ -56,7 +164,7 @@ export async function buildStandaloneGame(
   const assetsFolder = zip.folder('assets');
   if (!assetsFolder) throw new Error('Failed to create assets folder');
 
-  const assetUrls = collectAllAssets(project);
+  const assetUrls = collectAllAssets(resolvedProject);
   let assetCount = 0;
   
   for (const [name, dataUrl] of Object.entries(assetUrls)) {

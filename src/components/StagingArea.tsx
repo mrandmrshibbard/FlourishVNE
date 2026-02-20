@@ -367,10 +367,10 @@ const StagingArea: React.FC<{
     const renderDialogueBox = (dialogue: NonNullable<StageState['dialogue']>) => {
         const interpolatedText = interpolateVariables(dialogue.text, currentVariables, project);
         return (
-            <div className={`absolute bottom-5 left-5 right-5 p-5 z-20 ${dialogueBoxImageUrl ? 'dialogue-box-custom bg-black/70' : 'bg-black/70 rounded-lg border-2 border-slate-500'}`}
-                 style={dialogueBoxImageUrl ? { borderImageSource: `url(${dialogueBoxImageUrl})` } : {}}>
+            <div className={`absolute bottom-5 left-5 right-5 p-5 z-20 rounded-lg ${dialogueBoxImageUrl ? '' : 'bg-black/70 border-2 border-slate-500'}`}
+                 style={dialogueBoxImageUrl ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}}>
                 {dialogue.characterName !== 'Narrator' && (
-                    <h3 className="mb-2" style={{...fontSettingsToStyle(project.ui.dialogueNameFont), color: dialogue.characterColor}}>
+                    <h3 className="mb-2" style={{...fontSettingsToStyle(project.ui.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
                         {dialogue.characterName}
                     </h3>
                 )}
@@ -386,8 +386,8 @@ const StagingArea: React.FC<{
             {choices.map((choice) => {
                  const interpolatedText = interpolateVariables(choice.text, currentVariables, project);
                 return (
-                    <button key={choice.id} className={`px-8 py-4 ${choiceButtonImageUrl ? 'choice-button-custom bg-slate-800/80 hover:bg-slate-700/90' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500 rounded-lg'}`}
-                            style={choiceButtonImageUrl ? { borderImageSource: `url(${choiceButtonImageUrl})`, ...fontSettingsToStyle(project.ui.choiceTextFont) } : fontSettingsToStyle(project.ui.choiceTextFont)}>
+                    <button key={choice.id} className={`px-8 py-4 rounded-lg ${choiceButtonImageUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500'}`}
+                            style={choiceButtonImageUrl ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...fontSettingsToStyle(project.ui.choiceTextFont) } : fontSettingsToStyle(project.ui.choiceTextFont)}>
                         {interpolatedText}
                     </button>
                 )

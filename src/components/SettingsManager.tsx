@@ -80,7 +80,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
             {/* Settings Content */}
             <div className="flex-1 overflow-y-auto">
                 {activeSection === 'general' && (
-                    <GeneralSettings project={project} onUpdate={updateProject} />
+                    <GeneralSettings project={project} onUpdate={updateProject} onUpdateUI={updateUI} />
                 )}
                 {activeSection === 'ui' && (
                     <UIAssetsSettings project={project} onUpdate={updateUI} />
@@ -105,9 +105,10 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
 interface GeneralSettingsProps {
     project: VNProject;
     onUpdate: (updates: Partial<VNProject>) => void;
+    onUpdateUI: (updates: Partial<VNProjectUI>) => void;
 }
 
-const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate }) => {
+const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, onUpdateUI }) => {
     return (
         <div className="p-6">
             <h3 className="text-xl font-bold text-white mb-6">General Settings</h3>
@@ -259,6 +260,102 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate }) 
                     </div>
                 </div>
 
+                <div className="pt-4 border-t border-slate-700">
+                    <h4 className="text-lg font-semibold text-white mb-4">Default Game Settings</h4>
+                    <p className="text-xs text-slate-400 mb-4">These values are used as the initial settings when a player starts your game.</p>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Text Speed: {project.ui?.defaultGameSettings?.textSpeed ?? 50}</label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="100"
+                                value={project.ui?.defaultGameSettings?.textSpeed ?? 50}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: val, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                }}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Music Volume: {Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}%</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value) / 100;
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: val, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                }}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">SFX Volume: {Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}%</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value) / 100;
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: val, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                }}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Auto-Advance Delay: {project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3}s</label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                step="0.5"
+                                value={project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3}
+                                onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: val } });
+                                }}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-slate-300">Enable Skip</label>
+                            <button
+                                onClick={() => {
+                                    const current = project.ui?.defaultGameSettings?.enableSkip ?? true;
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: !current, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                }}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    (project.ui?.defaultGameSettings?.enableSkip ?? true) ? 'bg-sky-500' : 'bg-slate-600'
+                                }`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    (project.ui?.defaultGameSettings?.enableSkip ?? true) ? 'translate-x-6' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-slate-300">Auto-Advance</label>
+                            <button
+                                onClick={() => {
+                                    const current = project.ui?.defaultGameSettings?.autoAdvance ?? false;
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: !current, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                }}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    (project.ui?.defaultGameSettings?.autoAdvance ?? false) ? 'bg-sky-500' : 'bg-slate-600'
+                                }`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    (project.ui?.defaultGameSettings?.autoAdvance ?? false) ? 'translate-x-6' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-slate-700">
                     <div>
                         <span className="text-slate-400">Project ID:</span>
@@ -323,7 +420,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null
                             });
                         }}
-                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-505"
+                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
                     >
                         <option value="">None</option>
                         {allImages.map(image => (
@@ -332,6 +429,17 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             </option>
                         ))}
                     </select>
+                    {project.ui.dialogueBoxImage?.id && (() => {
+                        const img = allImages.find(i => i.id === project.ui.dialogueBoxImage?.id);
+                        const url = img?.imageUrl;
+                        return url ? (
+                            <div className="mt-2 rounded-md overflow-hidden border border-slate-600" style={{ maxHeight: '80px' }}>
+                                <img src={url} alt="Dialogue box preview" className="w-full h-full object-contain" style={{ maxHeight: '80px' }} />
+                            </div>
+                        ) : (
+                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                        );
+                    })()}
                 </div>
 
                 <div>
@@ -354,6 +462,17 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             </option>
                         ))}
                     </select>
+                    {project.ui.choiceButtonImage?.id && (() => {
+                        const img = allImages.find(i => i.id === project.ui.choiceButtonImage?.id);
+                        const url = img?.imageUrl;
+                        return url ? (
+                            <div className="mt-2 rounded-md overflow-hidden border border-slate-600" style={{ maxHeight: '60px' }}>
+                                <img src={url} alt="Choice button preview" className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
+                            </div>
+                        ) : (
+                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                        );
+                    })()}
                 </div>
             </div>
         </div>
@@ -538,6 +657,25 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                             <span className="text-sm font-medium text-slate-300">Italic</span>
                         </label>
                     </div>
+
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-300 mb-1">Alignment</label>
+                        <div className="flex gap-1">
+                            {(['left', 'center', 'right'] as const).map(a => (
+                                <button
+                                    key={a}
+                                    onClick={() => updateFont(fontKey, { align: a })}
+                                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                                        (font.align || 'left') === a
+                                            ? 'bg-sky-500 text-white'
+                                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                    }`}
+                                >
+                                    {a === 'left' ? '← Left' : a === 'center' ? '↔ Center' : 'Right →'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
                 <div className="mt-4 p-3 bg-slate-900 rounded border border-slate-600">
@@ -548,7 +686,8 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                             fontSize: `${font.size}px`,
                             color: font.color,
                             fontWeight: font.weight,
-                            fontStyle: font.italic ? 'italic' : 'normal'
+                            fontStyle: font.italic ? 'italic' : 'normal',
+                            textAlign: font.align || 'left',
                         }}
                     >
                         Sample text with current font settings

@@ -20,6 +20,7 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 ...base, name: 'Button', type, text: 'Button',
                 font: project.ui.choiceTextFont, action: { type: UIActionType.None },
                 image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null,
+                backgroundColor: '#4D3273', hoverBackgroundColor: '#6B4C9A',
             };
             return el;
         }

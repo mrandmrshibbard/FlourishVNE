@@ -7,4 +7,5 @@ export const fontSettingsToStyle = (settings: VNFontSettings): React.CSSProperti
     color: settings.color,
     fontWeight: settings.weight,
     fontStyle: settings.italic ? 'italic' : 'normal',
+    textAlign: settings.align || 'left',
 });

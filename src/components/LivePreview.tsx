@@ -577,7 +577,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const handleClick = () => {
         if (hasFinished) {
             onFinished();
-        } else {
+        } else if (settings.enableSkip) {
             skip();
         }
     }
@@ -608,8 +608,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
 
     return (
         <div 
-            className={`absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer ${dialogueBoxUrl && !isDialogueBoxVideo ? 'dialogue-box-custom bg-black/70' : 'bg-black/70 rounded-lg border-2 border-slate-500'}`} 
-            style={dialogueBoxUrl && !isDialogueBoxVideo ? { borderImageSource: `url(${dialogueBoxUrl})` } : {}}
+            className={`absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer rounded-lg ${dialogueBoxUrl ? '' : 'bg-black/70 border-2 border-slate-500'}`} 
+            style={dialogueBoxUrl && !isDialogueBoxVideo ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : (!dialogueBoxUrl ? {} : {})}
             onClick={handleClick}
         >
             {isDialogueBoxVideo && dialogueBoxUrl && (
@@ -624,7 +624,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                 </video>
             )}
             {dialogue.characterName !== 'Narrator' && (
-                <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), color: dialogue.characterColor}}>
+                <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
                     {dialogue.characterName}
                 </h3>
             )}
@@ -654,8 +654,8 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                     <button 
                         key={index} 
                         onClick={() => onSelect(choice)}
-                        className={`px-8 py-4 relative ${choiceButtonUrl && !isChoiceButtonVideo ? 'choice-button-custom bg-slate-800/80 hover:bg-slate-700/90' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500 rounded-lg'}`}
-                        style={choiceButtonUrl && !isChoiceButtonVideo ? { borderImageSource: `url(${choiceButtonUrl})`, ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont)}
+                        className={`px-8 py-4 relative rounded-lg ${choiceButtonUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500'}`}
+                        style={choiceButtonUrl && !isChoiceButtonVideo ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont)}
                     >
                         {isChoiceButtonVideo && choiceButtonUrl && (
                             <video 
@@ -1522,7 +1522,7 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.SaveSlotGrid: {
                 const el = element as UISaveSlotGridElement;
-                const isSaveMode = screenId === project.ui.saveScreenId;
+                const isSaveMode = screenId === project.ui.saveScreenId && screenId !== project.ui.loadScreenId;
                 
                 return (
                     <SaveSlotGridComponent
@@ -1836,7 +1836,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
     const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
     const [sceneTransitionDuration, setSceneTransitionDuration] = useState(0.5);
-    const [settings, setSettings] = useState<GameSettings>(defaultSettings);
+    const [settings, setSettings] = useState<GameSettings>(() => {
+        const projectDefaults = project.ui?.defaultGameSettings;
+        if (projectDefaults) {
+            return { ...defaultSettings, ...projectDefaults };
+        }
+        return defaultSettings;
+    });
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
     const updatePlayerState = useCallback((updater: React.SetStateAction<PlayerState | null>) => {
@@ -5363,7 +5369,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     100% { background-position: 0% 0%; }
                 }
             `}</style>
-            <div className="w-full h-full aspect-video relative">
+            <div className="relative overflow-hidden" style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, maxWidth: '100%', maxHeight: '100%', width: '100%' }}>
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
                 {currentScreenId && (

@@ -8,6 +8,16 @@ export interface VNFontSettings {
     color: string;
     weight: 'normal' | 'bold';
     italic: boolean;
+    align?: 'left' | 'center' | 'right';
+}
+
+export interface VNDefaultGameSettings {
+    textSpeed: number;
+    musicVolume: number;
+    sfxVolume: number;
+    enableSkip: boolean;
+    autoAdvance: boolean;
+    autoAdvanceDelay: number;
 }
 
 export interface VNProjectUI {
@@ -22,6 +32,8 @@ export interface VNProjectUI {
     dialogueNameFont: VNFontSettings;
     dialogueTextFont: VNFontSettings;
     choiceTextFont: VNFontSettings;
+    /** Author-defined initial game settings (text speed, volume, etc.) */
+    defaultGameSettings?: VNDefaultGameSettings;
 }
 
 export type UIAsset = {

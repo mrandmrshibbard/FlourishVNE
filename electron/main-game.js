@@ -6,12 +6,13 @@
 const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
 
-// See electron/main.cjs: avoid GPU-process crashes on some Windows setups.
+// GPU stability: ANGLE D3D11 on Windows, plus prevent renderer backgrounding
+// to avoid black screen when switching back to a maximised window.
 if (process.platform === 'win32') {
-    app.disableHardwareAcceleration();
-    app.commandLine.appendSwitch('disable-gpu');
-    app.commandLine.appendSwitch('disable-gpu-compositing');
+    app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
 let mainWindow;
 
@@ -33,6 +34,14 @@ function createWindow() {
 
     // Load the game
     mainWindow.loadFile('index.html');
+
+    // Force repaint on focus to prevent black frame
+    mainWindow.on('focus', () => {
+        try { mainWindow.webContents.invalidate(); } catch {}
+    });
+    mainWindow.on('restore', () => {
+        try { mainWindow.webContents.invalidate(); } catch {}
+    });
 
     mainWindow.on('unresponsive', async () => {
         try {
@@ -86,9 +95,7 @@ function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+    app.quit();
 });
 
 app.on('activate', () => {

@@ -42,8 +42,8 @@ export const ChoiceMenu: React.FC<ChoiceMenuProps> = ({
                     <button 
                         key={index} 
                         onClick={() => onSelect(choice)}
-                        className={`px-8 py-4 relative ${choiceButtonUrl && !isChoiceButtonVideo ? 'choice-button-custom bg-slate-800/80 hover:bg-slate-700/90' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500 rounded-lg'}`}
-                        style={choiceButtonUrl && !isChoiceButtonVideo ? { borderImageSource: `url(${choiceButtonUrl})`, ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont)}
+                        className={`px-8 py-4 relative rounded-lg ${choiceButtonUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500'}`}
+                        style={choiceButtonUrl && !isChoiceButtonVideo ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont)}
                     >
                         {isChoiceButtonVideo && choiceButtonUrl && (
                             <video 

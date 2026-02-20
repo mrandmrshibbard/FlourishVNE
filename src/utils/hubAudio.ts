@@ -655,3 +655,43 @@ const playMelodyNote = (ctx: AudioContext, time: number) => {
     osc.start(time);
     osc.stop(time + 1.5);
 };
+
+
+// --- Public API for external Music Player ---
+
+/** Returns whether background music is currently playing */
+export const isBgmPlaying = (): boolean => isMusicPlaying;
+
+/** Returns the name of the currently selected song */
+export const getCurrentSongName = (): string => currentSong.name;
+
+/** Returns the full list of song names */
+export const getSongList = (): string[] => SONG_LIBRARY.map(s => s.name);
+
+/** Skip to a specific song by name, or pick a random different one if no name given */
+export const skipToNextSong = (songName?: string): string => {
+    const wasPlaying = isMusicPlaying;
+
+    // Stop current playback
+    if (wasPlaying) {
+        toggleBackgroundMusic(false);
+    }
+
+    // Pick the next song
+    if (songName) {
+        const found = SONG_LIBRARY.find(s => s.name === songName);
+        if (found) currentSong = found;
+    } else {
+        // Pick a random different song
+        const others = SONG_LIBRARY.filter(s => s.name !== currentSong.name);
+        currentSong = others[Math.floor(Math.random() * others.length)] || SONG_LIBRARY[0];
+    }
+
+    // Restart if it was playing
+    if (wasPlaying) {
+        // Small delay to let fade-out finish
+        setTimeout(() => toggleBackgroundMusic(true), 150);
+    }
+
+    return currentSong.name;
+};

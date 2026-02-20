@@ -88,6 +88,15 @@ export class AccessibilityManager {
     
     // Apply keyboard-only mode
     root.classList.toggle('keyboard-only', this.preferences.keyboardOnly);
+
+    // Apply screen reader mode - add aria attributes for better screen reader support
+    if (this.preferences.screenReaderMode) {
+      root.setAttribute('role', 'application');
+      root.setAttribute('aria-label', 'Flourish Visual Novel Engine');
+    } else {
+      root.removeAttribute('role');
+      root.removeAttribute('aria-label');
+    }
   }
 
   private savePreferences(): void {

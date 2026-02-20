@@ -1,15 +1,46 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { exec } = require('child_process');
 const os = require('os');
 
-// Windows GPU crashes can manifest as a blank/solid-color window + unresponsive UI.
-// Disabling hardware acceleration is a pragmatic fix for affected machines.
+/**
+ * Run a shell command asynchronously, returning a promise.
+ * This keeps the Electron main process responsive during long-running builds.
+ */
+function execAsync(command, options = {}) {
+  return new Promise((resolve, reject) => {
+    const proc = exec(command, { ...options, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+    // Log output in real-time for debugging
+    if (proc.stdout) proc.stdout.on('data', (d) => console.log('[build stdout]', d.toString().trim()));
+    if (proc.stderr) proc.stderr.on('data', (d) => console.log('[build stderr]', d.toString().trim()));
+  });
+}
+
+// GPU stability on Windows: use ANGLE's D3D11 backend instead of the native GL
+// driver, which crashes on some machines. Keep GPU compositing active so the UI
+// stays smooth at any window size.
 if (process.platform === 'win32') {
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-gpu-compositing');
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
+}
+// Prevent Chromium from throttling or suspending the renderer when the window
+// loses focus / is occluded.  This is the root cause of the "black screen when
+// switching back to the maximised window" problem.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
+// Enforce single instance – prevents duplicate background processes.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
 }
 
 let mainWindow;
@@ -54,16 +85,25 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.cjs')
     },
     backgroundColor: '#1a102c',
     title: 'Flourish Visual Novel Engine',
     show: false, // Don't show until ready
-    fullscreen: true,
   });
 
   // Load the built app from dist folder
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+
+  // Force a repaint whenever the window regains focus so the renderer
+  // is never left showing a stale (black) frame.
+  mainWindow.on('focus', () => {
+    try { mainWindow.webContents.invalidate(); } catch {}
+  });
+  mainWindow.on('restore', () => {
+    try { mainWindow.webContents.invalidate(); } catch {}
+  });
 
   // If the renderer crashes/freezes, offer a recovery path instead of leaving a stuck window.
   mainWindow.on('unresponsive', async () => {
@@ -218,7 +258,18 @@ function createWindow() {
       // If messaging fails (renderer disposed mid-flight), allow close.
       mainWindow.forceClose = true;
       mainWindow.destroy();
+      return;
     }
+
+    // Safety net: if the renderer never replies within 10 seconds, force-close
+    // so the process doesn't linger as a background zombie.
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.forceClose) {
+        console.warn('Close confirmation timed out – force-closing window.');
+        mainWindow.forceClose = true;
+        mainWindow.destroy();
+      }
+    }, 10_000);
   });
 
   // Handle window closed
@@ -239,11 +290,17 @@ app.whenReady().then(() => {
   });
 });
 
-// Quit when all windows are closed (except on macOS)
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
+// If a second instance is launched, focus the existing window instead.
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
   }
+});
+
+// Quit when all windows are closed.
+app.on('window-all-closed', () => {
+  app.quit();
 });
 
 // IPC Handler: Build Desktop Game with Electron Builder
@@ -284,9 +341,9 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
     });
     
     try {
-      execSync('npm install', { cwd: tempDir, stdio: 'ignore' });
+      await execAsync('npm install', { cwd: tempDir });
     } catch (err) {
-      throw new Error('Failed to install dependencies: ' + err.stderr?.toString() || err.message);
+      throw new Error('Failed to install dependencies: ' + (err.stderr || err.message));
     }
 
     // Run electron-builder directly
@@ -304,12 +361,11 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
     const builderCmd = process.platform === 'win32' ? `"${builderPath}.cmd"` : builderPath;
     
     try {
-      const output = execSync(`${builderCmd} ${platformFlag}`, { 
+      const { stdout } = await execAsync(`${builderCmd} ${platformFlag}`, { 
         cwd: tempDir, 
-        encoding: 'utf8',
         env: { ...process.env, CI: 'true' }
       });
-      console.log('Build output:', output);
+      console.log('Build output:', stdout);
     } catch (err) {
       console.error('Build error:', err);
       const stderr = err.stderr || '';
@@ -582,6 +638,12 @@ ipcMain.on('set-hub-active', (_event, isActive) => {
 
 // Allow renderer to quit the app after save confirmation
 ipcMain.on('confirm-quit', () => {
+  // Close all manager/child windows first so window-all-closed fires cleanly.
+  managerWindows.forEach(win => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+  managerWindows.clear();
+
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.forceClose = true;
     mainWindow.close();

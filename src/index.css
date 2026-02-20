@@ -1006,3 +1006,55 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 10px var(--accent-mint);
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* === ACCESSIBILITY STYLES === */
+
+/* High Contrast Mode */
+.high-contrast {
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #1a1a1a;
+  --bg-elevated: #222222;
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-tertiary: #c0c0c0;
+  filter: contrast(1.25);
+}
+
+.high-contrast button,
+.high-contrast input,
+.high-contrast select,
+.high-contrast textarea {
+  border-width: 2px !important;
+  border-color: #ffffff !important;
+}
+
+/* Reduced Motion Mode */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Large Text Mode */
+.large-text {
+  font-size: 120%;
+}
+
+.large-text .text-xs { font-size: 0.85rem; }
+.large-text .text-sm { font-size: 1rem; }
+.large-text .text-base { font-size: 1.15rem; }
+.large-text .text-lg { font-size: 1.35rem; }
+
+/* Keyboard Navigation Mode */
+.keyboard-only *:focus {
+  outline: 3px solid var(--accent-sky, #38bdf8) !important;
+  outline-offset: 2px !important;
+}
+
+.keyboard-only *:focus:not(:focus-visible) {
+  outline: none !important;
+}

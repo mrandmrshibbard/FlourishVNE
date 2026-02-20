@@ -7,6 +7,33 @@ interface Release {
   html_url?: string;
 }
 
+// Convert URLs in plain text to clickable links, and preserve markdown-style links
+function renderBodyWithLinks(text: string): React.ReactNode[] {
+  // Match URLs (http/https) that aren't already inside markdown link syntax
+  const urlRegex = /(https?:\/\/[^\s)\]]+)/g;
+  const parts = text.split(urlRegex);
+  
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      // Reset lastIndex since we used .test()
+      urlRegex.lastIndex = 0;
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--accent-cyan)] hover:text-[var(--accent-pink)] underline underline-offset-2 break-all transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export const ChangelogModal: React.FC<{
   visible: boolean;
   onClose: () => void;
@@ -124,18 +151,28 @@ export const ChangelogModal: React.FC<{
                 </span>
               )}
             </div>
-            <div className="text-sm whitespace-pre-wrap bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-color)]">
-              {release.body || 'No release notes available.'}
+            <div className="text-sm whitespace-pre-wrap bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-color)] select-text cursor-text">
+              {renderBodyWithLinks(release.body || 'No release notes available.')}
             </div>
             {release.html_url && (
-              <a
-                href={release.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-block text-sm text-[var(--accent-cyan)] hover:underline"
-              >
-                View on GitHub →
-              </a>
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
+                <a
+                  href={release.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-cyan)]/20 hover:bg-[var(--accent-cyan)]/30 text-[var(--accent-cyan)] rounded-lg text-sm font-medium transition-colors"
+                >
+                  📥 Download from GitHub →
+                </a>
+                <a
+                  href="https://memento-morii1.itch.io/flourish-visual-novel-engine"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-pink)]/20 hover:bg-[var(--accent-pink)]/30 text-[var(--accent-pink)] rounded-lg text-sm font-medium transition-colors"
+                >
+                  🎮 itch.io
+                </a>
+              </div>
             )}
           </div>
         )}

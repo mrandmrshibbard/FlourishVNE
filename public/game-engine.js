@@ -1367,7 +1367,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     fontSize: `${settings.size}px`,
     color: settings.color,
     fontWeight: settings.weight,
-    fontStyle: settings.italic ? "italic" : "normal"
+    fontStyle: settings.italic ? "italic" : "normal",
+    textAlign: settings.align || "left"
   });
   function clamp01(value) {
     if (Number.isNaN(value)) return 0;
@@ -3333,7 +3334,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const handleClick = () => {
       if (hasFinished) {
         onFinished();
-      } else {
+      } else if (settings.enableSkip) {
         skip();
       }
     };
@@ -3354,8 +3355,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "div",
       {
-        className: `absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer ${dialogueBoxUrl && !isDialogueBoxVideo ? "dialogue-box-custom bg-black/70" : "bg-black/70 rounded-lg border-2 border-slate-500"}`,
-        style: dialogueBoxUrl && !isDialogueBoxVideo ? { borderImageSource: `url(${dialogueBoxUrl})` } : {},
+        className: `absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer rounded-lg ${dialogueBoxUrl ? "" : "bg-black/70 border-2 border-slate-500"}`,
+        style: dialogueBoxUrl && !isDialogueBoxVideo ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center" } : !dialogueBoxUrl ? {} : {},
         onClick: handleClick,
         children: [
           isDialogueBoxVideo && dialogueBoxUrl && /* @__PURE__ */ jsxRuntime2.jsx(
@@ -3369,7 +3370,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: dialogueBoxUrl })
             }
           ),
-          dialogue.characterName !== "Narrator" && /* @__PURE__ */ jsxRuntime2.jsx("h3", { className: "mb-2", style: { ...fontSettingsToStyle(projectUI.dialogueNameFont), color: dialogue.characterColor }, children: dialogue.characterName }),
+          dialogue.characterName !== "Narrator" && /* @__PURE__ */ jsxRuntime2.jsx("h3", { className: "mb-2", style: { ...fontSettingsToStyle(projectUI.dialogueNameFont), ...dialogue.characterColor && dialogue.characterColor !== "#FFFFFF" ? { color: dialogue.characterColor } : {} }, children: dialogue.characterName }),
           /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "leading-relaxed", style: dialogueTextStyle, children: [
             displayText,
             !hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "animate-ping", children: "_" })
@@ -3388,8 +3389,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         "button",
         {
           onClick: () => onSelect(choice),
-          className: `px-8 py-4 relative ${choiceButtonUrl && !isChoiceButtonVideo ? "choice-button-custom bg-slate-800/80 hover:bg-slate-700/90" : "bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500 rounded-lg"}`,
-          style: choiceButtonUrl && !isChoiceButtonVideo ? { borderImageSource: `url(${choiceButtonUrl})`, ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont),
+          className: `px-8 py-4 relative rounded-lg ${choiceButtonUrl ? "hover:brightness-110 hover:scale-105 transition-all" : "bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500"}`,
+          style: choiceButtonUrl && !isChoiceButtonVideo ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center", ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont),
           children: [
             isChoiceButtonVideo && choiceButtonUrl && /* @__PURE__ */ jsxRuntime2.jsx(
               "video",
@@ -4104,7 +4105,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.SaveSlotGrid: {
           const el = element;
-          const isSaveMode = screenId === project2.ui.saveScreenId;
+          const isSaveMode = screenId === project2.ui.saveScreenId && screenId !== project2.ui.loadScreenId;
           return /* @__PURE__ */ jsxRuntime2.jsx(
             SaveSlotGridComponent,
             {
@@ -4359,6 +4360,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     ] }, `${screenId}-${isClosing ? "closing" : "open"}`);
   });
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false }) => {
+    var _a, _b;
     const { project } = useProject();
     const getValidTitleScreenId = React2.useCallback(() => {
       if (project.ui.titleScreenId && project.uiScreens[project.ui.titleScreenId]) {
@@ -4377,7 +4379,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [sceneTransitionFading, setSceneTransitionFading] = React2.useState(false);
     const [sceneTransitionType, setSceneTransitionType] = React2.useState("fade");
     const [sceneTransitionDuration, setSceneTransitionDuration] = React2.useState(0.5);
-    const [settings, setSettings] = React2.useState(defaultSettings);
+    const [settings, setSettings] = React2.useState(() => {
+      var _a2;
+      const projectDefaults = (_a2 = project.ui) == null ? void 0 : _a2.defaultGameSettings;
+      if (projectDefaults) {
+        return { ...defaultSettings, ...projectDefaults };
+      }
+      return defaultSettings;
+    });
     const [playerState, setPlayerState] = React2.useState(null);
     const playerStateRef = React2.useRef(null);
     const updatePlayerState = React2.useCallback((updater) => {
@@ -4489,13 +4498,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [shakeTrigger, setShakeTrigger] = React2.useState(0);
     const [activeCreditRoll, setActiveCreditRoll] = React2.useState(null);
     const assetResolver = React2.useCallback((assetId, type) => {
-      var _a, _b, _c;
+      var _a2, _b2, _c;
       if (!assetId) return null;
       switch (type) {
         case "audio":
-          return ((_a = project.audio[assetId]) == null ? void 0 : _a.audioUrl) || null;
+          return ((_a2 = project.audio[assetId]) == null ? void 0 : _a2.audioUrl) || null;
         case "video":
-          return ((_b = project.videos[assetId]) == null ? void 0 : _b.videoUrl) || null;
+          return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || null;
         case "image": {
           if (project.backgrounds[assetId]) {
             const bg = project.backgrounds[assetId];
@@ -4596,8 +4605,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [fadeAudio]);
     const savesKey = React2.useMemo(() => `vn-saves-${project.id}`, [project.id]);
     const hasElectronStorage = React2.useCallback(() => {
-      var _a;
-      return typeof window !== "undefined" && typeof window.electronAPI !== "undefined" && typeof ((_a = window.electronAPI) == null ? void 0 : _a.storage) !== "undefined";
+      var _a2;
+      return typeof window !== "undefined" && typeof window.electronAPI !== "undefined" && typeof ((_a2 = window.electronAPI) == null ? void 0 : _a2.storage) !== "undefined";
     }, []);
     const getGameSaves = React2.useCallback(async () => {
       try {
@@ -4747,12 +4756,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         });
       };
       const createSaveRecord = async () => {
-        var _a;
+        var _a2;
         const screenshot = await captureScreenshot();
         const saves = await getGameSaves();
         saves[slotNumber] = {
           timestamp: Date.now(),
-          sceneName: ((_a = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a.name) || "Unknown Scene",
+          sceneName: ((_a2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a2.name) || "Unknown Scene",
           screenshot,
           playerStateData: {
             currentSceneId: playerState.currentSceneId,
@@ -4776,14 +4785,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const loadGame = (slotNumber) => {
       stopAndResetMusic();
       const doLoad = async () => {
-        var _a;
+        var _a2;
         const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
         const saveData = saves[slotNumber];
         if (!saveData) return;
         updatePlayerState({
           mode: "playing",
           currentSceneId: saveData.playerStateData.currentSceneId,
-          currentCommands: saveData.playerStateData.currentCommands || ((_a = project.scenes[saveData.playerStateData.currentSceneId]) == null ? void 0 : _a.commands) || [],
+          currentCommands: saveData.playerStateData.currentCommands || ((_a2 = project.scenes[saveData.playerStateData.currentSceneId]) == null ? void 0 : _a2.commands) || [],
           currentIndex: saveData.playerStateData.currentIndex ?? 0,
           commandStack: saveData.playerStateData.commandStack || [],
           variables: saveData.playerStateData.variables,
@@ -4799,7 +4808,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       void doLoad();
     };
     const startNewGame = React2.useCallback(() => {
-      var _a;
+      var _a2;
       stopAndResetMusic();
       const initialVariables = { ...menuVariables };
       let startSceneId = project.startSceneId;
@@ -4845,7 +4854,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       updatePlayerState({
         mode: "playing",
         currentSceneId: startSceneId,
-        currentCommands: ((_a = project.scenes[startSceneId]) == null ? void 0 : _a.commands) || [],
+        currentCommands: ((_a2 = project.scenes[startSceneId]) == null ? void 0 : _a2.commands) || [],
         currentIndex: 0,
         commandStack: [],
         variables: initialVariables,
@@ -5415,16 +5424,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }, [assetResolver, settings.sfxVolume]);
     React2.useEffect(() => {
-      var _a;
+      var _a2;
       if (sfxMasterGainRef.current) {
         try {
-          sfxMasterGainRef.current.gain.setTargetAtTime(settings.sfxVolume, ((_a = audioCtxRef.current) == null ? void 0 : _a.currentTime) || 0, 0.01);
+          sfxMasterGainRef.current.gain.setTargetAtTime(settings.sfxVolume, ((_a2 = audioCtxRef.current) == null ? void 0 : _a2.currentTime) || 0, 0.01);
         } catch (e) {
         }
       }
     }, [settings.sfxVolume]);
     React2.useEffect(() => {
-      var _a;
+      var _a2;
       const scheduler = commandSchedulerRef.current;
       const diagnostics = runtimeDiagnosticsRef.current;
       if (!playerState || playerState.mode !== "playing") {
@@ -5647,7 +5656,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           updatePlayerState((p) => p ? { ...p, currentIndex: nextIndex } : null);
         }
       };
-      const shouldRunAsync = ((_a = command.modifiers) == null ? void 0 : _a.runAsync) === true;
+      const shouldRunAsync = ((_a2 = command.modifiers) == null ? void 0 : _a2.runAsync) === true;
       const commandContext = {
         project,
         playerState,
@@ -5667,10 +5676,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       (async () => {
         try {
           const applyResult = (result) => {
-            var _a2, _b;
+            var _a3, _b2;
             const variableStore2 = variableStoreRef.current;
             const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
-            if (((_a2 = result.updates) == null ? void 0 : _a2.variables) && variableStore2) {
+            if (((_a3 = result.updates) == null ? void 0 : _a3.variables) && variableStore2) {
               const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
                 variableId,
                 value,
@@ -5681,9 +5690,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             if (result.updates) {
               updatePlayerState((p) => {
-                var _a3, _b2, _c, _d, _e, _f, _g, _h, _i, _j;
+                var _a4, _b3, _c, _d, _e, _f, _g, _h, _i, _j;
                 if (!p) return null;
-                const mergedVariables = ((_a3 = result.updates) == null ? void 0 : _a3.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b2 = result.updates) == null ? void 0 : _b2.variables) ?? {} };
+                const mergedVariables = ((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
                 return {
                   ...p,
                   ...((_c = result.updates) == null ? void 0 : _c.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
@@ -5696,7 +5705,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   ...((_j = result.updates) == null ? void 0 : _j.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
               });
-              if (((_b = result.updates) == null ? void 0 : _b.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
+              if (((_b2 = result.updates) == null ? void 0 : _b2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
                 runtimeDebugLog("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
                 setScreenStack([]);
                 setHudStack([]);
@@ -6033,8 +6042,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       });
     };
     const handleChoiceSelect = (choice) => {
-      var _a;
-      runtimeDebugLog("[CHOICE] Selected:", choice.text, "Actions:", ((_a = choice.actions) == null ? void 0 : _a.length) || 0);
+      var _a2;
+      runtimeDebugLog("[CHOICE] Selected:", choice.text, "Actions:", ((_a2 = choice.actions) == null ? void 0 : _a2.length) || 0);
       updatePlayerState((p) => {
         if (!p) return null;
         let newState = { ...p };
@@ -6142,7 +6151,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       } : null);
     };
     const handleUIAction = (action) => {
-      var _a, _b;
+      var _a2, _b2;
       runtimeDebugLog("handleUIAction called with:", action.type, action);
       if (!playerState && action.type === UIActionType.StartNewGame) {
         startNewGame();
@@ -6582,10 +6591,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_a = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a.name,
+          currentSceneName: (_a2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_b = project.scenes[targetSceneId]) == null ? void 0 : _b.name
+          targetSceneName: (_b2 = project.scenes[targetSceneId]) == null ? void 0 : _b2.name
         });
         const targetScene = project.scenes[targetSceneId];
         if (!targetScene) {
@@ -6812,7 +6821,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: state.backgroundUrl, alt: "background", className: "absolute w-full h-full object-cover" })),
               playerState == null ? void 0 : playerState.uiState.transitionElement,
               Object.values(state.characters).map((char) => {
-                var _a;
+                var _a2;
                 let transitionClass = "";
                 let animationDuration = "1s";
                 let slideStyle = {};
@@ -6856,7 +6865,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         startOffsetX = startCoords.x - endCoords.x;
                         startOffsetY = startCoords.y - endCoords.y;
                       }
-                      if (startOffsetX === 0 && ((_a = char.transition) == null ? void 0 : _a.action) === "show") {
+                      if (startOffsetX === 0 && ((_a2 = char.transition) == null ? void 0 : _a2.action) === "show") {
                         let endX = 50;
                         if (typeof endPos === "object") endX = endPos.x;
                         else if (typeof endPos === "string") {
@@ -7423,7 +7432,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full aspect-video relative", children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "relative overflow-hidden", style: { aspectRatio: `${((_a = project.gameResolution) == null ? void 0 : _a.width) || 16} / ${((_b = project.gameResolution) == null ? void 0 : _b.height) || 9}`, maxWidth: "100%", maxHeight: "100%", width: "100%" }, children: [
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         currentScreenId && /* @__PURE__ */ jsxRuntime2.jsx(
           UIScreenRenderer,
@@ -7638,7 +7647,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: __APP_VERSION__,
+    version: "2.2.0",
     /**
      * Check if the engine is ready
      */

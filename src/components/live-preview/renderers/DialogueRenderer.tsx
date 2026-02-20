@@ -52,8 +52,8 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
 
     return (
         <div 
-            className={`absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer ${dialogueBoxUrl && !isDialogueBoxVideo ? 'dialogue-box-custom bg-black/70' : 'bg-black/70 rounded-lg border-2 border-slate-500'}`} 
-            style={dialogueBoxUrl && !isDialogueBoxVideo ? { borderImageSource: `url(${dialogueBoxUrl})` } : {}}
+            className={`absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer rounded-lg ${dialogueBoxUrl ? '' : 'bg-black/70 border-2 border-slate-500'}`} 
+            style={dialogueBoxUrl && !isDialogueBoxVideo ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : (!dialogueBoxUrl ? {} : {})}
             onClick={handleClick}
         >
             {isDialogueBoxVideo && dialogueBoxUrl && (
@@ -68,7 +68,7 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
                 </video>
             )}
             {dialogue.characterName !== 'Narrator' && (
-                <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), color: dialogue.characterColor}}>
+                <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
                     {dialogue.characterName}
                 </h3>
             )}

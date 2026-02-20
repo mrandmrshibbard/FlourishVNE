@@ -375,6 +375,17 @@ const UIElementInspector: React.FC<{
                         <AssetSelector label="Hover Sound" assetType="audio" value={el.hoverSoundId} onChange={id => updateElement({ hoverSoundId: id })} />
                         <AssetSelector label="Click Sound" assetType="audio" value={el.clickSoundId} onChange={id => updateElement({ clickSoundId: id })} />
                     </div>
+                    
+                    <h4 className="font-bold text-sm mt-3 text-slate-400">Button Colors (when no image is set)</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Background">
+                            <TextInput type="color" value={el.backgroundColor || '#4D3273'} onChange={e => updateElement({ backgroundColor: e.target.value })} />
+                        </FormField>
+                        <FormField label="Hover Background">
+                            <TextInput type="color" value={el.hoverBackgroundColor || '#6B4C9A'} onChange={e => updateElement({ hoverBackgroundColor: e.target.value })} />
+                        </FormField>
+                    </div>
+
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
                     <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
                     <h3 className="font-bold my-2 text-slate-400">Primary Action</h3>
