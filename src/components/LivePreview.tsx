@@ -3,11 +3,11 @@ import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { XMarkIcon, FilmIcon } from './icons';
-import { fontSettingsToStyle } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
@@ -216,11 +216,14 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
         left: `${overlay.x}%`,
         top: `${overlay.y}%`,
         ...(isSlideTransition ? {} : { transform: 'translate(-50%, -50%)' }),
-        fontSize: `${overlay.fontSize}px`,
+        fontSize: `calc(var(--font-scale, 1) * ${overlay.fontSize}px)`,
         fontFamily: overlay.fontFamily,
         color: overlay.color,
-        width: overlay.width ? `${overlay.width}px` : 'auto',
-        height: overlay.height ? `${overlay.height}px` : 'auto',
+        fontWeight: overlay.fontWeight || 'normal',
+        fontStyle: overlay.fontStyle || 'normal',
+        letterSpacing: overlay.letterSpacing ? `calc(var(--font-scale, 1) * ${overlay.letterSpacing}px)` : undefined,
+        width: overlay.width ? `calc(var(--font-scale, 1) * ${overlay.width}px)` : 'auto',
+        height: overlay.height ? `calc(var(--font-scale, 1) * ${overlay.height}px)` : 'auto',
         textAlign: overlay.textAlign || 'left',
         display: 'flex',
         alignItems: overlay.verticalAlign === 'top' ? 'flex-start' : overlay.verticalAlign === 'bottom' ? 'flex-end' : 'center',
@@ -228,6 +231,30 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
         whiteSpace: overlay.width ? 'pre-wrap' : 'nowrap',
         overflow: 'hidden',
     };
+
+    // Apply text shadow
+    if (overlay.textShadow?.enabled) {
+        const s = overlay.textShadow;
+        baseStyle.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
+    }
+
+    // Apply text border (stroke)
+    if (overlay.textBorder?.enabled) {
+        (baseStyle as any).WebkitTextStroke = `${overlay.textBorder.width}px ${overlay.textBorder.color}`;
+    }
+
+    // Apply text gradient (uses background-clip trick)
+    const useGradient = overlay.textGradient?.enabled && overlay.textGradient.colors.length >= 2;
+    if (useGradient) {
+        const g = overlay.textGradient!;
+        const gradientCSS = g.type === 'radial'
+            ? `radial-gradient(circle, ${g.colors.join(', ')})`
+            : `linear-gradient(${g.angle}deg, ${g.colors.join(', ')})`;
+        baseStyle.background = gradientCSS;
+        baseStyle.WebkitBackgroundClip = 'text';
+        (baseStyle as any).WebkitTextFillColor = 'transparent';
+        (baseStyle as any).backgroundClip = 'text';
+    }
 
     // Only pre-hide if we're showing WITH a transition that hasn't started yet
     if (overlay.action === 'show' && hasTransition && !playTransition) {
@@ -352,7 +379,7 @@ const ButtonOverlayElement: React.FC<{
         height: '100%',
         backgroundColor: overlay.backgroundColor,
         color: overlay.textColor,
-        fontSize: `${overlay.fontSize}px`,
+        fontSize: `calc(var(--font-scale, 1) * ${overlay.fontSize}px)`,
         fontWeight: overlay.fontWeight,
         borderRadius: `${overlay.borderRadius}px`,
         border: 'none',
@@ -363,6 +390,7 @@ const ButtonOverlayElement: React.FC<{
         transition: 'transform 0.1s, box-shadow 0.1s',
         boxShadow: isHovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
         transform: isHovered ? 'translateY(-2px)' : 'none',
+        opacity: overlay.opacity ?? 1,
     };
 
     const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
@@ -601,7 +629,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const dialogueTextStyle = {
         ...fontSettingsToStyle(projectUI.dialogueTextFont),
         ...(characterFont ? { fontFamily: characterFont } : {}),
-        ...(characterFontSize ? { fontSize: `${characterFontSize}px` } : {}),
+        ...(characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {}),
         ...(characterFontWeight ? { fontWeight: characterFontWeight } : {}),
         ...(characterFontItalic ? { fontStyle: 'italic' } : {})
     };
@@ -625,11 +653,11 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
             )}
             {dialogue.characterName !== 'Narrator' && (
                 <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
-                    {dialogue.characterName}
+                    <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
                 </h3>
             )}
             <p className="leading-relaxed" style={dialogueTextStyle}>
-                {displayText}
+                <span style={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}>{displayText}</span>
                 {!hasFinished && <span className="animate-ping">_</span>}
             </p>
         </div>
@@ -668,7 +696,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                                 <source src={choiceButtonUrl} />
                             </video>
                         )}
-                        <span className="relative z-10">{interpolatedText}</span>
+                        <span className="relative z-10" style={extractTextGradientStyle(projectUI.choiceTextFont) || undefined}>{interpolatedText}</span>
                     </button>
                 );
             })}
@@ -894,7 +922,7 @@ const ButtonElement: React.FC<{
                     style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }}
                 />
             )}
-            <span className="relative z-10" style={{...textStyle, display: 'inline-block', pointerEvents: 'none'}}>
+            <span className="relative z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), display: 'inline-block', pointerEvents: 'none'}}>
                 {interpolatedText}
             </span>
         </button>
@@ -1113,7 +1141,7 @@ const AssetCyclerElement: React.FC<{
             {el.label && (
                 <div
                     style={{
-                        fontSize: `${(el.font?.size || 16) * 0.8}px`,
+                        fontSize: `calc(var(--font-scale, 1) * ${(el.font?.size || 16) * 0.8}px)`,
                         fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
                         fontWeight: el.font?.weight || 'normal',
                         fontStyle: el.font?.italic ? 'italic' : 'normal',
@@ -1132,7 +1160,7 @@ const AssetCyclerElement: React.FC<{
                         background: 'none',
                         border: 'none',
                         color: el.arrowColor || '#a855f7',
-                        fontSize: `${el.arrowSize || 24}px`,
+                        fontSize: `calc(var(--font-scale, 1) * ${el.arrowSize || 24}px)`,
                         cursor: 'pointer',
                         padding: '4px',
                         lineHeight: 1,
@@ -1146,7 +1174,7 @@ const AssetCyclerElement: React.FC<{
                 <div
                     style={{
                         flex: 1,
-                        fontSize: `${el.font?.size || 16}px`,
+                        fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
                         fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
                         fontWeight: el.font?.weight || 'normal',
                         fontStyle: el.font?.italic ? 'italic' : 'normal',
@@ -1165,7 +1193,7 @@ const AssetCyclerElement: React.FC<{
                         background: 'none',
                         border: 'none',
                         color: el.arrowColor || '#a855f7',
-                        fontSize: `${el.arrowSize || 24}px`,
+                        fontSize: `calc(var(--font-scale, 1) * ${el.arrowSize || 24}px)`,
                         cursor: 'pointer',
                         padding: '4px',
                         lineHeight: 1,
@@ -1270,6 +1298,7 @@ const UIScreenRenderer: React.FC<{
             width: `${element.width}%`, height: `${element.height}%`,
             transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)`,
             overflow: 'hidden', // Prevent content overflow when using cover
+            opacity: element.opacity ?? 1,
             ...transitionStyle,
         };
 
@@ -1289,11 +1318,15 @@ const UIScreenRenderer: React.FC<{
                 const vAlignClass = { top: 'items-start', middle: 'items-center', bottom: 'items-end' }[el.verticalAlign || 'middle'];
                 const interpolatedText = interpolateVariables(el.text, variables, project);
 
+                const textStyle: React.CSSProperties = {
+                    ...fontSettingsToStyle(el.font),
+                };
+
                 return <div key={el.id}
                     style={style}
                     className={`flex ${hAlignClass} ${vAlignClass} p-1`}
                 >
-                    <div style={fontSettingsToStyle(el.font)}>{interpolatedText}</div>
+                    <div style={textStyle}><span style={extractTextGradientStyle(el.font) || undefined}>{interpolatedText}</span></div>
                 </div>;
             }
             case UIElementType.Image: {
@@ -1517,7 +1550,7 @@ const UIScreenRenderer: React.FC<{
                             style={el.checkboxColor ? { accentColor: el.checkboxColor } : {}}
                         />
                     )}
-                    <label style={fontSettingsToStyle(el.font)}>{el.text}</label>
+                    <label style={fontSettingsToStyle(el.font)}><span style={extractTextGradientStyle(el.font) || undefined}>{el.text}</span></label>
                 </div>
             }
             case UIElementType.SaveSlotGrid: {
@@ -1661,7 +1694,7 @@ const UIScreenRenderer: React.FC<{
                             style={{
                                 backgroundColor: el.backgroundColor || '#1e293b',
                                 color: el.font?.color || '#f1f5f9',
-                                fontSize: `${el.font?.size || 16}px`,
+                                fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
                                 fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
@@ -1700,7 +1733,7 @@ const UIScreenRenderer: React.FC<{
                             style={{
                                 backgroundColor: el.backgroundColor || '#1e293b',
                                 color: el.font?.color || '#f1f5f9',
-                                fontSize: `${el.font?.size || 16}px`,
+                                fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
                                 fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
@@ -1761,7 +1794,7 @@ const UIScreenRenderer: React.FC<{
                         <span
                             style={{
                                 color: el.labelColor || '#f1f5f9',
-                                fontSize: `${el.font?.size || 16}px`,
+                                fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
                                 fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
                                 fontWeight: el.font?.weight || 'normal',
                                 fontStyle: el.font?.italic ? 'italic' : 'normal',
@@ -1800,7 +1833,11 @@ const UIScreenRenderer: React.FC<{
     const shouldShowDialogue = screen.showDialogue && variables;
 
     return (
-        <div key={`${screenId}-${isClosing ? 'closing' : 'open'}`} className="absolute inset-0 w-full h-full" style={screenTransitionStyle}>
+        <div
+            key={`${screenId}-${isClosing ? 'closing' : 'open'}`}
+            className="absolute inset-0 w-full h-full"
+            style={screenTransitionStyle}
+        >
             {getBackgroundElement()}
             {Object.values(screen.elements).map(element => renderElement(element as VNUIElement, variables, project, onCommitVariables))}
         </div>
@@ -1954,6 +1991,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Stage ref used for measuring pixel size for accurate slide animations
     const stageRef = useRef<HTMLDivElement | null>(null);
     const stageSize = useStageSize(stageRef);
+    // Play-container ref – measures the aspect-ratio box so we can set --font-scale
+    const playContainerRef = useRef<HTMLDivElement | null>(null);
+    const playContainerSize = useStageSize(playContainerRef);
     // WebAudio resources for SFX
     const audioCtxRef = useRef<AudioContext | null>(null);
     const sfxBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
@@ -3822,7 +3862,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Handle jump actions (JumpToScene or JumpToLabel) last
             const jumpAction = actions.find(a => a.type === UIActionType.JumpToScene) as JumpToSceneAction | undefined;
             const labelAction = actions.find(a => a.type === UIActionType.JumpToLabel) as JumpToLabelAction | undefined;
-            
+
+            // Handle OpenURL actions (fire-and-forget, runs alongside other actions)
+            const openUrlActions = actions.filter(a => a.type === UIActionType.OpenURL) as OpenURLAction[];
+            openUrlActions.forEach(urlAction => {
+                if (urlAction.url) {
+                    if (urlAction.newTab !== false) {
+                        window.open(urlAction.url, '_blank', 'noopener,noreferrer');
+                    } else {
+                        window.location.href = urlAction.url;
+                    }
+                }
+            });
+
             if (labelAction) {
                 // JumpToLabel - go to a specific label within the current scene
                 const targetLabel = labelAction.targetLabel;
@@ -4466,6 +4518,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
             runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToLabel');
             uiDirtyVariableIdsRef.current.clear();
+        } else if (action.type === UIActionType.OpenURL) {
+            const openUrlAction = action as OpenURLAction;
+            if (openUrlAction.url) {
+                runtimeDebugLog('OpenURL action triggered:', openUrlAction.url, 'newTab:', openUrlAction.newTab);
+                if (openUrlAction.newTab !== false) {
+                    window.open(openUrlAction.url, '_blank', 'noopener,noreferrer');
+                } else {
+                    window.location.href = openUrlAction.url;
+                }
+            }
         }
     };
 
@@ -5369,7 +5431,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     100% { background-position: 0% 0%; }
                 }
             `}</style>
-            <div className="relative overflow-hidden" style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, maxWidth: '100%', maxHeight: '100%', width: '100%' }}>
+            <div ref={playContainerRef} className="relative overflow-hidden" style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, maxWidth: '100%', maxHeight: '100%', width: '100%', '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
                 {currentScreenId && (

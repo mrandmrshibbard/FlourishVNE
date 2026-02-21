@@ -4,6 +4,7 @@ import {
   normalizeOverlayEffects,
   type VNScreenOverlayEffect,
   type VNScreenOverlayEffectType,
+  type VNEffectParams,
 } from '../../types';
 
 export interface ScreenOverlayEffectsProps {
@@ -18,6 +19,14 @@ function getEffect(
   type: VNScreenOverlayEffectType
 ): VNScreenOverlayEffect | undefined {
   return effects.find((e) => e.type === type);
+}
+
+/** Read a numeric param with a default (all params are 0..1). */
+function ep(params: VNEffectParams | undefined, key: keyof VNEffectParams, fallback = 0.5): number {
+  if (!params) return fallback;
+  const v = params[key];
+  if (typeof v !== 'number') return fallback;
+  return clamp01(v);
 }
 
 // Parse hex color to RGB
@@ -90,14 +99,19 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     // Parse custom color or use blue-ish default
     const baseColor = parseColor(rain?.color, { r: 180, g: 210, b: 255 });
 
+    const p = rain?.params;
+    const windMul = 0.2 + ep(p, 'windStrength') * 1.8;   // 0.2..2.0×
+    const lenMul = 0.4 + ep(p, 'dropLength') * 1.2;       // 0.4..1.6×
+    const speedMul = 0.3 + ep(p, 'speed') * 1.4;          // 0.3..1.7×
+
     const dropCount = Math.floor(100 + intensity * 600);
     const drops = Array.from({ length: dropCount }).map(() => ({
       x: Math.random() * safeWidth,
       y: Math.random() * safeHeight,
-      len: 12 + Math.random() * 22,
-      speed: 600 + Math.random() * 1000,
+      len: (12 + Math.random() * 22) * lenMul,
+      speed: (600 + Math.random() * 1000) * speedMul,
       thickness: 1 + Math.random() * 1.8,
-      wind: -80 + Math.random() * 160,
+      wind: (-80 + Math.random() * 160) * windMul,
       splashTime: 0,
       splashX: 0,
       splashY: 0,
@@ -159,7 +173,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [rain?.intensity, rain?.color, safeWidth, safeHeight]);
+  }, [rain?.intensity, rain?.color, rain?.params?.windStrength, rain?.params?.dropLength, rain?.params?.speed, safeWidth, safeHeight]);
 
   // Snow/Ash effect
   useEffect(() => {
@@ -182,16 +196,21 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    const sp = snowAsh?.params;
+    const sizeMul = 0.4 + ep(sp, 'particleSize') * 1.2;     // 0.4..1.6×
+    const sWindMul = 0.2 + ep(sp, 'windStrength') * 1.8;    // 0.2..2.0×
+    const sSpeedMul = 0.3 + ep(sp, 'speed') * 1.4;          // 0.3..1.7×
+
     const count = Math.floor(80 + intensity * 420);
     const particles = Array.from({ length: count }).map(() => ({
       x: Math.random() * safeWidth,
       y: Math.random() * safeHeight,
-      r: variant === 'snow' ? 1.2 + Math.random() * 2.8 : 0.8 + Math.random() * 1.8,
-      vx: (variant === 'snow' ? -25 : -40) + Math.random() * 80,
-      vy: (variant === 'snow' ? 25 : 55) + Math.random() * (variant === 'snow' ? 70 : 130),
+      r: (variant === 'snow' ? 1.2 + Math.random() * 2.8 : 0.8 + Math.random() * 1.8) * sizeMul,
+      vx: ((variant === 'snow' ? -25 : -40) + Math.random() * 80) * sWindMul,
+      vy: ((variant === 'snow' ? 25 : 55) + Math.random() * (variant === 'snow' ? 70 : 130)) * sSpeedMul,
       wobblePhase: Math.random() * Math.PI * 2,
       wobbleSpeed: 1.5 + Math.random() * 2.5,
-      wobbleAmp: variant === 'snow' ? 15 + Math.random() * 20 : 8 + Math.random() * 12,
+      wobbleAmp: (variant === 'snow' ? 15 + Math.random() * 20 : 8 + Math.random() * 12) * sWindMul,
       rotPhase: Math.random() * Math.PI * 2,
       opacity: 0.4 + Math.random() * 0.6,
     }));
@@ -250,7 +269,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [snowAsh?.intensity, snowAsh?.variant, snowAsh?.color, safeWidth, safeHeight]);
+  }, [snowAsh?.intensity, snowAsh?.variant, snowAsh?.color, snowAsh?.params?.particleSize, snowAsh?.params?.windStrength, snowAsh?.params?.speed, safeWidth, safeHeight]);
 
   // Dynamic Sunbeams - soft undulating blanket of light
   useEffect(() => {
@@ -269,6 +288,10 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     // Parse custom color or use warm golden default
     const baseColor = parseColor(sunbeams?.color, { r: 255, g: 220, b: 140 });
 
+    const sbp = sunbeams?.params;
+    const sbSpeedMul = 0.3 + ep(sbp, 'speed') * 1.4;        // 0.3..1.7×
+    const sbSpreadMul = 0.4 + ep(sbp, 'spread') * 1.2;      // 0.4..1.6×
+
     // Create multiple noise functions for complex organic movement
     const noises = Array.from({ length: 4 }, () => createNoise());
     
@@ -279,7 +302,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     const draw = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      time += dt;
+      time += dt * sbSpeedMul;
 
       ctx.clearRect(0, 0, safeWidth, safeHeight);
       
@@ -311,7 +334,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
         
         // Wave parameters that shift smoothly over time
         const waveAngle = wavePhase + Math.sin(time * 0.1 + w) * 0.3 + n1 * 0.4;
-        const waveWidth = 0.8 + n2 * 0.6; // Very wide, overlapping waves
+        const waveWidth = (0.8 + n2 * 0.6) * sbSpreadMul; // Spread-adjusted wave width
         const waveBrightness = (0.3 + n3 * 0.4) * intensity * 0.15;
         
         // Create a very soft angular gradient
@@ -355,9 +378,9 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [sunbeams?.intensity, sunbeams?.color, safeWidth, safeHeight]);
+  }, [sunbeams?.intensity, sunbeams?.color, sunbeams?.params?.speed, sunbeams?.params?.spread, safeWidth, safeHeight]);
 
-  // Dynamic Shimmer - organic light waves
+  // Dynamic Shimmer - organic light waves + floating particles
   useEffect(() => {
     const intensity = clamp01(shimmer?.intensity ?? 0);
     const canvas = shimmerCanvasRef.current;
@@ -374,25 +397,41 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     // Parse custom color or use white default
     const baseColor = parseColor(shimmer?.color, { r: 255, g: 255, b: 255 });
 
+    const shp = shimmer?.params;
+    const shSpeedMul = 0.3 + ep(shp, 'speed') * 1.4;             // 0.3..1.7×
+    const shDensityMul = 0.3 + ep(shp, 'particleDensity') * 1.4; // 0.3..1.7×
+    const shimmerSide: string = (shp as any)?.shimmerSide || 'full';
+    const shimmerDir: string = (shp as any)?.shimmerDirection || 'up';
+    const particlesOnly: boolean = !!(shp as any)?.shimmerParticlesOnly;
+
     const noise = createNoise();
-    
+
+    // Compute horizontal bounds for waves based on shimmerSide
+    let waveMinX = 0;
+    let waveMaxX = safeWidth;
+    if (shimmerSide === 'left') { waveMaxX = safeWidth * 0.45; }
+    else if (shimmerSide === 'right') { waveMinX = safeWidth * 0.55; }
+    const waveRegionW = waveMaxX - waveMinX;
+
     // Multiple shimmer waves with different properties
-    const waves = Array.from({ length: 5 }).map((_, i) => ({
+    const waves = particlesOnly ? [] : Array.from({ length: 5 }).map((_, i) => ({
       phase: Math.random() * Math.PI * 2,
-      speed: 0.4 + Math.random() * 0.6,
+      speed: (0.4 + Math.random() * 0.6) * shSpeedMul,
       amplitude: 0.15 + Math.random() * 0.2,
       frequency: 0.5 + Math.random() * 1.5,
       yOffset: (i / 5) * safeHeight,
       noiseOffset: Math.random() * 1000,
-      width: safeWidth * (0.3 + Math.random() * 0.4),
+      width: waveRegionW * (0.3 + Math.random() * 0.4),
     }));
 
     // Floating light particles
-    const particles = Array.from({ length: 20 + Math.floor(intensity * 30) }).map(() => ({
+    const pCount = Math.floor((20 + intensity * 30) * shDensityMul);
+    const dirSign = shimmerDir === 'down' ? 1 : -1;
+    const particles = Array.from({ length: pCount }).map(() => ({
       x: Math.random() * safeWidth,
       y: Math.random() * safeHeight,
-      vx: -15 + Math.random() * 30,
-      vy: -10 + Math.random() * 20,
+      vx: (-15 + Math.random() * 30) * shSpeedMul,
+      vy: (5 + Math.random() * 15) * shSpeedMul * dirSign,
       size: 2 + Math.random() * 6,
       brightness: 0.3 + Math.random() * 0.7,
       pulsePhase: Math.random() * Math.PI * 2,
@@ -411,12 +450,13 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       ctx.clearRect(0, 0, safeWidth, safeHeight);
       ctx.globalCompositeOperation = 'lighter';
 
-      // Draw shimmer waves
+      // Draw shimmer waves (unless particles-only mode)
       for (const wave of waves) {
         wave.phase += dt * wave.speed;
         
         const noiseVal = noise(time * 0.2 + wave.noiseOffset);
-        const xOffset = (Math.sin(wave.phase) + noiseVal * 0.5) * safeWidth * wave.amplitude;
+        const xCenter = waveMinX + waveRegionW * 0.5;
+        const xOffset = xCenter + (Math.sin(wave.phase) + noiseVal * 0.5) * waveRegionW * wave.amplitude;
         const yPos = wave.yOffset + Math.sin(time * 0.3 + wave.noiseOffset) * 50;
 
         const gradient = ctx.createLinearGradient(
@@ -464,10 +504,22 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [shimmer?.intensity, shimmer?.color, safeWidth, safeHeight]);
+  }, [shimmer?.intensity, shimmer?.color, shimmer?.params?.speed, shimmer?.params?.particleDensity, shimmer?.params?.shimmerSide, shimmer?.params?.shimmerDirection, shimmer?.params?.shimmerParticlesOnly, safeWidth, safeHeight]);
 
   const scanlinesOpacity = clamp01(scanlines?.intensity ?? 0) * 0.65;
   const chromaOpacity = clamp01(chroma?.intensity ?? 0);
+
+  // CRT Scanlines params
+  const slLineSpacing = 2 + ep(scanlines?.params, 'lineSpacing') * 6;   // 2..8 px gap
+  const slSpeed = 2 + (1 - ep(scanlines?.params, 'speed')) * 10;         // 2..12 s duration (inverted so 1 = fast)
+  
+  // Chromatic Glitch params
+  const cgSpread = 2 + ep(chroma?.params, 'chromaticSpread') * 8;       // 2..10 px offset
+  const cgSpeed = 0.3 + (1 - ep(chroma?.params, 'speed')) * 1.4;         // 0.3..1.7 s (inverted)
+
+  // Resolve blend modes for canvas effects
+  const sunbeamsBlend = (sunbeams?.params?.blendMode || 'screen') as React.CSSProperties['mixBlendMode'];
+  const shimmerBlend = (shimmer?.params?.blendMode || 'overlay') as React.CSSProperties['mixBlendMode'];
 
   return (
     <div className={className}>
@@ -475,31 +527,42 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {scanlinesOpacity > 0 && (
         <div
           className="vnfx-scanlines"
-          style={{ opacity: scanlinesOpacity }}
+          style={{
+            opacity: scanlinesOpacity,
+            backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent ${slLineSpacing}px, rgba(0,0,0,0.4) ${slLineSpacing}px, rgba(0,0,0,0.4) ${slLineSpacing + 2}px)`,
+            animationDuration: `${slSpeed}s`,
+          }}
         />
       )}
 
       {/* Chromatic glitch */}
       {chromaOpacity > 0 && (
-        <div className="vnfx-chromatic" style={{ opacity: chromaOpacity }} />
+        <div 
+          className="vnfx-chromatic" 
+          style={{ 
+            opacity: chromaOpacity,
+            animationDuration: `${cgSpeed}s`,
+            backgroundImage: `radial-gradient(ellipse at 20% 50%, rgba(255,0,0,0.15) 0%, transparent ${cgSpread * 4}%), radial-gradient(ellipse at 80% 50%, rgba(0,255,255,0.12) 0%, transparent ${cgSpread * 4}%), repeating-linear-gradient(0deg, transparent 0px, transparent ${cgSpread}px, rgba(255,255,255,0.03) ${cgSpread}px, rgba(255,255,255,0.03) ${cgSpread + 1}px)`,
+          }}
+        />
       )}
 
-      {/* Sunbeams - now canvas-based */}
+      {/* Sunbeams - canvas-based with configurable blend mode */}
       {sunbeams && clamp01(sunbeams.intensity) > 0 && (
         <canvas
           ref={sunbeamsCanvasRef}
           className="vnfx-canvas"
-          style={{ mixBlendMode: 'screen' }}
+          style={{ mixBlendMode: sunbeamsBlend }}
           aria-hidden
         />
       )}
 
-      {/* Shimmer - now canvas-based */}
+      {/* Shimmer - canvas-based with configurable blend mode */}
       {shimmer && clamp01(shimmer.intensity) > 0 && (
         <canvas
           ref={shimmerCanvasRef}
           className="vnfx-canvas"
-          style={{ mixBlendMode: 'overlay' }}
+          style={{ mixBlendMode: shimmerBlend }}
           aria-hidden
         />
       )}

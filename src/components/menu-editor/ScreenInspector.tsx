@@ -3,9 +3,22 @@ import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNUIScreen } from '../../features/ui/types';
-import { FormField, TextInput, Select } from '../ui/Form';
+import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
-import { upsertOverlayEffect, type VNScreenOverlayEffectType } from '../../types';
+import { upsertOverlayEffect, type VNScreenOverlayEffectType, type VNEffectParams } from '../../types';
+
+/** Small reusable slider for 0..1 effect params */
+const ParamSlider: React.FC<{ label: string; value: number; onChange: (v: number) => void }> = ({ label, value, onChange }) => (
+    <div className="mt-1">
+        <div className="text-xs text-slate-400 mb-0.5 flex justify-between">
+            <span>{label}</span>
+            <span>{Math.round(value * 100)}%</span>
+        </div>
+        <input type="range" min="0" max="1" step="0.01" value={value}
+            onChange={e => onChange(parseFloat(e.target.value))}
+            className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500" />
+    </div>
+);
 
 const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     const { project, dispatch } = useProject();
@@ -32,13 +45,18 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
         const e = currentEffects.find(x => x.type === type);
         return e?.color ?? '';
     };
-    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string) => {
+    const getParams = (type: VNScreenOverlayEffectType): VNEffectParams => {
+        const e = currentEffects.find(x => x.type === type);
+        return e?.params ?? {};
+    };
+    const setEffect = (type: VNScreenOverlayEffectType, intensity: number, variant?: 'snow' | 'ash', color?: string, params?: VNEffectParams) => {
         updateScreen({
             effects: upsertOverlayEffect(currentEffects, {
                 type,
                 intensity,
                 variant,
                 color,
+                params,
             })
         });
     };
@@ -69,7 +87,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     </FormField>
                     {screen.background.type === 'color' ? (
                         <FormField label="Color Value">
-                            <TextInput type="color" value={screen.background.value} onChange={e => updateScreen({ background: { type: 'color', value: e.target.value }})} className="p-1 h-10"/>
+                            <ColorInput value={screen.background.value} onChange={val => updateScreen({ background: { type: 'color', value: val }})} className="p-1 h-10"/>
                         </FormField>
                     ) : (
                          <AssetSelector label="Asset" assetType={screen.background.type === 'image' ? 'images' : 'videos'} allowVideo value={screen.background.assetId} 
@@ -143,16 +161,37 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 <h3 className="font-bold mb-2 text-slate-400">Screen Effects</h3>
 
                 {([
-                    { type: 'crtScanlines' as const, label: 'CRT Scanlines' },
-                    { type: 'chromaticGlitch' as const, label: 'Chromatic Glitch' },
-                    { type: 'sunbeams' as const, label: 'Undulating Sunbeams', supportsColor: true, defaultColor: '#FFCC66' },
-                    { type: 'shimmer' as const, label: 'Undulating Shimmer', supportsColor: true, defaultColor: '#FFFFFF' },
-                    { type: 'rain' as const, label: 'Rain', supportsColor: true, defaultColor: '#AADDFF' },
-                    { type: 'snowAsh' as const, label: 'Snow / Ash', supportsColor: true, defaultColor: '#FFFFFF' },
-                ] as const).map(({ type, label, supportsColor, defaultColor }) => {
+                    { type: 'crtScanlines' as const, label: 'CRT Scanlines',
+                      extraParams: ['lineSpacing', 'speed'] as const,
+                      paramLabels: { lineSpacing: 'Line Spacing', speed: 'Scroll Speed' } },
+                    { type: 'chromaticGlitch' as const, label: 'Chromatic Glitch',
+                      extraParams: ['chromaticSpread', 'speed'] as const,
+                      paramLabels: { chromaticSpread: 'Offset Spread', speed: 'Jitter Speed' } },
+                    { type: 'sunbeams' as const, label: 'Undulating Sunbeams', supportsColor: true, defaultColor: '#FFCC66',
+                      extraParams: ['spread', 'speed'] as const,
+                      paramLabels: { spread: 'Ray Spread', speed: 'Animation Speed' },
+                      supportsBlend: true },
+                    { type: 'shimmer' as const, label: 'Undulating Shimmer', supportsColor: true, defaultColor: '#FFFFFF',
+                      extraParams: ['particleDensity', 'speed'] as const,
+                      paramLabels: { particleDensity: 'Particle Density', speed: 'Animation Speed' },
+                      supportsBlend: true },
+                    { type: 'rain' as const, label: 'Rain', supportsColor: true, defaultColor: '#AADDFF',
+                      extraParams: ['windStrength', 'dropLength', 'speed'] as const,
+                      paramLabels: { windStrength: 'Wind Strength', dropLength: 'Drop Length', speed: 'Fall Speed' } },
+                    { type: 'snowAsh' as const, label: 'Snow / Ash', supportsColor: true, defaultColor: '#FFFFFF',
+                      extraParams: ['particleSize', 'windStrength', 'speed'] as const,
+                      paramLabels: { particleSize: 'Particle Size', windStrength: 'Wind Strength', speed: 'Fall Speed' } },
+                ] as const).map(({ type, label, supportsColor, defaultColor, extraParams, paramLabels, supportsBlend }) => {
                     const intensity = getIntensity(type);
                     const enabled = intensity > 0;
                     const effectColor = getColor(type);
+                    const params = getParams(type);
+                    const variant = type === 'snowAsh' ? getSnowAshVariant() : undefined;
+
+                    const updateParam = (key: keyof VNEffectParams, val: number | string) => {
+                        setEffect(type, intensity, variant, effectColor || undefined, { ...params, [key]: val });
+                    };
+
                     return (
                         <div key={type} className="mb-3">
                             <label className="flex items-center gap-2 text-sm text-slate-200">
@@ -173,16 +212,81 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             {enabled && (
                                 <>
                                     <div className="mt-2">
-                                        <div className="text-xs text-slate-300 mb-1">Intensity: {Math.round(intensity * 100)}%</div>
+                                        <div className="text-xs text-slate-300 mb-1 flex justify-between">
+                                            <span>Intensity</span>
+                                            <span>{Math.round(intensity * 100)}%</span>
+                                        </div>
                                         <input
                                             type="range"
                                             min="0"
                                             max="1"
                                             step="0.01"
                                             value={intensity}
-                                            onChange={(e) => setEffect(type, parseFloat(e.target.value), type === 'snowAsh' ? getSnowAshVariant() : undefined, effectColor || undefined)}
+                                            onChange={(e) => setEffect(type, parseFloat(e.target.value), variant, effectColor || undefined, params)}
                                             className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-sky-500"
                                         />
+                                    </div>
+
+                                    {/* Per-effect granular sliders */}
+                                    <div className="mt-1 pl-2 border-l border-slate-700">
+                                        {extraParams.map(pKey => (
+                                            <ParamSlider
+                                                key={pKey}
+                                                label={(paramLabels as Record<string, string>)[pKey] || pKey}
+                                                value={typeof params[pKey] === 'number' ? (params[pKey] as number) : 0.5}
+                                                onChange={v => updateParam(pKey, v)}
+                                            />
+                                        ))}
+
+                                        {supportsBlend && (
+                                            <div className="mt-1">
+                                                <div className="text-xs text-slate-400 mb-0.5">Blend Mode</div>
+                                                <Select
+                                                    value={params.blendMode || (type === 'sunbeams' ? 'screen' : 'overlay')}
+                                                    onChange={e => updateParam('blendMode', e.target.value)}
+                                                >
+                                                    <option value="screen">Screen</option>
+                                                    <option value="overlay">Overlay</option>
+                                                    <option value="soft-light">Soft Light</option>
+                                                    <option value="normal">Normal</option>
+                                                </Select>
+                                            </div>
+                                        )}
+
+                                        {/* Shimmer-specific controls */}
+                                        {type === 'shimmer' && (
+                                            <>
+                                                <div className="mt-1">
+                                                    <div className="text-xs text-slate-400 mb-0.5">Side</div>
+                                                    <Select
+                                                        value={(params as any).shimmerSide || 'full'}
+                                                        onChange={e => updateParam('shimmerSide' as any, e.target.value)}
+                                                    >
+                                                        <option value="full">Full Screen</option>
+                                                        <option value="left">Left Side</option>
+                                                        <option value="right">Right Side</option>
+                                                    </Select>
+                                                </div>
+                                                <div className="mt-1">
+                                                    <div className="text-xs text-slate-400 mb-0.5">Direction</div>
+                                                    <Select
+                                                        value={(params as any).shimmerDirection || 'up'}
+                                                        onChange={e => updateParam('shimmerDirection' as any, e.target.value)}
+                                                    >
+                                                        <option value="up">Drift Up</option>
+                                                        <option value="down">Drift Down</option>
+                                                    </Select>
+                                                </div>
+                                                <label className="flex items-center gap-2 text-xs text-slate-300 mt-1 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!(params as any).shimmerParticlesOnly}
+                                                        onChange={e => updateParam('shimmerParticlesOnly' as any, e.target.checked as any)}
+                                                    />
+                                                    Particles Only (no light waves)
+                                                </label>
+                                            </>
+                                        )}
                                     </div>
 
                                     {supportsColor && (
@@ -192,19 +296,19 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                                 <input
                                                     type="color"
                                                     value={effectColor || defaultColor}
-                                                    onChange={(e) => setEffect(type, intensity, type === 'snowAsh' ? getSnowAshVariant() : undefined, e.target.value)}
+                                                    onChange={(e) => setEffect(type, intensity, variant, e.target.value, params)}
                                                     className="w-10 h-8 p-0 border-0 rounded cursor-pointer"
                                                 />
                                                 <input
                                                     type="text"
                                                     value={effectColor || defaultColor}
-                                                    onChange={(e) => setEffect(type, intensity, type === 'snowAsh' ? getSnowAshVariant() : undefined, e.target.value)}
+                                                    onChange={(e) => setEffect(type, intensity, variant, e.target.value, params)}
                                                     placeholder={defaultColor}
                                                     className="flex-1 px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded"
                                                 />
                                                 <button
                                                     type="button"
-                                                    onClick={() => setEffect(type, intensity, type === 'snowAsh' ? getSnowAshVariant() : undefined, defaultColor)}
+                                                    onClick={() => setEffect(type, intensity, variant, defaultColor, params)}
                                                     className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"
                                                     title="Reset to default color"
                                                 >
@@ -218,7 +322,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         <FormField label="Mode">
                                             <Select
                                                 value={getSnowAshVariant()}
-                                                onChange={(e) => setEffect('snowAsh', intensity, e.target.value as any, effectColor || undefined)}
+                                                onChange={(e) => setEffect('snowAsh', intensity, e.target.value as any, effectColor || undefined, params)}
                                             >
                                                 <option value="snow">Snow</option>
                                                 <option value="ash">Ash</option>

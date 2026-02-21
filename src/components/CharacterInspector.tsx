@@ -4,7 +4,7 @@ import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
 import { VNCharacter, VNCharacterExpression, VNCharacterLayer } from '../features/character/types';
-import { FormField, TextInput, Select } from './ui/Form';
+import { FormField, TextInput, Select, ColorInput } from './ui/Form';
 import { PencilIcon, PlusIcon, TrashIcon, UploadIcon } from './icons';
 import { fileToBase64 } from '../utils/file';
 import ConfirmationModal from './ui/ConfirmationModal';
@@ -188,7 +188,7 @@ const CharacterInspector: React.FC<{
             <div className="flex-grow overflow-y-auto pr-1 space-y-4">
                 <div>
                     <FormField label="Character Name"><TextInput value={character.name} onChange={e => updateCharacter({ name: e.target.value })} /></FormField>
-                    <FormField label="Dialogue Color"><TextInput type="color" value={character.color} onChange={e => updateCharacter({ color: e.target.value })} className="p-1 h-10" /></FormField>
+                    <FormField label="Dialogue Color"><ColorInput value={character.color} onChange={val => updateCharacter({ color: val })} className="p-1 h-10" /></FormField>
                 </div>
                 
                 <div>

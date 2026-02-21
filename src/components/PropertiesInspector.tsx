@@ -26,7 +26,7 @@ import { VNVariable, VNVariableType } from '../features/variables/types';
 import { VNCharacter, VNCharacterExpression } from '../features/character/types';
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
-import { FormField, Select, TextInput, TextArea } from './ui/Form';
+import { FormField, Select, TextInput, TextArea, ColorInput } from './ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon } from './icons';
 import AssetSelector from './ui/AssetSelector';
 import ActionEditor from './menu-editor/ActionEditor';
@@ -1302,8 +1302,25 @@ const PropertiesInspector: React.FC<{
                     <FormField label="Font Family"><TextInput value={cmd.fontFamily} onChange={e => updateCommand({ fontFamily: e.target.value })} placeholder="e.g., Arial, sans-serif" /></FormField>
                     <div className="grid grid-cols-2 gap-1">
                          <FormField label="Font Size (px)"><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 16 })} /></FormField>
-                        <FormField label="Color"><TextInput type="color" value={cmd.color} onChange={e => updateCommand({ color: e.target.value })} className="p-1 h-10" /></FormField>
+                        <FormField label="Color"><ColorInput value={cmd.color} onChange={val => updateCommand({ color: val })} className="p-1 h-10" /></FormField>
                     </div>
+                    <div className="grid grid-cols-2 gap-1">
+                        <FormField label="Weight">
+                            <Select value={cmd.fontWeight || 'normal'} onChange={e => updateCommand({ fontWeight: e.target.value as any })}>
+                                <option value="normal">Normal</option>
+                                <option value="bold">Bold</option>
+                            </Select>
+                        </FormField>
+                        <FormField label="Style">
+                            <Select value={cmd.fontStyle || 'normal'} onChange={e => updateCommand({ fontStyle: e.target.value as any })}>
+                                <option value="normal">Normal</option>
+                                <option value="italic">Italic</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    <FormField label="Letter Spacing (px)">
+                        <TextInput type="number" value={cmd.letterSpacing ?? 0} onChange={e => updateCommand({ letterSpacing: parseFloat(e.target.value) || 0 })} />
+                    </FormField>
                     <div className="grid grid-cols-2 gap-1">
                         <FormField label="Text Align">
                             <Select value={cmd.textAlign || 'left'} onChange={e => updateCommand({ textAlign: e.target.value as any })}>
@@ -1320,6 +1337,61 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                     </div>
+                    <hr className="border-slate-700 my-2" />
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Text Shadow</h4>
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mb-2">
+                        <input type="checkbox" checked={cmd.textShadow?.enabled ?? false} onChange={e => updateCommand({ textShadow: { ...( cmd.textShadow || { offsetX: 2, offsetY: 2, blur: 4, color: '#000000' }), enabled: e.target.checked } })} />
+                        Enable Shadow
+                    </label>
+                    {cmd.textShadow?.enabled && (
+                        <>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="X Offset"><TextInput type="number" value={cmd.textShadow.offsetX} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, offsetX: parseFloat(e.target.value) || 0 } })} /></FormField>
+                                <FormField label="Y Offset"><TextInput type="number" value={cmd.textShadow.offsetY} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, offsetY: parseFloat(e.target.value) || 0 } })} /></FormField>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="Blur"><TextInput type="number" value={cmd.textShadow.blur} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, blur: parseFloat(e.target.value) || 0 } })} /></FormField>
+                                <FormField label="Shadow Color"><ColorInput value={cmd.textShadow.color} onChange={val => updateCommand({ textShadow: { ...cmd.textShadow!, color: val } })} className="p-1 h-10" /></FormField>
+                            </div>
+                        </>
+                    )}
+                    <hr className="border-slate-700 my-2" />
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Text Gradient</h4>
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mb-2">
+                        <input type="checkbox" checked={cmd.textGradient?.enabled ?? false} onChange={e => updateCommand({ textGradient: { ...(cmd.textGradient || { type: 'linear', angle: 90, colors: ['#ff00a5', '#8a2be2'] }), enabled: e.target.checked } })} />
+                        Enable Gradient
+                    </label>
+                    {cmd.textGradient?.enabled && (
+                        <>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="Type">
+                                    <Select value={cmd.textGradient.type} onChange={e => updateCommand({ textGradient: { ...cmd.textGradient!, type: e.target.value as any } })}>
+                                        <option value="linear">Linear</option>
+                                        <option value="radial">Radial</option>
+                                    </Select>
+                                </FormField>
+                                {cmd.textGradient.type === 'linear' && (
+                                    <FormField label="Angle (°)"><TextInput type="number" value={cmd.textGradient.angle} onChange={e => updateCommand({ textGradient: { ...cmd.textGradient!, angle: parseInt(e.target.value, 10) || 0 } })} /></FormField>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="Color 1"><ColorInput value={cmd.textGradient.colors[0] || '#ff00a5'} onChange={val => { const c = [...(cmd.textGradient!.colors)]; c[0] = val; updateCommand({ textGradient: { ...cmd.textGradient!, colors: c } }); }} className="p-1 h-10" /></FormField>
+                                <FormField label="Color 2"><ColorInput value={cmd.textGradient.colors[1] || '#8a2be2'} onChange={val => { const c = [...(cmd.textGradient!.colors)]; c[1] = val; updateCommand({ textGradient: { ...cmd.textGradient!, colors: c } }); }} className="p-1 h-10" /></FormField>
+                            </div>
+                        </>
+                    )}
+                    <hr className="border-slate-700 my-2" />
+                    <h4 className="font-bold text-xs mb-2 text-slate-400">Text Border</h4>
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mb-2">
+                        <input type="checkbox" checked={cmd.textBorder?.enabled ?? false} onChange={e => updateCommand({ textBorder: { ...(cmd.textBorder || { width: 1, color: '#000000' }), enabled: e.target.checked } })} />
+                        Enable Border
+                    </label>
+                    {cmd.textBorder?.enabled && (
+                        <div className="grid grid-cols-2 gap-1">
+                            <FormField label="Width (px)"><TextInput type="number" value={cmd.textBorder.width} onChange={e => updateCommand({ textBorder: { ...cmd.textBorder!, width: parseFloat(e.target.value) || 0 } })} /></FormField>
+                            <FormField label="Border Color"><ColorInput value={cmd.textBorder.color} onChange={val => updateCommand({ textBorder: { ...cmd.textBorder!, color: val } })} className="p-1 h-10" /></FormField>
+                        </div>
+                    )}
                     <hr className="border-slate-700 my-2" />
                     <h4 className="font-bold text-xs mb-2 text-slate-400">Animation</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
@@ -1425,8 +1497,8 @@ const PropertiesInspector: React.FC<{
                     <h4 className="font-bold text-xs mb-2 text-slate-400">Styling</h4>
                     
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Background"><TextInput type="color" value={cmd.backgroundColor} onChange={e => updateCommand({ backgroundColor: e.target.value })} /></FormField>
-                        <FormField label="Text Color"><TextInput type="color" value={cmd.textColor} onChange={e => updateCommand({ textColor: e.target.value })} /></FormField>
+                        <FormField label="Background"><ColorInput value={cmd.backgroundColor || '#6366f1'} onChange={val => updateCommand({ backgroundColor: val })} /></FormField>
+                        <FormField label="Text Color"><ColorInput value={cmd.textColor || '#ffffff'} onChange={val => updateCommand({ textColor: val })} /></FormField>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-1">
@@ -1440,6 +1512,10 @@ const PropertiesInspector: React.FC<{
                     </div>
                     
                     <FormField label="Border Radius (px)"><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                    
+                    <FormField label={`Opacity: ${Math.round((cmd.opacity ?? 1) * 100)}%`}>
+                        <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
+                    </FormField>
                     
                     <hr className="border-slate-700 my-2" />
                     <h4 className="font-bold text-xs mb-2 text-slate-400">Images (Optional)</h4>

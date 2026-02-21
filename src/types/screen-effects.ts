@@ -10,6 +10,43 @@ export type VNScreenOverlayEffectType =
 
 export type VNSnowAshVariant = 'snow' | 'ash';
 
+/**
+ * Per-effect granular parameters beyond the universal `intensity`.
+ * All values are 0..1 normalised; renderers map them to concrete ranges.
+ */
+export interface VNEffectParams {
+  /** Animation / scroll speed (0 = frozen, 1 = fastest). Default ≈ 0.5 */
+  speed?: number;
+  /** Blend / compositing mode override */
+  blendMode?: 'screen' | 'overlay' | 'soft-light' | 'normal';
+  // --- Sunbeams ---
+  /** Angular spread of each ray (0 = narrow, 1 = very wide). Default ≈ 0.5 */
+  spread?: number;
+  // --- Shimmer ---
+  /** Relative floating-particle density (0 = few, 1 = many). Default ≈ 0.5 */
+  particleDensity?: number;
+  /** Which side the shimmer light emits from: 'left' | 'right' | 'full'. Default 'full' */
+  shimmerSide?: 'left' | 'right' | 'full';
+  /** Direction the shimmer/particles drift: 'up' | 'down'. Default 'up' */
+  shimmerDirection?: 'up' | 'down';
+  /** When true, disable the shimmer light waves and only show floating particles. Default false */
+  shimmerParticlesOnly?: boolean;
+  // --- Rain ---
+  /** Wind force applied to drops (0 = calm, 1 = strong). Default ≈ 0.5 */
+  windStrength?: number;
+  /** Raindrop streak length (0 = short, 1 = long). Default ≈ 0.5 */
+  dropLength?: number;
+  // --- Snow / Ash ---
+  /** Individual particle radius (0 = tiny, 1 = large). Default ≈ 0.5 */
+  particleSize?: number;
+  // --- CRT Scanlines ---
+  /** Gap between scan-line stripes (0 = tight, 1 = wide). Default ≈ 0.5 */
+  lineSpacing?: number;
+  // --- Chromatic Glitch ---
+  /** Colour-channel offset amount (0 = subtle, 1 = extreme). Default ≈ 0.5 */
+  chromaticSpread?: number;
+}
+
 export interface VNScreenOverlayEffect {
   id?: VNID;
   type: VNScreenOverlayEffectType;
@@ -19,6 +56,8 @@ export interface VNScreenOverlayEffect {
   variant?: VNSnowAshVariant;
   /** Optional color for the effect (hex string like #FFAA00) */
   color?: string;
+  /** Optional per-effect fine-tuning parameters */
+  params?: VNEffectParams;
 }
 
 export function clamp01(value: number): number {
@@ -66,6 +105,7 @@ export function upsertOverlayEffect(
       variant:
         next.type === 'snowAsh' ? (next.variant ?? 'snow') : next.variant,
       color: next.color,
+      params: next.params,
     },
   ]);
 }

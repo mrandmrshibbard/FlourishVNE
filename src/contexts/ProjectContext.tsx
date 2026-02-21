@@ -5,6 +5,7 @@ import { rootReducer } from '../state/rootReducer';
 import { saveProjectToIDB } from '../utils/storage';
 import { createLogger } from '../utils/logger';
 import { WorkflowTracker } from '../features/analytics/WorkflowTracker';
+import { useToast } from './ToastContext';
 
 interface UndoRedoState {
   past: VNProject[];
@@ -35,6 +36,7 @@ export const ProjectProvider: React.FC<{
   children: React.ReactNode;
   initialProject: VNProject;
 }> = ({ children, initialProject }) => {
+  const toast = useToast();
   const [history, setHistory] = useState<UndoRedoState>({
     past: [],
     present: initialProject,
@@ -145,7 +147,8 @@ export const ProjectProvider: React.FC<{
         future: [prev.present, ...prev.future]
       };
     });
-  }, []);
+    toast.info('Undo', { duration: 1200 });
+  }, [toast]);
 
   const redo = useCallback(() => {
     setHistory(prev => {
@@ -160,7 +163,8 @@ export const ProjectProvider: React.FC<{
         future: newFuture
       };
     });
-  }, []);
+    toast.info('Redo', { duration: 1200 });
+  }, [toast]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

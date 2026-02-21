@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { exportProject } from '../utils/projectPackager';
 import { saveRecentProject } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
 import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
-import ConfirmationModal from './ui/ConfirmationModal';
 import InfoModal from './ui/InfoModal';
 import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
@@ -52,6 +52,7 @@ const Header: React.FC<{
     const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
     const { project, undo, redo, canUndo, canRedo } = useProject();
     const isChildWindow = isManagerWindow();
+    const sessionSavedRef = useRef(false);
 
     useEffect(() => {
         editorDebugLog('showExitModal changed:', showExitModal);
@@ -62,6 +63,11 @@ const Header: React.FC<{
         if ((window as any).electronAPI?.onRequestSaveBeforeQuit) {
             (window as any).electronAPI.onRequestSaveBeforeQuit(() => {
                 editorDebugLog('Received quit request from Electron');
+                // If already saved this session, quit immediately
+                if (sessionSavedRef.current) {
+                    (window as any).electronAPI.confirmQuit();
+                    return;
+                }
                 setExitMode('electron');
                 setShowExitModal(true);
             });
@@ -97,6 +103,7 @@ const Header: React.FC<{
             if (didSave) {
                 // Save to recent projects now that we have a saved file
                 saveRecentProject(project);
+                sessionSavedRef.current = true;
             }
         } catch (error) {
             console.error("Export failed:", error);
@@ -109,6 +116,12 @@ const Header: React.FC<{
 
     const handleHubClick = () => {
         editorDebugLog('Hub button clicked, showing modal');
+        // If already saved this session, skip the dialog and exit directly
+        if (sessionSavedRef.current) {
+            closeAllManagerWindows();
+            onExit();
+            return;
+        }
         setExitMode('hub');
         setShowExitModal(true);
     };
@@ -126,6 +139,7 @@ const Header: React.FC<{
             
             // Save to recent projects now that we have a saved file
             saveRecentProject(project);
+            sessionSavedRef.current = true;
             
             // Wait a moment for the export to complete
             setTimeout(() => {
@@ -370,22 +384,53 @@ const Header: React.FC<{
         )}
         
         {/* Exit Confirmation Modal */}
-        <ConfirmationModal
-            isOpen={showExitModal}
-            onClose={handleCancelReturn}
-            onConfirm={handleConfirmReturn}
-            title="Save Before Leaving?"
-            confirmLabel={isExporting ? "Saving..." : "Save & Leave"}
-        >
-            <p className="mb-4 text-[var(--text-secondary)]">Do you want to export your project before leaving?</p>
-            <button
-                onClick={handleReturnWithoutSaving}
-                className="w-full px-4 py-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                disabled={isExporting}
+        {showExitModal && ReactDOM.createPortal(
+            <div
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm"
+                onClick={(e) => { if (e.target === e.currentTarget) handleCancelReturn(); }}
+                style={{ animation: 'fade-in 0.2s ease-out' }}
             >
-                Exit Without Saving
-            </button>
-        </ConfirmationModal>
+                <div
+                    className="bg-gradient-to-b from-[var(--bg-tertiary)] to-[var(--bg-secondary)] text-[var(--text-primary)] rounded-xl shadow-2xl w-full max-w-sm p-6 m-4 border border-[var(--border-default)]"
+                    style={{
+                        animation: 'modal-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.4), 0 0 60px rgba(168, 85, 247, 0.1)'
+                    }}
+                >
+                    <h2 className="text-lg font-semibold mb-2 text-[var(--text-primary)]">Save Before Leaving?</h2>
+                    <p className="text-sm text-[var(--text-secondary)] mb-5">Do you want to export your project before leaving?</p>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={handleConfirmReturn}
+                            disabled={isExporting}
+                            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-pink)]/25 transition-all text-white font-semibold text-sm disabled:opacity-60"
+                        >
+                            <span className="flex items-center justify-center gap-2">
+                                <SaveIcon className="w-4 h-4" />
+                                {isExporting ? "Saving..." : "Save & Leave"}
+                            </span>
+                        </button>
+                        <button
+                            onClick={handleCancelReturn}
+                            disabled={isExporting}
+                            className="w-full px-4 py-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all font-medium text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        >
+                            Cancel
+                        </button>
+                        <div className="flex justify-center pt-1">
+                            <button
+                                onClick={handleReturnWithoutSaving}
+                                disabled={isExporting}
+                                className="text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors underline underline-offset-2 disabled:opacity-40"
+                            >
+                                Exit Without Saving
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>,
+            document.body
+        )}
         
         {/* Error Modal */}
         <InfoModal

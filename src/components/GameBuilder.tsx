@@ -28,9 +28,25 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
   const [error, setError] = useState<string>('');
   const [gameBlob, setGameBlob] = useState<Blob | null>(null);
   const [buildSize, setBuildSize] = useState<number>(0);
+  const [iconDataUrl, setIconDataUrl] = useState<string>('');
+  const iconInputRef = React.useRef<HTMLInputElement>(null);
 
   const estimatedSize = estimateBuildSize(project);
   const validation = useMemo(() => validateProjectForBuild(project), [project]);
+
+  const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file (PNG recommended, 256×256 or larger).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setIconDataUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleBuild = async () => {
     try {
@@ -44,7 +60,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
         const { buildDesktopGame } = await import('../utils/desktopGameBundler');
         blob = await buildDesktopGame(project, (prog) => {
           setProgress(prog);
-        });
+        }, iconDataUrl || undefined);
         
         // Desktop builds save the file directly via Electron,
         // so we don't need to download the blob
@@ -165,6 +181,49 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </p>
               </div>
 
+              {buildType === 'desktop' && (
+                <div style={styles.iconPickerSection}>
+                  <input
+                    type="file"
+                    ref={iconInputRef}
+                    accept="image/png,image/jpeg,image/ico"
+                    onChange={handleIconSelect}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={styles.iconPickerLabel}>Application Icon</div>
+                  <div style={styles.iconPickerRow}>
+                    <div
+                      style={styles.iconPreviewBox}
+                      onClick={() => iconInputRef.current?.click()}
+                      title="Click to choose an icon"
+                    >
+                      {iconDataUrl ? (
+                        <img src={iconDataUrl} alt="App icon" style={styles.iconPreviewImg} />
+                      ) : (
+                        <span style={styles.iconPlaceholder}>📦</span>
+                      )}
+                    </div>
+                    <div style={styles.iconPickerInfo}>
+                      <button
+                        style={styles.iconChooseBtn}
+                        onClick={() => iconInputRef.current?.click()}
+                      >
+                        {iconDataUrl ? 'Change Icon' : 'Choose Icon'}
+                      </button>
+                      {iconDataUrl && (
+                        <button
+                          style={styles.iconClearBtn}
+                          onClick={() => setIconDataUrl('')}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <p style={styles.iconHint}>Recommended: 256×256 PNG</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div style={styles.statsBox}>
                 <div style={styles.stat}>
                   <div style={styles.statLabel}>Estimated Size:</div>
@@ -236,15 +295,32 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
               <div style={styles.progressBar}>
                 <div style={{ ...styles.progressFill, width: `${progress.progress}%` }} />
               </div>
-              <div style={styles.progressText}>{progress.progress}%</div>
+              <div style={styles.progressText}>{Math.round(progress.progress)}%</div>
               <div style={styles.progressMessage}>{progress.message}</div>
               
-              <div style={styles.progressSteps}>
-                <div style={getStepStyle(progress.step, 'prepare')}>📋 Preparing</div>
-                <div style={getStepStyle(progress.step, 'generate')}>⚙️ Generating</div>
-                <div style={getStepStyle(progress.step, 'assets')}>🎨 Bundling Assets</div>
-                <div style={getStepStyle(progress.step, 'finalize')}>📦 Finalizing</div>
-              </div>
+              {buildType === 'web' ? (
+                <div style={styles.progressSteps}>
+                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>📋 Preparing</div>
+                  <div style={getStepStyle(progress.step, 'generate', buildType)}>⚙️ Generating</div>
+                  <div style={getStepStyle(progress.step, 'assets', buildType)}>🎨 Bundling Assets</div>
+                  <div style={getStepStyle(progress.step, 'finalize', buildType)}>📦 Finalizing</div>
+                </div>
+              ) : (
+                <div style={{ ...styles.progressSteps, gridTemplateColumns: '1fr 1fr 1fr' }}>
+                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>📋 Prepare</div>
+                  <div style={getStepStyle(progress.step, 'generate', buildType)}>⚙️ Generate</div>
+                  <div style={getStepStyle(progress.step, 'assets', buildType)}>🎨 Assets</div>
+                  <div style={getStepStyle(progress.step, 'install', buildType)}>📥 Dependencies</div>
+                  <div style={getStepStyle(progress.step, 'build', buildType)}>🔨 Build EXE</div>
+                  <div style={getStepStyle(progress.step, 'save', buildType)}>💾 Save</div>
+                </div>
+              )}
+
+              {buildType === 'desktop' && (
+                <p style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center', marginTop: '16px' }}>
+                  Desktop builds take a few minutes — the app is working in the background.
+                </p>
+              )}
             </div>
           )}
 
@@ -378,10 +454,13 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
   );
 };
 
-function getStepStyle(currentStep: string, targetStep: string) {
+function getStepStyle(currentStep: string, targetStep: string, bType: BuildType = 'web') {
+  const webSteps = ['prepare', 'generate', 'assets', 'finalize'];
+  const desktopSteps = ['prepare', 'generate', 'assets', 'install', 'build', 'save'];
+  const steps = bType === 'desktop' ? desktopSteps : webSteps;
+
   const isActive = currentStep === targetStep;
-  const isPast = ['prepare', 'generate', 'assets', 'finalize'].indexOf(currentStep) > 
-                 ['prepare', 'generate', 'assets', 'finalize'].indexOf(targetStep);
+  const isPast = steps.indexOf(currentStep) > steps.indexOf(targetStep);
   
   return {
     ...styles.progressStep,
@@ -705,5 +784,80 @@ const styles = {
     padding: '10px',
     background: '#2a2a2a',
     borderRadius: '6px'
+  },
+  iconPickerSection: {
+    margin: '16px 0',
+    padding: '14px 16px',
+    background: '#1e1e2e',
+    borderRadius: '10px',
+    border: '1px solid #333'
+  },
+  iconPickerLabel: {
+    color: '#ccc',
+    fontSize: '13px',
+    fontWeight: 'bold' as const,
+    marginBottom: '10px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px'
+  },
+  iconPickerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px'
+  },
+  iconPreviewBox: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '12px',
+    background: '#2a2a3a',
+    border: '2px dashed #555',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    flexShrink: 0,
+    transition: 'border-color 0.2s'
+  },
+  iconPreviewImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    borderRadius: '10px'
+  },
+  iconPlaceholder: {
+    fontSize: '28px',
+    opacity: 0.5
+  },
+  iconPickerInfo: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    alignItems: 'center',
+    gap: '8px'
+  },
+  iconChooseBtn: {
+    padding: '6px 14px',
+    background: '#667eea',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '13px',
+    cursor: 'pointer',
+    fontWeight: 'bold' as const
+  },
+  iconClearBtn: {
+    padding: '6px 12px',
+    background: 'transparent',
+    color: '#f87171',
+    border: '1px solid #f87171',
+    borderRadius: '6px',
+    fontSize: '12px',
+    cursor: 'pointer'
+  },
+  iconHint: {
+    color: '#666',
+    fontSize: '11px',
+    margin: 0,
+    width: '100%'
   }
 };

@@ -30,6 +30,7 @@ export enum UIActionType {
     SetVariable = 'SetVariable',
     CycleLayerAsset = 'CycleLayerAsset',
     ToggleScreen = 'ToggleScreen',
+    OpenURL = 'OpenURL',
 }
 
 export interface BaseUIAction { type: UIActionType; }
@@ -42,5 +43,6 @@ export interface LoadGameAction extends BaseUIAction { type: UIActionType.LoadGa
 export interface SaveGameAction extends BaseUIAction { type: UIActionType.SaveGame; slotNumber: number; }
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
+export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction;

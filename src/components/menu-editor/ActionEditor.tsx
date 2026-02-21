@@ -1,7 +1,7 @@
 import React from 'react';
 import { VNID } from '../../types';
 import { VNUIScreen } from '../../features/ui/types';
-import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, CycleLayerAssetAction } from '../../types/shared';
+import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, CycleLayerAssetAction, OpenURLAction } from '../../types/shared';
 import { VNSetVariableOperator } from '../../features/variables/types';
 import { VNScene, CommandType, LabelCommand } from '../../features/scene/types';
 import { VNVariable } from '../../features/variables/types';
@@ -56,6 +56,7 @@ const ActionEditor: React.FC<{
                         <option value={UIActionType.SetVariable}>Set Variable</option>
                         <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
                         <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
+                        <option value={UIActionType.OpenURL}>Open URL</option>
                     </Select>
                 </FormField>
             </div>
@@ -93,6 +94,9 @@ const ActionEditor: React.FC<{
                 const firstLayerId = firstChar ? Object.keys(firstChar.layers)[0] || '' : '';
                 const firstVarId = Object.keys(project.variables)[0] || '';
                 newAction = { ...newAction, characterId: firstCharId, layerId: firstLayerId, variableId: firstVarId, direction: 'next' } as CycleLayerAssetAction;
+                break;
+            case UIActionType.OpenURL:
+                newAction = { ...newAction, url: 'https://', newTab: true } as OpenURLAction;
                 break;
         }
         onActionChange(newAction);
@@ -332,6 +336,28 @@ const ActionEditor: React.FC<{
                     </div>
                 );
             }
+            case UIActionType.OpenURL: {
+                const openUrlAction = action as OpenURLAction;
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label="URL">
+                            <TextInput
+                                value={openUrlAction.url || ''}
+                                onChange={e => onActionChange({ ...openUrlAction, url: e.target.value })}
+                                placeholder="https://example.com"
+                            />
+                        </FormField>
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={openUrlAction.newTab !== false}
+                                onChange={e => onActionChange({ ...openUrlAction, newTab: e.target.checked })}
+                            />
+                            Open in new tab
+                        </label>
+                    </div>
+                );
+            }
             default:
                 return null;
         }
@@ -355,6 +381,7 @@ const ActionEditor: React.FC<{
                     <option value={UIActionType.SetVariable}>Set Variable</option>
                     <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
                     <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
+                    <option value={UIActionType.OpenURL}>Open URL</option>
                 </Select>
             </FormField>
             {renderActionFields()}

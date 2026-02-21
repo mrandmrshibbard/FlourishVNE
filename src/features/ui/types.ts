@@ -2,6 +2,8 @@ import { VNID } from '../../types';
 import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNUIAction, VNTextAlign, VNVAlign } from '../../types/shared';
 
+import { VNTextShadow, VNTextGradient, VNTextBorder } from '../scene/types';
+
 export interface VNFontSettings {
     family: string;
     size: number;
@@ -9,6 +11,10 @@ export interface VNFontSettings {
     weight: 'normal' | 'bold';
     italic: boolean;
     align?: 'left' | 'center' | 'right';
+    letterSpacing?: number;
+    textShadow?: VNTextShadow;
+    textGradient?: VNTextGradient;
+    textBorder?: VNTextBorder;
 }
 
 export interface VNDefaultGameSettings {
@@ -61,6 +67,7 @@ interface BaseUIElement {
     type: UIElementType;
     x: number; y: number; width: number; height: number;
     anchorX: number; anchorY: number;
+    opacity?: number; // 0-1, default 1 (fully opaque)
     conditions?: VNCondition[];
     disabledConditions?: VNCondition[];
     // Element-level transitions
@@ -83,12 +90,31 @@ export interface UIButtonElement extends BaseUIElement {
     hoverBackgroundColor?: string; // Background color on hover when no image is set
 }
 
+export interface UITextShadow {
+    enabled: boolean;
+    offsetX: number;
+    offsetY: number;
+    blur: number;
+    color: string;
+}
+
+export interface UITextGradient {
+    enabled: boolean;
+    type: 'linear' | 'radial';
+    angle: number;
+    colors: string[];
+}
+
 export interface UITextElement extends BaseUIElement {
     type: UIElementType.Text;
     text: string;
     font: VNFontSettings;
     textAlign: VNTextAlign;
     verticalAlign: VNVAlign;
+    /** @deprecated Use font.textShadow instead */
+    textShadow?: VNTextShadow;
+    /** @deprecated Use font.textGradient instead */
+    textGradient?: VNTextGradient;
 }
 export interface UIImageElement extends BaseUIElement {
     type: UIElementType.Image;

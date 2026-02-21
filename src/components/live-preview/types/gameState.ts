@@ -20,6 +20,12 @@ export interface TextOverlay {
     color: string;
     width?: number;
     height?: number;
+    fontWeight?: 'normal' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    letterSpacing?: number;
+    textShadow?: { enabled: boolean; offsetX: number; offsetY: number; blur: number; color: string };
+    textGradient?: { enabled: boolean; type: 'linear' | 'radial'; angle: number; colors: string[] };
+    textBorder?: { enabled: boolean; width: number; color: string };
     textAlign?: 'left' | 'center' | 'right';
     verticalAlign?: 'top' | 'middle' | 'bottom';
     transition?: VNTransition;
@@ -60,6 +66,7 @@ export interface ButtonOverlay {
     fontSize: number;
     fontWeight: 'normal' | 'bold';
     borderRadius: number;
+    opacity: number;
     imageUrl: string | null;
     hoverImageUrl: string | null;
     onClick: import('../../../types/shared').VNUIAction;

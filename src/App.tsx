@@ -33,6 +33,11 @@ const App = () => {
 
     // Auto-start music when the app first loads
     useEffect(() => {
+        // Dismiss the splash screen now that React has mounted
+        if (typeof (window as any).__dismissSplash === 'function') {
+            (window as any).__dismissSplash();
+        }
+
         const tryAutoPlay = () => {
             try {
                 toggleBackgroundMusic(true);

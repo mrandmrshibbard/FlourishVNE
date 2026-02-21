@@ -25,12 +25,42 @@ function execAsync(command, options = {}) {
   });
 }
 
+/**
+ * Run a shell command with real-time progress callback for stdout/stderr lines.
+ */
+function execAsyncWithProgress(command, options = {}, onLine = () => {}) {
+  return new Promise((resolve, reject) => {
+    const proc = exec(command, { ...options, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+    if (proc.stdout) proc.stdout.on('data', (d) => {
+      const line = d.toString().trim();
+      console.log('[build stdout]', line);
+      onLine(line);
+    });
+    if (proc.stderr) proc.stderr.on('data', (d) => {
+      const line = d.toString().trim();
+      console.log('[build stderr]', line);
+      onLine(line);
+    });
+  });
+}
+
 // GPU stability on Windows: use ANGLE's D3D11 backend instead of the native GL
 // driver, which crashes on some machines. Keep GPU compositing active so the UI
 // stays smooth at any window size.
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
+// Speed up Electron startup — defer non-essential init
+app.commandLine.appendSwitch('enable-features', 'WinDelaySpellcheckServiceInit');
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
 // Prevent Chromium from throttling or suspending the renderer when the window
 // loses focus / is occluded.  This is the root cause of the "black screen when
 // switching back to the maximised window" problem.
@@ -44,7 +74,51 @@ if (!gotLock) {
 }
 
 let mainWindow;
+let splashWindow;
 let isHubActive = false;
+let isQuitting = false;
+
+/**
+ * Create a lightweight native splash window that shows immediately while the
+ * main renderer loads React, Tailwind, fonts, etc.
+ */
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 300,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#1a102c',
+    resizable: false,
+    skipTaskbar: false,
+    alwaysOnTop: true,
+    show: true,
+    center: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true }
+  });
+
+  // data:URL HTML renders in <50ms – no file I/O needed
+  splashWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<!DOCTYPE html>
+<html><head><style>
+  body { margin:0; display:flex; flex-direction:column; align-items:center;
+         justify-content:center; height:100vh; background:#1a102c;
+         font-family:'Segoe UI',sans-serif; color:#fff; overflow:hidden; }
+  .brand { font-size:2.2rem; font-weight:700; margin-bottom:1.4rem;
+           background:linear-gradient(135deg,#ff00a5,#8a2be2,#00f2ea);
+           -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .bar-wrap { width:200px; height:4px; border-radius:4px;
+              background:rgba(255,255,255,0.1); overflow:hidden; margin-bottom:0.8rem; }
+  .bar { height:100%; width:30%; border-radius:4px;
+         background:linear-gradient(90deg,#ff00a5,#8a2be2);
+         animation:loading 1.2s ease-in-out infinite alternate; }
+  @keyframes loading { from{width:20%;margin-left:0} to{width:50%;margin-left:50%} }
+  p { margin:0; font-size:0.8rem; opacity:0.5; }
+</style></head><body>
+  <div class="brand">Flourish VNE</div>
+  <div class="bar-wrap"><div class="bar"></div></div>
+  <p>Loading editor...</p>
+</body></html>`));
+}
 
 function isSafeNavigationUrl(urlString) {
   try {
@@ -96,6 +170,17 @@ function createWindow() {
   // Load the built app from dist folder
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
 
+  // Show the main window and close the splash once the app is painted.
+  // We use ready-to-show because it fires once the first non-blank frame is
+  // ready — at that point the user can see real UI, not a blank window.
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
+  });
+
   // Force a repaint whenever the window regains focus so the renderer
   // is never left showing a stale (black) frame.
   mainWindow.on('focus', () => {
@@ -142,11 +227,6 @@ function createWindow() {
   });
 
   hardenWebContents(mainWindow.webContents);
-
-  // Show window when ready to avoid flicker
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
 
   // Create application menu
   const template = [
@@ -227,8 +307,8 @@ function createWindow() {
 
   // Prevent window from closing, ask renderer to show save dialog
   mainWindow.on('close', (e) => {
-    // If we're already closing (confirmed), allow it
-    if (mainWindow.forceClose) {
+    // If we're already closing (confirmed) or app is quitting, allow it
+    if (mainWindow.forceClose || isQuitting) {
       return;
     }
 
@@ -278,8 +358,16 @@ function createWindow() {
   });
 }
 
-// App ready
+// App ready – show splash immediately, then start loading the full app.
+// The splash window uses show:true + backgroundColor so it appears the instant
+// BrowserWindow is created (before the data-URL HTML even paints).  We do NOT
+// wait for did-finish-load — the main window can start loading in the
+// background while the splash animates, shaving ~200-400ms off perceived
+// startup time.
 app.whenReady().then(() => {
+  createSplashWindow();
+  // Start the heavy main-window load immediately — no need to wait for the
+  // simple splash HTML to finish loading.
   createWindow();
 
   app.on('activate', () => {
@@ -298,12 +386,38 @@ app.on('second-instance', () => {
   }
 });
 
+// Set quitting flag so the close handler skips the save-confirmation dialog.
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 // Quit when all windows are closed.
 app.on('window-all-closed', () => {
   app.quit();
 });
 
+// Safety net: ensure the process actually terminates and doesn't linger.
+app.on('will-quit', () => {
+  // Destroy any lingering manager windows
+  managerWindows.forEach(win => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+  managerWindows.clear();
+
+  // Force-exit after a brief grace period in case something keeps the
+  // event loop alive (GPU process, open handles, etc.).
+  setTimeout(() => {
+    console.warn('App did not exit cleanly – forcing process.exit()');
+    process.exit(0);
+  }, 3000);
+});
+
 // IPC Handler: Build Desktop Game with Electron Builder
+// ── Persistent cache for node_modules to avoid re-downloading every build ──
+const buildCacheDir = path.join(app.getPath('userData'), 'build-cache');
+const cachedNodeModules = path.join(buildCacheDir, 'node_modules');
+const cachedPackageJson = path.join(buildCacheDir, 'package.json');
+
 ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
   try {
     // Create temporary build directory
@@ -333,24 +447,74 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
       }
     }
 
-    // Install dependencies
+    // ── Dependency installation with persistent cache ──
+    // Compare the package.json from the game with the cached one. If they
+    // match we can reuse the cached node_modules and skip `npm install`
+    // entirely, which saves ~30-60 s on subsequent builds.
     event.sender.send('build-progress', { 
       step: 'install', 
       progress: 30, 
-      message: 'Installing dependencies...' 
+      message: 'Preparing dependencies...' 
     });
     
-    try {
-      await execAsync('npm install', { cwd: tempDir });
-    } catch (err) {
-      throw new Error('Failed to install dependencies: ' + (err.stderr || err.message));
+    const newPkgPath = path.join(tempDir, 'package.json');
+    const newPkgContent = fs.existsSync(newPkgPath) ? fs.readFileSync(newPkgPath, 'utf8') : '';
+    const cachedPkgContent = fs.existsSync(cachedPackageJson) ? fs.readFileSync(cachedPackageJson, 'utf8') : '';
+    const cacheHit = newPkgContent && cachedPkgContent && newPkgContent === cachedPkgContent
+                     && fs.existsSync(cachedNodeModules);
+
+    if (cacheHit) {
+      // Reuse cached node_modules – just copy (or symlink) into the build dir
+      event.sender.send('build-progress', { 
+        step: 'install', 
+        progress: 35, 
+        message: 'Reusing cached dependencies...' 
+      });
+      console.log('[build] Cache hit – reusing node_modules from', buildCacheDir);
+      
+      // Use junction on Windows (fast, no admin rights), symlink elsewhere
+      const targetLink = path.join(tempDir, 'node_modules');
+      try {
+        fs.symlinkSync(cachedNodeModules, targetLink, 'junction');
+      } catch {
+        // Fallback: copy if symlink fails
+        fs.cpSync(cachedNodeModules, targetLink, { recursive: true });
+      }
+    } else {
+      // Fresh install – then persist the result for next time
+      event.sender.send('build-progress', { 
+        step: 'install', 
+        progress: 30, 
+        message: 'Installing dependencies (first build may take a minute)...' 
+      });
+      console.log('[build] Cache miss – running npm install');
+      
+      try {
+        await execAsync('npm install', { cwd: tempDir });
+      } catch (err) {
+        throw new Error('Failed to install dependencies: ' + (err.stderr || err.message));
+      }
+
+      // Save to cache for next time
+      try {
+        fs.mkdirSync(buildCacheDir, { recursive: true });
+        // Remove old cache
+        if (fs.existsSync(cachedNodeModules)) {
+          fs.rmSync(cachedNodeModules, { recursive: true, force: true });
+        }
+        fs.cpSync(path.join(tempDir, 'node_modules'), cachedNodeModules, { recursive: true });
+        fs.writeFileSync(cachedPackageJson, newPkgContent, 'utf8');
+        console.log('[build] Dependencies cached for future builds');
+      } catch (cacheErr) {
+        console.warn('[build] Failed to cache node_modules:', cacheErr.message);
+      }
     }
 
-    // Run electron-builder directly
+    // Run electron-builder with real-time progress feedback
     event.sender.send('build-progress', { 
       step: 'build', 
-      progress: 60, 
-      message: 'Building executable...' 
+      progress: 50, 
+      message: 'Starting executable build...' 
     });
     
     const platform = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux';
@@ -360,12 +524,46 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
     const builderPath = path.join(tempDir, 'node_modules', '.bin', 'electron-builder');
     const builderCmd = process.platform === 'win32' ? `"${builderPath}.cmd"` : builderPath;
     
+    // Track build phases from electron-builder output for granular progress
+    let buildProgress = 50;
+    const progressPhases = {
+      'loaded configuration': { pct: 52, msg: 'Loading build configuration...' },
+      'electron-builder': { pct: 54, msg: 'Initializing electron-builder...' },
+      'downloading': { pct: 58, msg: 'Downloading Electron binary (one-time)...' },
+      'verifying': { pct: 62, msg: 'Verifying Electron binary...' },
+      'packaging': { pct: 66, msg: 'Packaging application files...' },
+      'building': { pct: 72, msg: 'Building executable...' },
+      'packing': { pct: 78, msg: 'Packing into final executable...' },
+      'done': { pct: 84, msg: 'Finalising build output...' },
+    };
+
     try {
-      const { stdout } = await execAsync(`${builderCmd} ${platformFlag}`, { 
+      await execAsyncWithProgress(`${builderCmd} ${platformFlag}`, { 
         cwd: tempDir, 
         env: { ...process.env, CI: 'true' }
+      }, (line) => {
+        const lower = line.toLowerCase();
+        for (const [keyword, info] of Object.entries(progressPhases)) {
+          if (lower.includes(keyword) && info.pct > buildProgress) {
+            buildProgress = info.pct;
+            event.sender.send('build-progress', {
+              step: 'build',
+              progress: buildProgress,
+              message: info.msg
+            });
+          }
+        }
+        // Nudge progress up gradually even without keyword matches so the bar
+        // never sits still for too long.
+        if (buildProgress < 84) {
+          buildProgress = Math.min(buildProgress + 0.5, 84);
+          event.sender.send('build-progress', {
+            step: 'build',
+            progress: Math.round(buildProgress),
+            message: 'Building executable... please wait'
+          });
+        }
       });
-      console.log('Build output:', stdout);
     } catch (err) {
       console.error('Build error:', err);
       const stderr = err.stderr || '';
@@ -373,6 +571,12 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
       const message = err.message || '';
       throw new Error('Electron builder failed: ' + (stderr || stdout || message));
     }
+
+    event.sender.send('build-progress', {
+      step: 'build',
+      progress: 86,
+      message: 'Build complete — locating executable...'
+    });
 
     // Find the built executable
     const distDir = path.join(tempDir, 'dist');
@@ -431,6 +635,12 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
     }
 
     // Ask user where to save
+    event.sender.send('build-progress', {
+      step: 'save',
+      progress: 88,
+      message: 'Choose where to save your game...'
+    });
+
     let savePath;
     if (isDirectory) {
       // For directories, use folder selection dialog
@@ -456,6 +666,15 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
     }
 
     if (savePath) {
+      event.sender.send('build-progress', {
+        step: 'save',
+        progress: 90,
+        message: 'Saving executable...'
+      });
+
+      // Yield to the event loop so the progress update actually reaches the renderer
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       if (isDirectory) {
         // Copy entire directory recursively
         fs.cpSync(fullExePath, savePath, { recursive: true });
@@ -463,8 +682,24 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
         // Copy single file
         fs.copyFileSync(fullExePath, savePath);
       }
+
+      event.sender.send('build-progress', {
+        step: 'save',
+        progress: 94,
+        message: 'Cleaning up temporary files...'
+      });
+
+      // Yield so the UI updates before blocking cleanup
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Clean up temp directory with retry logic
+      // Remove junction/symlink first so rmSync doesn't follow into cache
+      const nmLink = path.join(tempDir, 'node_modules');
+      try {
+        const stat = fs.lstatSync(nmLink);
+        if (stat.isSymbolicLink()) fs.unlinkSync(nmLink);
+      } catch { /* not a link, fine */ }
+
       let retries = 3;
       while (retries > 0) {
         try {
@@ -474,9 +709,7 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
           retries--;
           if (retries === 0) {
             console.warn('Failed to clean up temp directory:', err);
-            // Don't throw - build succeeded even if cleanup failed
           } else {
-            // Wait before retry
             await new Promise(resolve => setTimeout(resolve, 500));
           }
         }
@@ -485,8 +718,10 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
       return { success: true, path: savePath };
     }
 
-    // Clean up temp directory
+    // Clean up temp directory (remove junction first)
     try {
+      const nmLink2 = path.join(tempDir, 'node_modules');
+      try { const s = fs.lstatSync(nmLink2); if (s.isSymbolicLink()) fs.unlinkSync(nmLink2); } catch {}
       fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
     } catch (err) {
       console.warn('Failed to clean up temp directory:', err);

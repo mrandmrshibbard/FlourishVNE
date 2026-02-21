@@ -1,20 +1,25 @@
-import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
+import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
-import { fontSettingsToStyle } from '../../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustomizationWizard';
 
-// Safe wrapper for element rendering to prevent crashes
+// Safe wrapper for element rendering to prevent crashes.
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
     try {
-        return <UIElementRenderer element={element} project={project} />;
+        return (
+            <div style={{ opacity: element.opacity ?? 1, width: '100%', height: '100%', overflow: 'hidden' }}>
+                <UIElementRenderer element={element} project={project} />
+            </div>
+        );
     } catch (err) {
         console.error('Error rendering UI element:', element.id, err);
         return <div className="w-full h-full bg-red-500/20 text-red-300 text-xs p-1">Render Error</div>;
@@ -46,7 +51,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 ) : (
                     <div className="absolute inset-0 w-full h-full rounded" style={{ backgroundColor: buttonBg }} />
                 )}
-                <span className="relative z-10" style={fontSettingsToStyle(btn.font)}>{btn.text}</span>
+                <span className="relative z-10" style={{...fontSettingsToStyle(btn.font), ...(extractTextGradientStyle(btn.font) || {})}}>{btn.text}</span>
             </div>;
         }
         case UIElementType.Text: {
@@ -54,11 +59,13 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[txt.textAlign || 'center'];
             const vAlignClass = { top: 'items-start', middle: 'items-center', bottom: 'items-end' }[txt.verticalAlign || 'middle'];
 
+            const txtStyle: React.CSSProperties = { ...fontSettingsToStyle(txt.font), textAlign: txt.textAlign || 'center' };
+
             return <div
                 className={`w-full h-full flex p-1 ${hAlignClass} ${vAlignClass}`}
-                style={{ ...fontSettingsToStyle(txt.font), textAlign: txt.textAlign || 'center' }}
+                style={txtStyle}
             >
-                <div>{txt.text}</div>
+                <div><span style={extractTextGradientStyle(txt.font) || undefined}>{txt.text}</span></div>
             </div>;
         }
         case UIElementType.Image: {
@@ -124,7 +131,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                             }}
                         >
                             <span className="text-xs font-bold" style={{ color: slotHeaderColor }}>Slot {i + 1}</span>
-                            <span className="text-[10px] opacity-50" style={fontSettingsToStyle(slotEl.font)}>{slotEl.emptySlotText}</span>
+                            <span className="text-[10px] opacity-50" style={{...fontSettingsToStyle(slotEl.font), ...(extractTextGradientStyle(slotEl.font) || {})}}>{slotEl.emptySlotText}</span>
                         </div>
                     ))}
                 </div>
@@ -149,7 +156,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const tog = element as UISettingsToggleElement;
             return <div className="w-full h-full flex items-center gap-2" style={fontSettingsToStyle(tog.font)}>
                 <input type="checkbox" className="h-4 w-4" disabled/>
-                <span>{tog.text}</span>
+                <span style={extractTextGradientStyle(tog.font) || undefined}>{tog.text}</span>
             </div>;
         case UIElementType.CharacterPreview:
              const charEl = element as UICharacterPreviewElement;
@@ -269,6 +276,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 />
                 <span style={{
                     ...fontSettingsToStyle(checkbox.font),
+                    ...(extractTextGradientStyle(checkbox.font) || {}),
                     color: checkbox.labelColor || '#f1f5f9'
                 }}>
                     {checkbox.label}
@@ -283,16 +291,16 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             
             return <div className="w-full h-full flex flex-col gap-1 items-center justify-center p-2 rounded" style={{ backgroundColor: cycler.backgroundColor || 'rgba(30, 41, 59, 0.8)' }}>
                 {cycler.label && (
-                    <div style={{...fontSettingsToStyle(cycler.font), fontSize: `${(cycler.font?.size || 16) * 0.8}px`, opacity: 0.8}} className="text-center">
-                        {cycler.label}
+                    <div style={{...fontSettingsToStyle(cycler.font), fontSize: `calc(var(--font-scale, 1) * ${(cycler.font?.size || 16) * 0.8}px)`, opacity: 0.8}} className="text-center">
+                        <span style={extractTextGradientStyle(cycler.font) || undefined}>{cycler.label}</span>
                     </div>
                 )}
                 <div className="flex items-center gap-3 w-full">
-                    <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `${cycler.arrowSize || 24}px` }}>◀</div>
+                    <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `calc(var(--font-scale, 1) * ${cycler.arrowSize || 24}px)` }}>◀</div>
                     <div className="flex-1 text-center overflow-hidden" style={fontSettingsToStyle(cycler.font)}>
-                        {cycler.showAssetName && firstAsset ? firstAsset.name : `1 / ${cycler.assetIds.length}`}
+                        <span style={extractTextGradientStyle(cycler.font) || undefined}>{cycler.showAssetName && firstAsset ? firstAsset.name : `1 / ${cycler.assetIds.length}`}</span>
                     </div>
-                    <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `${cycler.arrowSize || 24}px` }}>▶</div>
+                    <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `calc(var(--font-scale, 1) * ${cycler.arrowSize || 24}px)` }}>▶</div>
                 </div>
             </div>;
         default:
@@ -303,10 +311,11 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
 
 const MenuEditor: React.FC<{ 
     activeScreenId: VNID,
-    selectedElementId: VNID | null,
-    setSelectedElementId: (id: VNID | null) => void,
-}> = ({ activeScreenId, selectedElementId, setSelectedElementId }) => {
+    selectedElementIds: VNID[],
+    setSelectedElementIds: (ids: VNID[]) => void,
+}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds }) => {
     const { project, dispatch } = useProject();
+    const toast = useToast();
     const screen = project.uiScreens[activeScreenId];
     const [showWizard, setShowWizard] = useState(false);
     const [showTemplateSelector, setShowTemplateSelector] = useState(false);
@@ -315,6 +324,9 @@ const MenuEditor: React.FC<{
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
     const rafRef = useRef<number | null>(null);
     
+    // Clipboard for copy/cut/paste (persists across renders via ref)
+    const clipboardRef = useRef<{ elements: VNUIElement[]; isCut: boolean }>({ elements: [], isCut: false });
+
     // Defer rendering elements to give the browser time to settle
     const [isReady, setIsReady] = useState(false);
     useEffect(() => {
@@ -364,7 +376,7 @@ const MenuEditor: React.FC<{
         const newElement = createUIElement(type, project);
         if (newElement) {
             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
-            setSelectedElementId(newElement.id);
+            setSelectedElementIds([newElement.id]);
         }
     };
 
@@ -376,9 +388,126 @@ const MenuEditor: React.FC<{
             newElement.background = { type: 'video', assetId: null };
             newElement.image = null;
             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
-            setSelectedElementId(newElement.id);
+            setSelectedElementIds([newElement.id]);
         }
     };
+
+    // --- Selection helpers ---
+    const handleSelectElement = (elementId: VNID, e: React.MouseEvent) => {
+        if (e.ctrlKey || e.metaKey) {
+            // Toggle element in multi-select
+            setSelectedElementIds(
+                selectedElementIds.includes(elementId)
+                    ? selectedElementIds.filter(id => id !== elementId)
+                    : [...selectedElementIds, elementId]
+            );
+        } else {
+            // Single select
+            setSelectedElementIds([elementId]);
+        }
+    };
+
+    // --- Clipboard helpers ---
+    const generateNewId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}` as VNID;
+
+    const handleCopy = useCallback(() => {
+        if (!screen || selectedElementIds.length === 0) return;
+        const elements = selectedElementIds
+            .map(id => screen.elements[id])
+            .filter(Boolean) as VNUIElement[];
+        clipboardRef.current = { elements: JSON.parse(JSON.stringify(elements)), isCut: false };
+        toast.info(`Copied ${elements.length} element${elements.length > 1 ? 's' : ''}`, { duration: 1500 });
+    }, [screen, selectedElementIds, toast]);
+
+    const handleCut = useCallback(() => {
+        if (!screen || selectedElementIds.length === 0) return;
+        const elements = selectedElementIds
+            .map(id => screen.elements[id])
+            .filter(Boolean) as VNUIElement[];
+        clipboardRef.current = { elements: JSON.parse(JSON.stringify(elements)), isCut: true };
+        // Delete originals
+        selectedElementIds.forEach(id => {
+            dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId: id } });
+        });
+        setSelectedElementIds([]);
+        toast.info(`Cut ${elements.length} element${elements.length > 1 ? 's' : ''}`, { duration: 1500 });
+    }, [screen, selectedElementIds, activeScreenId, dispatch, setSelectedElementIds, toast]);
+
+    const handlePaste = useCallback(() => {
+        const { elements, isCut } = clipboardRef.current;
+        if (elements.length === 0) return;
+        const newIds: VNID[] = [];
+        elements.forEach(el => {
+            const newId = generateNewId();
+            const clone: VNUIElement = {
+                ...JSON.parse(JSON.stringify(el)),
+                id: newId,
+                name: isCut ? el.name : `${el.name} (copy)`,
+                // Offset pasted elements slightly so they don't overlap originals
+                x: el.x + (isCut ? 0 : 2),
+                y: el.y + (isCut ? 0 : 2),
+            };
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: clone } });
+            newIds.push(newId);
+        });
+        setSelectedElementIds(newIds);
+        toast.info(`Pasted ${newIds.length} element${newIds.length > 1 ? 's' : ''}`, { duration: 1500 });
+        // After a cut-paste, clear the clipboard so it doesn't paste again as cut
+        if (isCut) {
+            clipboardRef.current = { elements: [], isCut: false };
+        }
+    }, [activeScreenId, dispatch, setSelectedElementIds]);
+
+    const handleDeleteSelected = useCallback(() => {
+        if (selectedElementIds.length === 0) return;
+        const count = selectedElementIds.length;
+        selectedElementIds.forEach(id => {
+            dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId: id } });
+        });
+        setSelectedElementIds([]);
+        toast.info(`Deleted ${count} element${count > 1 ? 's' : ''}`, { duration: 1500 });
+    }, [selectedElementIds, activeScreenId, dispatch, setSelectedElementIds, toast]);
+
+    const handleSelectAll = useCallback(() => {
+        if (!screen) return;
+        const allIds = Object.keys(screen.elements) as VNID[];
+        setSelectedElementIds(allIds);
+        toast.info(`Selected ${allIds.length} element${allIds.length > 1 ? 's' : ''}`, { duration: 1500 });
+    }, [screen, setSelectedElementIds, toast]);
+
+    // --- Keyboard shortcuts ---
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if in input/textarea
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+            // Only handle if we're on the UI tab (screen is active)
+            if (!screen) return;
+
+            const isCtrl = e.ctrlKey || e.metaKey;
+
+            if (isCtrl && e.key === 'c') {
+                e.preventDefault();
+                handleCopy();
+            } else if (isCtrl && e.key === 'x') {
+                e.preventDefault();
+                handleCut();
+            } else if (isCtrl && e.key === 'v') {
+                e.preventDefault();
+                handlePaste();
+            } else if (isCtrl && e.key === 'a') {
+                e.preventDefault();
+                handleSelectAll();
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                handleDeleteSelected();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [screen, handleCopy, handleCut, handlePaste, handleSelectAll, handleDeleteSelected]);
 
     const handleWizardGenerate = (config: GeneratedConfig) => {
         const character = project.characters[config.characterId];
@@ -469,9 +598,16 @@ const MenuEditor: React.FC<{
                 title={`Editing Menu: ${screen.name}`} 
                 className="flex-1 min-h-0"
             >
-                <div className="w-full h-full bg-slate-900/50 rounded-md relative overflow-hidden" ref={stageRef}
-                    onMouseDown={() => setSelectedElementId(null)}
-                    style={getBackground()}
+                <div className="bg-slate-900/50 rounded-md relative overflow-hidden mx-auto" ref={stageRef}
+                    onMouseDown={() => setSelectedElementIds([])}
+                    style={{
+                        ...getBackground(),
+                        aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`,
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        width: '100%',
+                        '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1,
+                    } as React.CSSProperties}
                 >
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => (
                         <ResizableDraggable
@@ -480,10 +616,10 @@ const MenuEditor: React.FC<{
                             width={element.width} height={element.height}
                             anchorX={element.anchorX} anchorY={element.anchorY}
                             parentSize={stageSize}
-                            isSelected={selectedElementId === element.id}
+                            isSelected={selectedElementIds.includes(element.id)}
                             onSelect={(e) => {
                                 e.stopPropagation();
-                                setSelectedElementId(element.id);
+                                handleSelectElement(element.id, e);
                             }}
                             onUpdate={updates => handleUpdateElement(element.id, updates)}
                         >

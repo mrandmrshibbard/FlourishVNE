@@ -463,10 +463,10 @@ h1, h2, h3, h4, h5, h6 {
   background-clip: padding-box;
 }
 
-/* Selection */
+/* Selection — high contrast so highlighted text is clearly visible */
 ::selection {
-  background: linear-gradient(135deg, rgba(184, 126, 255, 0.5) 0%, rgba(255, 126, 179, 0.4) 100%);
-  color: var(--text-primary);
+  background: rgba(168, 85, 247, 0.65);
+  color: #ffffff;
 }
 
 /* === COMPONENT-SPECIFIC STYLES === */

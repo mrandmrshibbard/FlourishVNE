@@ -19,7 +19,8 @@ const isElectron = typeof window !== 'undefined' &&
  */
 export async function buildDesktopGame(
   project: VNProject,
-  onProgress: (progress: BuildProgress) => void
+  onProgress: (progress: BuildProgress) => void,
+  iconDataUrl?: string
 ): Promise<Blob> {
   
   // Check if running in Electron
@@ -69,16 +70,43 @@ export async function buildDesktopGame(
   }
   
   onProgress({ step: 'generate', progress: 40, message: 'Creating Electron configuration...' });
+
+  // ── Handle optional custom icon ──
+  let hasCustomIcon = false;
+  if (iconDataUrl && iconDataUrl.startsWith('data:')) {
+    const { dataURLToBlob: iconToBlob } = await import('./gameBundler');
+    const iconBlob = iconToBlob(iconDataUrl);
+    const iconBuffer = await iconBlob.arrayBuffer();
+    gameFiles['icon.png'] = iconBuffer;
+    hasCustomIcon = true;
+  }
   
   // Create package.json for Electron with electron-builder config
   const appName = project.title || 'Visual Novel Game';
   const packageName = appName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+  const buildFiles = [
+    'main.js',
+    'preload.js',
+    'index.html',
+    'assets/**/*'
+  ];
+  if (hasCustomIcon) buildFiles.push('icon.png');
+
+  const winConfig: Record<string, unknown> = { target: 'portable' };
+  const macConfig: Record<string, unknown> = { target: 'dir' };
+  const linuxConfig: Record<string, unknown> = { target: 'dir' };
+  if (hasCustomIcon) {
+    winConfig.icon = 'icon.png';
+    macConfig.icon = 'icon.png';
+    linuxConfig.icon = 'icon.png';
+  }
   
   gameFiles['package.json'] = JSON.stringify({
     name: packageName,
     productName: appName,
     version: '1.0.0',
-    description: project.description || 'A visual novel game created with Flourish VNE',
+    description: appName,
     main: 'main.js',
     scripts: {
       start: 'electron .',
@@ -99,25 +127,24 @@ export async function buildDesktopGame(
       directories: {
         output: 'dist'
       },
-      files: [
-        'main.js',
-        'preload.js',
-        'index.html',
-        'assets/**/*'
-      ],
-      win: {
-        target: 'portable'
-      },
-      mac: {
-        target: 'dir'
-      },
-      linux: {
-        target: 'dir'
-      }
+      files: buildFiles,
+      win: winConfig,
+      mac: macConfig,
+      linux: linuxConfig
     }
   }, null, 2);
   
+  // Pre-compute the escaped title for safe inclusion in the generated JavaScript
+  const safeTitle = (project.title || 'Visual Novel')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$');
+
   // Create Electron main.js - simple wrapper that uses file system for saves
+  // Includes a native splash window that shows instantly while the game HTML loads.
+  // NOTE: We avoid nested template literals by using string concatenation for the
+  // splash HTML to prevent escaping issues with the outer TypeScript template.
   gameFiles['main.js'] = `const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -135,10 +162,51 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) { app.quit(); }
 
 let mainWindow;
+let splashWindow;
 const saveDir = path.join(app.getPath('userData'), 'saves');
 
 if (!fs.existsSync(saveDir)) {
   fs.mkdirSync(saveDir, { recursive: true });
+}
+
+const GAME_TITLE = '${safeTitle}';
+const ICON_PATH = path.join(__dirname, 'icon.png');
+const HAS_ICON = fs.existsSync(ICON_PATH);
+
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 480,
+    height: 320,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#000000',
+    resizable: false,
+    skipTaskbar: false,
+    alwaysOnTop: true,
+    show: true,
+    icon: HAS_ICON ? ICON_PATH : undefined,
+    webPreferences: { nodeIntegration: false, contextIsolation: true }
+  });
+  // Tiny inline HTML splash – renders in <50ms
+  var splashHtml = '<!DOCTYPE html>'
+    + '<html><head><style>'
+    + 'body{margin:0;display:flex;flex-direction:column;align-items:center;'
+    + 'justify-content:center;height:100vh;background:#000;'
+    + 'font-family:Segoe UI,sans-serif;color:#fff;overflow:hidden}'
+    + 'h1{font-size:1.8rem;margin:0 0 1.2rem;opacity:.95}'
+    + '.bw{width:200px;height:4px;border-radius:4px;'
+    + 'background:rgba(255,255,255,.15);overflow:hidden}'
+    + '.b{height:100%;width:30%;border-radius:4px;'
+    + 'background:linear-gradient(90deg,#ff00a5,#8a2be2);'
+    + 'animation:l 1.2s ease-in-out infinite alternate}'
+    + '@keyframes l{from{width:20%;margin-left:0}to{width:50%;margin-left:50%}}'
+    + 'p{margin:.8rem 0 0;font-size:.8rem;opacity:.6}'
+    + '</style></head><body>'
+    + '<h1>' + GAME_TITLE + '</h1>'
+    + '<div class="bw"><div class="b"></div></div>'
+    + '<p>Loading...</p>'
+    + '</body></html>';
+  splashWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(splashHtml));
 }
 
 function createWindow() {
@@ -147,13 +215,14 @@ function createWindow() {
     height: 720,
     backgroundColor: '#000000',
     show: false,
+    icon: HAS_ICON ? ICON_PATH : undefined,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.js')
     },
-    title: '${project.title || 'Visual Novel'}'
+    title: GAME_TITLE
   });
 
   // Remove the default menu bar for a clean game experience
@@ -169,20 +238,40 @@ function createWindow() {
     try { mainWindow.webContents.invalidate(); } catch {}
   });
   
-  // Show window when ready to avoid flashing
+  // Once the game HTML is painted, swap from splash to main window
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
   });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Hard fallback: if app.quit() or will-quit don't terminate us, force exit
+    setTimeout(() => { process.exit(0); }, 2000);
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createSplashWindow();
+  // Defer main window creation until splash is painted
+  if (splashWindow) {
+    splashWindow.webContents.once('did-finish-load', () => { createWindow(); });
+    setTimeout(() => { if (!mainWindow) createWindow(); }, 3000);
+  } else {
+    createWindow();
+  }
+});
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+// Ensure the process actually terminates
+app.on('will-quit', () => {
+  setTimeout(() => { process.exit(0); }, 1500);
 });
 
 app.on('second-instance', () => {
@@ -193,7 +282,10 @@ app.on('second-instance', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createSplashWindow();
+    createWindow();
+  }
 });
 
 // Simple save system - replaces localStorage with file system

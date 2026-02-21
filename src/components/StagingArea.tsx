@@ -12,7 +12,7 @@ import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import Panel from './ui/Panel';
-import { fontSettingsToStyle } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import { interpolateVariables } from '../utils/variableInterpolation';
 
 interface TextOverlay {
@@ -25,6 +25,12 @@ interface TextOverlay {
     color: string;
     width?: number;
     height?: number;
+    fontWeight?: 'normal' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    letterSpacing?: number;
+    textShadow?: { enabled: boolean; offsetX: number; offsetY: number; blur: number; color: string };
+    textGradient?: { enabled: boolean; type: 'linear' | 'radial'; angle: number; colors: string[] };
+    textBorder?: { enabled: boolean; width: number; color: string };
     textAlign?: 'left' | 'center' | 'right';
     verticalAlign?: 'top' | 'middle' | 'bottom';
 }
@@ -254,7 +260,9 @@ const StagingArea: React.FC<{
                     textOverlays.push({
                         id: command.id, text: command.text, x: command.x, y: command.y,
                         fontSize: command.fontSize, fontFamily: command.fontFamily, color: command.color,
-                        width: command.width, height: command.height, textAlign: command.textAlign, verticalAlign: command.verticalAlign
+                        width: command.width, height: command.height, textAlign: command.textAlign, verticalAlign: command.verticalAlign,
+                        fontWeight: command.fontWeight, fontStyle: command.fontStyle, letterSpacing: command.letterSpacing,
+                        textShadow: command.textShadow, textGradient: command.textGradient, textBorder: command.textBorder,
                     });
                     break;
                 case CommandType.HideText:
@@ -371,11 +379,11 @@ const StagingArea: React.FC<{
                  style={dialogueBoxImageUrl ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}}>
                 {dialogue.characterName !== 'Narrator' && (
                     <h3 className="mb-2" style={{...fontSettingsToStyle(project.ui.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
-                        {dialogue.characterName}
+                        <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
                     </h3>
                 )}
                 <p className="leading-relaxed" style={fontSettingsToStyle(project.ui.dialogueTextFont)}>
-                    {interpolatedText}
+                    <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
                 </p>
             </div>
         );
@@ -388,7 +396,7 @@ const StagingArea: React.FC<{
                 return (
                     <button key={choice.id} className={`px-8 py-4 rounded-lg ${choiceButtonImageUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500'}`}
                             style={choiceButtonImageUrl ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...fontSettingsToStyle(project.ui.choiceTextFont) } : fontSettingsToStyle(project.ui.choiceTextFont)}>
-                        {interpolatedText}
+                        <span style={extractTextGradientStyle(project.ui.choiceTextFont) || undefined}>{interpolatedText}</span>
                     </button>
                 )
             })}
@@ -437,19 +445,39 @@ const StagingArea: React.FC<{
                         </div>
                     );
                 })}
-                {stageState.textOverlays.map(o => (
-                     <div key={o.id} style={{
+                {stageState.textOverlays.map(o => {
+                     const textStyle: React.CSSProperties = {
                         position: 'absolute', 
                         left: `${o.x}%`, 
                         top: `${o.y}%`,
                         width: o.width ? `${pxToPercentWidth(o.width)}%` : 'auto', 
                         height: o.height ? `${pxToPercentHeight(o.height)}%` : 'auto',
                         transform: 'translate(-50%, -50%)', 
-                        ...fontSettingsToStyle({ family: o.fontFamily, size: o.fontSize, color: o.color, weight: 'normal', italic: false }),
+                        ...fontSettingsToStyle({ family: o.fontFamily, size: o.fontSize, color: o.color, weight: o.fontWeight || 'normal', italic: o.fontStyle === 'italic' }),
                         fontSize: `${scaleFontSize(o.fontSize)}px`,
                         textAlign: o.textAlign,
-                     }}>{o.text}</div>
-                ))}
+                        letterSpacing: o.letterSpacing ? `${o.letterSpacing}px` : undefined,
+                     };
+                     if (o.textShadow?.enabled) {
+                         textStyle.textShadow = `${o.textShadow.offsetX}px ${o.textShadow.offsetY}px ${o.textShadow.blur}px ${o.textShadow.color}`;
+                     }
+                     if (o.textBorder?.enabled) {
+                         (textStyle as any).WebkitTextStroke = `${o.textBorder.width}px ${o.textBorder.color}`;
+                     }
+                     let gradientStyle: React.CSSProperties | undefined;
+                     if (o.textGradient?.enabled && o.textGradient.colors.length >= 2) {
+                         const g = o.textGradient;
+                         gradientStyle = {
+                             background: g.type === 'radial'
+                                 ? `radial-gradient(circle, ${g.colors.join(', ')})`
+                                 : `linear-gradient(${g.angle}deg, ${g.colors.join(', ')})`,
+                             WebkitBackgroundClip: 'text',
+                             WebkitTextFillColor: 'transparent',
+                             backgroundClip: 'text',
+                         } as React.CSSProperties;
+                     }
+                     return <div key={o.id} style={textStyle}><span style={gradientStyle}>{o.text}</span></div>;
+                })}
                  {stageState.imageOverlays.map(o => (
                      <div key={o.id} style={{
                          position: 'absolute', 

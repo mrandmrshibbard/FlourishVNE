@@ -12,16 +12,16 @@ interface UIManagerProps {
     project: VNProject;
     activeMenuScreenId: VNID | null;
     setActiveMenuScreenId: (id: VNID | null) => void;
-    selectedUIElementId: VNID | null;
-    setSelectedUIElementId: (id: VNID | null) => void;
+    selectedUIElementIds: VNID[];
+    setSelectedUIElementIds: (ids: VNID[]) => void;
 }
 
 const UIManager: React.FC<UIManagerProps> = ({
     project,
     activeMenuScreenId,
     setActiveMenuScreenId,
-    selectedUIElementId,
-    setSelectedUIElementId
+    selectedUIElementIds,
+    setSelectedUIElementIds
 }) => {
     const { dispatch } = useProject();
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
@@ -86,9 +86,9 @@ const UIManager: React.FC<UIManagerProps> = ({
         } else {
             setActiveMenuScreenId(null);
         }
-        setSelectedUIElementId(null);
+        setSelectedUIElementIds([]);
         setPendingRestore(false);
-    }, [pendingRestore, project.ui.titleScreenId, project.uiScreens, setActiveMenuScreenId, setSelectedUIElementId]);
+    }, [pendingRestore, project.ui.titleScreenId, project.uiScreens, setActiveMenuScreenId, setSelectedUIElementIds]);
 
     return (
         <div className="flex h-full">
@@ -144,8 +144,8 @@ const UIManager: React.FC<UIManagerProps> = ({
                 {activeMenuScreenId ? (
                     <MenuEditor
                         activeScreenId={activeMenuScreenId}
-                        selectedElementId={selectedUIElementId}
-                        setSelectedElementId={setSelectedUIElementId}
+                        selectedElementIds={selectedUIElementIds}
+                        setSelectedElementIds={setSelectedUIElementIds}
                     />
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-400">

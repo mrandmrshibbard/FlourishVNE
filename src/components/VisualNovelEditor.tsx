@@ -50,7 +50,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [activeSceneId, setActiveSceneId] = useState<VNID>(project.startSceneId);
     const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
     const [activeMenuScreenId, setActiveMenuScreenId] = useState<VNID | null>(null);
-    const [selectedUIElementId, setSelectedUIElementId] = useState<VNID | null>(null);
+    const [selectedUIElementIds, setSelectedUIElementIds] = useState<VNID[]>([]);
     const [activeCharacterId, setActiveCharacterId] = useState<VNID | null>(null);
     const [selectedExpressionId, setSelectedExpressionId] = useState<VNID | null>(null);
     const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
@@ -166,14 +166,14 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const handleSetActiveMenuScreen = (id: VNID | null) => {
         setActiveMenuScreenId(id);
         setSelectedCommandIndex(null); 
-        setSelectedUIElementId(null); 
+        setSelectedUIElementIds([]); 
         setActiveCharacterId(null);
     }
      const handleSetActiveCharacter = (id: VNID | null) => {
         setActiveCharacterId(id);
         setActiveMenuScreenId(null);
         setSelectedCommandIndex(null);
-        setSelectedUIElementId(null);
+        setSelectedUIElementIds([]);
     }
 
     const renderInspector = () => {
@@ -194,8 +194,9 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             />;
         }
         if (activeMenuScreenId) {
-            if (selectedUIElementId) {
-                return <UIElementInspector screenId={activeMenuScreenId} elementId={selectedUIElementId} setSelectedElementId={setSelectedUIElementId} />;
+            if (selectedUIElementIds.length > 0) {
+                const lastId = selectedUIElementIds[selectedUIElementIds.length - 1];
+                return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} />;
             }
             return <ScreenInspector screenId={activeMenuScreenId} />;
         }
@@ -403,7 +404,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             setActiveSceneId(project.startSceneId);
             setSelectedCommandIndex(null);
             setActiveMenuScreenId(null);
-            setSelectedUIElementId(null);
+            setSelectedUIElementIds([]);
             setActiveCharacterId(null);
             setSelectedExpressionId(null);
             setSelectedVariableId(null);
@@ -536,8 +537,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 project={project}
                                 activeMenuScreenId={activeMenuScreenId}
                                 setActiveMenuScreenId={handleSetActiveMenuScreen}
-                                selectedUIElementId={selectedUIElementId}
-                                setSelectedUIElementId={setSelectedUIElementId}
+                                selectedUIElementIds={selectedUIElementIds}
+                                setSelectedUIElementIds={setSelectedUIElementIds}
                             />
                         </ErrorBoundary>
                     ) : activeTab === 'assets' ? (

@@ -351,7 +351,76 @@
 <link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-slate-900 text-slate-100">
+    <!-- Splash screen: visible instantly before any JS loads -->
+    <div id="flourish-splash" style="
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background-color: #1a102c;
+      font-family: 'Poppins', 'Segoe UI', sans-serif;
+      transition: opacity 0.4s ease-out;
+    ">
+      <div style="
+        font-size: 2.5rem; font-weight: 700;
+        background: linear-gradient(135deg, #ff00a5, #8a2be2, #00f2ea);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text; margin-bottom: 1.5rem;
+        letter-spacing: 0.05em;
+      ">Flourish VNE</div>
+      <div style="
+        width: 200px; height: 4px; border-radius: 4px;
+        background: rgba(255,255,255,0.1); overflow: hidden;
+        margin-bottom: 1rem;
+      ">
+        <div id="splash-progress" style="
+          height: 100%; width: 0%; border-radius: 4px;
+          background: linear-gradient(90deg, #ff00a5, #8a2be2);
+          transition: width 0.3s ease;
+        "></div>
+      </div>
+      <div id="splash-status" style="
+        color: #c0b4d4; font-size: 0.85rem;
+      ">Loading editor...</div>
+    </div>
+
     <div id="root"></div>
+
+    <script>
+      // Animate the splash progress bar while loading
+      (function() {
+        var bar = document.getElementById('splash-progress');
+        var status = document.getElementById('splash-status');
+        var progress = 0;
+        var steps = [
+          [15, 'Loading styles...'],
+          [35, 'Loading libraries...'],
+          [55, 'Initializing engine...'],
+          [75, 'Preparing workspace...'],
+        ];
+        var stepIdx = 0;
+        var interval = setInterval(function() {
+          if (stepIdx < steps.length) {
+            progress = steps[stepIdx][0];
+            bar.style.width = progress + '%';
+            status.textContent = steps[stepIdx][1];
+            stepIdx++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 400);
+        // React will call window.__dismissSplash() when mounted
+        window.__dismissSplash = function() {
+          clearInterval(interval);
+          bar.style.width = '100%';
+          status.textContent = 'Ready!';
+          var splash = document.getElementById('flourish-splash');
+          setTimeout(function() {
+            splash.style.opacity = '0';
+            setTimeout(function() { splash.remove(); }, 400);
+          }, 200);
+        };
+      })();
+    </script>
+
     <script type="module" src="/src/index.tsx"></script>
     <script>
         // Prevent default context menu (right-click menu)

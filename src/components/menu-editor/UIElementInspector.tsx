@@ -7,7 +7,7 @@ import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElem
 import { VNVariable, VNVariableType } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { VNProject } from '../../types/project';
-import { FormField, TextInput, Select } from '../ui/Form';
+import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
 import ActionEditor from './ActionEditor';
@@ -311,6 +311,10 @@ const UIElementInspector: React.FC<{
                 <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
             </div>
             
+            <FormField label={`Opacity: ${Math.round((element.opacity ?? 1) * 100)}%`}>
+                <input type="range" min="0" max="1" step="0.01" value={element.opacity ?? 1} onChange={e => updateElement({ opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
+            </FormField>
+            
             <h3 className="font-bold mt-3 mb-2 text-slate-400">Element Transition</h3>
             <div className="grid grid-cols-2 gap-2">
                 <FormField label="Transition In">
@@ -379,10 +383,10 @@ const UIElementInspector: React.FC<{
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Button Colors (when no image is set)</h4>
                     <div className="grid grid-cols-2 gap-2">
                         <FormField label="Background">
-                            <TextInput type="color" value={el.backgroundColor || '#4D3273'} onChange={e => updateElement({ backgroundColor: e.target.value })} />
+                            <ColorInput value={el.backgroundColor || '#4D3273'} onChange={val => updateElement({ backgroundColor: val })} />
                         </FormField>
                         <FormField label="Hover Background">
-                            <TextInput type="color" value={el.hoverBackgroundColor || '#6B4C9A'} onChange={e => updateElement({ hoverBackgroundColor: e.target.value })} />
+                            <ColorInput value={el.hoverBackgroundColor || '#6B4C9A'} onChange={val => updateElement({ hoverBackgroundColor: val })} />
                         </FormField>
                     </div>
 
@@ -610,10 +614,10 @@ const UIElementInspector: React.FC<{
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Colors</h4>
                     <div className="grid grid-cols-2 gap-2">
                         <FormField label="Thumb Color">
-                            <TextInput type="color" value={el.thumbColor || '#ec4899'} onChange={e => updateElement({ thumbColor: e.target.value })} />
+                            <ColorInput value={el.thumbColor || '#ec4899'} onChange={val => updateElement({ thumbColor: val })} />
                         </FormField>
                         <FormField label="Track Color">
-                            <TextInput type="color" value={el.trackColor || '#a855f7'} onChange={e => updateElement({ trackColor: e.target.value })} />
+                            <ColorInput value={el.trackColor || '#a855f7'} onChange={val => updateElement({ trackColor: val })} />
                         </FormField>
                     </div>
 
@@ -780,7 +784,7 @@ const UIElementInspector: React.FC<{
                     
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Checkbox Color</h4>
                     <FormField label="Color">
-                        <TextInput type="color" value={el.checkboxColor || '#ec4899'} onChange={e => updateElement({ checkboxColor: e.target.value })} />
+                        <ColorInput value={el.checkboxColor || '#ec4899'} onChange={val => updateElement({ checkboxColor: val })} />
                     </FormField>
                     
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>

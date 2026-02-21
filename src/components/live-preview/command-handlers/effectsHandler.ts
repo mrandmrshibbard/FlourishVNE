@@ -130,6 +130,8 @@ export function handleSetScreenOverlayEffect(
             type: command.effectType,
             intensity: command.intensity,
             variant: command.variant,
+            color: command.color,
+            params: command.params,
           }),
         },
       },

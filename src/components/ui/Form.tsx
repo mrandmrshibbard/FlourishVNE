@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 export const FormField: React.FC<{ label: string; children: React.ReactNode; hint?: string; accentColor?: string }> = ({ label, children, hint, accentColor }) => (
     <div className="mb-4">
@@ -48,6 +48,52 @@ export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttri
         className={`${inputBaseStyles} ${className || ''}`}
     />
 ));
+
+// Throttled color input — prevents lag when dragging the color picker
+export const ColorInput: React.FC<{
+    value: string;
+    onChange: (value: string) => void;
+    className?: string;
+}> = ({ value, onChange, className }) => {
+    const [localValue, setLocalValue] = useState(value);
+    const rafRef = useRef<number | null>(null);
+    const latestValueRef = useRef(value);
+
+    // Sync from parent when external value changes (e.g. undo/redo)
+    useEffect(() => {
+        latestValueRef.current = value;
+        setLocalValue(value);
+    }, [value]);
+
+    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const newVal = e.target.value;
+        setLocalValue(newVal);
+        // Throttle the upstream callback to animation frames
+        if (rafRef.current !== null) {
+            cancelAnimationFrame(rafRef.current);
+        }
+        rafRef.current = requestAnimationFrame(() => {
+            onChange(newVal);
+            rafRef.current = null;
+        });
+    }, [onChange]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+        };
+    }, []);
+
+    return (
+        <input 
+            type="color"
+            value={localValue || '#000000'}
+            onChange={handleChange}
+            className={`${inputBaseStyles} ${className || ''}`}
+        />
+    );
+};
 
 // FIX: Combine passed className with default styles, and set a default for the rows prop.
 export const TextArea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = ({ className, rows = 4, ...props }) => (

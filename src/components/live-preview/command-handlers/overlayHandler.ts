@@ -31,6 +31,12 @@ export function handleShowText(
     color: command.color,
     width: command.width,
     height: command.height,
+    fontWeight: command.fontWeight,
+    fontStyle: command.fontStyle,
+    letterSpacing: command.letterSpacing,
+    textShadow: command.textShadow,
+    textGradient: command.textGradient,
+    textBorder: command.textBorder,
     textAlign: command.textAlign,
     verticalAlign: command.verticalAlign,
     transition: command.transition !== 'instant' ? command.transition : undefined,
@@ -269,6 +275,7 @@ export function handleShowButton(
     fontSize: command.fontSize || 18,
     fontWeight: command.fontWeight || 'normal',
     borderRadius: command.borderRadius || 8,
+    opacity: command.opacity ?? 1,
     imageUrl: command.image ? assetResolver(command.image.id, command.image.type) : null,
     hoverImageUrl: command.hoverImage
       ? assetResolver(command.hoverImage.id, command.hoverImage.type)

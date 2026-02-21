@@ -242,10 +242,33 @@ export interface SetScreenOverlayEffectCommand extends BaseCommand {
     color?: string;
     /** Duration in seconds before effect auto-removes. 0 = persistent (until cleared). */
     duration?: number;
+    /** Optional per-effect parameters */
+    params?: import('../../types/screen-effects').VNEffectParams;
 }
 export interface ShowScreenCommand extends BaseCommand {
     type: CommandType.ShowScreen;
     screenId: VNID;
+}
+
+export interface VNTextShadow {
+    enabled: boolean;
+    offsetX: number;
+    offsetY: number;
+    blur: number;
+    color: string;
+}
+
+export interface VNTextGradient {
+    enabled: boolean;
+    type: 'linear' | 'radial';
+    angle: number; // degrees, for linear
+    colors: string[]; // at least 2 stops
+}
+
+export interface VNTextBorder {
+    enabled: boolean;
+    width: number; // px
+    color: string;
 }
 
 export interface ShowTextCommand extends BaseCommand {
@@ -258,6 +281,12 @@ export interface ShowTextCommand extends BaseCommand {
     color: string;
     width?: number;
     height?: number;
+    fontWeight?: 'normal' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    letterSpacing?: number;
+    textShadow?: VNTextShadow;
+    textGradient?: VNTextGradient;
+    textBorder?: VNTextBorder;
     textAlign?: VNTextAlign;
     verticalAlign?: VNVAlign;
     transition: VNTransition;
@@ -308,6 +337,7 @@ export interface ShowButtonCommand extends BaseCommand {
     fontSize?: number;
     fontWeight?: 'normal' | 'bold';
     borderRadius?: number; // pixels
+    opacity?: number; // 0-1, default 1
     // Images (optional)
     image?: { type: 'image' | 'video', id: VNID } | null;
     hoverImage?: { type: 'image' | 'video', id: VNID } | null;
