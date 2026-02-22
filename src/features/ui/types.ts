@@ -21,6 +21,7 @@ export interface VNDefaultGameSettings {
     textSpeed: number;
     musicVolume: number;
     sfxVolume: number;
+    ambientVolume: number;
     enableSkip: boolean;
     autoAdvance: boolean;
     autoAdvanceDelay: number;
@@ -34,7 +35,18 @@ export interface VNProjectUI {
     pauseScreenId: VNID | null;
     gameHudScreenId: VNID | null;
     dialogueBoxImage: UIAsset | null;
+    dialogueBoxBorderImage: UIAsset | null;
+    dialogueBorderPadding?: number; // px of border visible around the background (default 12)
+    dialogueBoxWidth?: number; // percentage 30-100 of screen width (default 100)
+    dialogueBoxHeight?: number; // px explicit height, 0/undefined = auto (default auto)
+    dialogueBoxBottomMargin?: number; // px from bottom of screen (default 20)
+    dialogueBoxPadding?: number; // px inner content padding (default 20)
     choiceButtonImage: UIAsset | null;
+    choiceButtonBorderImage: UIAsset | null;
+    choiceBorderPadding?: number; // px of border visible around the background (default 8)
+    choiceButtonWidth?: number; // px explicit width, 0/undefined = auto (default auto)
+    choiceButtonHeight?: number; // px explicit height, 0/undefined = auto (default auto)
+    choiceButtonPadding?: number; // px inner content padding (default 16)
     dialogueNameFont: VNFontSettings;
     dialogueTextFont: VNFontSettings;
     choiceTextFont: VNFontSettings;
@@ -132,7 +144,7 @@ export interface UISaveSlotGridElement extends BaseUIElement {
     slotHoverBorderColor?: string;
     slotHeaderColor?: string;
 }
-export type GameSetting = 'musicVolume' | 'sfxVolume' | 'textSpeed';
+export type GameSetting = 'musicVolume' | 'sfxVolume' | 'ambientVolume' | 'textSpeed';
 export interface UISettingsSliderElement extends BaseUIElement {
     type: UIElementType.SettingsSlider;
     setting: GameSetting;
@@ -247,12 +259,14 @@ export interface VNUIScreen {
     id: VNID;
     name:string;
     background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null };
-    music: { audioId: VNID | null, policy: 'continue' | 'stop' };
-    ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop' };
+    music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
+    ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     elements: Record<VNID, VNUIElement>;
     effects?: VNScreenOverlayEffect[];
-    transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
-    transitionOut?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
-    transitionDuration?: number; // Duration in milliseconds (default 300)
+    transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'crossfade';
+    transitionOut?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'crossfade';
+    transitionDuration?: number; // Legacy fallback duration in milliseconds (default 300)
+    transitionInDuration?: number; // Duration for transition-in in milliseconds (default 300)
+    transitionOutDuration?: number; // Duration for transition-out in milliseconds (default 300)
     showDialogue?: boolean; // Whether to show the dialogue box on this screen
 }

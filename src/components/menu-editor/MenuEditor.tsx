@@ -155,7 +155,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
         case UIElementType.SettingsToggle:
             const tog = element as UISettingsToggleElement;
             return <div className="w-full h-full flex items-center gap-2" style={fontSettingsToStyle(tog.font)}>
-                <input type="checkbox" className="h-4 w-4" disabled/>
+                <input type="checkbox" className="h-4 w-4" disabled style={{ accentColor: tog.checkboxColor || '#3b82f6', pointerEvents: 'none' as const }}/>
                 <span style={extractTextGradientStyle(tog.font) || undefined}>{tog.text}</span>
             </div>;
         case UIElementType.CharacterPreview:
@@ -366,48 +366,7 @@ const MenuEditor: React.FC<{
         };
     }, [activeScreenId]);
 
-    if (!screen) return <Panel title="Menu Editor">Screen not found</Panel>;
-
-    const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
-        dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
-    };
-    
-    const handleAddElement = (type: UIElementType) => {
-        const newElement = createUIElement(type, project);
-        if (newElement) {
-            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
-            setSelectedElementIds([newElement.id]);
-        }
-    };
-
-    const handleAddVideoElement = () => {
-        const newElement = createUIElement(UIElementType.Image, project) as UIImageElement;
-        if (newElement) {
-            // Pre-configure as a video element
-            newElement.name = 'Video';
-            newElement.background = { type: 'video', assetId: null };
-            newElement.image = null;
-            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
-            setSelectedElementIds([newElement.id]);
-        }
-    };
-
-    // --- Selection helpers ---
-    const handleSelectElement = (elementId: VNID, e: React.MouseEvent) => {
-        if (e.ctrlKey || e.metaKey) {
-            // Toggle element in multi-select
-            setSelectedElementIds(
-                selectedElementIds.includes(elementId)
-                    ? selectedElementIds.filter(id => id !== elementId)
-                    : [...selectedElementIds, elementId]
-            );
-        } else {
-            // Single select
-            setSelectedElementIds([elementId]);
-        }
-    };
-
-    // --- Clipboard helpers ---
+    // --- Clipboard helpers (hooks must be above early return) ---
     const generateNewId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}` as VNID;
 
     const handleCopy = useCallback(() => {
@@ -456,7 +415,7 @@ const MenuEditor: React.FC<{
         if (isCut) {
             clipboardRef.current = { elements: [], isCut: false };
         }
-    }, [activeScreenId, dispatch, setSelectedElementIds]);
+    }, [activeScreenId, dispatch, setSelectedElementIds, toast]);
 
     const handleDeleteSelected = useCallback(() => {
         if (selectedElementIds.length === 0) return;
@@ -508,6 +467,48 @@ const MenuEditor: React.FC<{
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [screen, handleCopy, handleCut, handlePaste, handleSelectAll, handleDeleteSelected]);
+
+    // Early return AFTER all hooks to satisfy Rules of Hooks
+    if (!screen) return <Panel title="Menu Editor">Screen not found</Panel>;
+
+    const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
+        dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
+    };
+    
+    const handleAddElement = (type: UIElementType) => {
+        const newElement = createUIElement(type, project);
+        if (newElement) {
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
+            setSelectedElementIds([newElement.id]);
+        }
+    };
+
+    const handleAddVideoElement = () => {
+        const newElement = createUIElement(UIElementType.Image, project) as UIImageElement;
+        if (newElement) {
+            // Pre-configure as a video element
+            newElement.name = 'Video';
+            newElement.background = { type: 'video', assetId: null };
+            newElement.image = null;
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
+            setSelectedElementIds([newElement.id]);
+        }
+    };
+
+    // --- Selection helpers ---
+    const handleSelectElement = (elementId: VNID, e: React.MouseEvent) => {
+        if (e.ctrlKey || e.metaKey) {
+            // Toggle element in multi-select
+            setSelectedElementIds(
+                selectedElementIds.includes(elementId)
+                    ? selectedElementIds.filter(id => id !== elementId)
+                    : [...selectedElementIds, elementId]
+            );
+        } else {
+            // Single select
+            setSelectedElementIds([elementId]);
+        }
+    };
 
     const handleWizardGenerate = (config: GeneratedConfig) => {
         const character = project.characters[config.characterId];

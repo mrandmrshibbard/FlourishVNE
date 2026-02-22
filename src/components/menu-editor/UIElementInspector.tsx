@@ -602,6 +602,7 @@ const UIElementInspector: React.FC<{
                             <Select value={el.setting} onChange={e => updateElement({ setting: e.target.value as GameSetting })}>
                                 <option value="musicVolume">Music Volume</option>
                                 <option value="sfxVolume">SFX Volume</option>
+                                <option value="ambientVolume">Ambient Volume</option>
                                 <option value="textSpeed">Text Speed</option>
                             </Select>
                         </FormField>
@@ -614,10 +615,10 @@ const UIElementInspector: React.FC<{
                     <h4 className="font-bold text-sm mt-3 text-slate-400">Slider Colors</h4>
                     <div className="grid grid-cols-2 gap-2">
                         <FormField label="Thumb Color">
-                            <ColorInput value={el.thumbColor || '#ec4899'} onChange={val => updateElement({ thumbColor: val })} />
+                            <ColorInput value={el.thumbColor || '#8a2be2'} onChange={val => updateElement({ thumbColor: val })} />
                         </FormField>
                         <FormField label="Track Color">
-                            <ColorInput value={el.trackColor || '#a855f7'} onChange={val => updateElement({ trackColor: val })} />
+                            <ColorInput value={el.trackColor || '#4D3273'} onChange={val => updateElement({ trackColor: val })} />
                         </FormField>
                     </div>
 

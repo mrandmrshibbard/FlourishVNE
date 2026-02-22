@@ -30,6 +30,8 @@ export const ProjectContext = createContext<{
   canUndo: boolean;
   canRedo: boolean;
   lastAutoSave: number | null;
+  isDirty: boolean;
+  markSaved: () => void;
 } | null>(null);
 
 export const ProjectProvider: React.FC<{
@@ -43,6 +45,7 @@ export const ProjectProvider: React.FC<{
     future: []
   });
   const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   const isSyncing = useRef(false);
   const historyRef = useRef(history);
@@ -59,6 +62,7 @@ export const ProjectProvider: React.FC<{
       }
 
       WorkflowTracker.getInstance().trackAction(action.type, 'editor');
+      setIsDirty(true);
 
       const now = Date.now();
       const shouldCoalesce =
@@ -166,6 +170,10 @@ export const ProjectProvider: React.FC<{
     toast.info('Redo', { duration: 1200 });
   }, [toast]);
 
+  const markSaved = useCallback(() => {
+    setIsDirty(false);
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
@@ -195,7 +203,9 @@ export const ProjectProvider: React.FC<{
       redo,
       canUndo: history.past.length > 0,
       canRedo: history.future.length > 0,
-      lastAutoSave
+      lastAutoSave,
+      isDirty,
+      markSaved
     }}>
       {children}
     </ProjectContext.Provider>

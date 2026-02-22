@@ -273,7 +273,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 value={project.ui?.defaultGameSettings?.textSpeed ?? 50}
                                 onChange={(e) => {
                                     const val = parseInt(e.target.value);
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: val, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: val, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
                                 }}
                                 className="w-full accent-sky-500"
                             />
@@ -287,7 +287,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 value={Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}
                                 onChange={(e) => {
                                     const val = parseInt(e.target.value) / 100;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: val, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: val, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
                                 }}
                                 className="w-full accent-sky-500"
                             />
@@ -301,7 +301,21 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 value={Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}
                                 onChange={(e) => {
                                     const val = parseInt(e.target.value) / 100;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: val, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: val, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                }}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Ambient Volume: {Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100)}%</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100)}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value) / 100;
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: val, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
                                 }}
                                 className="w-full accent-sky-500"
                             />
@@ -316,7 +330,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 value={project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3}
                                 onChange={(e) => {
                                     const val = parseFloat(e.target.value);
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: val } });
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: val } });
                                 }}
                                 className="w-full accent-sky-500"
                             />
@@ -326,7 +340,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             <button
                                 onClick={() => {
                                     const current = project.ui?.defaultGameSettings?.enableSkip ?? true;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: !current, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: !current, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
                                 }}
                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                     (project.ui?.defaultGameSettings?.enableSkip ?? true) ? 'bg-sky-500' : 'bg-slate-600'
@@ -342,7 +356,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             <button
                                 onClick={() => {
                                     const current = project.ui?.defaultGameSettings?.autoAdvance ?? false;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: !current, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
+                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: !current, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
                                 }}
                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                     (project.ui?.defaultGameSettings?.autoAdvance ?? false) ? 'bg-sky-500' : 'bg-slate-600'
@@ -443,6 +457,104 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 </div>
 
                 <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Dialogue Box Border Image</label>
+                    <select
+                        value={project.ui.dialogueBoxBorderImage?.id || ''}
+                        onChange={(e) => {
+                            const assetId = e.target.value;
+                            const asset = assetId ? allImages.find(img => img.id === assetId) : null;
+                            onUpdate({
+                                dialogueBoxBorderImage: asset ? { type: 'image', id: asset.id } : null
+                            });
+                        }}
+                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                        <option value="">None</option>
+                        {allImages.map(image => (
+                            <option key={image.id} value={image.id}>
+                                {image.name}
+                            </option>
+                        ))}
+                    </select>
+                    {project.ui.dialogueBoxBorderImage?.id && (() => {
+                        const img = allImages.find(i => i.id === project.ui.dialogueBoxBorderImage?.id);
+                        const url = img?.imageUrl;
+                        return url ? (
+                            <div className="mt-2 rounded-md overflow-hidden border border-slate-600" style={{ maxHeight: '80px' }}>
+                                <img src={url} alt="Dialogue border preview" className="w-full h-full object-contain" style={{ maxHeight: '80px' }} />
+                            </div>
+                        ) : (
+                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                        );
+                    })()}
+                </div>
+
+                {(project.ui.dialogueBoxImage || project.ui.dialogueBoxBorderImage) && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Dialogue Border Thickness ({project.ui.dialogueBorderPadding ?? 12}px)</label>
+                        <input
+                            type="range"
+                            min="0"
+                            max="40"
+                            value={project.ui.dialogueBorderPadding ?? 12}
+                            onChange={(e) => onUpdate({ dialogueBorderPadding: parseInt(e.target.value) })}
+                            className="w-full accent-sky-500"
+                        />
+                    </div>
+                )}
+
+                <div className="border-t border-slate-700 pt-4">
+                    <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Dialogue Box Dimensions</h4>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Width ({project.ui.dialogueBoxWidth ?? 100}%)</label>
+                            <input
+                                type="range"
+                                min="30"
+                                max="100"
+                                value={project.ui.dialogueBoxWidth ?? 100}
+                                onChange={(e) => onUpdate({ dialogueBoxWidth: parseInt(e.target.value) })}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Height (px, 0 = auto)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                max="600"
+                                value={project.ui.dialogueBoxHeight ?? 0}
+                                onChange={(e) => onUpdate({ dialogueBoxHeight: Math.max(0, parseInt(e.target.value) || 0) })}
+                                className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                placeholder="0 = auto"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Bottom Margin ({project.ui.dialogueBoxBottomMargin ?? 20}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="200"
+                                value={project.ui.dialogueBoxBottomMargin ?? 20}
+                                onChange={(e) => onUpdate({ dialogueBoxBottomMargin: parseInt(e.target.value) })}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Inner Padding ({project.ui.dialogueBoxPadding ?? 20}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="60"
+                                value={project.ui.dialogueBoxPadding ?? 20}
+                                onChange={(e) => onUpdate({ dialogueBoxPadding: parseInt(e.target.value) })}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Choice Button Image</label>
                     <select
                         value={project.ui.choiceButtonImage?.id || ''}
@@ -473,6 +585,94 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
                         );
                     })()}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Choice Button Border Image</label>
+                    <select
+                        value={project.ui.choiceButtonBorderImage?.id || ''}
+                        onChange={(e) => {
+                            const assetId = e.target.value;
+                            const asset = assetId ? allImages.find(img => img.id === assetId) : null;
+                            onUpdate({
+                                choiceButtonBorderImage: asset ? { type: 'image', id: asset.id } : null
+                            });
+                        }}
+                        className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                        <option value="">None</option>
+                        {allImages.map(image => (
+                            <option key={image.id} value={image.id}>
+                                {image.name}
+                            </option>
+                        ))}
+                    </select>
+                    {project.ui.choiceButtonBorderImage?.id && (() => {
+                        const img = allImages.find(i => i.id === project.ui.choiceButtonBorderImage?.id);
+                        const url = img?.imageUrl;
+                        return url ? (
+                            <div className="mt-2 rounded-md overflow-hidden border border-slate-600" style={{ maxHeight: '60px' }}>
+                                <img src={url} alt="Choice border preview" className="w-full h-full object-contain" style={{ maxHeight: '60px' }} />
+                            </div>
+                        ) : (
+                            <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                        );
+                    })()}
+                </div>
+
+                {(project.ui.choiceButtonImage || project.ui.choiceButtonBorderImage) && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Choice Border Thickness ({project.ui.choiceBorderPadding ?? 8}px)</label>
+                        <input
+                            type="range"
+                            min="0"
+                            max="30"
+                            value={project.ui.choiceBorderPadding ?? 8}
+                            onChange={(e) => onUpdate({ choiceBorderPadding: parseInt(e.target.value) })}
+                            className="w-full accent-sky-500"
+                        />
+                    </div>
+                )}
+
+                <div className="border-t border-slate-700 pt-4">
+                    <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Choice Button Dimensions</h4>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Width (px, 0 = auto)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                max="1200"
+                                value={project.ui.choiceButtonWidth ?? 0}
+                                onChange={(e) => onUpdate({ choiceButtonWidth: Math.max(0, parseInt(e.target.value) || 0) })}
+                                className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                placeholder="0 = auto"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Height (px, 0 = auto)</label>
+                            <input
+                                type="number"
+                                min="0"
+                                max="400"
+                                value={project.ui.choiceButtonHeight ?? 0}
+                                onChange={(e) => onUpdate({ choiceButtonHeight: Math.max(0, parseInt(e.target.value) || 0) })}
+                                className="w-full bg-slate-800 text-white p-3 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                placeholder="0 = auto"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Inner Padding ({project.ui.choiceButtonPadding ?? 16}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="60"
+                                value={project.ui.choiceButtonPadding ?? 16}
+                                onChange={(e) => onUpdate({ choiceButtonPadding: parseInt(e.target.value) })}
+                                className="w-full accent-sky-500"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

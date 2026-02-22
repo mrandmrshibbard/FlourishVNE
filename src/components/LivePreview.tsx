@@ -619,6 +619,18 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         : null;
     const isDialogueBoxVideo = projectUI.dialogueBoxImage?.type === 'video';
 
+    // Resolve dialogue box border image URL
+    const dialogueBorderUrl = projectUI.dialogueBoxBorderImage
+        ? (project.images[projectUI.dialogueBoxBorderImage.id]?.imageUrl || project.backgrounds[projectUI.dialogueBoxBorderImage.id]?.imageUrl)
+        : null;
+    const dialogueBorderPadding = projectUI.dialogueBorderPadding ?? 12;
+
+    // Dialogue box layout settings
+    const dialogueBoxWidth = projectUI.dialogueBoxWidth ?? 100;
+    const dialogueBoxHeight = projectUI.dialogueBoxHeight || 0;
+    const dialogueBoxBottomMargin = projectUI.dialogueBoxBottomMargin ?? 20;
+    const dialogueBoxPadding = projectUI.dialogueBoxPadding ?? 20;
+
     // Get character-specific font if available
     const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
     const characterFont = character?.fontFamily;
@@ -634,32 +646,48 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         ...(characterFontItalic ? { fontStyle: 'italic' } : {})
     };
 
+    const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
+
     return (
         <div 
-            className={`absolute bottom-5 left-5 right-5 p-5 z-20 cursor-pointer rounded-lg ${dialogueBoxUrl ? '' : 'bg-black/70 border-2 border-slate-500'}`} 
-            style={dialogueBoxUrl && !isDialogueBoxVideo ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : (!dialogueBoxUrl ? {} : {})}
+            className={`absolute z-20 cursor-pointer rounded-lg`}
+            style={{
+                bottom: `${dialogueBoxBottomMargin}px`,
+                left: `${(100 - dialogueBoxWidth) / 2}%`,
+                right: `${(100 - dialogueBoxWidth) / 2}%`,
+                ...(dialogueBorderUrl 
+                    ? { backgroundImage: `url(${dialogueBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px` }
+                    : {})
+            }}
             onClick={handleClick}
         >
-            {isDialogueBoxVideo && dialogueBoxUrl && (
-                <video 
-                    autoPlay 
-                    loop 
-                    muted 
-                    className="absolute inset-0 w-full h-full object-cover rounded-lg -z-10"
-                    style={{ pointerEvents: 'none' }}
-                >
-                    <source src={dialogueBoxUrl} />
-                </video>
-            )}
-            {dialogue.characterName !== 'Narrator' && (
-                <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
-                    <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                </h3>
-            )}
-            <p className="leading-relaxed" style={dialogueTextStyle}>
-                <span style={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}>{displayText}</span>
-                {!hasFinished && <span className="animate-ping">_</span>}
-            </p>
+            <div 
+                className={`relative rounded-lg ${!hasCustomImage ? 'bg-black/70 border-2 border-slate-500' : ''}`}
+                style={dialogueBoxUrl && !isDialogueBoxVideo 
+                    ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }), padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px` } 
+                    : { padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }) }}
+            >
+                {isDialogueBoxVideo && dialogueBoxUrl && (
+                    <video 
+                        autoPlay 
+                        loop 
+                        muted 
+                        className="absolute inset-0 w-full h-full rounded-lg -z-10"
+                        style={{ pointerEvents: 'none', objectFit: 'fill' }}
+                    >
+                        <source src={dialogueBoxUrl} />
+                    </video>
+                )}
+                {dialogue.characterName !== 'Narrator' && (
+                    <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
+                        <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                    </h3>
+                )}
+                <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                    <span style={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}>{displayText}</span>
+                    {!hasFinished && <span className="animate-ping">_</span>}
+                </p>
+            </div>
         </div>
     );
 };
@@ -674,30 +702,52 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
         : null;
     const isChoiceButtonVideo = projectUI.choiceButtonImage?.type === 'video';
 
+    // Resolve choice button border image URL
+    const choiceBorderUrl = projectUI.choiceButtonBorderImage
+        ? (project.images[projectUI.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonBorderImage.id]?.imageUrl)
+        : null;
+    const choiceBorderPadding = projectUI.choiceBorderPadding ?? 8;
+
+    // Choice button layout settings
+    const choiceWidth = projectUI.choiceButtonWidth || 0;
+    const choiceHeight = projectUI.choiceButtonHeight || 0;
+    const choicePadding = projectUI.choiceButtonPadding ?? 16;
+
+    const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
+
     return (
         <div className="absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8 space-y-4">
             {choices.map((choice, index) => {
                 const interpolatedText = interpolateVariables(choice.text, variables, project);
                 return (
-                    <button 
-                        key={index} 
-                        onClick={() => onSelect(choice)}
-                        className={`px-8 py-4 relative rounded-lg ${choiceButtonUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500'}`}
-                        style={choiceButtonUrl && !isChoiceButtonVideo ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...fontSettingsToStyle(projectUI.choiceTextFont) } : fontSettingsToStyle(projectUI.choiceTextFont)}
+                    <div
+                        key={index}
+                        className={`${choiceBorderUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : ''}`}
+                        style={choiceBorderUrl 
+                            ? { backgroundImage: `url(${choiceBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }), borderRadius: '0.5rem' }
+                            : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }) }}
                     >
-                        {isChoiceButtonVideo && choiceButtonUrl && (
-                            <video 
-                                autoPlay 
-                                loop 
-                                muted 
-                                className="absolute inset-0 w-full h-full object-cover rounded-lg -z-10"
-                                style={{ pointerEvents: 'none' }}
-                            >
-                                <source src={choiceButtonUrl} />
-                            </video>
-                        )}
-                        <span className="relative z-10" style={extractTextGradientStyle(projectUI.choiceTextFont) || undefined}>{interpolatedText}</span>
-                    </button>
+                        <button 
+                            onClick={() => onSelect(choice)}
+                            className={`relative rounded-lg overflow-hidden w-full ${!hasCustomChoiceImage ? 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500' : ''} ${!choiceBorderUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : ''}`}
+                            style={choiceButtonUrl && !isChoiceButtonVideo 
+                                ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choicePadding}px ${choicePadding * 2}px`, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), ...fontSettingsToStyle(projectUI.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const } 
+                                : { padding: `${choicePadding}px ${choicePadding * 2}px`, ...fontSettingsToStyle(projectUI.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}) }}
+                        >
+                            {isChoiceButtonVideo && choiceButtonUrl && (
+                                <video 
+                                    autoPlay 
+                                    loop 
+                                    muted 
+                                    className="absolute inset-0 w-full h-full rounded-lg -z-10"
+                                    style={{ pointerEvents: 'none', objectFit: 'fill' }}
+                                >
+                                    <source src={choiceButtonUrl} />
+                                </video>
+                            )}
+                            <span className="relative z-10" style={extractTextGradientStyle(projectUI.choiceTextFont) || undefined}>{interpolatedText}</span>
+                        </button>
+                    </div>
                 );
             })}
         </div>
@@ -1824,9 +1874,11 @@ const UIScreenRenderer: React.FC<{
 
     // Get screen transition style
     const transitionType = isClosing ? (screen.transitionOut || 'fade') : (screen.transitionIn || 'fade');
-    const duration = screen.transitionDuration || 300;
+    const duration = isClosing
+        ? (screen.transitionOutDuration ?? screen.transitionDuration ?? 300)
+        : (screen.transitionInDuration ?? screen.transitionDuration ?? 300);
     const screenTransitionStyle: React.CSSProperties = {
-        animation: transitionType !== 'none' ? `screenTransition${transitionType}${isClosing ? 'Out' : ''} ${duration}ms ease-out forwards` : undefined,
+        animation: transitionType !== 'none' ? `screenTransition${transitionType}${isClosing ? 'Out' : ''} ${duration}ms ${transitionType === 'crossfade' ? 'linear' : 'ease-out'} forwards` : undefined,
     };
 
     // Check if dialogue should be shown
@@ -1876,9 +1928,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [settings, setSettings] = useState<GameSettings>(() => {
         const projectDefaults = project.ui?.defaultGameSettings;
         if (projectDefaults) {
+            // Merge with defaults to fill any missing fields (e.g. ambientVolume for older projects)
             return { ...defaultSettings, ...projectDefaults };
         }
-        return defaultSettings;
+        return { ...defaultSettings };
     });
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
@@ -2103,15 +2156,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [project]);
     
     const fadeAudio = useCallback((audioElement: HTMLAudioElement, targetVolume: number, duration: number, onComplete?: () => void) => {
+        // Ensure target volume is a valid finite number
+        const safeTarget = Number.isFinite(targetVolume) ? Math.max(0, Math.min(1, targetVolume)) : 0.8;
         // Use different interval refs for different audio elements
         const intervalRef = audioElement === musicAudioRef.current ? audioFadeInterval : ambientFadeInterval;
         
         if (intervalRef.current) clearInterval(intervalRef.current);
         
         const startVolume = audioElement.volume;
-        const volumeChange = targetVolume - startVolume;
+        const volumeChange = safeTarget - startVolume;
         if (duration === 0) {
-            audioElement.volume = targetVolume;
+            audioElement.volume = safeTarget;
             onComplete?.();
             return;
         }
@@ -2121,7 +2176,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         intervalRef.current = window.setInterval(() => {
             const elapsedTime = Date.now() - startTime;
             const progress = Math.min(elapsedTime / (duration * 1000), 1);
-            audioElement.volume = startVolume + volumeChange * progress;
+            const newVol = startVolume + volumeChange * progress;
+            audioElement.volume = Math.max(0, Math.min(1, newVol));
 
             if (progress >= 1) {
                 if (intervalRef.current) clearInterval(intervalRef.current);
@@ -2840,7 +2896,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             audio.loop = true;
             audio.play().then(() => {
                 menuMusicUrlRef.current = newAudioUrl;
-                fadeAudio(audio, settings.musicVolume, 0.5);
+                const screenVol = musicInfo.volume ?? 1;
+                fadeAudio(audio, screenVol * settings.musicVolume, 0.5);
             }).catch(e => {
                 console.error('Menu music play failed:', e);
                 if (!userGestureDetectedRef.current) {
@@ -2861,7 +2918,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
     
-    useEffect(() => { if (musicAudioRef.current) musicAudioRef.current.volume = settings.musicVolume; }, [settings.musicVolume]);
+    useEffect(() => {
+        if (!musicAudioRef.current) return;
+        const safeVol = Number.isFinite(settings.musicVolume) ? settings.musicVolume : 0.8;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        const screenVol = activeScreen?.music?.volume ?? 1;
+        musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * safeVol));
+    }, [settings.musicVolume, screenStack, project.uiScreens]);
 
     // Ambient Noise Management
     useEffect(() => {
@@ -2918,7 +2981,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             audio.volume = 0;
             audio.play().then(() => {
                 menuAmbientUrlRef.current = newAudioUrl;
-                fadeAudio(audio, settings.sfxVolume, 0.5);
+                const screenVol = ambientInfo.volume ?? 1;
+                fadeAudio(audio, screenVol * settings.ambientVolume, 0.5);
             }).catch(e => {
                 console.error('[Ambient] Play failed:', e);
             });
@@ -2935,9 +2999,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             menuAmbientUrlRef.current = newAudioUrl;
         }
 
-    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.sfxVolume, fadeAudio]);
+    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.ambientVolume, fadeAudio]);
     
-    useEffect(() => { if (ambientNoiseAudioRef.current) ambientNoiseAudioRef.current.volume = settings.sfxVolume; }, [settings.sfxVolume]);
+    useEffect(() => {
+        if (!ambientNoiseAudioRef.current) return;
+        const safeVol = Number.isFinite(settings.ambientVolume) ? settings.ambientVolume : 0.8;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        const screenVol = activeScreen?.ambientNoise?.volume ?? 1;
+        ambientNoiseAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * safeVol));
+    }, [settings.ambientVolume, screenStack, project.uiScreens]);
 
     useEffect(() => {
         if (playerState?.mode !== 'playing' || screenStack.length > 0) {
@@ -3047,7 +3117,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Use HTMLAudio for SFX - more reliable in packaged environments
             runtimeDebugLog('[SFX] Creating HTMLAudio element for playback');
             const audio = new Audio(url);
-            audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * settings.sfxVolume;
+            audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
             
             // Limit simultaneous SFX
             if (sfxPoolRef.current.length >= MAX_SIMULTANEOUS_SFX) {
@@ -3993,17 +4063,64 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                 }
                 
-                setHudStack(s => [...s, targetId]);
+                setHudStack(s => {
+                    // Handle crossfade: mark the departing screen as closing so it fades out
+                    // while the new screen fades in on top
+                    const departingId = s.length > 0 ? s[s.length - 1] : null;
+                    if (departingId) {
+                        const departingScreen = project.uiScreens[departingId];
+                        const depTransOut = departingScreen?.transitionOut || 'fade';
+                        const targetTransIn = targetScreen.transitionIn || 'fade';
+                        if (targetTransIn === 'crossfade' || depTransOut === 'crossfade') {
+                            const duration = departingScreen?.transitionOutDuration ?? departingScreen?.transitionDuration ?? 300;
+                            setClosingScreens(prev => new Set(prev).add(departingId));
+                            // After fade-in completes, clean up the departing screen from both sets
+                            setTimeout(() => {
+                                setClosingScreens(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(departingId);
+                                    return next;
+                                });
+                                // Remove departed screen from the stack to prevent accumulation
+                                setHudStack(prev => prev.filter(id => id !== departingId));
+                            }, duration + 100);
+                        }
+                    }
+                    return [...s, targetId];
+                });
             } else {
-                setScreenStack(stack => [...stack, targetId]);
+                setScreenStack(stack => {
+                    const departingId = stack.length > 0 ? stack[stack.length - 1] : null;
+                    if (departingId) {
+                        const departingScreen = project.uiScreens[departingId];
+                        const depTransOut = departingScreen?.transitionOut || 'fade';
+                        const targetTransIn = targetScreen.transitionIn || 'fade';
+                        if (targetTransIn === 'crossfade' || depTransOut === 'crossfade') {
+                            const duration = departingScreen?.transitionOutDuration ?? departingScreen?.transitionDuration ?? 300;
+                            setClosingScreens(prev => new Set(prev).add(departingId));
+                            // After fade-in completes, clean up the departing screen from both sets
+                            setTimeout(() => {
+                                setClosingScreens(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(departingId);
+                                    return next;
+                                });
+                                // Remove departed screen from the stack to prevent accumulation
+                                setScreenStack(prev => prev.filter(id => id !== departingId));
+                            }, duration + 100);
+                        }
+                    }
+                    return [...stack, targetId];
+                });
             }
         } else if (action.type === UIActionType.ReturnToPreviousScreen) {
             if (playerState && playerState.mode === 'playing') {
                 if (hudStack.length > 0) {
                     const closingScreenId = hudStack[hudStack.length - 1];
                     const closingScreen = project.uiScreens[closingScreenId];
-                    const transitionDuration = closingScreen?.transitionDuration || 300;
-                    const hasTransition = closingScreen?.transitionOut && closingScreen.transitionOut !== 'none';
+                    const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+                    const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
+                    const hasTransition = effectiveTransitionOut !== 'none';
                     
                     if (hasTransition) {
                         // Mark screen as closing
@@ -4080,8 +4197,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 if (screenStack.length > 1) {
                     const closingScreenId = screenStack[screenStack.length - 1];
                     const closingScreen = project.uiScreens[closingScreenId];
-                    const transitionDuration = closingScreen?.transitionDuration || 300;
-                    const hasTransition = closingScreen?.transitionOut && closingScreen.transitionOut !== 'none';
+                    const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+                    const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
+                    const hasTransition = effectiveTransitionOut !== 'none';
                     
                     if (hasTransition) {
                         // Mark screen as closing
@@ -5294,11 +5412,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     from { opacity: 0; transform: translateX(-100%); }
                     to { opacity: 1; transform: translateX(0); }
                 }
+                @keyframes screenTransitioncrossfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
                 
                 /* Screen OUT transitions */
                 @keyframes screenTransitionfadeOut {
                     from { opacity: 1; }
                     to { opacity: 0; }
+                }
+                @keyframes screenTransitioncrossfadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 1; }
                 }
                 @keyframes screenTransitionslideUpOut {
                     from { opacity: 1; transform: translateY(0); }
@@ -5434,6 +5560,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             <div ref={playContainerRef} className="relative overflow-hidden" style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, maxWidth: '100%', maxHeight: '100%', width: '100%', '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
+                {/* Render closing screens underneath current screen for crossfade transitions */}
+                {screenStack.filter(id => id !== currentScreenId && closingScreens.has(id)).map(closingId => (
+                    <UIScreenRenderer
+                        key={`closing-${closingId}`}
+                        screenId={closingId}
+                        onAction={handleUIAction}
+                        settings={settings}
+                        onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
+                        assetResolver={assetResolver}
+                        gameSaves={gameSaves}
+                        playSound={playSound}
+                        variables={playerState ? {...uiVariables} : {...menuVariables}}
+                        onVariableChange={handleVariableChange}
+                        isClosing={true}
+                        evaluateConditions={evaluateConditions}
+                        onCommitVariables={commitUiVariablesToPlayerState}
+                    />
+                ))}
                 {currentScreenId && (
                     <UIScreenRenderer
                         screenId={currentScreenId}
@@ -5458,6 +5602,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         onCommitVariables={commitUiVariablesToPlayerState}
                     />
                 )}
+                {
+                    // Render closing HUD screens for crossfade transitions
+                    playerState?.mode === 'playing' && hudStack.filter(id => {
+                        const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+                        return id !== topHud && closingScreens.has(id);
+                    }).map(closingId => (
+                        <UIScreenRenderer
+                            key={`hud-closing-${closingId}`}
+                            screenId={closingId}
+                            onAction={handleUIAction}
+                            settings={settings}
+                            onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
+                            assetResolver={assetResolver}
+                            gameSaves={gameSaves}
+                            playSound={playSound}
+                            variables={{...uiVariables}}
+                            onVariableChange={handleVariableChange}
+                            isClosing={true}
+                            evaluateConditions={evaluateConditions}
+                            onCommitVariables={commitUiVariablesToPlayerState}
+                        />
+                    ))
+                }
                 {
                     // Render HUD screens while in playing mode. Priority: explicit hudStack top, then project.ui.gameHudScreenId
                     playerState?.mode === 'playing' && (

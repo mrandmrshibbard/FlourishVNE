@@ -993,6 +993,9 @@ const PropertiesInspector: React.FC<{
                         {Object.keys(project.audio).length === 0 && <option disabled>No audio uploaded</option>}
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select></FormField>
+                    <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
+                        <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-sky-500" />
+                    </FormField>
                     <FormField label="Fade Duration (seconds)"><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>
                     <div className="flex items-center gap-1"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" /> <label>Loop</label></div>
                 </>;
@@ -1003,10 +1006,15 @@ const PropertiesInspector: React.FC<{
             }
              case CommandType.PlaySoundEffect: {
                 const cmd = command as PlaySoundEffectCommand;
-                return <FormField label="Audio Track"><Select value={cmd.audioId} onChange={e => updateCommand({ audioId: e.target.value })}>
+                return <>
+                    <FormField label="Audio Track"><Select value={cmd.audioId} onChange={e => updateCommand({ audioId: e.target.value })}>
                         {Object.keys(project.audio).length === 0 && <option disabled>No audio uploaded</option>}
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </Select></FormField>;
+                    </Select></FormField>
+                    <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
+                        <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-sky-500" />
+                    </FormField>
+                </>;
             }
             case CommandType.PlayMovie: {
                 const cmd = command as PlayMovieCommand;

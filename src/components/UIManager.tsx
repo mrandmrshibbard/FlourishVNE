@@ -53,6 +53,11 @@ const UIManager: React.FC<UIManagerProps> = ({
     };
 
     const handleDeleteUIScreen = (screenId: VNID) => {
+        // Clear active selection if deleting the currently active screen
+        if (activeMenuScreenId === screenId) {
+            setActiveMenuScreenId(null);
+            setSelectedUIElementIds([]);
+        }
         dispatch({ type: 'DELETE_UI_SCREEN', payload: { screenId } });
     };
 

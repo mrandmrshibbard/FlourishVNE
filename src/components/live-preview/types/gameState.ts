@@ -187,6 +187,7 @@ export interface GameSettings {
     textSpeed: number;
     musicVolume: number;
     sfxVolume: number;
+    ambientVolume: number;
     enableSkip: boolean;
     autoAdvance: boolean;
     autoAdvanceDelay: number; // in seconds
@@ -196,6 +197,7 @@ export const defaultSettings: GameSettings = {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
+    ambientVolume: 0.8,
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3,

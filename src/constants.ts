@@ -57,12 +57,16 @@ export const createDefaultUIScreens = (): { screens: Record<VNID, VNUIScreen>, s
     settingsScreenElements[sfxLabelId] = { id: sfxLabelId, name: 'SFX Volume Label', type: UIElementType.Text, text: 'Sound FX Volume', x: 35, y: 40, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: 'left', verticalAlign: 'middle' } as UITextElement;
     const sfxSliderId = generateId('el');
     settingsScreenElements[sfxSliderId] = { id: sfxSliderId, name: 'SFX Volume Slider', type: UIElementType.SettingsSlider, setting: 'sfxVolume', x: 65, y: 40, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5} as UISettingsSliderElement;
+    const ambientLabelId = generateId('el');
+    settingsScreenElements[ambientLabelId] = { id: ambientLabelId, name: 'Ambient Volume Label', type: UIElementType.Text, text: 'Ambient Volume', x: 35, y: 50, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: 'left', verticalAlign: 'middle' } as UITextElement;
+    const ambientSliderId = generateId('el');
+    settingsScreenElements[ambientSliderId] = { id: ambientSliderId, name: 'Ambient Volume Slider', type: UIElementType.SettingsSlider, setting: 'ambientVolume', x: 65, y: 50, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5} as UISettingsSliderElement;
     const textSpeedLabelId = generateId('el');
-    settingsScreenElements[textSpeedLabelId] = { id: textSpeedLabelId, name: 'Text Speed Label', type: UIElementType.Text, text: 'Text Speed', x: 35, y: 50, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: 'left', verticalAlign: 'middle' } as UITextElement;
+    settingsScreenElements[textSpeedLabelId] = { id: textSpeedLabelId, name: 'Text Speed Label', type: UIElementType.Text, text: 'Text Speed', x: 35, y: 60, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: 'left', verticalAlign: 'middle' } as UITextElement;
     const textSpeedSliderId = generateId('el');
-    settingsScreenElements[textSpeedSliderId] = { id: textSpeedSliderId, name: 'Text Speed Slider', type: UIElementType.SettingsSlider, setting: 'textSpeed', x: 65, y: 50, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5 } as UISettingsSliderElement;
+    settingsScreenElements[textSpeedSliderId] = { id: textSpeedSliderId, name: 'Text Speed Slider', type: UIElementType.SettingsSlider, setting: 'textSpeed', x: 65, y: 60, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5 } as UISettingsSliderElement;
     const skipToggleId = generateId('el');
-    settingsScreenElements[skipToggleId] = { id: skipToggleId, name: 'Enable Skip Toggle', type: UIElementType.SettingsToggle, setting: 'enableSkip', text: "Enable Skip", x: 50, y: 60, width: 30, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont } as UISettingsToggleElement;
+    settingsScreenElements[skipToggleId] = { id: skipToggleId, name: 'Enable Skip Toggle', type: UIElementType.SettingsToggle, setting: 'enableSkip', text: "Enable Skip", x: 50, y: 70, width: 30, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont } as UISettingsToggleElement;
     const backBtnId = generateId('el');
     settingsScreenElements[backBtnId] = { id: backBtnId, name: 'Back Button', type: UIElementType.Button, text: 'Back', x: 50, y: 85, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.ReturnToPreviousScreen }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
 
@@ -140,6 +144,7 @@ export const createInitialProject = (): VNProject => {
                 textSpeed: 50,
                 musicVolume: 0.8,
                 sfxVolume: 0.8,
+                ambientVolume: 0.8,
                 enableSkip: true,
                 autoAdvance: false,
                 autoAdvanceDelay: 3,

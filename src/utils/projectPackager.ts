@@ -551,6 +551,78 @@ export const exportProject = async (project: VNProject): Promise<boolean> => {
         }
     }
 
+    // Process dialogue box border image
+    if (projectClone.ui.dialogueBoxBorderImage) {
+        const assetId = projectClone.ui.dialogueBoxBorderImage.id;
+        const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+        const assetUrl = (asset as VNBackground)?.imageUrl || (asset as any)?.imageUrl;
+        
+        if (assetUrl && assetUrl.startsWith('data:')) {
+            const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+            const filename = `dialogue_border_${assetId}.${mimeToExtension(mimeType)}`;
+            assetFolder.folder('ui')?.file(filename, blob);
+            const embeddedPath = `assets/ui/${filename}`;
+            addEmbedded('ui', embeddedPath);
+            if (projectClone.images[assetId]) {
+                (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+            } else {
+                (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+            }
+        } else if (assetUrl) {
+            const fetched = await fetchUrlToBlob(assetUrl);
+            if (fetched) {
+                const { blob, mimeType } = fetched;
+                const filename = `dialogue_border_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                if (projectClone.images[assetId]) {
+                    (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+                } else {
+                    (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+                }
+            } else {
+                addFailure(`ui:dialogueBorder`);
+            }
+        }
+    }
+
+    // Process choice button border image
+    if (projectClone.ui.choiceButtonBorderImage) {
+        const assetId = projectClone.ui.choiceButtonBorderImage.id;
+        const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+        const assetUrl = (asset as VNBackground)?.imageUrl || (asset as any)?.imageUrl;
+        
+        if (assetUrl && assetUrl.startsWith('data:')) {
+            const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+            const filename = `choice_border_${assetId}.${mimeToExtension(mimeType)}`;
+            assetFolder.folder('ui')?.file(filename, blob);
+            const embeddedPath = `assets/ui/${filename}`;
+            addEmbedded('ui', embeddedPath);
+            if (projectClone.images[assetId]) {
+                (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+            } else {
+                (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+            }
+        } else if (assetUrl) {
+            const fetched = await fetchUrlToBlob(assetUrl);
+            if (fetched) {
+                const { blob, mimeType } = fetched;
+                const filename = `choice_border_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                if (projectClone.images[assetId]) {
+                    (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+                } else {
+                    (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+                }
+            } else {
+                addFailure(`ui:choiceBorder`);
+            }
+        }
+    }
+
     // --- 3. SAVE PROJECT.JSON AND GENERATE ZIP ---
     zip.file('project.json', JSON.stringify(projectClone, null, 2));
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));

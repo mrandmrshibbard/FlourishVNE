@@ -88,8 +88,8 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
             id: newId, 
             name, 
             background: { type: 'color', value: '#0f172a' }, 
-            music: { audioId: null, policy: 'continue' },
-            ambientNoise: { audioId: null, policy: 'continue' },
+            music: { audioId: null, policy: 'continue', volume: 0.8 },
+            ambientNoise: { audioId: null, policy: 'continue', volume: 0.8 },
             elements: {},
             effects: [],
         };

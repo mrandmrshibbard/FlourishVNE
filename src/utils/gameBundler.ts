@@ -255,9 +255,22 @@ export async function generateStandaloneHTML(project: VNProject): Promise<string
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      font-family: var(--font-body);
       background: #000;
       overflow: hidden;
+      overscroll-behavior: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
+    
+    /* Allow text selection in input elements */
+    input, textarea, [contenteditable="true"] {
+      user-select: text;
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
     }
     
     #game-container {
@@ -334,9 +347,22 @@ export async function generateStandaloneHTML(project: VNProject): Promise<string
       --accent-pink: #ff00a5;
       --accent-cyan: #00f2ea;
       --accent-purple: #8a2be2;
+      --accent-sky: #0ea5e9;
+      --accent-blue: #3b82f6;
+      --accent-yellow: #fbbf24;
+      --accent-red: #ef4444;
+      --accent-green: #10b981;
       --text-primary: #f0e6ff;
       --text-secondary: #c0b4d4;
-      --font-heading: 'Pacifico', cursive;
+      --text-tertiary: #94a3b8;
+      --text-muted: #64748b;
+      --slate-900: #0f172a;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --slate-600: #475569;
+      --slate-500: #64748b;
+      --slate-400: #94a3b8;
+      --font-heading: 'Poppins', sans-serif;
       --font-body: 'Poppins', sans-serif;
     }
     
@@ -508,6 +534,24 @@ export async function generateStandaloneHTML(project: VNProject): Promise<string
   ${hasInlinedTailwind 
     ? `<script>${vendor.tailwind}</script>` 
     : `<script src="https://cdn.tailwindcss.com"></script>`}
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              400: 'var(--slate-400)',
+              500: 'var(--slate-500)',
+              600: 'var(--slate-600)',
+              700: 'var(--slate-700)',
+              800: 'var(--slate-800)',
+              900: 'var(--slate-900)',
+            }
+          }
+        }
+      }
+    }
+  </script>
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -786,6 +830,19 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       const video = project.videos?.[assetId];
       if (video) addAsset(video.videoUrl, 'ui');
     }
+  }
+
+  // Collect dialogue box and choice button border image assets
+  if (project.ui.dialogueBoxBorderImage) {
+    const assetId = project.ui.dialogueBoxBorderImage.id;
+    const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+    if (bg) addAsset(bg.imageUrl, 'ui');
+  }
+
+  if (project.ui.choiceButtonBorderImage) {
+    const assetId = project.ui.choiceButtonBorderImage.id;
+    const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+    if (bg) addAsset(bg.imageUrl, 'ui');
   }
 
   // Collect UI screens and elements

@@ -367,24 +367,62 @@ const StagingArea: React.FC<{
         ? (project.images[project.ui.dialogueBoxImage.id]?.imageUrl || project.backgrounds[project.ui.dialogueBoxImage.id]?.imageUrl)
         : null;
 
+    // Resolve dialogue box border image URL
+    const dialogueBorderImageUrl = project.ui.dialogueBoxBorderImage
+        ? (project.images[project.ui.dialogueBoxBorderImage.id]?.imageUrl || project.backgrounds[project.ui.dialogueBoxBorderImage.id]?.imageUrl)
+        : null;
+    const dialogueBorderPadding = project.ui.dialogueBorderPadding ?? 12;
+
+    // Dialogue box layout settings
+    const dialogueBoxWidth = project.ui.dialogueBoxWidth ?? 100;
+    const dialogueBoxHeight = project.ui.dialogueBoxHeight || 0;
+    const dialogueBoxBottomMargin = project.ui.dialogueBoxBottomMargin ?? 20;
+    const dialogueBoxPadding = project.ui.dialogueBoxPadding ?? 20;
+
     // Resolve choice button image URL
     const choiceButtonImageUrl = project.ui.choiceButtonImage 
         ? (project.images[project.ui.choiceButtonImage.id]?.imageUrl || project.backgrounds[project.ui.choiceButtonImage.id]?.imageUrl)
         : null;
 
+    // Resolve choice button border image URL
+    const choiceBorderImageUrl = project.ui.choiceButtonBorderImage
+        ? (project.images[project.ui.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[project.ui.choiceButtonBorderImage.id]?.imageUrl)
+        : null;
+    const choiceBorderPadding = project.ui.choiceBorderPadding ?? 8;
+
+    // Choice button layout settings
+    const choiceWidth = project.ui.choiceButtonWidth || 0;
+    const choiceHeight = project.ui.choiceButtonHeight || 0;
+    const choicePadding = project.ui.choiceButtonPadding ?? 16;
+
+    const hasCustomDialogueImage = dialogueBoxImageUrl || dialogueBorderImageUrl;
+    const hasCustomChoiceImage = choiceButtonImageUrl || choiceBorderImageUrl;
+
     const renderDialogueBox = (dialogue: NonNullable<StageState['dialogue']>) => {
         const interpolatedText = interpolateVariables(dialogue.text, currentVariables, project);
         return (
-            <div className={`absolute bottom-5 left-5 right-5 p-5 z-20 rounded-lg ${dialogueBoxImageUrl ? '' : 'bg-black/70 border-2 border-slate-500'}`}
-                 style={dialogueBoxImageUrl ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}}>
-                {dialogue.characterName !== 'Narrator' && (
-                    <h3 className="mb-2" style={{...fontSettingsToStyle(project.ui.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
-                        <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                    </h3>
-                )}
-                <p className="leading-relaxed" style={fontSettingsToStyle(project.ui.dialogueTextFont)}>
-                    <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
-                </p>
+            <div className="absolute z-20 rounded-lg"
+                 style={{
+                     bottom: `${dialogueBoxBottomMargin}px`,
+                     left: `${(100 - dialogueBoxWidth) / 2}%`,
+                     right: `${(100 - dialogueBoxWidth) / 2}%`,
+                     ...(dialogueBorderImageUrl 
+                         ? { backgroundImage: `url(${dialogueBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px` }
+                         : {})
+                 }}>
+                <div className={`relative rounded-lg ${!hasCustomDialogueImage ? 'bg-black/70 border-2 border-slate-500' : ''}`}
+                     style={dialogueBoxImageUrl 
+                         ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }), padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px` } 
+                         : { padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }) }}>
+                    {dialogue.characterName !== 'Narrator' && (
+                        <h3 className="mb-2" style={{...fontSettingsToStyle(project.ui.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
+                            <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                        </h3>
+                    )}
+                    <p className="leading-relaxed" style={{...fontSettingsToStyle(project.ui.dialogueTextFont), wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                        <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
+                    </p>
+                </div>
             </div>
         );
     };
@@ -394,10 +432,17 @@ const StagingArea: React.FC<{
             {choices.map((choice) => {
                  const interpolatedText = interpolateVariables(choice.text, currentVariables, project);
                 return (
-                    <button key={choice.id} className={`px-8 py-4 rounded-lg ${choiceButtonImageUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500'}`}
-                            style={choiceButtonImageUrl ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...fontSettingsToStyle(project.ui.choiceTextFont) } : fontSettingsToStyle(project.ui.choiceTextFont)}>
-                        <span style={extractTextGradientStyle(project.ui.choiceTextFont) || undefined}>{interpolatedText}</span>
-                    </button>
+                    <div key={choice.id}
+                         style={choiceBorderImageUrl 
+                             ? { backgroundImage: `url(${choiceBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }), borderRadius: '0.5rem' }
+                             : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }) }}>
+                        <button className={`relative rounded-lg overflow-hidden w-full ${!hasCustomChoiceImage ? 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500' : ''} ${choiceBorderImageUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : (!hasCustomChoiceImage ? '' : 'hover:brightness-110 hover:scale-105 transition-all')}`}
+                                style={choiceButtonImageUrl 
+                                    ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choicePadding}px ${choicePadding * 2}px`, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), ...fontSettingsToStyle(project.ui.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const } 
+                                    : { padding: `${choicePadding}px ${choicePadding * 2}px`, ...fontSettingsToStyle(project.ui.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}) }}>
+                            <span style={extractTextGradientStyle(project.ui.choiceTextFont) || undefined}>{interpolatedText}</span>
+                        </button>
+                    </div>
                 )
             })}
         </div>

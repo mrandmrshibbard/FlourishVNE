@@ -50,9 +50,10 @@ const Header: React.FC<{
     const [isExporting, setIsExporting] = useState(false);
     const [isExportingQuick, setIsExportingQuick] = useState(false);
     const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
-    const { project, undo, redo, canUndo, canRedo } = useProject();
+    const { project, undo, redo, canUndo, canRedo, isDirty, markSaved } = useProject();
     const isChildWindow = isManagerWindow();
-    const sessionSavedRef = useRef(false);
+    const isDirtyRef = useRef(isDirty);
+    isDirtyRef.current = isDirty;
 
     useEffect(() => {
         editorDebugLog('showExitModal changed:', showExitModal);
@@ -63,8 +64,8 @@ const Header: React.FC<{
         if ((window as any).electronAPI?.onRequestSaveBeforeQuit) {
             (window as any).electronAPI.onRequestSaveBeforeQuit(() => {
                 editorDebugLog('Received quit request from Electron');
-                // If already saved this session, quit immediately
-                if (sessionSavedRef.current) {
+                // If no unsaved changes, quit immediately
+                if (!isDirtyRef.current) {
                     (window as any).electronAPI.confirmQuit();
                     return;
                 }
@@ -103,7 +104,7 @@ const Header: React.FC<{
             if (didSave) {
                 // Save to recent projects now that we have a saved file
                 saveRecentProject(project);
-                sessionSavedRef.current = true;
+                markSaved();
             }
         } catch (error) {
             console.error("Export failed:", error);
@@ -116,8 +117,8 @@ const Header: React.FC<{
 
     const handleHubClick = () => {
         editorDebugLog('Hub button clicked, showing modal');
-        // If already saved this session, skip the dialog and exit directly
-        if (sessionSavedRef.current) {
+        // If no unsaved changes, skip the dialog and exit directly
+        if (!isDirty) {
             closeAllManagerWindows();
             onExit();
             return;
@@ -139,7 +140,7 @@ const Header: React.FC<{
             
             // Save to recent projects now that we have a saved file
             saveRecentProject(project);
-            sessionSavedRef.current = true;
+            markSaved();
             
             // Wait a moment for the export to complete
             setTimeout(() => {

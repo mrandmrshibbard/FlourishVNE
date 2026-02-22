@@ -236,12 +236,12 @@
       input[type=range]:focus {
         outline: none;
       }
-      /* Thumb */
+      /* Thumb - default styling */
       input[type=range]::-webkit-slider-thumb {
         -webkit-appearance: none;
         appearance: none;
         margin-top: -6px;
-        background-color: var(--accent-pink);
+        background-color: var(--slider-thumb-color, var(--accent-pink));
         height: 20px;
         width: 20px;
         border-radius: 99px;
@@ -249,20 +249,46 @@
       input[type=range]::-moz-range-thumb {
         border: none;
         border-radius: 99px;
-        background-color: var(--accent-pink);
+        background-color: var(--slider-thumb-color, var(--accent-pink));
         height: 20px;
         width: 20px;
       }
-      /* Track */
+      /* Track - default styling */
       input[type=range]::-webkit-slider-runnable-track {
-        background-color: var(--bg-tertiary);
+        background-color: var(--slider-track-color, var(--bg-tertiary));
         border-radius: 0.5rem;
         height: 8px;
       }
        input[type=range]::-moz-range-track {
-        background-color: var(--bg-tertiary);
+        background-color: var(--slider-track-color, var(--bg-tertiary));
         border-radius: 0.5rem;
         height: 8px;
+      }
+
+      /* Custom slider with images */
+      input[type=range].custom-slider::-webkit-slider-thumb {
+        background-image: var(--slider-thumb-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-thumb-color, var(--accent-pink));
+      }
+      input[type=range].custom-slider::-moz-range-thumb {
+        background-image: var(--slider-thumb-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-thumb-color, var(--accent-pink));
+      }
+      input[type=range].custom-slider::-webkit-slider-runnable-track {
+        background-image: var(--slider-track-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-track-color, var(--bg-tertiary));
+      }
+      input[type=range].custom-slider::-moz-range-track {
+        background-image: var(--slider-track-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-track-color, var(--bg-tertiary));
       }
 
       /* === UTILITY CLASSES === */

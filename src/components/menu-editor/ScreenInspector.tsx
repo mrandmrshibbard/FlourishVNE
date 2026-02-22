@@ -110,6 +110,11 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </Select>
                     </FormField>
                 </div>
+                <FormField label={`Default Volume: ${Math.round((screen.music.volume ?? 1) * 100)}%`}>
+                    <input type="range" min="0" max="100" value={Math.round((screen.music.volume ?? 1) * 100)}
+                        onChange={e => updateScreen({ music: { ...screen.music, volume: parseInt(e.target.value) / 100 } })}
+                        className="w-full accent-purple-500" />
+                </FormField>
 
                 <hr className="border-slate-700 my-4" />
                 <h3 className="font-bold mb-2 text-slate-400">Ambient Noise</h3>
@@ -122,6 +127,11 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </Select>
                     </FormField>
                 </div>
+                <FormField label={`Default Volume: ${Math.round((screen.ambientNoise.volume ?? 1) * 100)}%`}>
+                    <input type="range" min="0" max="100" value={Math.round((screen.ambientNoise.volume ?? 1) * 100)}
+                        onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, volume: parseInt(e.target.value) / 100 } })}
+                        className="w-full accent-purple-500" />
+                </FormField>
 
                 <hr className="border-slate-700 my-4" />
                 <h3 className="font-bold mb-2 text-slate-400">Screen Transitions</h3>
@@ -130,6 +140,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         <Select value={screen.transitionIn || 'fade'} onChange={e => updateScreen({ transitionIn: e.target.value as any })}>
                             <option value="none">None</option>
                             <option value="fade">Fade</option>
+                            <option value="crossfade">Crossfade</option>
                             <option value="slideUp">Slide Up</option>
                             <option value="slideDown">Slide Down</option>
                             <option value="slideLeft">Slide Left</option>
@@ -140,6 +151,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         <Select value={screen.transitionOut || 'fade'} onChange={e => updateScreen({ transitionOut: e.target.value as any })}>
                             <option value="none">None</option>
                             <option value="fade">Fade</option>
+                            <option value="crossfade">Crossfade</option>
                             <option value="slideUp">Slide Up</option>
                             <option value="slideDown">Slide Down</option>
                             <option value="slideLeft">Slide Left</option>
@@ -147,9 +159,14 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </Select>
                     </FormField>
                 </div>
-                <FormField label="Duration (ms)">
-                    <TextInput type="number" value={screen.transitionDuration || 300} onChange={e => updateScreen({ transitionDuration: parseInt(e.target.value) || 300 })} />
-                </FormField>
+                <div className="grid grid-cols-2 gap-2">
+                    <FormField label="Fade In Duration (ms)">
+                        <TextInput type="number" value={screen.transitionInDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionInDuration: parseInt(e.target.value) || 300 })} />
+                    </FormField>
+                    <FormField label="Fade Out Duration (ms)">
+                        <TextInput type="number" value={screen.transitionOutDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionOutDuration: parseInt(e.target.value) || 300 })} />
+                    </FormField>
+                </div>
 
                 <hr className="border-slate-700 my-4" />
                 <h3 className="font-bold mb-2 text-slate-400">Dialogue Box</h3>
