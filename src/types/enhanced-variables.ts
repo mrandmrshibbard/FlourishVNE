@@ -1,6 +1,6 @@
 import { VNID } from './index';
 import { VNCondition } from './shared';
-import { VNVariable, VNVariableType, VNSetVariableOperator } from '../features/variables/types';
+import { VNVariable, VNVariableType, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
 
 // Enhanced variable types extending base VN variable system
 export type EnhancedVariableType = VNVariableType | 'object' | 'array' | 'date' | 'json' | 'expression';
@@ -26,7 +26,7 @@ export type EnhancedVariableOperator =
   | 'merge';
 
 // Variable scopes for organization and access control
-export type VariableScope = 'global' | 'scene' | 'character' | 'session' | 'temporary' | 'persistent';
+export type VariableScope = 'local' | 'global' | 'persistent' | 'scene' | 'character' | 'session' | 'temporary';
 
 // Variable categories for organization
 export type VariableCategory = 
@@ -53,7 +53,7 @@ export type VariableValidationType =
 export type PersistenceLevel = 'none' | 'session' | 'save-file' | 'global-settings' | 'cloud';
 
 // Enhanced variable with additional features
-export interface EnhancedVariable extends VNVariable {
+export interface EnhancedVariable extends Omit<VNVariable, 'scope'> {
   // Enhanced type system
   enhancedType: EnhancedVariableType;
   subType?: string; // For arrays/objects: element type

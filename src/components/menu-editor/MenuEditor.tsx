@@ -4,7 +4,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
@@ -301,6 +301,34 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                         <span style={extractTextGradientStyle(cycler.font) || undefined}>{cycler.showAssetName && firstAsset ? firstAsset.name : `1 / ${cycler.assetIds.length}`}</span>
                     </div>
                     <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `calc(var(--font-scale, 1) * ${cycler.arrowSize || 24}px)` }}>▶</div>
+                </div>
+            </div>;
+        case UIElementType.CGGallery:
+            const gallery = element as UICGGalleryElement;
+            const cols = gallery.columns || 4;
+            const cgGalleryEntries = Object.values(project.cgGallery?.entries || {});
+            const filteredEntries = gallery.categoryFilter
+                ? cgGalleryEntries.filter(e => e.category === gallery.categoryFilter)
+                : cgGalleryEntries;
+            const displayCount = Math.min(filteredEntries.length || cols * 2, cols * 3);
+            return <div className="w-full h-full overflow-hidden rounded p-2" style={{ backgroundColor: gallery.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}>
+                <div className="grid gap-1 h-full" style={{
+                    gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                    gap: `${gallery.gap || 8}px`,
+                }}>
+                    {Array.from({ length: displayCount }).map((_, i) => {
+                        const entry = filteredEntries[i];
+                        const isLocked = entry?.unlockable;
+                        return <div key={i} className="flex items-center justify-center text-xs" style={{
+                            backgroundColor: isLocked ? (gallery.lockedColor || '#1e293b') : '#334155',
+                            borderRadius: `${gallery.thumbnailBorderRadius || 8}px`,
+                            border: `1px solid ${gallery.thumbnailBorderColor || '#4D3273'}`,
+                            aspectRatio: '16/9',
+                            overflow: 'hidden',
+                        }}>
+                            {entry ? (isLocked ? (gallery.lockedText || '🔒') : (entry.name || 'CG')) : ''}
+                        </div>;
+                    })}
                 </div>
             </div>;
         default:
@@ -653,6 +681,7 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Cycler</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
+                    <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
                 </div>
             </div>
             

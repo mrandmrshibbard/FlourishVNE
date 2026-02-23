@@ -60,6 +60,46 @@ export function validateProjectForBuild(project: VNProject): ValidationResult {
         });
     }
 
+    // Validate CG Gallery
+    if (project.cgGallery) {
+        const entries = Object.values(project.cgGallery.entries || {});
+        for (const entry of entries) {
+            const e = entry as any;
+            if (!e.assetId) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `CG Gallery entry "${e.name || e.id}" has no asset assigned.`,
+                    location: 'CG Gallery'
+                });
+            } else if (!project.images?.[e.assetId] && !project.backgrounds?.[e.assetId] && !project.videos?.[e.assetId]) {
+                errors.push({
+                    severity: 'error',
+                    message: `CG Gallery entry "${e.name || e.id}" references a missing asset (ID: ${e.assetId}).`,
+                    location: 'CG Gallery'
+                });
+            }
+            if (e.unlockable && e.unlockVariableId) {
+                if (!project.variables[e.unlockVariableId]) {
+                    errors.push({
+                        severity: 'error',
+                        message: `CG Gallery entry "${e.name || e.id}" references a missing unlock variable (ID: ${e.unlockVariableId}).`,
+                        location: 'CG Gallery'
+                    });
+                }
+            }
+        }
+        if (project.cgGallery.lockedPlaceholderAssetId) {
+            const phId = project.cgGallery.lockedPlaceholderAssetId;
+            if (!project.images?.[phId] && !project.backgrounds?.[phId]) {
+                warnings.push({
+                    severity: 'warning',
+                    message: 'CG Gallery locked placeholder references a missing image asset.',
+                    location: 'CG Gallery'
+                });
+            }
+        }
+    }
+
     return {
         isValid: errors.length === 0,
         errors,

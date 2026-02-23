@@ -13,6 +13,39 @@ export interface VNProjectFont {
     fileName?: string;
 }
 
+/** A single entry in the CG Gallery */
+export interface CGGalleryEntry {
+    id: VNID;
+    /** Display name shown in the gallery */
+    name: string;
+    /** Asset ID of the image/video to display (from images or backgrounds) */
+    assetId: VNID | null;
+    /** Optional thumbnail asset (if different from main asset) */
+    thumbnailAssetId?: VNID | null;
+    /** Whether this entry requires unlocking to view */
+    unlockable: boolean;
+    /** Variable ID that tracks unlock status (boolean). When true, the entry is unlocked. Required if unlockable=true */
+    unlockVariableId?: VNID | null;
+    /** Category/group for organizing entries (e.g. "Chapter 1", "Characters") */
+    category?: string;
+    /** Sort order within category */
+    order?: number;
+}
+
+/** CG Gallery configuration for the project */
+export interface CGGalleryConfig {
+    /** All gallery entries */
+    entries: Record<VNID, CGGalleryEntry>;
+    /** Whether unlocked items are saved per-save-slot or globally */
+    unlockScope: 'global' | 'per-save';
+    /** Number of columns in the gallery grid */
+    columns: number;
+    /** Placeholder image shown for locked entries (asset ID) */
+    lockedPlaceholderAssetId?: VNID | null;
+    /** Background color for the gallery viewer */
+    viewerBackgroundColor?: string;
+}
+
 export interface VNProject {
     id: VNID;
     title: string;
@@ -36,4 +69,6 @@ export interface VNProject {
         height: number;
         aspectRatio: string;
     };
+    /** CG Gallery configuration for unlockable art gallery */
+    cgGallery?: CGGalleryConfig;
 }

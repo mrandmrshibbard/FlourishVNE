@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -199,6 +199,22 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 arrowColor: '#a855f7',
                 arrowSize: 24,
                 backgroundColor: 'rgba(30, 41, 59, 0.8)'
+            };
+            return el;
+        }
+        case UIElementType.CGGallery: {
+            const el: UICGGalleryElement = {
+                ...base, name: 'CG Gallery', type,
+                width: 80, height: 70, x: 10, y: 15,
+                columns: 4,
+                gap: 8,
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                thumbnailBorderColor: '#4D3273',
+                thumbnailBorderRadius: 8,
+                showNames: true,
+                nameFont: project.ui.dialogueTextFont,
+                lockedColor: '#1e293b',
+                lockedText: '🔒',
             };
             return el;
         }

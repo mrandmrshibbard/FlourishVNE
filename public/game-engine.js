@@ -41,6 +41,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["PlaySoundEffect"] = "PlaySoundEffect";
     CommandType2["StopSoundEffect"] = "StopSoundEffect";
     CommandType2["PlayMovie"] = "PlayMovie";
+    CommandType2["StopMovie"] = "StopMovie";
     CommandType2["Wait"] = "Wait";
     CommandType2["ShakeScreen"] = "ShakeScreen";
     CommandType2["TintScreen"] = "TintScreen";
@@ -585,6 +586,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["Dropdown"] = "Dropdown";
     UIElementType2["Checkbox"] = "Checkbox";
     UIElementType2["AssetCycler"] = "AssetCycler";
+    UIElementType2["CGGallery"] = "CGGallery";
     return UIElementType2;
   })(UIElementType || {});
   const generateId$2 = (prefix) => `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
@@ -2862,6 +2864,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           textOverlays: [],
           imageOverlays: [],
           buttonOverlays: [],
+          movieOverlays: [],
           screen: {
             shake: { active: false, intensity: 0 },
             tint: "transparent",
@@ -3097,10 +3100,45 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!isRuntimeDebugEnabled()) return;
     console.warn(...args);
   }
+  function getPersistentVarsKey(projectId) {
+    return `vn-persistent-vars-${projectId}`;
+  }
+  function loadPersistentVariables(projectId) {
+    var _a;
+    try {
+      if (typeof window !== "undefined" && ((_a = window.electronAPI) == null ? void 0 : _a.storage)) {
+      }
+      const raw = localStorage.getItem(getPersistentVarsKey(projectId));
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+  function savePersistentVariables(projectId, vars) {
+    var _a;
+    try {
+      if (typeof window !== "undefined" && ((_a = window.electronAPI) == null ? void 0 : _a.storage)) {
+        window.electronAPI.storage.setItem(getPersistentVarsKey(projectId), vars);
+      }
+      localStorage.setItem(getPersistentVarsKey(projectId), JSON.stringify(vars));
+    } catch (e) {
+      console.error("Failed to save persistent variables:", e);
+    }
+  }
+  function getLocalVariableDefaults(projectVariables) {
+    const defaults = {};
+    Object.values(projectVariables).forEach((v) => {
+      if ((v.scope || "global") === "local") {
+        defaults[v.id] = v.defaultValue;
+      }
+    });
+    return defaults;
+  }
   const defaultSettings = {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
+    ambientVolume: 0.8,
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3
@@ -3992,6 +4030,136 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       el.id
     );
   };
+  const CGGalleryGridElement = ({ element, entries, variables, project, assetResolver }) => {
+    var _a;
+    const [viewingEntry, setViewingEntry] = React2.useState(null);
+    const [viewerIndex, setViewerIndex] = React2.useState(0);
+    const isEntryUnlocked = (entry) => {
+      if (!entry.unlockable) return true;
+      if (!entry.unlockVariableId) return true;
+      const val = variables[entry.unlockVariableId];
+      return val === true || val === "true" || val === 1;
+    };
+    const unlockedEntries = entries.filter((e) => isEntryUnlocked(e));
+    const handleThumbnailClick = (entry, index) => {
+      if (!isEntryUnlocked(entry)) return;
+      setViewingEntry(entry);
+      setViewerIndex(unlockedEntries.indexOf(entry));
+    };
+    const navigateViewer = (dir) => {
+      const newIndex = (viewerIndex + dir + unlockedEntries.length) % unlockedEntries.length;
+      setViewerIndex(newIndex);
+      setViewingEntry(unlockedEntries[newIndex]);
+    };
+    if (viewingEntry) {
+      const viewUrl = assetResolver(viewingEntry.assetId, "image");
+      return /* @__PURE__ */ jsxRuntime2.jsxs(
+        "div",
+        {
+          className: "absolute inset-0 z-50 flex items-center justify-center",
+          style: { backgroundColor: element.backgroundColor || "rgba(0,0,0,0.95)" },
+          onClick: () => setViewingEntry(null),
+          children: [
+            viewUrl && /* @__PURE__ */ jsxRuntime2.jsx(
+              "img",
+              {
+                src: viewUrl,
+                alt: viewingEntry.name,
+                className: "max-w-[90%] max-h-[85%] object-contain",
+                onClick: (e) => e.stopPropagation()
+              }
+            ),
+            unlockedEntries.length > 1 && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(
+                "button",
+                {
+                  className: "absolute left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl p-2",
+                  onClick: (e) => {
+                    e.stopPropagation();
+                    navigateViewer(-1);
+                  },
+                  children: "◀"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntime2.jsx(
+                "button",
+                {
+                  className: "absolute right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl p-2",
+                  onClick: (e) => {
+                    e.stopPropagation();
+                    navigateViewer(1);
+                  },
+                  children: "▶"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute bottom-4 left-0 right-0 text-center", children: [
+              element.showNames !== false && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-white text-sm mb-1", children: viewingEntry.name }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "text-white/40 text-xs", children: "Click anywhere to close" })
+            ] }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute top-4 right-4 text-white/50 text-sm", children: [
+              viewerIndex + 1,
+              " / ",
+              unlockedEntries.length
+            ] })
+          ]
+        }
+      );
+    }
+    const lockedPlaceholderUrl = ((_a = project.cgGallery) == null ? void 0 : _a.lockedPlaceholderAssetId) ? assetResolver(project.cgGallery.lockedPlaceholderAssetId, "image") : null;
+    return /* @__PURE__ */ jsxRuntime2.jsx(
+      "div",
+      {
+        className: "w-full h-full overflow-y-auto p-2 rounded",
+        style: { backgroundColor: element.backgroundColor || "rgba(15, 23, 42, 0.9)" },
+        children: /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            className: "grid",
+            style: {
+              gridTemplateColumns: `repeat(${element.columns || 4}, 1fr)`,
+              gap: `${element.gap || 8}px`
+            },
+            children: entries.map((entry, idx) => {
+              const unlocked = isEntryUnlocked(entry);
+              const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
+              const thumbUrl = unlocked ? assetResolver(thumbAssetId, "image") : lockedPlaceholderUrl;
+              return /* @__PURE__ */ jsxRuntime2.jsxs(
+                "div",
+                {
+                  className: "relative overflow-hidden flex items-center justify-center",
+                  style: {
+                    aspectRatio: "16/9",
+                    borderRadius: `${element.thumbnailBorderRadius || 8}px`,
+                    border: `2px solid ${element.thumbnailBorderColor || "#4D3273"}`,
+                    backgroundColor: unlocked ? "#334155" : element.lockedColor || "#1e293b",
+                    cursor: unlocked ? "pointer" : "default",
+                    transition: "transform 0.15s ease, border-color 0.15s ease"
+                  },
+                  onClick: () => handleThumbnailClick(entry),
+                  onMouseEnter: (e) => {
+                    if (unlocked) {
+                      e.currentTarget.style.transform = "scale(1.05)";
+                      e.currentTarget.style.borderColor = "#8b5cf6";
+                    }
+                  },
+                  onMouseLeave: (e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.borderColor = element.thumbnailBorderColor || "#4D3273";
+                  },
+                  children: [
+                    unlocked && thumbUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: thumbUrl, alt: entry.name, className: "w-full h-full object-cover" }) : !unlocked ? /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-2xl", children: element.lockedText || "🔒" }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-xs text-slate-500", children: entry.name }),
+                    element.showNames !== false && unlocked && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1", children: entry.name })
+                  ]
+                },
+                entry.id
+              );
+            })
+          }
+        )
+      }
+    );
+  };
   const getTransitionStyle = (transitionIn, duration, delay) => {
     const durationMs = duration || 300;
     const delayMs = delay || 0;
@@ -4038,7 +4206,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return null;
     };
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
@@ -4511,6 +4679,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             el.id
           );
         }
+        case UIElementType.CGGallery: {
+          const el = element;
+          const galleryEntries = Object.values(((_u = project2.cgGallery) == null ? void 0 : _u.entries) || {});
+          const filteredEntries = el.categoryFilter ? galleryEntries.filter((e) => e.category === el.categoryFilter) : galleryEntries;
+          filteredEntries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: /* @__PURE__ */ jsxRuntime2.jsx(
+            CGGalleryGridElement,
+            {
+              element: el,
+              entries: filteredEntries,
+              variables: variables2,
+              project: project2,
+              assetResolver
+            }
+          ) }, el.id);
+        }
         default:
           return null;
       }
@@ -4720,6 +4904,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (project.images && project.images[assetId]) {
         const img = project.images[assetId];
         return { isVideo: !!img.isVideo, loop: !!img.loop };
+      }
+      if (project.videos && project.videos[assetId]) {
+        return { isVideo: true, loop: true };
       }
       for (const charId in project.characters) {
         const char = project.characters[charId];
@@ -4977,7 +5164,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           variables: saveData.playerStateData.variables,
           stageState: saveData.playerStateData.stageState,
           history: [],
-          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
+          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
           musicState: saveData.playerStateData.musicState
         });
         setScreenStack([]);
@@ -4990,6 +5177,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       var _a2;
       stopAndResetMusic();
       const initialVariables = { ...menuVariables };
+      const persistentVars = loadPersistentVariables(project.id);
+      Object.values(project.variables).forEach((v) => {
+        if ((v.scope || "global") === "persistent" && persistentVars[v.id] !== void 0) {
+          initialVariables[v.id] = persistentVars[v.id];
+        }
+      });
       let startSceneId = project.startSceneId;
       const startScene = project.scenes[startSceneId];
       if (startScene && startScene.conditions && startScene.conditions.length > 0) {
@@ -5037,9 +5230,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         currentIndex: 0,
         commandStack: [],
         variables: initialVariables,
-        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
+        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
         history: [],
-        uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
+        uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
         musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false }
       });
       setScreenStack([]);
@@ -5672,6 +5865,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     textOverlays: [],
                     imageOverlays: [],
                     buttonOverlays: [],
+                    movieOverlays: [],
                     screen: {
                       shake: { active: false, intensity: 0 },
                       tint: "transparent",
@@ -5687,6 +5881,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     choices: null,
                     textInput: null,
                     movieUrl: null,
+                    movieLoop: false,
                     isWaitingForInput: false,
                     isTransitioning: false,
                     transitionElement: null,
@@ -5803,6 +5998,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       textOverlays: [],
                       imageOverlays: [],
                       buttonOverlays: [],
+                      movieOverlays: [],
                       screen: {
                         shake: { active: false, intensity: 0 },
                         tint: "transparent",
@@ -5818,6 +6014,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       choices: null,
                       textInput: null,
                       movieUrl: null,
+                      movieLoop: false,
                       isWaitingForInput: false,
                       isTransitioning: false,
                       transitionElement: null,
@@ -5865,12 +6062,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
       let instantAdvance = true;
       (async () => {
+        var _a3;
         try {
           const applyResult = (result) => {
-            var _a3, _b2;
+            var _a4, _b2, _c2;
             const variableStore2 = variableStoreRef.current;
             const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
-            if (((_a3 = result.updates) == null ? void 0 : _a3.variables) && variableStore2) {
+            if (((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2) {
               const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
                 variableId,
                 value,
@@ -5880,23 +6078,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               variableStore2.applyWrites(writes);
             }
             if (result.updates) {
+              const isSceneChange = ((_b2 = result.updates) == null ? void 0 : _b2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
-                var _a4, _b3, _c2, _d, _e, _f, _g, _h, _i, _j;
+                var _a5, _b3, _c3, _d, _e, _f, _g, _h, _i, _j;
                 if (!p) return null;
-                const mergedVariables = ((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
+                let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
+                if (isSceneChange) {
+                  const localDefaults = getLocalVariableDefaults(project.variables);
+                  mergedVariables = { ...mergedVariables, ...localDefaults };
+                  runtimeDebugLog("[Variable Scope] Reset local variables on scene change:", Object.keys(localDefaults));
+                }
                 return {
                   ...p,
-                  ...((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
+                  ...((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
                   ...((_d = result.updates) == null ? void 0 : _d.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
                   ...((_e = result.updates) == null ? void 0 : _e.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
                   ...((_f = result.updates) == null ? void 0 : _f.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
-                  ...((_g = result.updates) == null ? void 0 : _g.variables) !== void 0 ? { variables: mergedVariables } : {},
+                  ...((_g = result.updates) == null ? void 0 : _g.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
                   ...((_h = result.updates) == null ? void 0 : _h.stageState) !== void 0 ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {},
                   ...((_i = result.updates) == null ? void 0 : _i.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
                   ...((_j = result.updates) == null ? void 0 : _j.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
               });
-              if (((_b2 = result.updates) == null ? void 0 : _b2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
+              if (((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
                 runtimeDebugLog("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
                 setScreenStack([]);
                 setHudStack([]);
@@ -5967,6 +6171,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case CommandType.SetVariable: {
               const result = handleSetVariable(command, commandContext);
               applyResult(result);
+              const setVarCmd = command;
+              const varDef = project.variables[setVarCmd.variableId];
+              if (varDef && varDef.scope === "persistent" && ((_a3 = result.updates) == null ? void 0 : _a3.variables)) {
+                const persistentSnapshot = {};
+                Object.values(project.variables).forEach((v) => {
+                  if ((v.scope || "global") === "persistent" && result.updates.variables[v.id] !== void 0) {
+                    persistentSnapshot[v.id] = result.updates.variables[v.id];
+                  }
+                });
+                savePersistentVariables(project.id, { ...loadPersistentVariables(project.id), ...persistentSnapshot });
+                runtimeDebugLog("[Variable Scope] Saved persistent variable:", varDef.name);
+              }
               break;
             }
             case CommandType.TextInput: {
@@ -6002,8 +6218,63 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               break;
             }
             case CommandType.PlayMovie: {
-              instantAdvance = false;
-              updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true, movieUrl: assetResolver(command.videoId, "video") } } : null);
+              const movieCmd = command;
+              const movieUrl = assetResolver(movieCmd.videoId, "video");
+              const isOverlay = movieCmd.displayMode === "overlay";
+              const shouldLoop = movieCmd.loop ?? false;
+              if (isOverlay) {
+                updatePlayerState((p) => {
+                  if (!p) return null;
+                  const existing = p.stageState.movieOverlays || [];
+                  return {
+                    ...p,
+                    stageState: {
+                      ...p.stageState,
+                      movieOverlays: [...existing, {
+                        url: movieUrl || "",
+                        loop: shouldLoop,
+                        x: movieCmd.x,
+                        y: movieCmd.y,
+                        width: movieCmd.width,
+                        height: movieCmd.height,
+                        opacity: movieCmd.opacity,
+                        objectFit: movieCmd.objectFit
+                      }]
+                    }
+                  };
+                });
+              } else {
+                if (movieCmd.waitsForCompletion) {
+                  instantAdvance = false;
+                  updatePlayerState((p) => p ? {
+                    ...p,
+                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop }
+                  } : null);
+                } else {
+                  updatePlayerState((p) => p ? {
+                    ...p,
+                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop }
+                  } : null);
+                }
+              }
+              break;
+            }
+            case CommandType.StopMovie: {
+              updatePlayerState((p) => {
+                if (!p) return null;
+                return {
+                  ...p,
+                  stageState: {
+                    ...p.stageState,
+                    movieOverlays: []
+                  },
+                  uiState: {
+                    ...p.uiState,
+                    movieUrl: null,
+                    movieLoop: false
+                  }
+                };
+              });
               break;
             }
             case CommandType.Wait: {
@@ -6283,6 +6554,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               `${setVarAction.operator} => ${effectiveOperator}`,
               ")"
             );
+            if (variable.scope === "persistent") {
+              const prevPersistent = loadPersistentVariables(project.id);
+              savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: newVal });
+              runtimeDebugLog("[Variable Scope] Saved persistent variable from choice:", variable.name);
+            }
           }
         }
         runtimeDebugLog("[CHOICE] Variables after actions:", JSON.stringify(newState.variables, null, 2));
@@ -6330,6 +6606,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const actualSceneId = navigateToScene(jumpAction.targetSceneId, newState.variables);
           const newScene = project.scenes[actualSceneId];
           if (newScene) {
+            const localDefaults = getLocalVariableDefaults(project.variables);
+            newState.variables = { ...newState.variables, ...localDefaults };
+            runtimeDebugLog("[Variable Scope] Reset local variables on choice/button scene jump:", Object.keys(localDefaults));
             newState.currentSceneId = actualSceneId;
             newState.currentCommands = newScene.commands;
             newState.currentIndex = 0;
@@ -6610,6 +6889,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 textOverlays: [],
                 imageOverlays: [],
                 buttonOverlays: [],
+                movieOverlays: [],
                 screen: {
                   shake: { active: false, intensity: 0 },
                   tint: "transparent",
@@ -6625,6 +6905,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 choices: null,
                 textInput: null,
                 movieUrl: null,
+                movieLoop: false,
                 isWaitingForInput: false,
                 isTransitioning: false,
                 transitionElement: null,
@@ -6671,6 +6952,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     textOverlays: [],
                     imageOverlays: [],
                     buttonOverlays: [],
+                    movieOverlays: [],
                     screen: {
                       shake: { active: false, intensity: 0 },
                       tint: "transparent",
@@ -6687,6 +6969,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     choices: null,
                     textInput: null,
                     movieUrl: null,
+                    movieLoop: false,
                     isWaitingForInput: false,
                     isTransitioning: false,
                     transitionElement: null,
@@ -6770,6 +7053,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             });
           }
         });
+        if (variable.scope === "persistent") {
+          const currentVars = playerState ? uiVariablesRef.current : menuVariables;
+          const prevPersistent = loadPersistentVariables(project.id);
+          savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: currentVars[setVarAction.variableId] });
+          runtimeDebugLog("[Variable Scope] Saved persistent variable from UI action:", variable.name);
+        }
       } else if (action.type === UIActionType.CycleLayerAsset) {
         runtimeDebugLog("CycleLayerAsset handler triggered, playerState exists:", !!playerState);
         const cycleAction = action;
@@ -7073,6 +7362,48 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 }
               ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: state.backgroundUrl, alt: "background", className: "absolute w-full h-full object-cover" })),
               playerState == null ? void 0 : playerState.uiState.transitionElement,
+              state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
+                if (!movie.url) return null;
+                const isCustom = movie.objectFit === "custom";
+                const videoStyle = isCustom ? {
+                  left: `${movie.x ?? 0}%`,
+                  top: `${movie.y ?? 0}%`,
+                  width: `${movie.width ?? 100}%`,
+                  height: `${movie.height ?? 100}%`,
+                  objectFit: "fill",
+                  opacity: movie.opacity ?? 1,
+                  zIndex: 2
+                } : {
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: movie.objectFit || "cover",
+                  opacity: movie.opacity ?? 1,
+                  zIndex: 2
+                };
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  "video",
+                  {
+                    src: movie.url,
+                    autoPlay: true,
+                    muted: true,
+                    loop: movie.loop,
+                    playsInline: true,
+                    className: "absolute pointer-events-none",
+                    style: videoStyle,
+                    onEnded: () => {
+                      if (movie.loop) return;
+                      updatePlayerState((p) => {
+                        if (!p) return null;
+                        const overlays = [...p.stageState.movieOverlays || []];
+                        overlays.splice(idx, 1);
+                        return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                      });
+                    }
+                  },
+                  `movie-overlay-${idx}-${movie.url}`
+                );
+              }),
               Object.values(state.characters).map((char) => {
                 var _a2;
                 let transitionClass = "";
@@ -7204,12 +7535,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     const CreditRollOverlay = ({ command, project: project2, assetResolver: assetResolver2, getAssetMetadata: getAssetMetadata2, onFinish }) => {
       const bgs = command.backgrounds || [];
+      const mediaItems = command.media || [];
       const hasBgs = bgs.length > 0;
+      const hasMedia = mediaItems.length > 0;
       const [bgIndex, setBgIndex] = React2.useState(0);
       const [prevBgIndex, setPrevBgIndex] = React2.useState(null);
       const [transitioning, setTransitioning] = React2.useState(false);
       const bgTimerRef = React2.useRef(null);
       const bgTransTimerRef = React2.useRef(null);
+      const [elapsed, setElapsed] = React2.useState(0);
+      const startTimeRef = React2.useRef(Date.now());
+      React2.useEffect(() => {
+        if (!hasMedia) return;
+        startTimeRef.current = Date.now();
+        const interval = window.setInterval(() => {
+          setElapsed((Date.now() - startTimeRef.current) / 1e3);
+        }, 200);
+        return () => clearInterval(interval);
+      }, [hasMedia]);
       React2.useEffect(() => {
         if (!hasBgs || bgs.length <= 1) return;
         const scheduleNext = (idx) => {
@@ -7245,17 +7588,27 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const url = assetResolver2(slide.assetId, "image");
         if (!url) return null;
         const meta = getAssetMetadata2(slide.assetId, "image");
-        const style = {
+        const isCustom = slide.objectFit === "custom";
+        const style = isCustom ? {
+          position: "absolute",
+          left: `${slide.x ?? 0}%`,
+          top: `${slide.y ?? 0}%`,
+          width: `${slide.width ?? 100}%`,
+          height: `${slide.height ?? 100}%`,
+          objectFit: "fill",
+          opacity: (slide.opacity ?? 1) * opacity,
+          transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
+        } : {
           position: "absolute",
           inset: 0,
           width: "100%",
           height: "100%",
-          objectFit: "cover",
-          opacity,
+          objectFit: slide.objectFit || "cover",
+          opacity: (slide.opacity ?? 1) * opacity,
           transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : "none"
         };
         if (meta.isVideo) {
-          return /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, autoPlay: true, muted: true, loop: meta.loop, style });
+          return /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, autoPlay: true, muted: true, loop: meta.loop, playsInline: true, style });
         }
         return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style });
       };
@@ -7287,6 +7640,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               )
             ] }),
             hasBgs && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 z-[1]", style: { backgroundColor: "rgba(0,0,0,0.4)" } }),
+            hasMedia && mediaItems.map((item, idx) => {
+              const url = assetResolver2(item.assetId, "image");
+              if (!url) return null;
+              const meta = getAssetMetadata2(item.assetId, "image");
+              const showAt = item.showAt || 0;
+              const hideAt = item.hideAt || 0;
+              const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
+              const isFading = item.transition === "fade";
+              const itemOpacity = isVisible ? item.opacity ?? 1 : 0;
+              const isCustomItem = item.objectFit === "custom";
+              const mediaStyle = isCustomItem ? {
+                position: "absolute",
+                left: `${item.x}%`,
+                top: `${item.y}%`,
+                width: `${item.width}%`,
+                height: `${item.height}%`,
+                objectFit: "fill",
+                opacity: itemOpacity,
+                transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : "none",
+                zIndex: 1,
+                pointerEvents: "none"
+              } : {
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: item.objectFit || "cover",
+                opacity: itemOpacity,
+                transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : "none",
+                zIndex: 1,
+                pointerEvents: "none"
+              };
+              if (meta.isVideo) {
+                return /* @__PURE__ */ jsxRuntime2.jsx("video", { src: url, autoPlay: true, muted: true, loop: true, playsInline: true, style: mediaStyle }, `credit-media-${idx}`);
+              }
+              return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: mediaStyle }, `credit-media-${idx}`);
+            }),
             /* @__PURE__ */ jsxRuntime2.jsx(
               "div",
               {
@@ -7294,7 +7684,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 style: {
                   color: command.textColor || "#FFFFFF",
                   animationDuration: `${command.duration || 15}s`,
-                  textShadow: hasBgs ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none"
+                  textShadow: hasBgs || hasMedia ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none"
                 },
                 onAnimationEnd: (e) => {
                   if (e.target === e.currentTarget) {
@@ -7365,7 +7755,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             onClose: () => updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)
           }
         ),
-        uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white", onClick: () => updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null), children: /* @__PURE__ */ jsxRuntime2.jsx("video", { src: uiState.movieUrl, autoPlay: true, className: "w-full h-full", onEnded: () => updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null } } : null) }) }),
+        uiState.movieUrl && /* @__PURE__ */ jsxRuntime2.jsxs(
+          "div",
+          {
+            className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white",
+            onClick: () => {
+              if (!uiState.isWaitingForInput) return;
+              updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false } } : null);
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(
+                "video",
+                {
+                  src: uiState.movieUrl,
+                  autoPlay: true,
+                  loop: uiState.movieLoop ?? false,
+                  style: { width: "100%", height: "100%", objectFit: "contain" },
+                  onEnded: () => {
+                    if (uiState.movieLoop) return;
+                    if (uiState.isWaitingForInput) {
+                      updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false } } : null);
+                    } else {
+                      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : null);
+                    }
+                  }
+                }
+              ),
+              uiState.isWaitingForInput && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none", children: "Click to skip" })
+            ]
+          }
+        ),
         activeCreditRoll && /* @__PURE__ */ jsxRuntime2.jsx(
           CreditRollOverlay,
           {

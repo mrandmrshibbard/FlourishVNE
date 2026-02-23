@@ -61,6 +61,54 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 return `Flash`;
             case 'CreditRoll':
                 return `🎬 Credit Roll`;
+            case 'Choice':
+                return `Choice (${(command as any).options?.length || 0} options)`;
+            case 'Jump':
+                return `→ ${project.scenes[(command as any).targetSceneId]?.name || 'N/A'}`;
+            case 'JumpToLabel':
+                return `→ Label: ${(command as any).labelId || 'N/A'}`;
+            case 'Label':
+                return `🏷 ${(command as any).labelId || 'N/A'}`;
+            case 'TextInput':
+                return `Input → ${project.variables[(command as any).variableId]?.name || 'Var'}`;
+            case 'StopMusic':
+                return `■ Stop Music`;
+            case 'StopSoundEffect':
+                return `■ Stop SFX`;
+            case 'PlayMovie': {
+                const mode = (command as any).displayMode === 'overlay' ? '(overlay)' : '';
+                return `🎬 ${project.videos[(command as any).videoId]?.name || 'N/A'} ${mode}`.trim();
+            }
+            case 'StopMovie':
+                return `■ Stop Movie`;
+            case 'Wait':
+                return `⏱ ${(command as any).duration || 1}s`;
+            case 'ShowScreen':
+                return `Screen: ${project.uiScreens[(command as any).screenId]?.name || 'N/A'}`;
+            case 'ShowText':
+                return `Text: "${((command as any).text || '').substring(0, 15)}..."`;
+            case 'ShowImage':
+                return `Image: ${project.images?.[(command as any).imageId]?.name || 'N/A'}`;
+            case 'HideText':
+                return `Hide Text`;
+            case 'HideImage':
+                return `Hide Image`;
+            case 'ShowButton':
+                return `Btn: "${((command as any).text || '').substring(0, 15)}"`;
+            case 'HideButton':
+                return `Hide Button`;
+            case 'PanZoomScreen':
+                return `Zoom: ${(command as any).zoom || 1}x`;
+            case 'ResetScreenEffects':
+                return `Reset FX`;
+            case 'SetScreenOverlayEffect':
+                return `FX: ${(command as any).effectType || 'N/A'}`;
+            case 'BranchStart':
+                return `Branch: ${(command as any).name || 'Unnamed'}`;
+            case 'BranchEnd':
+                return `End Branch`;
+            case 'Group':
+                return `📁 ${(command as any).name || 'Group'}`;
             default:
                 return command.type.replace(/([A-Z])/g, ' $1').trim();
         }

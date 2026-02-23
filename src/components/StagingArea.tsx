@@ -4,7 +4,8 @@ import type { VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
 import {
     CommandType, ShowCharacterCommand, DialogueCommand, FlashScreenCommand, ChoiceOption,
-    ChoiceCommand, SetBackgroundCommand, ShowTextCommand, ShowImageCommand, VNScene, ShowButtonCommand
+    ChoiceCommand, SetBackgroundCommand, ShowTextCommand, ShowImageCommand, VNScene, ShowButtonCommand,
+    PlayMovieCommand
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -90,7 +91,17 @@ interface StageState {
         characterColor: string;
         text: string;
     } | null;
-    movie: { videoName: string } | null;
+    movie: {
+        videoUrl: string;
+        videoName: string;
+        displayMode: 'fullscreen' | 'overlay';
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        opacity: number;
+        objectFit: string;
+    } | null;
     flash: { color: string } | null;
     choices: ChoiceOption[] | null;
     commandIndicator: { type: string; details: string } | null;
@@ -194,7 +205,7 @@ const StagingArea: React.FC<{
         let currentVariables: StageState['variables'] = {};
 
         // Initialize variables with project defaults
-        Object.values(project.variables).forEach(v => {
+        (Object.values(project.variables) as import('../features/variables/types').VNVariable[]).forEach(v => {
             currentVariables[v.id] = v.defaultValue;
         });
 
@@ -322,9 +333,23 @@ const StagingArea: React.FC<{
                 case CommandType.Choice:
                     choices = currentCommand.options.filter(opt => evaluateConditions(opt.conditions, currentVariables));
                     break;
-                case CommandType.PlayMovie:
-                    movie = { videoName: project.videos[currentCommand.videoId]?.name || 'N/A' };
+                case CommandType.PlayMovie: {
+                    const movieCmd = currentCommand as PlayMovieCommand;
+                    const videoAsset = project.videos[movieCmd.videoId];
+                    const videoUrl = videoAsset?.videoUrl || null;
+                    movie = {
+                        videoUrl: videoUrl || '',
+                        videoName: videoAsset?.name || 'N/A',
+                        displayMode: movieCmd.displayMode || 'fullscreen',
+                        x: movieCmd.x ?? 0,
+                        y: movieCmd.y ?? 0,
+                        width: movieCmd.width ?? 100,
+                        height: movieCmd.height ?? 100,
+                        opacity: movieCmd.opacity ?? 1,
+                        objectFit: movieCmd.objectFit || 'cover',
+                    };
                     break;
+                }
                 case CommandType.FlashScreen:
                     flash = { color: currentCommand.color };
                     break;
@@ -332,6 +357,7 @@ const StagingArea: React.FC<{
                 case CommandType.PlayMusic:
                 case CommandType.PlaySoundEffect:
                 case CommandType.StopMusic:
+                case CommandType.StopMovie:
                 case CommandType.Jump:
                 case CommandType.Wait:
                 case CommandType.TextInput:
@@ -477,7 +503,57 @@ const StagingArea: React.FC<{
                     style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}
                 >
                     {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
-                {Object.values(stageState.characters).map((char) => {
+
+                {/* Movie/video - renders BEHIND characters (z-index 2) */}
+                {stageState.movie && stageState.movie.videoUrl && (
+                    stageState.movie.displayMode === 'fullscreen' ? (
+                        <video
+                            key={`stage-movie-${stageState.movie.videoUrl}`}
+                            src={stageState.movie.videoUrl}
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                            className="absolute pointer-events-none"
+                            style={{
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: (stageState.movie.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                                opacity: stageState.movie.opacity,
+                                zIndex: 2,
+                            }}
+                        />
+                    ) : (
+                        <video
+                            key={`stage-movie-${stageState.movie.videoUrl}`}
+                            src={stageState.movie.videoUrl}
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                            className="absolute pointer-events-none"
+                            style={{
+                                left: `${stageState.movie.x}%`,
+                                top: `${stageState.movie.y}%`,
+                                width: `${stageState.movie.width}%`,
+                                height: `${stageState.movie.height}%`,
+                                objectFit: (stageState.movie.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                                opacity: stageState.movie.opacity,
+                                zIndex: 2,
+                            }}
+                        />
+                    )
+                )}
+                {/* Fallback: if video URL is missing, show an indicator */}
+                {stageState.movie && !stageState.movie.videoUrl && (
+                    <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center text-white bg-black/60">
+                        <FilmIcon className="w-12 h-12 opacity-50" />
+                        <p className="text-sm opacity-70 mt-2">Video: {stageState.movie.videoName}</p>
+                    </div>
+                )}
+
+                {(Object.values(stageState.characters) as StageCharacterState[]).map((char) => {
                     const posStyle = getPositionStyle(char.position);
                     const isCustomPosition = typeof char.position === 'object';
                     // For preset positions, anchor to bottom. For custom positions, respect the exact coordinates
@@ -578,12 +654,6 @@ const StagingArea: React.FC<{
                 {currentDialogue && renderDialogueBox(currentDialogue)}
                 {currentChoices && renderChoiceMenu(currentChoices)}
 
-                {stageState.movie && (
-                    <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white">
-                        <FilmIcon className="w-24 h-24" />
-                        <p>Play Movie: {stageState.movie.videoName}</p>
-                    </div>
-                )}
                  {stageState.flash && (
                     <div className="absolute inset-0 z-50" style={{ backgroundColor: stageState.flash.color, opacity: 0.7 }}></div>
                 )}

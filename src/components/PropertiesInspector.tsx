@@ -8,7 +8,8 @@ import {
     PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, WaitCommand, ShakeScreenCommand, PlayMovieCommand,
     TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand, FlashScreenCommand, ShowScreenCommand,
     HideTextCommand, HideImageCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, HideButtonCommand,
-    LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground,
+    LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground, CreditMedia,
+    GroupCommand,
     VNScene,
     ChoiceAction,
 } from '../features/scene/types';
@@ -1018,6 +1019,7 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.PlayMovie: {
                 const cmd = command as PlayMovieCommand;
+                const isOverlay = cmd.displayMode === 'overlay';
                 return <>
                     <FormField label="Video">
                         <Select value={cmd.videoId} onChange={e => updateCommand({ videoId: e.target.value })}>
@@ -1025,11 +1027,77 @@ const PropertiesInspector: React.FC<{
                             {Object.values(project.videos).map((v: VNVideo) => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </Select>
                     </FormField>
+                    <FormField label="Display Mode">
+                        <Select value={cmd.displayMode || 'fullscreen'} onChange={e => {
+                            const mode = e.target.value as 'fullscreen' | 'overlay';
+                            // Overlay mode always advances immediately (non-blocking)
+                            if (mode === 'overlay') {
+                                updateCommand({ displayMode: mode, waitsForCompletion: false });
+                            } else {
+                                updateCommand({ displayMode: mode });
+                            }
+                        }}>
+                            <option value="fullscreen">Fullscreen (black background)</option>
+                            <option value="overlay">Overlay (transparent, plays over scene)</option>
+                        </Select>
+                    </FormField>
+                    <p className="text-xs text-slate-400 mt-1 mb-2">
+                        {isOverlay
+                            ? 'Movie plays as a transparent layer behind characters. Use for effects like falling petals, rain, etc.'
+                            : 'Movie fills the screen with a black background. Use for cutscenes and cinematics.'}
+                    </p>
                     <div className="flex items-center gap-1 mt-2">
-                        <input id="waits-for-completion" type="checkbox" checked={cmd.waitsForCompletion} onChange={e => updateCommand({ waitsForCompletion: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" /> 
-                        <label htmlFor="waits-for-completion">Wait for completion</label>
+                        <input id="movie-loop" type="checkbox" checked={cmd.loop ?? false} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" />
+                        <label htmlFor="movie-loop" className="text-sm">Loop continuously</label>
                     </div>
+                    {!isOverlay && (
+                        <div className="flex items-center gap-1 mt-2">
+                            <input id="waits-for-completion" type="checkbox" checked={cmd.waitsForCompletion} onChange={e => updateCommand({ waitsForCompletion: e.target.checked })} className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500" /> 
+                            <label htmlFor="waits-for-completion" className="text-sm">Wait for completion</label>
+                        </div>
+                    )}
+                    <hr className="border-slate-700 my-2" />
+                    <FormField label="Display Sizing">
+                        <Select value={cmd.objectFit || 'cover'} onChange={e => {
+                            const val = e.target.value as 'cover' | 'contain' | 'fill' | 'custom';
+                            if (val === 'custom') {
+                                updateCommand({ objectFit: val });
+                            } else {
+                                // Reset position/size to defaults when switching away from custom
+                                updateCommand({ objectFit: val, x: 0, y: 0, width: 100, height: 100 });
+                            }
+                        }}>
+                            <option value="cover">Cover (fill area, may crop)</option>
+                            <option value="contain">Contain (fit inside, may letterbox)</option>
+                            <option value="fill">Fill (stretch to fit)</option>
+                            <option value="custom">Custom (set position & size)</option>
+                        </Select>
+                    </FormField>
+                    {cmd.objectFit === 'custom' && (
+                        <>
+                            <h4 className="font-bold text-xs mb-2 text-slate-400">Position & Size</h4>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="X Position (%)"><TextInput type="number" min="0" max="100" step="1" value={cmd.x ?? 0} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                                <FormField label="Y Position (%)"><TextInput type="number" min="0" max="100" step="1" value={cmd.y ?? 0} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="Width (%)"><TextInput type="number" min="1" max="100" step="1" value={cmd.width ?? 100} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 100 })} /></FormField>
+                                <FormField label="Height (%)"><TextInput type="number" min="1" max="100" step="1" value={cmd.height ?? 100} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 100 })} /></FormField>
+                            </div>
+                        </>
+                    )}
+                    <FormField label={`Opacity: ${Math.round((cmd.opacity ?? 1) * 100)}%`}>
+                        <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
+                    </FormField>
+                    {isOverlay && (
+                        <p className="text-xs text-slate-400 mt-2">
+                            Use the <strong>Stop Movie</strong> command to remove overlay movies.
+                        </p>
+                    )}
                 </>;
+            }
+            case CommandType.StopMovie: {
+                return <p className="text-xs text-slate-400">Stops all currently playing movie overlays.</p>;
             }
             case CommandType.SetVariable: {
                 const cmd = command as SetVariableCommand;
@@ -1820,6 +1888,36 @@ const PropertiesInspector: React.FC<{
                                                     <TextInput type="number" min="0.1" max="5" step="0.1" value={bg.transitionDuration} onChange={e => updateBg(i, { transitionDuration: parseFloat(e.target.value) || 0.5 })} />
                                                 </FormField>
                                             )}
+                                            <FormField label="Sizing">
+                                                <Select value={bg.objectFit || 'cover'} onChange={e => {
+                                                    const val = e.target.value as 'cover' | 'contain' | 'fill' | 'custom';
+                                                    if (val === 'custom') {
+                                                        updateBg(i, { objectFit: val });
+                                                    } else {
+                                                        updateBg(i, { objectFit: val, x: 0, y: 0, width: 100, height: 100 });
+                                                    }
+                                                }}>
+                                                    <option value="cover">Cover</option>
+                                                    <option value="contain">Contain</option>
+                                                    <option value="fill">Fill</option>
+                                                    <option value="custom">Custom</option>
+                                                </Select>
+                                            </FormField>
+                                            {bg.objectFit === 'custom' && (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-1 mt-1.5">
+                                                        <FormField label="X (%)"><TextInput type="number" min="0" max="100" step="1" value={bg.x ?? 0} onChange={e => updateBg(i, { x: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                        <FormField label="Y (%)"><TextInput type="number" min="0" max="100" step="1" value={bg.y ?? 0} onChange={e => updateBg(i, { y: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-1">
+                                                        <FormField label="Width (%)"><TextInput type="number" min="1" max="100" step="1" value={bg.width ?? 100} onChange={e => updateBg(i, { width: parseFloat(e.target.value) || 100 })} /></FormField>
+                                                        <FormField label="Height (%)"><TextInput type="number" min="1" max="100" step="1" value={bg.height ?? 100} onChange={e => updateBg(i, { height: parseFloat(e.target.value) || 100 })} /></FormField>
+                                                    </div>
+                                                </>
+                                            )}
+                                            <FormField label={`Opacity: ${Math.round((bg.opacity ?? 1) * 100)}%`}>
+                                                <input type="range" min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
+                                            </FormField>
                                         </div>
                                     ))}
                                 </div>
@@ -1832,6 +1930,130 @@ const PropertiesInspector: React.FC<{
                             </>;
                         })()}
                     </FormField>
+                    <hr className="border-slate-700 my-3" />
+                    <FormField label="Foreground Media">
+                        <p className="text-[10px] text-slate-400 mb-2">Add positioned images/videos that appear during the credit roll with timed visibility.</p>
+                        {(() => {
+                            const mediaList: CreditMedia[] = cmd.media || [];
+                            const mediaAssetOptions: { value: string; label: string; group?: string }[] = [];
+                            Object.values(project.backgrounds).forEach((b: VNBackground) => {
+                                mediaAssetOptions.push({ value: b.id, label: b.name, group: 'Backgrounds' });
+                            });
+                            Object.values(project.images).forEach((img: VNImage) => {
+                                mediaAssetOptions.push({ value: img.id, label: img.name, group: 'Images' });
+                            });
+                            Object.values(project.videos).forEach((v: VNVideo) => {
+                                mediaAssetOptions.push({ value: v.id, label: v.name, group: 'Videos' });
+                            });
+
+                            const updateMedia = (index: number, updates: Partial<CreditMedia>) => {
+                                const newMedia = [...mediaList];
+                                newMedia[index] = { ...newMedia[index], ...updates };
+                                updateCommand({ media: newMedia });
+                            };
+                            const removeMedia = (index: number) => {
+                                updateCommand({ media: mediaList.filter((_, i) => i !== index) });
+                            };
+                            const addMedia = () => {
+                                const newItem: CreditMedia = { assetId: null, x: 10, y: 10, width: 30, height: 30, opacity: 1, objectFit: 'contain', showAt: 0, hideAt: 0, transition: 'fade', transitionDuration: 0.5 };
+                                updateCommand({ media: [...mediaList, newItem] });
+                            };
+                            const moveMedia = (index: number, dir: -1 | 1) => {
+                                const newMedia = [...mediaList];
+                                const swap = index + dir;
+                                if (swap < 0 || swap >= newMedia.length) return;
+                                [newMedia[index], newMedia[swap]] = [newMedia[swap], newMedia[index]];
+                                updateCommand({ media: newMedia });
+                            };
+
+                            return <>
+                                <div className="space-y-2 mb-2">
+                                    {mediaList.map((item, i) => (
+                                        <div key={i} className="p-2 rounded-lg border bg-emerald-900/15 border-emerald-500/25">
+                                            <div className="flex items-center gap-1 mb-1.5">
+                                                <span className="text-[10px] uppercase font-bold text-emerald-300">Media {i + 1}</span>
+                                                <div className="flex-1" />
+                                                <button onClick={() => moveMedia(i, -1)} className="p-0.5 text-xs text-slate-400 hover:text-white" title="Move up">▲</button>
+                                                <button onClick={() => moveMedia(i, 1)} className="p-0.5 text-xs text-slate-400 hover:text-white" title="Move down">▼</button>
+                                                <button onClick={() => removeMedia(i)} className="p-0.5 text-xs text-red-400 hover:text-red-300" title="Remove">✕</button>
+                                            </div>
+                                            <SearchableSelect
+                                                options={mediaAssetOptions}
+                                                value={item.assetId || ''}
+                                                onChange={(value) => updateMedia(i, { assetId: value || null })}
+                                                placeholder={mediaAssetOptions.length === 0 ? "No assets uploaded" : "Select image/video..."}
+                                            />
+                                            <FormField label="Sizing">
+                                                <Select value={item.objectFit || 'contain'} onChange={e => {
+                                                    const val = e.target.value as 'cover' | 'contain' | 'fill' | 'custom';
+                                                    if (val === 'custom') {
+                                                        updateMedia(i, { objectFit: val });
+                                                    } else {
+                                                        updateMedia(i, { objectFit: val, x: 10, y: 10, width: 30, height: 30 });
+                                                    }
+                                                }}>
+                                                    <option value="cover">Cover</option>
+                                                    <option value="contain">Contain</option>
+                                                    <option value="fill">Fill</option>
+                                                    <option value="custom">Custom</option>
+                                                </Select>
+                                            </FormField>
+                                            {item.objectFit === 'custom' && (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-1 mt-1.5">
+                                                        <FormField label="X (%)"><TextInput type="number" min="0" max="100" step="1" value={item.x} onChange={e => updateMedia(i, { x: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                        <FormField label="Y (%)"><TextInput type="number" min="0" max="100" step="1" value={item.y} onChange={e => updateMedia(i, { y: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-1">
+                                                        <FormField label="Width (%)"><TextInput type="number" min="1" max="100" step="1" value={item.width} onChange={e => updateMedia(i, { width: parseFloat(e.target.value) || 30 })} /></FormField>
+                                                        <FormField label="Height (%)"><TextInput type="number" min="1" max="100" step="1" value={item.height} onChange={e => updateMedia(i, { height: parseFloat(e.target.value) || 30 })} /></FormField>
+                                                    </div>
+                                                </>
+                                            )}
+                                            <FormField label={`Opacity: ${Math.round((item.opacity ?? 1) * 100)}%`}>
+                                                <input type="range" min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-emerald-500" />
+                                            </FormField>
+                                            <div className="grid grid-cols-2 gap-1 mt-1.5">
+                                                <FormField label="Show at (s)"><TextInput type="number" min="0" step="0.5" value={item.showAt} onChange={e => updateMedia(i, { showAt: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                <FormField label="Hide at (s)"><TextInput type="number" min="0" step="0.5" value={item.hideAt} onChange={e => updateMedia(i, { hideAt: parseFloat(e.target.value) || 0 })} /></FormField>
+                                            </div>
+                                            <p className="text-[9px] text-slate-500 mt-0.5">Hide at 0 = show for entire credit duration</p>
+                                            <div className="grid grid-cols-2 gap-1 mt-1">
+                                                <FormField label="Transition">
+                                                    <Select value={item.transition} onChange={e => updateMedia(i, { transition: e.target.value as 'fade' | 'instant' })}>
+                                                        <option value="fade">Fade</option>
+                                                        <option value="instant">Instant</option>
+                                                    </Select>
+                                                </FormField>
+                                                {item.transition !== 'instant' && (
+                                                    <FormField label="Duration (s)">
+                                                        <TextInput type="number" min="0.1" max="5" step="0.1" value={item.transitionDuration} onChange={e => updateMedia(i, { transitionDuration: parseFloat(e.target.value) || 0.5 })} />
+                                                    </FormField>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={addMedia}
+                                    className="w-full px-2 py-1.5 text-xs bg-emerald-900/25 hover:bg-emerald-800/35 border border-emerald-500/25 rounded text-emerald-300 transition-colors"
+                                >
+                                    + Add Media Item
+                                </button>
+                            </>;
+                        })()}
+                    </FormField>
+                </>;
+            }
+            case CommandType.Group: {
+                const cmd = command as GroupCommand;
+                return <>
+                    <FormField label="Group Name">
+                        <TextInput value={cmd.name || ''} onChange={e => updateCommand({ name: e.target.value })} placeholder="Group name" />
+                    </FormField>
+                    <p className="text-xs text-slate-400 mt-2">
+                        Contains {cmd.commandIds?.length || 0} command(s). Groups are visual only and have no effect during playback.
+                    </p>
                 </>;
             }
             default: return <p>This command has no properties.</p>;

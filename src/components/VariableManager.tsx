@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { VNProject } from '../types/project';
-import { VNVariable } from '../features/variables/types';
+import { VNVariable, VNVariableScope } from '../features/variables/types';
 import { useProject } from '../contexts/ProjectContext';
 import { PlusIcon, TrashIcon, Cog6ToothIcon, PencilIcon } from './icons';
 import { CommandType, VNCommand, SetVariableCommand, TextInputCommand, ChoiceCommand } from '../features/scene/types';
@@ -386,17 +386,25 @@ const VariableItem: React.FC<VariableItemProps> = ({
         }
     };
 
+    const scope: VNVariableScope = variable.scope || 'global';
+    const scopeColors: Record<VNVariableScope, { bg: string; border: string; text: string; label: string }> = {
+        local: { bg: 'bg-emerald-600/20', border: 'border-emerald-500/50', text: 'text-emerald-400', label: 'Local' },
+        global: { bg: 'bg-sky-600/20', border: 'border-sky-500/50', text: 'text-sky-400', label: 'Global' },
+        persistent: { bg: 'bg-amber-600/20', border: 'border-amber-500/50', text: 'text-amber-400', label: 'Persistent' },
+    };
+    const sc = scopeColors[scope];
+
     return (
         <div
             onClick={onSelect}
             onDoubleClick={onStartRenaming}
             className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
                 isSelected
-                    ? 'bg-sky-500/20 border border-sky-500/50'
+                    ? `${sc.bg} border ${sc.border}`
                     : 'hover:bg-slate-700'
             }`}
         >
-            <div className="w-8 h-8 rounded-md bg-slate-700 flex items-center justify-center flex-shrink-0 text-sm">
+            <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 text-sm border ${sc.bg} ${sc.border}`}>
                 {getTypeIcon(variable.type)}
             </div>
 
@@ -418,6 +426,9 @@ const VariableItem: React.FC<VariableItemProps> = ({
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
+                <span className={`text-[10px] capitalize px-1.5 py-0.5 rounded ${sc.bg} ${sc.text} border ${sc.border}`}>
+                    {sc.label}
+                </span>
                 <span className="text-xs text-slate-400 capitalize px-2 py-1 bg-slate-600 rounded">
                     {variable.type}
                 </span>
@@ -486,11 +497,32 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
         onUpdate({ defaultValue: value });
     };
 
+    const currentScope: VNVariableScope = variable.scope || 'global';
+    const scopeDescriptions: Record<VNVariableScope, string> = {
+        local: 'Reset when the scene changes. Use for temporary/scene-specific state.',
+        global: 'Persists across scenes within a playthrough. Resets on new game.',
+        persistent: 'Saved permanently across play sessions. Use for CG Gallery unlocks, achievements, etc.',
+    };
+
     return (
         <div className="flex-1 p-4 overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4">{variable.name}</h3>
 
             <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Scope</label>
+                    <select
+                        value={currentScope}
+                        onChange={(e) => onUpdate({ scope: e.target.value as VNVariableScope })}
+                        className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                        <option value="local">🟢 Local (scene-scoped)</option>
+                        <option value="global">🔵 Global (playthrough)</option>
+                        <option value="persistent">🟡 Persistent (cross-session)</option>
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">{scopeDescriptions[currentScope]}</p>
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
                     <select

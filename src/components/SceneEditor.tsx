@@ -77,7 +77,9 @@ const CommandItem: React.FC<{
             case CommandType.PlaySoundEffect:
                 return `Play SFX: ${project.audio[command.audioId]?.name || 'N/A'}`;
             case CommandType.PlayMovie:
-                return `Play Movie: ${project.videos[command.videoId]?.name || 'N/A'}`;
+                return `Play Movie: ${project.videos[command.videoId]?.name || 'N/A'}${command.displayMode === 'overlay' ? ' (overlay)' : ''}`;
+            case CommandType.StopMovie:
+                return `Stop Movie`;
             case CommandType.SetVariable:
                  const varName = project.variables[command.variableId]?.name || 'Unknown Variable';
                  return `Set ${varName} ${command.operator} ${command.value}`;

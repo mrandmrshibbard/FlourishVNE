@@ -5,26 +5,26 @@ import { interpolateVariables } from '../utils/variableInterpolation';
 import { XMarkIcon, FilmIcon } from './icons';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
-import { VNProject } from '../types/project';
+import { VNProject, CGGalleryEntry } from '../types/project';
 import {
     VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, GameSetting, GameToggleSetting, UIElementType
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, GameSetting, GameToggleSetting, UIElementType
 } from '../features/ui/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand,
-    PlayMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
+    PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
-    CreditRollCommand, CreditBackground
+    CreditRollCommand, CreditBackground, CreditMedia
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
-import { VNVariable, VNSetVariableOperator } from '../features/variables/types';
+import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
 import { ScreenOverlayEffects } from './live-preview/ScreenOverlayEffects';
 import { 
     normalizeSetVariableOperator as normalizeOperator,
@@ -49,6 +49,48 @@ function runtimeDebugWarn(...args: unknown[]): void {
     if (!isRuntimeDebugEnabled()) return;
     // eslint-disable-next-line no-console
     console.warn(...args);
+}
+
+// --- Persistent Variable Helpers ---
+/** localStorage key for cross-session persistent variables */
+function getPersistentVarsKey(projectId: string): string {
+    return `vn-persistent-vars-${projectId}`;
+}
+
+/** Load persistent variables from storage (localStorage or Electron) */
+function loadPersistentVariables(projectId: string): Record<string, string | number | boolean> {
+    try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            // Electron storage is async — for initial sync load, fall back to localStorage
+        }
+        const raw = localStorage.getItem(getPersistentVarsKey(projectId));
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+}
+
+/** Save a single persistent variable to storage */
+function savePersistentVariables(projectId: string, vars: Record<string, string | number | boolean>): void {
+    try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            (window as any).electronAPI.storage.setItem(getPersistentVarsKey(projectId), vars);
+        }
+        localStorage.setItem(getPersistentVarsKey(projectId), JSON.stringify(vars));
+    } catch (e) {
+        console.error('Failed to save persistent variables:', e);
+    }
+}
+
+/** Get default values for all local-scope variables in a project */
+function getLocalVariableDefaults(projectVariables: Record<string, any>): Record<string, string | number | boolean> {
+    const defaults: Record<string, string | number | boolean> = {};
+    Object.values(projectVariables).forEach((v: any) => {
+        if ((v.scope || 'global') === 'local') {
+            defaults[v.id] = v.defaultValue;
+        }
+    });
+    return defaults;
 }
 
 // Command Handlers
@@ -122,6 +164,7 @@ const defaultSettings: GameSettings = {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
+    ambientVolume: 0.8,
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3,
@@ -1259,6 +1302,154 @@ const AssetCyclerElement: React.FC<{
     );
 };
 
+// --- CG Gallery Grid Component ---
+const CGGalleryGridElement: React.FC<{
+    element: UICGGalleryElement;
+    entries: CGGalleryEntry[];
+    variables: Record<VNID, string | number | boolean>;
+    project: VNProject;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+}> = ({ element, entries, variables, project, assetResolver }) => {
+    const [viewingEntry, setViewingEntry] = useState<CGGalleryEntry | null>(null);
+    const [viewerIndex, setViewerIndex] = useState(0);
+
+    const isEntryUnlocked = (entry: CGGalleryEntry): boolean => {
+        if (!entry.unlockable) return true;
+        if (!entry.unlockVariableId) return true;
+        const val = variables[entry.unlockVariableId];
+        return val === true || val === 'true' || val === 1;
+    };
+
+    const unlockedEntries = entries.filter(e => isEntryUnlocked(e));
+
+    const handleThumbnailClick = (entry: CGGalleryEntry, index: number) => {
+        if (!isEntryUnlocked(entry)) return;
+        setViewingEntry(entry);
+        setViewerIndex(unlockedEntries.indexOf(entry));
+    };
+
+    const navigateViewer = (dir: -1 | 1) => {
+        const newIndex = (viewerIndex + dir + unlockedEntries.length) % unlockedEntries.length;
+        setViewerIndex(newIndex);
+        setViewingEntry(unlockedEntries[newIndex]);
+    };
+
+    // Fullscreen viewer overlay
+    if (viewingEntry) {
+        const viewUrl = assetResolver(viewingEntry.assetId, 'image');
+        return (
+            <div
+                className="absolute inset-0 z-50 flex items-center justify-center"
+                style={{ backgroundColor: element.backgroundColor || 'rgba(0,0,0,0.95)' }}
+                onClick={() => setViewingEntry(null)}
+            >
+                {viewUrl && (
+                    <img
+                        src={viewUrl}
+                        alt={viewingEntry.name}
+                        className="max-w-[90%] max-h-[85%] object-contain"
+                        onClick={e => e.stopPropagation()}
+                    />
+                )}
+                {/* Navigation arrows */}
+                {unlockedEntries.length > 1 && (
+                    <>
+                        <button
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl p-2"
+                            onClick={e => { e.stopPropagation(); navigateViewer(-1); }}
+                        >
+                            ◀
+                        </button>
+                        <button
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl p-2"
+                            onClick={e => { e.stopPropagation(); navigateViewer(1); }}
+                        >
+                            ▶
+                        </button>
+                    </>
+                )}
+                {/* Entry name and close hint */}
+                <div className="absolute bottom-4 left-0 right-0 text-center">
+                    {element.showNames !== false && (
+                        <div className="text-white text-sm mb-1">{viewingEntry.name}</div>
+                    )}
+                    <div className="text-white/40 text-xs">Click anywhere to close</div>
+                </div>
+                {/* Counter */}
+                <div className="absolute top-4 right-4 text-white/50 text-sm">
+                    {viewerIndex + 1} / {unlockedEntries.length}
+                </div>
+            </div>
+        );
+    }
+
+    // Thumbnail grid
+    const lockedPlaceholderUrl = project.cgGallery?.lockedPlaceholderAssetId
+        ? assetResolver(project.cgGallery.lockedPlaceholderAssetId, 'image')
+        : null;
+
+    return (
+        <div
+            className="w-full h-full overflow-y-auto p-2 rounded"
+            style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}
+        >
+            <div
+                className="grid"
+                style={{
+                    gridTemplateColumns: `repeat(${element.columns || 4}, 1fr)`,
+                    gap: `${element.gap || 8}px`,
+                }}
+            >
+                {entries.map((entry, idx) => {
+                    const unlocked = isEntryUnlocked(entry);
+                    const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
+                    const thumbUrl = unlocked ? assetResolver(thumbAssetId, 'image') : lockedPlaceholderUrl;
+
+                    return (
+                        <div
+                            key={entry.id}
+                            className="relative overflow-hidden flex items-center justify-center"
+                            style={{
+                                aspectRatio: '16/9',
+                                borderRadius: `${element.thumbnailBorderRadius || 8}px`,
+                                border: `2px solid ${element.thumbnailBorderColor || '#4D3273'}`,
+                                backgroundColor: unlocked ? '#334155' : (element.lockedColor || '#1e293b'),
+                                cursor: unlocked ? 'pointer' : 'default',
+                                transition: 'transform 0.15s ease, border-color 0.15s ease',
+                            }}
+                            onClick={() => handleThumbnailClick(entry, idx)}
+                            onMouseEnter={e => {
+                                if (unlocked) {
+                                    (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
+                                    (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf6';
+                                }
+                            }}
+                            onMouseLeave={e => {
+                                (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                                (e.currentTarget as HTMLElement).style.borderColor = element.thumbnailBorderColor || '#4D3273';
+                            }}
+                        >
+                            {unlocked && thumbUrl ? (
+                                <img src={thumbUrl} alt={entry.name} className="w-full h-full object-cover" />
+                            ) : !unlocked ? (
+                                <span className="text-2xl">{element.lockedText || '🔒'}</span>
+                            ) : (
+                                <span className="text-xs text-slate-500">{entry.name}</span>
+                            )}
+                            {/* Name label */}
+                            {element.showNames !== false && unlocked && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1">
+                                    {entry.name}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 // --- Helper for Element Transitions ---
 const getTransitionStyle = (
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale',
@@ -1868,6 +2059,27 @@ const UIScreenRenderer: React.FC<{
                     project={project} 
                 />;
             }
+            case UIElementType.CGGallery: {
+                const el = element as UICGGalleryElement;
+                const galleryEntries = Object.values(project.cgGallery?.entries || {}) as CGGalleryEntry[];
+                const filteredEntries = el.categoryFilter
+                    ? galleryEntries.filter(e => e.category === el.categoryFilter)
+                    : galleryEntries;
+                // Sort by order then by name
+                filteredEntries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+
+                return (
+                    <div key={el.id} style={style}>
+                        <CGGalleryGridElement
+                            element={el}
+                            entries={filteredEntries}
+                            variables={variables}
+                            project={project}
+                            assetResolver={assetResolver}
+                        />
+                    </div>
+                );
+            }
             default: return null;
         }
     }
@@ -2135,6 +2347,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (project.images && project.images[assetId]) {
             const img = project.images[assetId];
             return { isVideo: !!img.isVideo, loop: !!img.loop };
+        }
+
+        // Check videos collection
+        if (project.videos && project.videos[assetId]) {
+            return { isVideo: true, loop: true };
         }
         
         // Check characters
@@ -2421,7 +2638,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 variables: saveData.playerStateData.variables,
                 stageState: saveData.playerStateData.stageState,
                 history: [],
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
@@ -2439,6 +2656,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         
         // Use menuVariables (which may have been modified by character customization) instead of defaults
         const initialVariables: Record<VNID, string | number | boolean> = { ...menuVariables };
+
+        // Merge persistent variables from storage — they survive across sessions
+        const persistentVars = loadPersistentVariables(project.id);
+        Object.values(project.variables).forEach((v: any) => {
+            if ((v.scope || 'global') === 'persistent' && persistentVars[v.id] !== undefined) {
+                initialVariables[v.id] = persistentVars[v.id];
+            }
+        });
 
         // Note: We can't use navigateToScene here because it's defined after startNewGame
         // We'll check start scene conditions inline
@@ -2485,9 +2710,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentIndex: 0,
             commandStack: [],
             variables: initialVariables,
-            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
+            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
             history: [],
-            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
+            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
         });
         setScreenStack([]);
@@ -3220,6 +3445,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     textOverlays: [],
                                     imageOverlays: [],
                                     buttonOverlays: [],
+                                    movieOverlays: [],
                                     screen: {
                                         shake: { active: false, intensity: 0 },
                                         tint: 'transparent',
@@ -3235,6 +3461,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     choices: null,
                                     textInput: null,
                                     movieUrl: null,
+                                    movieLoop: false,
                                     isWaitingForInput: false,
                                     isTransitioning: false,
                                     transitionElement: null,
@@ -3379,6 +3606,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         textOverlays: [],
                                         imageOverlays: [],
                                         buttonOverlays: [],
+                                        movieOverlays: [],
                                         screen: {
                                             shake: { active: false, intensity: 0 },
                                             tint: 'transparent',
@@ -3394,6 +3622,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         choices: null,
                                         textInput: null,
                                         movieUrl: null,
+                                        movieLoop: false,
                                         isWaitingForInput: false,
                                         isTransitioning: false,
                                         transitionElement: null,
@@ -3466,16 +3695,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     variableStore.applyWrites(writes);
                 }
                 if (result.updates) {
+                    const isSceneChange = result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId;
                     updatePlayerState(p => {
                         if (!p) return null;
-                        const mergedVariables = result.updates?.variables && variableStore ? variableStore.snapshot().globals : { ...p.variables, ...(result.updates?.variables ?? {}) };
+                        let mergedVariables = result.updates?.variables && variableStore ? variableStore.snapshot().globals : { ...p.variables, ...(result.updates?.variables ?? {}) };
+                        // Reset local-scope variables to defaults on scene change
+                        if (isSceneChange) {
+                            const localDefaults = getLocalVariableDefaults(project.variables);
+                            mergedVariables = { ...mergedVariables, ...localDefaults };
+                            runtimeDebugLog('[Variable Scope] Reset local variables on scene change:', Object.keys(localDefaults));
+                        }
                         return {
                             ...p,
                             ...(result.updates?.currentSceneId !== undefined ? { currentSceneId: result.updates.currentSceneId } : {}),
                             ...(result.updates?.currentCommands !== undefined ? { currentCommands: result.updates.currentCommands } : {}),
                             ...(result.updates?.currentIndex !== undefined ? { currentIndex: result.updates.currentIndex } : {}),
                             ...(result.updates?.commandStack !== undefined ? { commandStack: result.updates.commandStack } : {}),
-                            ...(result.updates?.variables !== undefined ? { variables: mergedVariables } : {}),
+                            ...(result.updates?.variables !== undefined || isSceneChange ? { variables: mergedVariables } : {}),
                             ...(result.updates?.stageState !== undefined ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {}),
                             ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
                             ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
@@ -3561,6 +3797,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 case CommandType.SetVariable: {
                     const result = handleSetVariable(command as SetVariableCommand, commandContext);
                     applyResult(result);
+                    // Auto-save persistent-scope variables to storage
+                    const setVarCmd = command as SetVariableCommand;
+                    const varDef = project.variables[setVarCmd.variableId];
+                    if (varDef && (varDef as any).scope === 'persistent' && result.updates?.variables) {
+                        const persistentSnapshot: Record<string, string | number | boolean> = {};
+                        Object.values(project.variables).forEach((v: any) => {
+                            if ((v.scope || 'global') === 'persistent' && result.updates!.variables![v.id] !== undefined) {
+                                persistentSnapshot[v.id] = result.updates!.variables![v.id];
+                            }
+                        });
+                        savePersistentVariables(project.id, { ...loadPersistentVariables(project.id), ...persistentSnapshot });
+                        runtimeDebugLog('[Variable Scope] Saved persistent variable:', varDef.name);
+                    }
                     break;
                 }
                 case CommandType.TextInput: {
@@ -3596,8 +3845,68 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.PlayMovie: {
-                    instantAdvance = false;
-                    updatePlayerState(p => p ? {...p, uiState: {...p.uiState, isWaitingForInput: true, movieUrl: assetResolver((command as PlayMovieCommand).videoId, 'video')}} : null);
+                    const movieCmd = command as PlayMovieCommand;
+                    const movieUrl = assetResolver(movieCmd.videoId, 'video');
+                    const isOverlay = movieCmd.displayMode === 'overlay';
+                    const shouldLoop = movieCmd.loop ?? false;
+
+                    if (isOverlay) {
+                        // Overlay mode: add to stageState.movieOverlays (behind characters, above background)
+                        updatePlayerState(p => {
+                            if (!p) return null;
+                            const existing = p.stageState.movieOverlays || [];
+                            return {
+                                ...p,
+                                stageState: {
+                                    ...p.stageState,
+                                    movieOverlays: [...existing, {
+                                        url: movieUrl || '',
+                                        loop: shouldLoop,
+                                        x: movieCmd.x,
+                                        y: movieCmd.y,
+                                        width: movieCmd.width,
+                                        height: movieCmd.height,
+                                        opacity: movieCmd.opacity,
+                                        objectFit: movieCmd.objectFit,
+                                    }],
+                                },
+                            };
+                        });
+                        // Overlay movies never block — always advance immediately
+                    } else {
+                        // Fullscreen mode: show over black background
+                        if (movieCmd.waitsForCompletion) {
+                            instantAdvance = false;
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop },
+                            } : null);
+                        } else {
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop },
+                            } : null);
+                        }
+                    }
+                    break;
+                }
+                case CommandType.StopMovie: {
+                    // Clear all overlay movies
+                    updatePlayerState(p => {
+                        if (!p) return null;
+                        return {
+                            ...p,
+                            stageState: {
+                                ...p.stageState,
+                                movieOverlays: [],
+                            },
+                            uiState: {
+                                ...p.uiState,
+                                movieUrl: null,
+                                movieLoop: false,
+                            },
+                        };
+                    });
                     break;
                 }
                 case CommandType.Wait: {
@@ -3923,6 +4232,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         `${setVarAction.operator} => ${effectiveOperator}`,
                         ')'
                     );
+                    // Auto-save persistent-scope variables
+                    if ((variable as any).scope === 'persistent') {
+                        const prevPersistent = loadPersistentVariables(project.id);
+                        savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: newVal });
+                        runtimeDebugLog('[Variable Scope] Saved persistent variable from choice:', variable.name);
+                    }
                 }
             }
             runtimeDebugLog('[CHOICE] Variables after actions:', JSON.stringify(newState.variables, null, 2));
@@ -3980,6 +4295,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const actualSceneId = navigateToScene(jumpAction.targetSceneId, newState.variables);
                 const newScene = project.scenes[actualSceneId];
                 if (newScene) {
+                    // Reset local-scope variables on scene jump from choice
+                    const localDefaults = getLocalVariableDefaults(project.variables);
+                    newState.variables = { ...newState.variables, ...localDefaults };
+                    runtimeDebugLog('[Variable Scope] Reset local variables on choice/button scene jump:', Object.keys(localDefaults));
                     newState.currentSceneId = actualSceneId;
                     newState.currentCommands = newScene.commands;
                     newState.currentIndex = 0;
@@ -4306,6 +4625,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             textOverlays: [], 
                             imageOverlays: [], 
                             buttonOverlays: [], 
+                            movieOverlays: [],
                             screen: { 
                                 shake: { active: false, intensity: 0 }, 
                                 tint: 'transparent', 
@@ -4321,6 +4641,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             choices: null,
                             textInput: null,
                             movieUrl: null,
+                            movieLoop: false,
                             isWaitingForInput: false,
                             isTransitioning: false,
                             transitionElement: null,
@@ -4375,6 +4696,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     textOverlays: [], 
                                     imageOverlays: [], 
                                     buttonOverlays: [], 
+                                    movieOverlays: [],
                                     screen: { 
                                         shake: { active: false, intensity: 0 }, 
                                         tint: 'transparent', 
@@ -4391,6 +4713,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     choices: null,
                                     textInput: null,
                                     movieUrl: null,
+                                    movieLoop: false,
                                     isWaitingForInput: false,
                                     isTransitioning: false,
                                     transitionElement: null,
@@ -4485,6 +4808,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     });
                 }
             });
+            // Auto-save persistent-scope variables from UI action
+            if ((variable as any).scope === 'persistent') {
+                const currentVars = playerState ? uiVariablesRef.current : menuVariables;
+                const prevPersistent = loadPersistentVariables(project.id);
+                savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: currentVars[setVarAction.variableId] });
+                runtimeDebugLog('[Variable Scope] Saved persistent variable from UI action:', variable.name);
+            }
         } else if (action.type === UIActionType.CycleLayerAsset) {
             runtimeDebugLog('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
             
@@ -4851,6 +5181,48 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         )}
                         {/* render background transition visuals here so characters render above them */}
                         {playerState?.uiState.transitionElement}
+                        {/* Movie overlays (behind characters, above background) */}
+                        {state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
+                            if (!movie.url) return null;
+                            const isCustom = movie.objectFit === 'custom';
+                            const videoStyle: React.CSSProperties = isCustom ? {
+                                left: `${movie.x ?? 0}%`,
+                                top: `${movie.y ?? 0}%`,
+                                width: `${movie.width ?? 100}%`,
+                                height: `${movie.height ?? 100}%`,
+                                objectFit: 'fill' as const,
+                                opacity: movie.opacity ?? 1,
+                                zIndex: 2,
+                            } : {
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: (movie.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                                opacity: movie.opacity ?? 1,
+                                zIndex: 2,
+                            };
+                            return (
+                                <video
+                                    key={`movie-overlay-${idx}-${movie.url}`}
+                                    src={movie.url}
+                                    autoPlay
+                                    muted
+                                    loop={movie.loop}
+                                    playsInline
+                                    className="absolute pointer-events-none"
+                                    style={videoStyle}
+                                    onEnded={() => {
+                                        if (movie.loop) return;
+                                        updatePlayerState(p => {
+                                            if (!p) return null;
+                                            const overlays = [...(p.stageState.movieOverlays || [])];
+                                            overlays.splice(idx, 1);
+                                            return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                                        });
+                                    }}
+                                />
+                            );
+                        })}
                         {Object.values(state.characters).map((char: StageCharacterState) => {
                             let transitionClass = '';
                             let animationDuration = '1s';
@@ -5009,12 +5381,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         onFinish: () => void;
     }> = ({ command, project, assetResolver, getAssetMetadata, onFinish }) => {
         const bgs = command.backgrounds || [];
+        const mediaItems = command.media || [];
         const hasBgs = bgs.length > 0;
+        const hasMedia = mediaItems.length > 0;
         const [bgIndex, setBgIndex] = useState(0);
         const [prevBgIndex, setPrevBgIndex] = useState<number | null>(null);
         const [transitioning, setTransitioning] = useState(false);
         const bgTimerRef = useRef<number | null>(null);
         const bgTransTimerRef = useRef<number | null>(null);
+        const [elapsed, setElapsed] = useState(0);
+        const startTimeRef = useRef(Date.now());
+
+        // Track elapsed time for timed media items
+        useEffect(() => {
+            if (!hasMedia) return;
+            startTimeRef.current = Date.now();
+            const interval = window.setInterval(() => {
+                setElapsed((Date.now() - startTimeRef.current) / 1000);
+            }, 200);
+            return () => clearInterval(interval);
+        }, [hasMedia]);
 
         // Cycle backgrounds
         useEffect(() => {
@@ -5054,13 +5440,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const url = assetResolver(slide.assetId, 'image');
             if (!url) return null;
             const meta = getAssetMetadata(slide.assetId, 'image');
-            const style: React.CSSProperties = {
-                position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-                opacity,
+            const isCustom = slide.objectFit === 'custom';
+            const style: React.CSSProperties = isCustom ? {
+                position: 'absolute',
+                left: `${slide.x ?? 0}%`,
+                top: `${slide.y ?? 0}%`,
+                width: `${slide.width ?? 100}%`,
+                height: `${slide.height ?? 100}%`,
+                objectFit: 'fill' as const,
+                opacity: (slide.opacity ?? 1) * opacity,
+                transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
+            } : {
+                position: 'absolute', inset: 0, width: '100%', height: '100%',
+                objectFit: (slide.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                opacity: (slide.opacity ?? 1) * opacity,
                 transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
             };
             if (meta.isVideo) {
-                return <video src={url} autoPlay muted loop={meta.loop} style={style} />;
+                return <video src={url} autoPlay muted loop={meta.loop} playsInline style={style} />;
             }
             return <img src={url} alt="" style={style} />;
         };
@@ -5101,13 +5498,52 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     <div className="absolute inset-0 z-[1]" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} />
                 )}
 
+                {/* Foreground media items (images/videos with positioning and timed visibility) */}
+                {hasMedia && mediaItems.map((item, idx) => {
+                    const url = assetResolver(item.assetId, 'image');
+                    if (!url) return null;
+                    const meta = getAssetMetadata(item.assetId, 'image');
+                    const showAt = item.showAt || 0;
+                    const hideAt = item.hideAt || 0;
+                    const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
+                    const isFading = item.transition === 'fade';
+                    const itemOpacity = isVisible ? (item.opacity ?? 1) : 0;
+                    const isCustomItem = item.objectFit === 'custom';
+                    const mediaStyle: React.CSSProperties = isCustomItem ? {
+                        position: 'absolute',
+                        left: `${item.x}%`,
+                        top: `${item.y}%`,
+                        width: `${item.width}%`,
+                        height: `${item.height}%`,
+                        objectFit: 'fill' as const,
+                        opacity: itemOpacity,
+                        transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
+                        zIndex: 1,
+                        pointerEvents: 'none',
+                    } : {
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: (item.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                        opacity: itemOpacity,
+                        transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
+                        zIndex: 1,
+                        pointerEvents: 'none',
+                    };
+                    if (meta.isVideo) {
+                        return <video key={`credit-media-${idx}`} src={url} autoPlay muted loop playsInline style={mediaStyle} />;
+                    }
+                    return <img key={`credit-media-${idx}`} src={url} alt="" style={mediaStyle} />;
+                })}
+
                 {/* Credits scroll */}
                 <div
                     className="credits-scroll text-center px-8 relative z-[2]"
                     style={{
                         color: command.textColor || '#FFFFFF',
                         animationDuration: `${command.duration || 15}s`,
-                        textShadow: hasBgs ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
+                        textShadow: (hasBgs || hasMedia) ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
                     }}
                     onAnimationEnd={(e) => {
                         if (e.target === e.currentTarget) {
@@ -5203,8 +5639,31 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 />
             )}
             {uiState.movieUrl && (
-                <div className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white" onClick={() => updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)}>
-                    <video src={uiState.movieUrl} autoPlay className="w-full h-full" onEnded={() => updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null}} : null)} />
+                <div
+                    className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white"
+                    onClick={() => {
+                        if (!uiState.isWaitingForInput) return;
+                        updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
+                    }}
+                >
+                    <video
+                        src={uiState.movieUrl}
+                        autoPlay
+                        loop={uiState.movieLoop ?? false}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        onEnded={() => {
+                            // If looping, onEnded won't fire (browser handles loop). Just in case:
+                            if (uiState.movieLoop) return;
+                            if (uiState.isWaitingForInput) {
+                                updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
+                            } else {
+                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false}} : null);
+                            }
+                        }}
+                    />
+                    {uiState.isWaitingForInput && (
+                        <div className="absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none">Click to skip</div>
+                    )}
                 </div>
             )}
             {activeCreditRoll && (

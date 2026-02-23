@@ -33,6 +33,7 @@ export function handleJump(command: JumpCommand, context: CommandContext): Comma
         textOverlays: [],
         imageOverlays: [],
         buttonOverlays: [],
+        movieOverlays: [],
         screen: {
           shake: { active: false, intensity: 0 },
           tint: 'transparent',

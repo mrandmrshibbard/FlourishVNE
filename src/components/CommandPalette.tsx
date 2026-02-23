@@ -42,7 +42,7 @@ export const COMMAND_CATEGORIES = {
     'Media': {
         color: 'bg-red-500/20 border-red-500 text-red-300',
         headerColor: 'bg-red-600/30 text-red-200',
-        commands: [CommandType.PlayMovie, CommandType.CreditRoll]
+        commands: [CommandType.PlayMovie, CommandType.StopMovie, CommandType.CreditRoll]
     },
     'Flow Control': {
         color: 'bg-indigo-500/20 border-indigo-500 text-indigo-300',

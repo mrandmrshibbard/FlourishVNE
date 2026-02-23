@@ -55,6 +55,7 @@ export enum CommandType {
     PlaySoundEffect = 'PlaySoundEffect',
     StopSoundEffect = 'StopSoundEffect',
     PlayMovie = 'PlayMovie',
+    StopMovie = 'StopMovie',
     Wait = 'Wait',
     ShakeScreen = 'ShakeScreen',
     TintScreen = 'TintScreen',
@@ -196,6 +197,25 @@ export interface PlayMovieCommand extends BaseCommand {
     type: CommandType.PlayMovie;
     videoId: VNID;
     waitsForCompletion: boolean;
+    /** How the movie is displayed: 'fullscreen' = opaque black overlay, 'overlay' = transparent layer over stage */
+    displayMode?: 'fullscreen' | 'overlay';
+    /** Whether the movie loops continuously */
+    loop?: boolean;
+    /** X position as percentage (0-100). Default: 0 (left edge) */
+    x?: number;
+    /** Y position as percentage (0-100). Default: 0 (top edge) */
+    y?: number;
+    /** Width as percentage of stage (0-100). Default: 100 */
+    width?: number;
+    /** Height as percentage of stage (0-100). Default: 100 */
+    height?: number;
+    /** Opacity (0-1). Default: 1 */
+    opacity?: number;
+    /** How the video fits within its container. 'custom' = use x/y/width/height for manual positioning */
+    objectFit?: 'cover' | 'contain' | 'fill' | 'custom';
+}
+export interface StopMovieCommand extends BaseCommand {
+    type: CommandType.StopMovie;
 }
 
 export interface WaitCommand extends BaseCommand {
@@ -395,6 +415,34 @@ export interface CreditRollCommand extends BaseCommand {
     onComplete: 'advance' | 'title';
     /** Optional slideshow backgrounds that cycle while credits scroll */
     backgrounds?: CreditBackground[];
+    /** Optional foreground media items shown during credit roll (images/videos with positioning) */
+    media?: CreditMedia[];
+}
+
+/** A foreground media item displayed during credit roll */
+export interface CreditMedia {
+    /** Asset ID referencing an image or video */
+    assetId: VNID | null;
+    /** X position as percentage (0-100) */
+    x: number;
+    /** Y position as percentage (0-100) */
+    y: number;
+    /** Width as percentage of stage (0-100) */
+    width: number;
+    /** Height as percentage of stage (0-100) */
+    height: number;
+    /** Opacity (0-1). Default: 1 */
+    opacity: number;
+    /** How the media fits within its container. 'custom' = manual positioning */
+    objectFit: 'cover' | 'contain' | 'fill' | 'custom';
+    /** When to show this media (seconds from start, 0 = immediately) */
+    showAt: number;
+    /** When to hide this media (seconds from start, 0 = show for entire credits) */
+    hideAt: number;
+    /** Transition to use when showing/hiding */
+    transition: 'fade' | 'instant';
+    /** Transition duration in seconds */
+    transitionDuration: number;
 }
 
 /** A background slide shown during credit roll */
@@ -407,12 +455,24 @@ export interface CreditBackground {
     transition: 'fade' | 'dissolve' | 'instant';
     /** Transition duration in seconds */
     transitionDuration: number;
+    /** X position as percentage (0-100). Default: 0 */
+    x?: number;
+    /** Y position as percentage (0-100). Default: 0 */
+    y?: number;
+    /** Width as percentage of stage (0-100). Default: 100 */
+    width?: number;
+    /** Height as percentage of stage (0-100). Default: 100 */
+    height?: number;
+    /** Opacity (0-1). Default: 1 */
+    opacity?: number;
+    /** How the media fits within its container. 'custom' = manual positioning */
+    objectFit?: 'cover' | 'contain' | 'fill' | 'custom';
 }
 
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
-  | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | WaitCommand
+  | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand;

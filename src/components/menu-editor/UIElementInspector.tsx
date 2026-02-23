@@ -3,7 +3,7 @@ import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNCondition, VNConditionOperator } from '../../types/shared';
-import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, DropdownOption, GameSetting, GameToggleSetting, AssetCondition } from '../../features/ui/types';
+import { VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, DropdownOption, GameSetting, GameToggleSetting, AssetCondition } from '../../features/ui/types';
 import { VNVariable, VNVariableType } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { VNProject } from '../../types/project';
@@ -1645,6 +1645,62 @@ const UIElementInspector: React.FC<{
 
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
                     <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                </>
+            }
+            case UIElementType.CGGallery: {
+                const el = element as UICGGalleryElement;
+                const galleryEntries = Object.values(project.cgGallery?.entries || {});
+                const categories = [...new Set(galleryEntries.map(e => e.category).filter(Boolean))] as string[];
+                return <>
+                    <h3 className="font-bold my-2 text-slate-400">Gallery Layout</h3>
+                    <FormField label="Columns">
+                        <TextInput type="number" min="2" max="8" value={String(el.columns || 4)} onChange={e => updateElement({ columns: parseInt(e.target.value, 10) || 4 })} />
+                    </FormField>
+                    <FormField label="Gap (px)">
+                        <TextInput type="number" min="0" max="32" value={String(el.gap || 8)} onChange={e => updateElement({ gap: parseInt(e.target.value, 10) || 8 })} />
+                    </FormField>
+                    <FormField label="Category Filter">
+                        <Select value={el.categoryFilter || ''} onChange={e => updateElement({ categoryFilter: e.target.value || undefined })}>
+                            <option value="">All Categories</option>
+                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </Select>
+                        <p className="text-[9px] text-slate-500 mt-0.5">Filter to show only entries in a specific category</p>
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Thumbnail Styling</h3>
+                    <FormField label="Border Color">
+                        <input type="color" className="w-full" value={el.thumbnailBorderColor || '#4D3273'} onChange={e => updateElement({ thumbnailBorderColor: e.target.value })} />
+                    </FormField>
+                    <FormField label="Border Radius (px)">
+                        <TextInput type="number" min="0" max="32" value={String(el.thumbnailBorderRadius || 8)} onChange={e => updateElement({ thumbnailBorderRadius: parseInt(e.target.value, 10) || 8 })} />
+                    </FormField>
+                    <FormField label="Background Color">
+                        <input type="color" className="w-full" value={el.backgroundColor || '#0f172a'} onChange={e => updateElement({ backgroundColor: e.target.value })} />
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Locked Entries</h3>
+                    <FormField label="Locked Background">
+                        <input type="color" className="w-full" value={el.lockedColor || '#1e293b'} onChange={e => updateElement({ lockedColor: e.target.value })} />
+                    </FormField>
+                    <FormField label="Locked Text">
+                        <TextInput value={el.lockedText || '🔒'} onChange={e => updateElement({ lockedText: e.target.value })} placeholder="🔒" />
+                    </FormField>
+
+                    <h3 className="font-bold my-2 text-slate-400">Display</h3>
+                    <FormField label="Show Names">
+                        <input type="checkbox" checked={el.showNames !== false} onChange={e => updateElement({ showNames: e.target.checked })} />
+                    </FormField>
+                    {el.showNames !== false && el.nameFont && (
+                        <>
+                            <h3 className="font-bold my-2 text-slate-400">Name Font</h3>
+                            <FontEditor font={el.nameFont} onFontChange={(prop, value) => updateElement({ nameFont: { ...el.nameFont!, [prop]: value } })} />
+                        </>
+                    )}
+
+                    <div className="mt-4 p-2 rounded bg-slate-700/30 text-xs text-slate-400">
+                        <p>Gallery entries are managed in the <strong>CG Gallery</strong> tab. This element displays them as a grid on the UI screen.</p>
+                        <p className="mt-1">{galleryEntries.length} entries configured.</p>
+                    </div>
                 </>
             }
             default: return null;

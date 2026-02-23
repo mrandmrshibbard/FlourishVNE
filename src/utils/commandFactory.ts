@@ -79,7 +79,11 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             return command;
         }
         case CommandType.PlayMovie: {
-            const command = { type, videoId: firstVideoId || '', waitsForCompletion: true };
+            const command = { type, videoId: firstVideoId || '', waitsForCompletion: true, displayMode: 'fullscreen' as const, loop: false, x: 0, y: 0, width: 100, height: 100, opacity: 1, objectFit: 'cover' as const };
+            return command;
+        }
+        case CommandType.StopMovie: {
+            const command = { type };
             return command;
         }
         case CommandType.SetVariable: {

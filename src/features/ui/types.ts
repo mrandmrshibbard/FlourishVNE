@@ -71,6 +71,7 @@ export enum UIElementType {
     Dropdown = 'Dropdown',
     Checkbox = 'Checkbox',
     AssetCycler = 'AssetCycler',
+    CGGallery = 'CGGallery',
 }
 
 interface BaseUIElement {
@@ -251,9 +252,33 @@ export interface UIAssetCyclerElement extends BaseUIElement {
     filterVariableIds?: VNID[]; // Array of variables to use for filtering (pattern uses {varId} placeholder syntax)
 }
 
+export interface UICGGalleryElement extends BaseUIElement {
+    type: UIElementType.CGGallery;
+    /** Number of columns in the thumbnail grid */
+    columns: number;
+    /** Gap between thumbnails in pixels */
+    gap: number;
+    /** Background color for the gallery area */
+    backgroundColor?: string;
+    /** Border color for each thumbnail slot */
+    thumbnailBorderColor?: string;
+    /** Border radius for each thumbnail slot in pixels */
+    thumbnailBorderRadius?: number;
+    /** Whether to show entry names beneath thumbnails */
+    showNames?: boolean;
+    /** Font settings for entry names */
+    nameFont?: VNFontSettings;
+    /** Background color for locked entries */
+    lockedColor?: string;
+    /** Text to show on locked entries (e.g., "???", "🔒") */
+    lockedText?: string;
+    /** Filter by category (empty = show all) */
+    categoryFilter?: string;
+}
+
 export type VNUIElement = 
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement;
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement;
 
 export interface VNUIScreen {
     id: VNID;

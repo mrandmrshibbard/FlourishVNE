@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { VNProject, VNProjectFont } from '../types/project';
+import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
 import { VNProjectUI, VNFontSettings } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, MusicalNoteIcon, TrashIcon, SparklesIcon, ClockIcon } from './icons';
@@ -27,7 +27,7 @@ interface SettingsManagerProps {
 
 const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
-    const [activeSection, setActiveSection] = useState<'general' | 'ui' | 'fonts' | 'screens' | 'accessibility' | 'analytics'>('general');
+    const [activeSection, setActiveSection] = useState<'general' | 'ui' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
         editorDebugLog('[SettingsManager] updateUI called with:', updates);
@@ -44,6 +44,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
         { id: 'ui' as const, name: 'UI Assets', icon: PhotoIcon },
         { id: 'fonts' as const, name: 'Fonts', icon: BookOpenIcon },
         { id: 'screens' as const, name: 'Screens', icon: MusicalNoteIcon },
+        { id: 'cg-gallery' as const, name: 'CG Gallery', icon: PhotoIcon },
         { id: 'accessibility' as const, name: 'Accessibility', icon: SparklesIcon },
         { id: 'analytics' as const, name: 'Analytics', icon: ClockIcon },
     ];
@@ -93,6 +94,9 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                 )}
                 {activeSection === 'accessibility' && (
                     <AccessibilitySettings />
+                )}
+                {activeSection === 'cg-gallery' && (
+                    <CGGallerySettings project={project} onUpdate={updateProject} />
                 )}
                 {activeSection === 'analytics' && (
                     <AnalyticsSettings />
@@ -1064,6 +1068,307 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                     </select>
                 </div>
             </div>
+        </div>
+    );
+};
+
+interface CGGallerySettingsProps {
+    project: VNProject;
+    onUpdate: (updates: Partial<VNProject>) => void;
+}
+
+const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate }) => {
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+
+    const gallery: CGGalleryConfig = project.cgGallery ?? {
+        entries: {},
+        unlockScope: 'global',
+        columns: 4,
+    };
+
+    const updateGallery = (updates: Partial<CGGalleryConfig>) => {
+        onUpdate({ cgGallery: { ...gallery, ...updates } });
+    };
+
+    const entries = Object.values(gallery.entries).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const addEntry = () => {
+        const id = `cg-${Math.random().toString(36).substring(2, 9)}` as VNID;
+        const newEntry: CGGalleryEntry = {
+            id,
+            name: `CG ${entries.length + 1}`,
+            assetId: null,
+            unlockable: false,
+            order: entries.length,
+        };
+        updateGallery({ entries: { ...gallery.entries, [id]: newEntry } });
+        setEditingEntryId(id);
+    };
+
+    const updateEntry = (id: VNID, updates: Partial<CGGalleryEntry>) => {
+        const existing = gallery.entries[id];
+        if (!existing) return;
+        updateGallery({ entries: { ...gallery.entries, [id]: { ...existing, ...updates } } });
+    };
+
+    const removeEntry = (id: VNID) => {
+        const { [id]: _removed, ...rest } = gallery.entries;
+        updateGallery({ entries: rest });
+        if (editingEntryId === id) setEditingEntryId(null);
+    };
+
+    const allImages = Object.values(project.images || {}) as { id: string; name: string; imageUrl?: string; videoUrl?: string }[];
+    const allBackgrounds = Object.values(project.backgrounds || {}) as { id: string; name: string; imageUrl?: string; videoUrl?: string }[];
+    const allAssets = [
+        ...allImages.map((img) => ({ id: img.id, name: img.name, type: 'Image' })),
+        ...allBackgrounds.map((bg) => ({ id: bg.id, name: bg.name, type: 'Background' })),
+    ];
+
+    const booleanVariables = Object.values(project.variables || {}).filter((v: any) => v.type === 'boolean') as { id: string; name: string; type: string }[];
+
+    return (
+        <div className="p-6">
+            <h3 className="text-xl font-bold text-white mb-2">CG Gallery</h3>
+            <p className="text-sm text-slate-400 mb-6">
+                Manage the CG (Computer Graphics) gallery entries that players can unlock and view. Add images from your project assets and optionally tie them to boolean variables to create unlockable gallery items.
+            </p>
+
+            {/* Gallery-Level Settings */}
+            <div className="space-y-4 max-w-lg mb-8">
+                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">Gallery Settings</h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">Columns</label>
+                        <input
+                            type="number"
+                            min={2}
+                            max={8}
+                            value={gallery.columns}
+                            onChange={(e) => updateGallery({ columns: parseInt(e.target.value, 10) || 4 })}
+                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">Unlock Scope</label>
+                        <select
+                            value={gallery.unlockScope}
+                            onChange={(e) => updateGallery({ unlockScope: e.target.value as 'global' | 'per-save' })}
+                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        >
+                            <option value="global">Global (all saves)</option>
+                            <option value="per-save">Per Save Slot</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Locked Placeholder Image</label>
+                    <select
+                        value={gallery.lockedPlaceholderAssetId ?? ''}
+                        onChange={(e) => updateGallery({ lockedPlaceholderAssetId: (e.target.value || null) as VNID | null })}
+                        className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                        <option value="">Default (lock icon)</option>
+                        {allAssets.map((a) => (
+                            <option key={a.id} value={a.id}>[{a.type}] {a.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Viewer Background Color</label>
+                    <div className="flex gap-2 items-center">
+                        <input
+                            type="color"
+                            value={gallery.viewerBackgroundColor || '#000000'}
+                            onChange={(e) => updateGallery({ viewerBackgroundColor: e.target.value })}
+                            className="h-9 w-12 bg-slate-800 border border-slate-600 rounded cursor-pointer"
+                        />
+                        <input
+                            type="text"
+                            value={gallery.viewerBackgroundColor || '#000000'}
+                            onChange={(e) => updateGallery({ viewerBackgroundColor: e.target.value })}
+                            className="flex-1 bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500 text-sm font-mono"
+                            placeholder="#000000"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Entries Section */}
+            <div className="mb-4 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">Gallery Entries ({entries.length})</h4>
+                <button
+                    onClick={addEntry}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-sm rounded-md transition-colors"
+                >
+                    + Add Entry
+                </button>
+            </div>
+
+            {entries.length === 0 ? (
+                <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-slate-700 border-dashed">
+                    <p className="text-slate-400 mb-2">No gallery entries yet</p>
+                    <p className="text-xs text-slate-500">Click "Add Entry" to create your first CG gallery item</p>
+                </div>
+            ) : (
+                <div className="space-y-2 max-w-2xl">
+                    {entries.map((entry) => {
+                        const isEditing = editingEntryId === entry.id;
+                        const assetInfo = allAssets.find((a) => a.id === entry.assetId);
+
+                        return (
+                            <div
+                                key={entry.id}
+                                className={`bg-slate-800 rounded-md border ${isEditing ? 'border-sky-500' : 'border-slate-700'} overflow-hidden`}
+                            >
+                                {/* Entry Header (collapsed) */}
+                                <div
+                                    className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-750"
+                                    onClick={() => setEditingEntryId(isEditing ? null : entry.id)}
+                                >
+                                    <span className="text-slate-500 text-xs font-mono w-6 text-center">{(entry.order ?? 0) + 1}</span>
+                                    <span className="flex-1 text-white text-sm font-medium truncate">{entry.name}</span>
+                                    <span className="text-xs text-slate-400">
+                                        {assetInfo ? `${assetInfo.type}: ${assetInfo.name}` : 'No asset'}
+                                    </span>
+                                    {entry.unlockable && (
+                                        <span className="text-xs bg-amber-600/30 text-amber-400 px-2 py-0.5 rounded">🔒 Unlockable</span>
+                                    )}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); removeEntry(entry.id as VNID); }}
+                                        className="text-red-400 hover:text-red-300 p-1"
+                                        title="Remove entry"
+                                    >
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                    <span className={`text-slate-400 transition-transform ${isEditing ? 'rotate-180' : ''}`}>▼</span>
+                                </div>
+
+                                {/* Entry Details (expanded) */}
+                                {isEditing && (
+                                    <div className="px-4 pb-4 pt-2 border-t border-slate-700 space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1">Name</label>
+                                            <input
+                                                type="text"
+                                                value={entry.name}
+                                                onChange={(e) => updateEntry(entry.id as VNID, { name: e.target.value })}
+                                                className="w-full bg-slate-900 text-white p-2 rounded border border-slate-600 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Asset</label>
+                                                <select
+                                                    value={entry.assetId ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { assetId: (e.target.value || null) as VNID | null })}
+                                                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-600 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                                >
+                                                    <option value="">-- Select Asset --</option>
+                                                    {allImages.length > 0 && (
+                                                        <optgroup label="Images">
+                                                            {allImages.map((img) => (
+                                                                <option key={img.id} value={img.id}>{img.name}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    )}
+                                                    {allBackgrounds.length > 0 && (
+                                                        <optgroup label="Backgrounds">
+                                                            {allBackgrounds.map((bg) => (
+                                                                <option key={bg.id} value={bg.id}>{bg.name}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    )}
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Thumbnail Override</label>
+                                                <select
+                                                    value={entry.thumbnailAssetId ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { thumbnailAssetId: (e.target.value || null) as VNID | null })}
+                                                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-600 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                                >
+                                                    <option value="">Same as asset</option>
+                                                    {allAssets.map((a) => (
+                                                        <option key={a.id} value={a.id}>[{a.type}] {a.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Category</label>
+                                                <input
+                                                    type="text"
+                                                    value={entry.category ?? ''}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { category: e.target.value || undefined })}
+                                                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-600 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                                    placeholder="e.g. Chapter 1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-400 mb-1">Sort Order</label>
+                                                <input
+                                                    type="number"
+                                                    value={entry.order ?? 0}
+                                                    onChange={(e) => updateEntry(entry.id as VNID, { order: parseInt(e.target.value, 10) || 0 })}
+                                                    className="w-full bg-slate-900 text-white p-2 rounded border border-slate-600 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Unlockable Section */}
+                                        <div className="bg-slate-900/50 rounded p-3 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    role="switch"
+                                                    aria-checked={entry.unlockable}
+                                                    onClick={() => updateEntry(entry.id as VNID, { unlockable: !entry.unlockable })}
+                                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                                                        entry.unlockable ? 'bg-sky-500' : 'bg-slate-600'
+                                                    }`}
+                                                >
+                                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${entry.unlockable ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                                </button>
+                                                <label className="text-sm text-slate-300">Requires Unlocking</label>
+                                            </div>
+
+                                            {entry.unlockable && (
+                                                <div>
+                                                    <label className="block text-xs font-medium text-slate-400 mb-1">Unlock Variable (boolean)</label>
+                                                    <select
+                                                        value={entry.unlockVariableId ?? ''}
+                                                        onChange={(e) => updateEntry(entry.id as VNID, { unlockVariableId: (e.target.value || null) as VNID | null })}
+                                                        className="w-full bg-slate-900 text-white p-2 rounded border border-slate-600 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                                    >
+                                                        <option value="">-- Select Variable --</option>
+                                                        {booleanVariables.map((v) => (
+                                                            <option key={v.id} value={v.id}>{v.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    {booleanVariables.length === 0 && (
+                                                        <p className="text-xs text-amber-400 mt-1">
+                                                            No boolean variables found. Create a boolean variable in the Variables panel to use as an unlock trigger.
+                                                        </p>
+                                                    )}
+                                                    {entry.unlockVariableId && !booleanVariables.find((v) => v.id === entry.unlockVariableId) && (
+                                                        <p className="text-xs text-amber-400 mt-1">⚠ Selected variable not found</p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };

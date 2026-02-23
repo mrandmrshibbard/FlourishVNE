@@ -106,6 +106,17 @@ export interface StageState {
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
+    /** Persistent movie overlays (transparent, looping) that play behind characters */
+    movieOverlays?: Array<{
+        url: string;
+        loop: boolean;
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+        opacity?: number;
+        objectFit?: 'cover' | 'contain' | 'fill' | 'custom';
+    }>;
     screen: {
         shake: { active: boolean; intensity: number };
         tint: string;
@@ -149,6 +160,7 @@ export interface PlayerState {
             maxLength: number;
         } | null;
         movieUrl: string | null;
+        movieLoop?: boolean;
         isWaitingForInput: boolean;
         isTransitioning: boolean;
         transitionElement: React.ReactNode | null;
