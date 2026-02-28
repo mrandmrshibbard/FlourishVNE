@@ -492,6 +492,9 @@ function sendUpdateStatus(status, data = {}) {
 
 // IPC: renderer requests to install a downloaded update and restart
 ipcMain.on('install-update', () => {
+  // Set isQuitting so the mainWindow 'close' handler doesn't block the quit
+  // with a save-before-quit prompt.
+  isQuitting = true;
   autoUpdater.quitAndInstall(false, true);
 });
 
