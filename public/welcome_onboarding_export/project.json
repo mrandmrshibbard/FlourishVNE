@@ -2453,23 +2453,23 @@
       "name": "popcorn",
       "imageUrl": "assets/images/imag-x2se6or_popcorn.png"
     },
-    "imag-o8lelrg": {
-      "id": "imag-o8lelrg",
-      "name": "hungyhungyhungy",
-      "path": "",
-      "imageUrl": "assets/images/imag-o8lelrg_hungyhungyhungy.jpg"
-    },
-    "imag-ukga3bs": {
-      "id": "imag-ukga3bs",
-      "name": "couple_goals",
-      "path": "",
-      "imageUrl": "assets/images/imag-ukga3bs_couple_goals.jpg"
-    },
     "imag-gx27t95": {
       "id": "imag-gx27t95",
       "name": "back-s661ohf_sakura_garden_night",
       "path": "",
       "imageUrl": "assets/images/imag-gx27t95_back-s661ohf_sakura_garden_night.png"
+    },
+    "imag-uqqzdvl": {
+      "id": "imag-uqqzdvl",
+      "name": "couple_goals",
+      "path": "",
+      "imageUrl": "assets/images/imag-uqqzdvl_couple_goals.jpg"
+    },
+    "imag-crcdnkd": {
+      "id": "imag-crcdnkd",
+      "name": "hungyhungyhungy",
+      "path": "",
+      "imageUrl": "assets/images/imag-crcdnkd_hungyhungyhungy.png"
     }
   },
   "audio": {
@@ -4922,7 +4922,7 @@
       "cg-kuvrvxc": {
         "id": "cg-kuvrvxc",
         "name": "Couple Goals",
-        "assetId": "imag-ukga3bs",
+        "assetId": "imag-uqqzdvl",
         "unlockable": true,
         "order": 1,
         "unlockVariableId": "var-7t1jqgs"
@@ -4930,7 +4930,7 @@
       "cg-bjgx5xh": {
         "id": "cg-bjgx5xh",
         "name": "Hungeeee!",
-        "assetId": "imag-o8lelrg",
+        "assetId": "imag-crcdnkd",
         "unlockable": true,
         "order": 2,
         "unlockVariableId": "var-rk5i513"
