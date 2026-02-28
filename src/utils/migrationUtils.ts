@@ -116,7 +116,6 @@ export class MigrationUtils {
   private hasEnhancedFeatures(project: any): boolean {
     return !!(
       project.templates ||
-      project.logicGraphs ||
       project.enhancedVariables ||
       project.contextPanels ||
       project.wizards
@@ -320,16 +319,6 @@ export class MigrationUtils {
       });
     }
 
-    // Check logic graphs
-    if (project.logicGraphs && !Array.isArray(project.logicGraphs)) {
-      errors.push({
-        severity: 'error',
-        code: 'INVALID_LOGIC_GRAPHS',
-        message: 'Logic graphs must be an array',
-        path: 'logicGraphs'
-      });
-    }
-
     return errors;
   }
 
@@ -417,16 +406,6 @@ export class MigrationUtils {
           });
         }
 
-        // Add logic graphs array if missing
-        if (!project.logicGraphs) {
-          changes.push({
-            type: 'added',
-            path: 'logicGraphs',
-            description: 'Added logic graphs array for visual logic builder',
-            newValue: []
-          });
-        }
-
         // Add enhanced variables if missing
         if (!project.enhancedVariables) {
           changes.push({
@@ -458,7 +437,7 @@ export class MigrationUtils {
         };
       },
       validate: (project: any): boolean => {
-        return !!(project.templates && project.logicGraphs);
+        return !!(project.templates);
       }
     });
 

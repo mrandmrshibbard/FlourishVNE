@@ -12,16 +12,26 @@ import { getAutoSaveMetadata, loadProjectFromIDB, deleteAutoSave } from '../util
 interface RecentProject {
     id: string;
     title: string;
-    lastOpened: number; // timestamp
+    lastOpened: number; // timestamp in milliseconds
     sceneCount: number;
     characterCount: number;
+    /** Absolute path to the .flourish / .zip file on disk (if known). */
+    filePath?: string;
+}
+
+/** A file entry returned by the main process's list-project-files IPC. */
+interface SavedProjectFile {
+    name: string;
+    path: string;
+    size: number;       // bytes
+    modified: number;   // timestamp in milliseconds
 }
 
 const RECENT_PROJECTS_KEY = 'flourish:recentProjects';
 const MAX_RECENT_PROJECTS = 5;
 
 // Helper to save recent project metadata - exported for use by Header on successful exports
-export function saveRecentProject(project: VNProject): void {
+export function saveRecentProject(project: VNProject, filePath?: string): void {
     try {
         const stored = localStorage.getItem(RECENT_PROJECTS_KEY);
         let recents: RecentProject[] = stored ? JSON.parse(stored) : [];
@@ -36,6 +46,7 @@ export function saveRecentProject(project: VNProject): void {
             lastOpened: Date.now(),
             sceneCount: Object.keys(project.scenes || {}).length,
             characterCount: Object.keys(project.characters || {}).length,
+            filePath: filePath || undefined,
         });
         
         // Trim to max
@@ -79,6 +90,7 @@ export const ProjectHub: React.FC<{
     const [bannerDismissed, setBannerDismissed] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+    const [savedProjectFiles, setSavedProjectFiles] = useState<SavedProjectFile[]>([]);
     const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
     const [showRecovery, setShowRecovery] = useState(false);
     const toast = useToast();
@@ -87,6 +99,16 @@ export const ProjectHub: React.FC<{
 
     useEffect(() => {
         setRecentProjects(loadRecentProjects());
+
+        // Scan the default Projects directory for saved .flourish / .zip files
+        const api = (window as any).electronAPI;
+        if (api?.listProjectFiles) {
+            api.listProjectFiles().then((result: { success: boolean; files: SavedProjectFile[] }) => {
+                if (result.success) {
+                    setSavedProjectFiles(result.files);
+                }
+            }).catch(() => {});
+        }
 
         getAutoSaveMetadata().then(metas => {
             if (metas.length > 0) {
@@ -263,6 +285,90 @@ export const ProjectHub: React.FC<{
             (window as any).electronAPI.setHubActive(false);
         }
         fileInputRef.current?.click();
+    };
+
+    /**
+     * Open a project from a known file path on disk (from Recent Projects,
+     * Saved Projects, or the native Open dialog).
+     */
+    const handleOpenFromPath = async (filePath: string) => {
+        const api = (window as any).electronAPI;
+        if (!api?.readProjectFile) {
+            // Not running in Electron — fall back to file picker
+            handleFileOpen();
+            return;
+        }
+
+        setIsImporting(true);
+        try {
+            const result = await api.readProjectFile(filePath);
+            if (!result.success) {
+                toast.error(result.error || 'Failed to read project file.');
+                return;
+            }
+
+            // result.data is a Uint8Array (IPC-serialised Buffer)
+            const { project } = await importProject(result.data);
+            if (api?.setHubActive) {
+                api.setHubActive(false);
+            }
+            saveRecentProject(project, filePath);
+            toast.success('Project loaded!');
+            onProjectSelect(project);
+        } catch (error) {
+            console.error('Error opening project from path:', error);
+            toast.error(`Failed to open project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    /**
+     * Use the native Open dialog (via IPC) to pick a project file.
+     * Falls back to the HTML file input when not running in Electron.
+     */
+    const handleNativeOpen = async () => {
+        const api = (window as any).electronAPI;
+        if (!api?.openProjectDialog) {
+            handleFileOpen();
+            return;
+        }
+
+        setIsImporting(true);
+        try {
+            const result = await api.openProjectDialog();
+            if (!result.success) {
+                if (!result.canceled) toast.error(result.error || 'Failed to open project.');
+                return;
+            }
+
+            const { project } = await importProject(result.data);
+            if (api?.setHubActive) {
+                api.setHubActive(false);
+            }
+            saveRecentProject(project, result.filePath);
+            toast.success('Project loaded!');
+            onProjectSelect(project);
+        } catch (error) {
+            console.error('Error opening project:', error);
+            toast.error(`Failed to open project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    /**
+     * Open the default Projects folder in the OS file explorer.
+     */
+    const handleRevealProjectsFolder = async () => {
+        const api = (window as any).electronAPI;
+        if (!api?.getUserDataPaths || !api?.revealInExplorer) return;
+        try {
+            const paths = await api.getUserDataPaths();
+            await api.revealInExplorer(paths.projects);
+        } catch {
+            toast.error('Could not open folder.');
+        }
     };
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -573,7 +679,7 @@ export const ProjectHub: React.FC<{
                     
                     {/* Import Project Card */}
                     <button 
-                        onClick={handleFileOpen}
+                        onClick={isElectron ? handleNativeOpen : handleFileOpen}
                         className="group relative w-full md:w-1/3 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"
                         style={{
                             background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
@@ -605,14 +711,14 @@ export const ProjectHub: React.FC<{
                         >
                             <UploadIcon className="w-10 h-10 text-[var(--accent-cyan)]" />
                         </div>
-                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Import Project</h2>
-                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Load a .zip project file</p>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Open Project</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Load a .flourish or .zip project</p>
                         
                         {/* Decorative sparkles */}
                         <div className="absolute top-8 left-8 text-[var(--accent-cyan)] opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
                         <div className="absolute bottom-6 right-10 text-[var(--accent-mint)] opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
                     </button>
-                    <input type="file" ref={fileInputRef} className="hidden" accept=".zip,application/zip" onChange={handleFileChange} />
+                    <input type="file" ref={fileInputRef} className="hidden" accept=".zip,.flourish,application/zip" onChange={handleFileChange} />
                 </main>
                 
                 {/* Recent Projects Section */}
@@ -635,8 +741,14 @@ export const ProjectHub: React.FC<{
                                         boxShadow: 'var(--shadow-md)',
                                         animationDelay: `${index * 0.1}s`
                                     }}
-                                    onClick={handleFileOpen}
-                                    title="Import this project to continue working on it"
+                                    onClick={() => {
+                                        if (recent.filePath) {
+                                            handleOpenFromPath(recent.filePath);
+                                        } else {
+                                            isElectron ? handleNativeOpen() : handleFileOpen();
+                                        }
+                                    }}
+                                    title={recent.filePath ? `Open ${recent.filePath}` : 'Import this project to continue working on it'}
                                 >
                                     {/* Color accent bar */}
                                     <div 
@@ -670,24 +782,85 @@ export const ProjectHub: React.FC<{
                                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-mint)]" />
                                         {formatTimeAgo(recent.lastOpened)}
                                     </p>
+                                    {recent.filePath && (
+                                        <p className="text-[10px] text-[var(--text-muted)] mt-1.5 truncate opacity-60" title={recent.filePath}>
+                                            📁 {recent.filePath}
+                                        </p>
+                                    )}
                                 </div>
                             ))}
                         </div>
-                        <p className="text-xs text-[var(--text-muted)] mt-5 text-center opacity-70">
-                            Click a project to import it (you'll need to select the exported .zip file)
-                        </p>
+                    </section>
+                )}
+
+                {/* Saved Projects on Disk (Electron only) */}
+                {isElectron && savedProjectFiles.length > 0 && (
+                    <section className="mt-10">
+                        <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-5 flex items-center gap-3 uppercase tracking-widest">
+                            <span className="w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-cyan)]" />
+                            <span className="text-base">📂</span>
+                            Saved Projects
+                            <span className="w-8 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-cyan)]" />
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {savedProjectFiles.map((file) => (
+                                <button
+                                    key={file.path}
+                                    onClick={() => handleOpenFromPath(file.path)}
+                                    className="group relative rounded-xl p-4 text-left transition-all duration-200 hover:scale-[1.01]"
+                                    style={{
+                                        background: 'var(--bg-tertiary)',
+                                        border: '1px solid var(--border-subtle)',
+                                    }}
+                                    title={file.path}
+                                >
+                                    <div className="font-semibold text-sm text-[var(--text-primary)] truncate mb-1">
+                                        {file.name.replace(/\.(flourish|zip)$/i, '')}
+                                    </div>
+                                    <div className="flex items-center gap-3 text-[10px] text-[var(--text-muted)]">
+                                        <span>{(file.size / 1024).toFixed(0)} KB</span>
+                                        <span>{formatTimeAgo(file.modified)}</span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     </section>
                 )}
                 
                  <footer className="text-center mt-14 text-[var(--text-muted)] text-sm">
-                    <p className="opacity-70">Your work is managed in memory. Use the 'Export' button in the editor to save.</p>
-                    <button
-                        onClick={() => setShowChangelog(true)}
-                        className="mt-4 text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
-                    >
-                        View Latest Changes 
-                        <span className="group-hover:translate-x-1 transition-transform">→</span>
-                    </button>
+                    {isElectron ? (
+                        <>
+                            <p className="opacity-70">Projects are saved to your <strong>Documents/Flourish VNE/Projects</strong> folder.</p>
+                            <div className="flex items-center justify-center gap-4 mt-3">
+                                <button
+                                    onClick={handleRevealProjectsFolder}
+                                    className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
+                                >
+                                    📂 Open Projects Folder
+                                    <span className="group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
+                                <span className="text-[var(--border-subtle)]">|</span>
+                                <button
+                                    onClick={() => setShowChangelog(true)}
+                                    className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
+                                >
+                                    View Latest Changes
+                                    <span className="group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p className="opacity-70">Your work is managed in memory. Use the 'Export' button in the editor to save.</p>
+                            <button
+                                onClick={() => setShowChangelog(true)}
+                                className="mt-4 text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
+                            >
+                                View Latest Changes
+                                <span className="group-hover:translate-x-1 transition-transform">→</span>
+                            </button>
+                        </>
+                    )}
                 </footer>
             </div>
             <ChangelogModal visible={showChangelog} onClose={() => setShowChangelog(false)} />

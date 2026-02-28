@@ -122,7 +122,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
 
         const value = formData[field.id] ?? field.defaultValue ?? '';
         const error = errors[field.id];
-        const baseInputClass = `w-full px-3 py-2 bg-slate-900 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors ${error ? 'border-red-500' : 'border-slate-600'}`;
+        const baseInputClass = `w-full px-3 py-2 bg-[var(--bg-primary)] border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors ${error ? 'border-red-500' : 'border-[var(--border-default)]'}`;
 
         return (
             <div key={field.id} className="mb-4">
@@ -131,7 +131,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                     {field.required && <span className="text-red-400 ml-1">*</span>}
                 </label>
                 {field.helpText && (
-                    <p className="text-xs text-slate-400 mb-1.5">{field.helpText}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mb-1.5">{field.helpText}</p>
                 )}
 
                 {(field.type === 'text') && (
@@ -197,7 +197,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                                     className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
                                         selected
                                             ? 'bg-purple-600 border-purple-500 text-white'
-                                            : 'bg-slate-900 border-slate-600 text-slate-300 hover:border-slate-500'
+                                            : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-primary)] hover:border-[var(--border-default)]'
                                     }`}
                                 >
                                     {opt.label}
@@ -205,7 +205,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             );
                         })}
                         {(!field.options || field.options.length === 0) && (
-                            <p className="text-xs text-slate-500 italic">No options available</p>
+                            <p className="text-xs text-[var(--text-muted)] italic">No options available</p>
                         )}
                     </div>
                 )}
@@ -216,9 +216,9 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             type="checkbox"
                             checked={!!value}
                             onChange={(e) => handleFieldChange(field.id, e.target.checked)}
-                            className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
+                            className="w-4 h-4 rounded border-[var(--border-default)] bg-[var(--bg-primary)] text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
                         />
-                        <span className="text-sm text-slate-300">Enable</span>
+                        <span className="text-sm text-[var(--text-primary)]">Enable</span>
                     </label>
                 )}
 
@@ -228,9 +228,9 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             type="color"
                             value={value || '#FFFFFF'}
                             onChange={(e) => handleFieldChange(field.id, e.target.value)}
-                            className="w-10 h-10 rounded border border-slate-600 bg-slate-900 cursor-pointer"
+                            className="w-10 h-10 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] cursor-pointer"
                         />
-                        <span className="text-sm text-slate-400 font-mono">{value || '#FFFFFF'}</span>
+                        <span className="text-sm text-[var(--text-secondary)] font-mono">{value || '#FFFFFF'}</span>
                     </div>
                 )}
 
@@ -239,12 +239,12 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                         type="range"
                         value={value || 0}
                         onChange={(e) => handleFieldChange(field.id, parseFloat(e.target.value))}
-                        className="w-full accent-purple-500"
+                        className="w-full accent-[var(--accent-lavender)]"
                     />
                 )}
 
                 {field.type === 'file' && (
-                    <div className="px-4 py-3 bg-slate-900 border border-dashed border-slate-600 rounded-lg text-center text-slate-400 text-sm">
+                    <div className="px-4 py-3 bg-[var(--bg-primary)] border border-dashed border-[var(--border-default)] rounded-lg text-center text-[var(--text-secondary)] text-sm">
                         File upload (configure after wizard)
                     </div>
                 )}
@@ -259,14 +259,15 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
     const getWizardIcon = (icon?: string) => {
         if (icon === 'user') return '👤';
         if (icon === 'image') return '🎬';
+        if (icon === 'gallery') return '🖼️';
         return '✨';
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
-            <div className="relative w-full max-w-2xl max-h-[85vh] bg-slate-800 border border-slate-700 rounded-xl shadow-2xl flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <div className="relative w-full max-w-2xl max-h-[85vh] bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
                     <div className="flex items-center gap-3">
                         <span className="text-xl">✨</span>
                         <h2 className="text-lg font-semibold text-white">
@@ -275,7 +276,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                     </div>
                     <button
                         onClick={handleClose}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                        className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-white hover:bg-[var(--bg-secondary)] transition-colors"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
                             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
@@ -284,7 +285,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                 </div>
 
                 {selectedWizard && currentStep && (
-                    <div className="px-6 py-3 border-b border-slate-700 bg-slate-800/50">
+                    <div className="px-6 py-3 border-b border-[var(--border-subtle)] bg-[var(--bg-primary)]/50">
                         <div className="flex items-center gap-2 mb-2">
                             {selectedWizard.steps.map((step, idx) => (
                                 <React.Fragment key={step.id}>
@@ -293,19 +294,19 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                                             ? 'bg-green-600 text-white'
                                             : idx === currentStepIndex
                                                 ? 'bg-purple-600 text-white'
-                                                : 'bg-slate-700 text-slate-400'
+                                                : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'
                                     }`}>
                                         {idx < currentStepIndex ? '✓' : idx + 1}
                                     </div>
                                     {idx < selectedWizard.steps.length - 1 && (
                                         <div className={`flex-1 h-0.5 rounded ${
-                                            idx < currentStepIndex ? 'bg-green-600' : 'bg-slate-700'
+                                            idx < currentStepIndex ? 'bg-green-600' : 'bg-[var(--bg-secondary)]'
                                         }`} />
                                     )}
                                 </React.Fragment>
                             ))}
                         </div>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-[var(--text-secondary)]">
                             Step {currentStepIndex + 1} of {totalSteps}
                             {currentStep.estimatedTime && ` · ~${currentStep.estimatedTime} min`}
                         </p>
@@ -315,7 +316,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                     {!selectedWizard ? (
                         <div>
-                            <p className="text-slate-400 text-sm mb-5">
+                            <p className="text-[var(--text-secondary)] text-sm mb-5">
                                 Choose a wizard to get started with guided content creation.
                             </p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -323,7 +324,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                                     <button
                                         key={wizard.id}
                                         onClick={() => handleSelectWizard(wizard)}
-                                        className="text-left p-5 bg-slate-900 border border-slate-600 rounded-lg hover:border-purple-500 hover:bg-slate-800 transition-all group"
+                                        className="text-left p-5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg hover:border-purple-500 hover:bg-[var(--bg-primary)] transition-all group"
                                     >
                                         <div className="flex items-start gap-3">
                                             <span className="text-2xl">{getWizardIcon(wizard.icon)}</span>
@@ -331,11 +332,11 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                                                 <h3 className="font-semibold text-white group-hover:text-purple-300 transition-colors">
                                                     {wizard.name}
                                                 </h3>
-                                                <p className="text-sm text-slate-400 mt-1">{wizard.description}</p>
-                                                <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
+                                                <p className="text-sm text-[var(--text-secondary)] mt-1">{wizard.description}</p>
+                                                <div className="flex items-center gap-3 mt-3 text-xs text-[var(--text-muted)]">
                                                     <span>{wizard.totalSteps} steps</span>
                                                     <span>~{wizard.estimatedTime} min</span>
-                                                    <span className="capitalize px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
+                                                    <span className="capitalize px-1.5 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-subtle)]">
                                                         {wizard.complexity}
                                                     </span>
                                                 </div>
@@ -349,7 +350,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                         <div>
                             <h3 className="text-lg font-semibold text-white mb-1">{currentStep.title}</h3>
                             {currentStep.description && (
-                                <p className="text-sm text-slate-400 mb-5">{currentStep.description}</p>
+                                <p className="text-sm text-[var(--text-secondary)] mb-5">{currentStep.description}</p>
                             )}
                             {currentStep.fields.map(renderField)}
                         </div>
@@ -357,10 +358,10 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                 </div>
 
                 {selectedWizard && (
-                    <div className="px-6 py-4 border-t border-slate-700 flex items-center justify-between bg-slate-800/80">
+                    <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-primary)]/80">
                         <button
                             onClick={handleBack}
-                            className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 border border-slate-600 transition-colors"
+                            className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] transition-colors"
                         >
                             {currentStepIndex === 0 ? '← Wizards' : '← Back'}
                         </button>
@@ -368,7 +369,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             {currentStep?.canSkip && !isLastStep && (
                                 <button
                                     onClick={() => setCurrentStepIndex(prev => prev + 1)}
-                                    className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                                    className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:text-slate-200 transition-colors"
                                 >
                                     Skip
                                 </button>

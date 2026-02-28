@@ -145,7 +145,7 @@ function validateCommand(
             break;
         }
         case CommandType.SetBackground: {
-            if (!project.backgrounds[cmd.backgroundId]) {
+            if (!project.backgrounds[cmd.backgroundId] && !project.images?.[cmd.backgroundId]) {
                 errors.push({
                     severity: 'error',
                     message: `SetBackground references missing background asset (ID: ${cmd.backgroundId}).`,
@@ -221,6 +221,23 @@ function validateCommand(
                 warnings.push({
                     severity: 'warning',
                     message: `Choice command has no options. Players will be stuck.`,
+                    location: loc
+                });
+            }
+            break;
+        }
+        case CommandType.RunScript: {
+            const scripts = project.scripts || {};
+            if (!cmd.scriptId || !scripts[cmd.scriptId]) {
+                errors.push({
+                    severity: 'error',
+                    message: `RunScript references missing script (ID: ${cmd.scriptId || 'none'}).`,
+                    location: loc
+                });
+            } else if (!scripts[cmd.scriptId].enabled) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `RunScript references disabled script "${scripts[cmd.scriptId].name}".`,
                     location: loc
                 });
             }

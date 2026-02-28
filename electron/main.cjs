@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
@@ -77,6 +78,27 @@ let mainWindow;
 let splashWindow;
 let isHubActive = false;
 let isQuitting = false;
+/** File path passed via CLI / file-association / second-instance. */
+let pendingOpenFilePath = null;
+
+// ── Default user directories ────────────────────────────────────────────────
+// These are created on first launch so the user always has a sensible place
+// for projects and built games, located in Documents/Flourish VNE.
+const flourishDocsRoot = path.join(app.getPath('documents'), 'Flourish VNE');
+const defaultProjectsDir = path.join(flourishDocsRoot, 'Projects');
+const defaultBuildsWebDir = path.join(flourishDocsRoot, 'Builds', 'Web');
+const defaultBuildsDesktopDir = path.join(flourishDocsRoot, 'Builds', 'Desktop');
+
+/**
+ * Ensure all default user directories exist.  Called once on app-ready.
+ */
+function ensureUserDirectories() {
+  for (const dir of [defaultProjectsDir, defaultBuildsWebDir, defaultBuildsDesktopDir]) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+}
 
 /**
  * Create a lightweight native splash window that shows immediately while the
@@ -178,6 +200,15 @@ function createWindow() {
     if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.close();
       splashWindow = null;
+    }
+  });
+
+  // Once the renderer's DOM is fully loaded, send any pending file-open
+  // request (from double-clicking a .flourish file to launch the app).
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (pendingOpenFilePath) {
+      mainWindow.webContents.send('open-file', pendingOpenFilePath);
+      pendingOpenFilePath = null;
     }
   });
 
@@ -365,10 +396,77 @@ function createWindow() {
 // background while the splash animates, shaving ~200-400ms off perceived
 // startup time.
 app.whenReady().then(() => {
+  // Create default user directories (Documents/Flourish VNE/…)
+  ensureUserDirectories();
+
+  // ── File-association / CLI open ──
+  // If the user double-clicked a .flourish file, the path is in process.argv.
+  const cliFile = process.argv.find(
+    (a) => a.endsWith('.flourish') && fs.existsSync(a)
+  );
+  if (cliFile) pendingOpenFilePath = path.resolve(cliFile);
+
   createSplashWindow();
   // Start the heavy main-window load immediately — no need to wait for the
   // simple splash HTML to finish loading.
   createWindow();
+
+  // ── Auto-Update ──────────────────────────────────────────────────────────
+  // Configure electron-updater: download updates silently in the background.
+  // Once downloaded, the renderer is notified and shows a restart prompt.
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  // Don't auto-run after update; let the nsis installer's runAfterFinish
+  // setting handle that.
+  autoUpdater.autoRunAppAfterInstall = true;
+  // Use the logger built into electron-updater (logs to ~/AppData/…/logs/)
+  autoUpdater.logger = require('electron-updater').log;
+  if (autoUpdater.logger) {
+    autoUpdater.logger.transports = autoUpdater.logger.transports || {};
+  }
+
+  // Forward update lifecycle events to the renderer so we can show UI.
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus('checking');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus('available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+    });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus('not-available');
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdateStatus('downloading', {
+      percent: Math.round(progress.percent),
+      transferred: progress.transferred,
+      total: progress.total,
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateStatus('downloaded', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-update error:', err);
+    sendUpdateStatus('error', { message: err?.message || 'Unknown error' });
+  });
+
+  // Kick off the check after a short delay so the UI finishes rendering first.
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('Update check failed:', err);
+    });
+  }, 3000); // milliseconds
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked
@@ -378,11 +476,51 @@ app.whenReady().then(() => {
   });
 });
 
+/**
+ * Send auto-update status to the renderer process.
+ * Silently no-ops if the window doesn't exist yet.
+ */
+function sendUpdateStatus(status, data = {}) {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-status', { status, ...data });
+    }
+  } catch {
+    // Window may be mid-creation; ignore.
+  }
+}
+
+// IPC: renderer requests to install a downloaded update and restart
+ipcMain.on('install-update', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+// IPC: renderer requests a manual update check
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { success: true, version: result?.updateInfo?.version };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Check failed' };
+  }
+});
+
 // If a second instance is launched, focus the existing window instead.
-app.on('second-instance', () => {
+// If the second instance was invoked with a .flourish file path (e.g. the
+// user double-clicked a project file while the app is running), forward it
+// to the renderer so it can open the project.
+app.on('second-instance', (_event, argv) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
+
+    // Look for a .flourish path in the new argv
+    const filePath = argv.find(
+      (a) => a.endsWith('.flourish') && fs.existsSync(a)
+    );
+    if (filePath) {
+      mainWindow.webContents.send('open-file', path.resolve(filePath));
+    }
   }
 });
 
@@ -593,17 +731,24 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
     let isDirectory = false;
     
     if (platform === 'win') {
-      // For portable build, look for .exe file directly in dist
-      exePath = files.find(f => f.endsWith('.exe') && !f.includes('Setup'));
-      if (exePath) {
-        fullExePath = path.join(distDir, exePath);
+      // For NSIS installer builds, look for Setup exe first
+      const setupExe = files.find(f => f.endsWith('.exe') && f.includes('Setup'));
+      if (setupExe) {
+        exePath = setupExe;
+        fullExePath = path.join(distDir, setupExe);
       } else {
-        // Look for win-unpacked folder
-        const unpackedDir = files.find(f => f.includes('win-unpacked'));
-        if (unpackedDir) {
-          fullExePath = path.join(distDir, unpackedDir);
-          exePath = unpackedDir;
-          isDirectory = true;
+        // For portable build, look for .exe file directly in dist
+        exePath = files.find(f => f.endsWith('.exe'));
+        if (exePath) {
+          fullExePath = path.join(distDir, exePath);
+        } else {
+          // Look for win-unpacked folder
+          const unpackedDir = files.find(f => f.includes('win-unpacked'));
+          if (unpackedDir) {
+            fullExePath = path.join(distDir, unpackedDir);
+            exePath = unpackedDir;
+            isDirectory = true;
+          }
         }
       }
     } else if (platform === 'mac') {
@@ -646,7 +791,7 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
       // For directories, use folder selection dialog
       const result = await dialog.showOpenDialog(mainWindow, {
         title: 'Choose Where to Save Game Folder',
-        defaultPath: app.getPath('downloads'),
+        defaultPath: defaultBuildsDesktopDir,
         properties: ['openDirectory', 'createDirectory']
       });
       
@@ -657,7 +802,7 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
       // For single files, use save dialog
       const result = await dialog.showSaveDialog(mainWindow, {
         title: 'Save Desktop Game',
-        defaultPath: path.join(app.getPath('downloads'), exePath),
+        defaultPath: path.join(defaultBuildsDesktopDir, exePath),
         filters: [
           { name: 'Executable', extensions: [exePath.split('.').pop()] }
         ]
@@ -846,10 +991,15 @@ ipcMain.on('sync-project-state', (event, projectData) => {
 ipcMain.handle('save-project-export', async (event, { data, filename }) => {
   try {
     const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    // Ensure default filename uses .flourish extension
+    const defaultName = filename.replace(/\.zip$/i, '').replace(/\.flourish$/i, '') + '.flourish';
     const result = await dialog.showSaveDialog(targetWindow, {
-      title: 'Save Project Export',
-      defaultPath: path.join(app.getPath('downloads'), filename),
-      filters: [{ name: 'Zip Archive', extensions: ['zip'] }],
+      title: 'Save Project',
+      defaultPath: path.join(defaultProjectsDir, defaultName),
+      filters: [
+        { name: 'Flourish Project', extensions: ['flourish'] },
+        { name: 'Zip Archive (legacy)', extensions: ['zip'] },
+      ],
       properties: ['createDirectory', 'showOverwriteConfirmation']
     });
 
@@ -896,4 +1046,173 @@ ipcMain.handle('get-app-version', () => {
 ipcMain.on('cancel-quit', () => {
   // Just do nothing, window won't close
   console.log('Quit cancelled by user');
+});
+
+// ── User Directories & File-System Project Management ─────────────────────
+
+/**
+ * Return the default user data paths so the renderer can display them and
+ * pre-fill save/open dialogs.
+ */
+ipcMain.handle('get-user-data-paths', () => {
+  return {
+    projects: defaultProjectsDir,
+    buildsWeb: defaultBuildsWebDir,
+    buildsDesktop: defaultBuildsDesktopDir,
+    documents: flourishDocsRoot,
+  };
+});
+
+/**
+ * Save a project export (ZIP bytes) to a file path, defaulting to the
+ * Projects directory.  If `filePath` is provided, writes directly there
+ * (for "Save" to a known path).  If not, shows a native Save dialog.
+ *
+ * The `ext` parameter lets the caller choose between .flourish (the working
+ * project format) and .zip (the classic shareable archive).
+ */
+ipcMain.handle('save-project-to-path', async (event, { data, filename, filePath, ext, defaultDir }) => {
+  try {
+    const extension = ext || 'flourish';
+    let targetPath = filePath;
+
+    if (!targetPath) {
+      const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+      const defaultName = filename.replace(/\.zip$/i, '').replace(/\.flourish$/i, '') + '.' + extension;
+      const saveDir = defaultDir || defaultProjectsDir;
+      
+      // Choose filters based on extension type
+      const filters = extension === 'zip'
+        ? [{ name: 'Zip Archive', extensions: ['zip'] }]
+        : [
+            { name: 'Flourish Project', extensions: ['flourish'] },
+            { name: 'Zip Archive', extensions: ['zip'] },
+          ];
+
+      const result = await dialog.showSaveDialog(targetWindow, {
+        title: extension === 'zip' ? 'Save Build' : 'Save Project',
+        defaultPath: path.join(saveDir, defaultName),
+        filters,
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true };
+      }
+      targetPath = result.filePath;
+    }
+
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(targetPath, buffer);
+
+    return { success: true, filePath: targetPath };
+  } catch (error) {
+    console.error('Failed to save project:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Show an Open dialog, read a .flourish / .zip project file from disk,
+ * and return its raw bytes to the renderer for import.
+ */
+ipcMain.handle('open-project-dialog', async (event) => {
+  try {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    const result = await dialog.showOpenDialog(targetWindow, {
+      title: 'Open Project',
+      defaultPath: defaultProjectsDir,
+      filters: [
+        { name: 'Flourish Projects', extensions: ['flourish', 'zip'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || !result.filePaths.length) {
+      return { success: false, canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    const fileBuffer = fs.readFileSync(filePath);
+
+    return {
+      success: true,
+      filePath,
+      fileName: path.basename(filePath),
+      data: fileBuffer, // Electron IPC serializes Buffer → Uint8Array in renderer
+    };
+  } catch (error) {
+    console.error('Failed to open project:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Read a project file from a known path (e.g. from Recent Projects or
+ * file-association double-click).  Returns raw file bytes.
+ */
+ipcMain.handle('read-project-file', async (_event, filePath) => {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: 'File not found: ' + filePath };
+    }
+    const fileBuffer = fs.readFileSync(filePath);
+    return {
+      success: true,
+      filePath,
+      fileName: path.basename(filePath),
+      data: fileBuffer,
+    };
+  } catch (error) {
+    console.error('Failed to read project file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * List all .flourish and .zip files in the default Projects directory
+ * so the ProjectHub can display them.
+ */
+ipcMain.handle('list-project-files', async () => {
+  try {
+    if (!fs.existsSync(defaultProjectsDir)) {
+      return { success: true, files: [] };
+    }
+
+    const entries = fs.readdirSync(defaultProjectsDir, { withFileTypes: true });
+    const files = entries
+      .filter((e) => e.isFile() && /\.(flourish|zip)$/i.test(e.name))
+      .map((e) => {
+        const fullPath = path.join(defaultProjectsDir, e.name);
+        const stat = fs.statSync(fullPath);
+        return {
+          name: e.name,
+          path: fullPath,
+          size: stat.size,
+          modified: stat.mtimeMs,
+        };
+      })
+      .sort((a, b) => b.modified - a.modified); // newest first
+
+    return { success: true, files };
+  } catch (error) {
+    console.error('Failed to list project files:', error);
+    return { success: false, error: error.message, files: [] };
+  }
+});
+
+/**
+ * Reveal a directory in the OS file explorer (Explorer / Finder).
+ */
+ipcMain.handle('reveal-in-explorer', async (_event, dirPath) => {
+  try {
+    if (fs.existsSync(dirPath)) {
+      shell.openPath(dirPath);
+      return { success: true };
+    }
+    return { success: false, error: 'Directory not found' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });

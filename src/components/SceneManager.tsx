@@ -114,10 +114,10 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     return (
         <div className="flex h-full overflow-hidden">
             {/* Left Sidebar - Scene List (2/3) + Command Palette (1/3) */}
-            <div className="panel border-r-2 border-slate-700 flex flex-col flex-shrink-0" style={{ width: 'var(--sidebar-width)', minWidth: '240px', maxWidth: '320px' }}>
+            <div className="panel border-r-2 border-[var(--border-subtle)] flex flex-col flex-shrink-0" style={{ width: 'var(--sidebar-width)', minWidth: '240px', maxWidth: '320px' }}>
                 {/* Scene List - 2/3 */}
-                <div className="flex-[2] flex flex-col border-b-2 border-slate-700 min-h-0">
-                    <div className="px-1.5 py-1 border-b border-slate-700 flex-shrink-0">
+                <div className="flex-[2] flex flex-col border-b-2 border-[var(--border-subtle)] min-h-0">
+                    <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0">
                         <h2 className="text-xs font-bold text-white flex items-center gap-1">
                             <BookOpenIcon className="w-3 h-3" />
                             Scenes
@@ -149,7 +149,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                         ))}
                     </div>
 
-                    <div className="px-1.5 py-1 border-t border-slate-700 flex-shrink-0">
+                    <div className="px-1.5 py-1 border-t border-[var(--border-subtle)] flex-shrink-0">
                         <button
                             onClick={addScene}
                             className="w-full bg-sky-500 hover:bg-sky-600 text-white py-1 px-1.5 rounded text-xs flex items-center justify-center gap-1 font-bold transition-colors"
@@ -202,13 +202,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({
             {/* Center - Staging Area (top) + Scene Editor (bottom) */}
             <div className="flex-1 flex flex-col min-w-[600px] panel border-r-2 overflow-hidden">
                 {/* Staging Area - Top - 60% */}
-                <div className="flex-[3] flex flex-col border-b-2 border-slate-700 min-h-0 overflow-hidden">
+                <div className="flex-[3] flex flex-col border-b-2 border-[var(--border-subtle)] min-h-0 overflow-hidden">
                     <div className="h-full p-2 overflow-hidden">
                         <StagingArea
                             project={project}
                             activeSceneId={activeSceneId}
                             selectedCommandIndex={selectedCommandIndex}
-                            className="h-full w-full border-2 border-slate-700 rounded-lg"
+                            className="h-full w-full border-2 border-[var(--border-subtle)] rounded-lg"
                             style={{ height: '100%' }}
                         />
                     </div>
@@ -305,10 +305,10 @@ const SceneItem: React.FC<SceneItemProps> = ({
                     ? 'border-2 border-sky-400 bg-sky-500/10'
                     : isSelected
                     ? 'bg-sky-500/20 border border-sky-500/50'
-                    : 'hover:bg-slate-700'
+                    : 'hover:bg-[var(--bg-secondary)]'
             }`}
         >
-            <BookOpenIcon className="w-3 h-3 text-slate-400 flex-shrink-0" />
+            <BookOpenIcon className="w-3 h-3 text-[var(--text-secondary)] flex-shrink-0" />
 
             <div className="flex-1 min-w-0 overflow-hidden">
                 {isRenaming ? (
@@ -318,7 +318,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
                         onChange={e => setRenameValue(e.target.value)}
                         onBlur={handleRenameBlur}
                         onKeyDown={handleRenameKeyDown}
-                        className="w-full bg-slate-900 text-white px-1 py-0.5 rounded text-xs outline-none ring-1 ring-sky-500"
+                        className="w-full bg-[var(--bg-primary)] text-white px-1 py-0.5 rounded text-xs outline-none ring-1 ring-sky-500"
                         onClick={e => e.stopPropagation()}
                         autoFocus
                     />
@@ -334,7 +334,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-                    className="p-0.5 text-slate-500 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-0.5 text-[var(--text-muted)] hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Duplicate Scene"
                 >
                     <DuplicateIcon className="w-3 h-3" />
@@ -345,7 +345,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
                     className={`p-0.5 rounded transition-colors ${
                         isStartScene
                             ? 'text-yellow-400 hover:text-yellow-300'
-                            : 'text-slate-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100'
+                            : 'text-[var(--text-muted)] hover:text-yellow-400 opacity-0 group-hover:opacity-100'
                     }`}
                     title="Set as Start Scene"
                 >
@@ -354,7 +354,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                    className="p-0.5 text-slate-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-0.5 text-[var(--text-muted)] hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Rename"
                 >
                     <PencilIcon className="w-3 h-3" />
@@ -362,7 +362,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    className="p-0.5 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-0.5 text-[var(--text-muted)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Delete"
                 >
                     <TrashIcon className="w-3 h-3" />

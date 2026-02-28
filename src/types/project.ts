@@ -4,6 +4,8 @@ import { VNCharacter } from '../features/character/types';
 import { VNScene } from '../features/scene/types';
 import { VNProjectUI, VNUIScreen } from '../features/ui/types';
 import { VNVariable } from '../features/variables/types';
+import { VNScript } from './scripting';
+import { PluginRegistryEntry, VNPlugin } from './plugins';
 
 export interface VNProjectFont {
     id: VNID;
@@ -71,4 +73,10 @@ export interface VNProject {
     };
     /** CG Gallery configuration for unlockable art gallery */
     cgGallery?: CGGalleryConfig;
+    /** User-defined scripts */
+    scripts?: Record<VNID, VNScript>;
+    /** Installed plugins */
+    plugins?: Record<string, VNPlugin>;
+    /** Plugin registry (enabled state + config per plugin) */
+    pluginRegistry?: Record<string, PluginRegistryEntry>;
 }

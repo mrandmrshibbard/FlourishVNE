@@ -238,8 +238,8 @@ const VariableManager: React.FC<VariableManagerProps> = ({
     return (
         <div className="flex h-full">
             {/* Variables List Sidebar */}
-            <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
-                <div className="p-4 border-b border-slate-700">
+            <div className="w-80 bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col">
+                <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <Cog6ToothIcon className="w-5 h-5" />
                         Variables
@@ -261,7 +261,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                     ))}
                 </div>
 
-                <div className="p-2 border-t border-slate-700">
+                <div className="p-2 border-t border-[var(--border-subtle)]">
                     <button
                         onClick={addVariable}
                         className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
@@ -281,7 +281,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                         onUpdate={(updates) => handleUpdateVariable(selectedVariableId, updates)}
                     />
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-400">
+                    <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
                         <div className="text-center">
                             <Cog6ToothIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
                             <p className="text-lg">Select a variable to inspect</p>
@@ -297,7 +297,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                     isOpen={true}
                     onClose={() => setDeleteConfirm(null)}
                     onConfirm={() => handleDeleteVariable(deleteConfirm.variableId)}
-                    title={deleteConfirm.usages.length > 0 ? "⚠️ Variable In Use" : "🗑️ Delete Variable"}
+                    title={deleteConfirm.usages.length > 0 ? "Variable In Use" : "Delete Variable"}
                     confirmLabel={deleteConfirm.usages.length > 0 ? "Delete Anyway" : "Delete"}
                 >
                     {deleteConfirm.usages.length > 0 ? (
@@ -311,11 +311,11 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                                 <ul className="space-y-1.5 text-sm">
                                     {deleteConfirm.usages.slice(0, 10).map((usage, i) => (
                                         <li key={i} className="flex items-start gap-2 text-[var(--text-secondary)]">
-                                            <span className="flex-shrink-0">
-                                                {usage.type === 'command' && '📜'}
-                                                {usage.type === 'condition' && '❓'}
-                                                {usage.type === 'ui-action' && '🔘'}
-                                                {usage.type === 'text-reference' && '💬'}
+                                            <span className="flex-shrink-0 text-xs font-mono">
+                                                {usage.type === 'command' && '→'}
+                                                {usage.type === 'condition' && '?'}
+                                                {usage.type === 'ui-action' && '○'}
+                                                {usage.type === 'text-reference' && '«»'}
                                             </span>
                                             <span>
                                                 <strong>{usage.location}</strong>
@@ -379,10 +379,10 @@ const VariableItem: React.FC<VariableItemProps> = ({
 
     const getTypeIcon = (type: string) => {
         switch (type) {
-            case 'number': return '🔢';
-            case 'string': return '📝';
-            case 'boolean': return '✅';
-            default: return '❓';
+            case 'number': return '#';
+            case 'string': return 'Aa';
+            case 'boolean': return '✓';
+            default: return '?';
         }
     };
 
@@ -401,7 +401,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
             className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
                 isSelected
                     ? `${sc.bg} border ${sc.border}`
-                    : 'hover:bg-slate-700'
+                    : 'hover:bg-[var(--bg-secondary)]'
             }`}
         >
             <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 text-sm border ${sc.bg} ${sc.border}`}>
@@ -416,7 +416,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
                         onChange={e => setRenameValue(e.target.value)}
                         onBlur={handleRenameBlur}
                         onKeyDown={handleRenameKeyDown}
-                        className="w-full bg-slate-900 text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
+                        className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
                         onClick={e => e.stopPropagation()}
                         autoFocus
                     />
@@ -429,13 +429,13 @@ const VariableItem: React.FC<VariableItemProps> = ({
                 <span className={`text-[10px] capitalize px-1.5 py-0.5 rounded ${sc.bg} ${sc.text} border ${sc.border}`}>
                     {sc.label}
                 </span>
-                <span className="text-xs text-slate-400 capitalize px-2 py-1 bg-slate-600 rounded">
+                <span className="text-xs text-[var(--text-secondary)] capitalize px-2 py-1 bg-[var(--bg-tertiary)] rounded">
                     {variable.type}
                 </span>
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                    className="p-1 text-slate-500 hover:text-sky-400 transition-opacity"
+                    className="p-1 text-[var(--text-muted)] hover:text-sky-400 transition-opacity"
                     title="Rename"
                 >
                     <PencilIcon className="w-3 h-3" />
@@ -468,7 +468,7 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
 
     if (!variable) {
         return (
-            <div className="flex-1 flex items-center justify-center text-slate-400">
+            <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
                 <p>Variable not found</p>
             </div>
         );
@@ -510,25 +510,25 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
 
             <div className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Scope</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Scope</label>
                     <select
                         value={currentScope}
                         onChange={(e) => onUpdate({ scope: e.target.value as VNVariableScope })}
-                        className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                     >
                         <option value="local">🟢 Local (scene-scoped)</option>
                         <option value="global">🔵 Global (playthrough)</option>
                         <option value="persistent">🟡 Persistent (cross-session)</option>
                     </select>
-                    <p className="text-xs text-slate-400 mt-1">{scopeDescriptions[currentScope]}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">{scopeDescriptions[currentScope]}</p>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Type</label>
                     <select
                         value={variable.type}
                         onChange={(e) => handleTypeChange(e.target.value as 'number' | 'string' | 'boolean')}
-                        className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                     >
                         <option value="number">Number</option>
                         <option value="string">String</option>
@@ -537,12 +537,12 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Default Value</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Default Value</label>
                     {variable.type === 'boolean' ? (
                         <select
                             value={variable.defaultValue ? 'true' : 'false'}
                             onChange={(e) => handleDefaultValueChange(e.target.value === 'true')}
-                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         >
                             <option value="false">False</option>
                             <option value="true">True</option>
@@ -552,25 +552,25 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                             type="number"
                             value={variable.defaultValue}
                             onChange={(e) => handleDefaultValueChange(parseFloat(e.target.value) || 0)}
-                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         />
                     ) : (
                         <input
                             type="text"
                             value={variable.defaultValue}
                             onChange={(e) => handleDefaultValueChange(e.target.value)}
-                            className="w-full bg-slate-800 text-white p-2 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         />
                     )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-slate-700">
+                <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-[var(--border-subtle)]">
                     <div>
-                        <span className="text-slate-400">ID:</span>
+                        <span className="text-[var(--text-secondary)]">ID:</span>
                         <span className="text-white ml-2 font-mono text-xs">{variable.id}</span>
                     </div>
                     <div>
-                        <span className="text-slate-400">Type:</span>
+                        <span className="text-[var(--text-secondary)]">Type:</span>
                         <span className="text-white ml-2 capitalize">{variable.type}</span>
                     </div>
                 </div>

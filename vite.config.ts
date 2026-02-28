@@ -33,7 +33,6 @@ export default defineConfig(({ mode }) => {
               if (id.includes('react-dom')) return 'react-vendor';
 
               if (id.includes('monaco-editor')) return 'monaco';
-              if (id.includes('reactflow')) return 'reactflow';
 
               return 'vendor';
             },

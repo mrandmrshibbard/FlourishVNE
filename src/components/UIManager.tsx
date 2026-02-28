@@ -98,8 +98,8 @@ const UIManager: React.FC<UIManagerProps> = ({
     return (
         <div className="flex h-full">
             {/* UI Screen List Sidebar */}
-            <div className="bg-slate-800 border-r border-slate-700 flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
-                <div className="p-4 border-b border-slate-700">
+            <div className="bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
+                <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <BookmarkSquareIcon className="w-5 h-5" />
                         UI Screens
@@ -126,7 +126,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                     })}
                 </div>
 
-                <div className="p-2 border-t border-slate-700 space-y-2">
+                <div className="p-2 border-t border-[var(--border-subtle)] space-y-2">
                     <button
                         onClick={addUIScreen}
                         className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
@@ -137,7 +137,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                     <UIScreenThemeSelector label="Apply Theme to All" className="w-full [&>button]:w-full [&>button]:justify-center" />
                     <button
                         onClick={openRestoreModal}
-                        className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
+                        className="w-full bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
                     >
                         Restore Default Screens
                     </button>
@@ -153,7 +153,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                         setSelectedElementIds={setSelectedUIElementIds}
                     />
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-400">
+                    <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
                         <div className="text-center">
                             <BookmarkSquareIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
                             <p className="text-lg">Select a UI screen to edit</p>
@@ -220,10 +220,10 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
             className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
                 isSelected
                     ? 'bg-sky-500/20 border border-sky-500/50'
-                    : 'hover:bg-slate-700'
+                    : 'hover:bg-[var(--bg-secondary)]'
             }`}
         >
-            <BookmarkSquareIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <BookmarkSquareIcon className="w-4 h-4 text-[var(--text-secondary)] flex-shrink-0" />
 
             <div className="flex-grow truncate">
                 {isRenaming && !isSpecial ? (
@@ -233,7 +233,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                         onChange={e => setRenameValue(e.target.value)}
                         onBlur={handleRenameBlur}
                         onKeyDown={handleRenameKeyDown}
-                        className="w-full bg-slate-900 text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
+                        className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
                         onClick={e => e.stopPropagation()}
                         autoFocus
                     />
@@ -244,12 +244,12 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 
             <div className="flex items-center gap-1 flex-shrink-0">
                 {isSpecial && (
-                    <LockClosedIcon className="w-4 h-4 text-slate-500" title="This screen is essential and cannot be deleted or renamed." />
+                    <LockClosedIcon className="w-4 h-4 text-[var(--text-muted)]" title="This screen is essential and cannot be deleted or renamed." />
                 )}
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-                    className="p-1 text-sky-400 hover:text-sky-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                    className="p-1 text-sky-400 hover:text-sky-300 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
                     title="Duplicate"
                 >
                     <DuplicateIcon className="w-3 h-3" />
@@ -259,7 +259,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     <>
                         <button
                             onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                            className="p-1 text-slate-400 hover:text-sky-400 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                            className="p-1 text-[var(--text-secondary)] hover:text-sky-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
                             title="Rename"
                         >
                             <PencilIcon className="w-3 h-3" />
@@ -267,7 +267,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                            className="p-1 text-slate-400 hover:text-red-400 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                            className="p-1 text-[var(--text-secondary)] hover:text-red-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
                             title="Delete"
                         >
                             <TrashIcon className="w-3 h-3" />

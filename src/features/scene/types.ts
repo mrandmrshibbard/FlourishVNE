@@ -72,6 +72,7 @@ export enum CommandType {
     HideButton = 'HideButton',
     CreditRoll = 'CreditRoll',
     Group = 'Group', // Visual grouping only, no execution
+    RunScript = 'RunScript', // Execute a user-defined script
 }
 
 interface BaseCommand {
@@ -178,12 +179,12 @@ export interface PlayMusicCommand extends BaseCommand {
     type: CommandType.PlayMusic;
     audioId: VNID;
     loop: boolean;
-    fadeDuration: number;
+    fadeDuration: number; // in seconds
     volume?: number; // optional per-command volume override (0-1)
 }
 export interface StopMusicCommand extends BaseCommand {
     type: CommandType.StopMusic;
-    fadeDuration: number;
+    fadeDuration: number; // in seconds
 }
 export interface PlaySoundEffectCommand extends BaseCommand {
     type: CommandType.PlaySoundEffect;
@@ -225,30 +226,30 @@ export interface WaitCommand extends BaseCommand {
 }
 export interface ShakeScreenCommand extends BaseCommand {
     type: CommandType.ShakeScreen;
-    duration: number;
+    duration: number; // in seconds
     intensity: number;
 }
 
 export interface TintScreenCommand extends BaseCommand {
     type: CommandType.TintScreen;
     color: string;
-    duration: number;
+    duration: number; // in seconds
 }
 export interface PanZoomScreenCommand extends BaseCommand {
     type: CommandType.PanZoomScreen;
     zoom: number;
-    panX: number; // percentage
-    panY: number; // percentage
-    duration: number;
+    panX: number; // percentage (0-100)
+    panY: number; // percentage (0-100)
+    duration: number; // in seconds
 }
 export interface ResetScreenEffectsCommand extends BaseCommand {
     type: CommandType.ResetScreenEffects;
-    duration: number;
+    duration: number; // in seconds
 }
 export interface FlashScreenCommand extends BaseCommand {
     type: CommandType.FlashScreen;
     color: string;
-    duration: number;
+    duration: number; // in seconds
 }
 
 export interface SetScreenOverlayEffectCommand extends BaseCommand {
@@ -469,13 +470,21 @@ export interface CreditBackground {
     objectFit?: 'cover' | 'contain' | 'fill' | 'custom';
 }
 
+export interface RunScriptCommand extends BaseCommand {
+    type: CommandType.RunScript;
+    /** ID of the script to execute (references project.scripts) */
+    scriptId: VNID;
+    /** Whether to wait for async scripts to complete before advancing */
+    waitForCompletion: boolean;
+}
+
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
-  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand;
+  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand;
 
 export interface VNScene {
     id: VNID;

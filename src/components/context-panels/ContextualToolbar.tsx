@@ -11,6 +11,13 @@
 import React, { useMemo, useCallback } from 'react';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
+import {
+  ChatBubbleIcon, BranchIcon, VariablesIcon, PlayIcon, FaceSmileIcon,
+  ShirtIcon, DuplicateIcon, CursorClickIcon, DocumentTextIcon, PhotoIcon,
+  SearchIcon, ArrowsUpDownIcon, StarIcon, QuestionMarkIcon, BoltIcon,
+  CheckIcon, PlusIcon, BugIcon, ArrowDownTrayIcon, UploadIcon, FolderIcon,
+  ArrowLeftIcon, ArrowRightIcon, XMarkIcon
+} from '../icons';
 
 /**
  * Tool definition
@@ -75,7 +82,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-dialogue',
             label: 'Add Dialogue',
-            icon: <span>💬</span>,
+            icon: <ChatBubbleIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-dialogue'),
             tooltip: 'Add dialogue command (Alt+D)',
             shortcut: 'Alt+D'
@@ -83,7 +90,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-choice',
             label: 'Add Choice',
-            icon: <span>🔀</span>,
+            icon: <BranchIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-choice'),
             tooltip: 'Add choice command (Alt+C)',
             shortcut: 'Alt+C'
@@ -91,7 +98,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-variable',
             label: 'Set Variable',
-            icon: <span>📊</span>,
+            icon: <VariablesIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-variable'),
             tooltip: 'Add variable command (Alt+V)',
             shortcut: 'Alt+V'
@@ -99,7 +106,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'preview-scene',
             label: 'Preview',
-            icon: <span>▶️</span>,
+            icon: <PlayIcon className="w-4 h-4" />,
             action: () => onToolAction?.('preview-scene'),
             tooltip: 'Preview scene (F5)',
             shortcut: 'F5',
@@ -112,21 +119,21 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-expression',
             label: 'Add Expression',
-            icon: <span>😊</span>,
+            icon: <FaceSmileIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-expression'),
             tooltip: 'Add new expression',
           },
           {
             id: 'add-outfit',
             label: 'Add Outfit',
-            icon: <span>👔</span>,
+            icon: <ShirtIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-outfit'),
             tooltip: 'Add outfit variant',
           },
           {
             id: 'duplicate-character',
             label: 'Duplicate',
-            icon: <span>📋</span>,
+            icon: <DuplicateIcon className="w-4 h-4" />,
             action: () => onToolAction?.('duplicate-character'),
             tooltip: 'Duplicate character (Ctrl+D)',
             shortcut: 'Ctrl+D'
@@ -138,28 +145,28 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-button',
             label: 'Add Button',
-            icon: <span>🔘</span>,
+            icon: <CursorClickIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-button'),
             tooltip: 'Add button element',
           },
           {
             id: 'add-text',
             label: 'Add Text',
-            icon: <span>📝</span>,
+            icon: <DocumentTextIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-text'),
             tooltip: 'Add text element',
           },
           {
             id: 'add-image',
             label: 'Add Image',
-            icon: <span>🖼️</span>,
+            icon: <PhotoIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-image'),
             tooltip: 'Add image element',
           },
           {
             id: 'preview-ui',
             label: 'Preview',
-            icon: <span>▶️</span>,
+            icon: <PlayIcon className="w-4 h-4" />,
             action: () => onToolAction?.('preview-ui'),
             tooltip: 'Preview UI screen (F5)',
             shortcut: 'F5',
@@ -172,21 +179,21 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'filter-templates',
             label: 'Filter',
-            icon: <span>🔍</span>,
+            icon: <SearchIcon className="w-4 h-4" />,
             action: () => onToolAction?.('filter-templates'),
             tooltip: 'Filter templates',
           },
           {
             id: 'sort-templates',
             label: 'Sort',
-            icon: <span>↕️</span>,
+            icon: <ArrowsUpDownIcon className="w-4 h-4" />,
             action: () => onToolAction?.('sort-templates'),
             tooltip: 'Sort templates',
           },
           {
             id: 'favorites-only',
             label: 'Favorites',
-            icon: <span>⭐</span>,
+            icon: <StarIcon className="w-4 h-4" />,
             action: () => onToolAction?.('favorites-only'),
             tooltip: 'Show favorites only',
           }
@@ -197,21 +204,21 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-condition',
             label: 'Add Condition',
-            icon: <span>❓</span>,
+            icon: <QuestionMarkIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-condition'),
             tooltip: 'Add condition node',
           },
           {
             id: 'add-action',
             label: 'Add Action',
-            icon: <span>⚡</span>,
+            icon: <BoltIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-action'),
             tooltip: 'Add action node',
           },
           {
             id: 'validate-logic',
             label: 'Validate',
-            icon: <span>✓</span>,
+            icon: <CheckIcon className="w-4 h-4" />,
             action: () => onToolAction?.('validate-logic'),
             tooltip: 'Validate logic flow',
             variant: 'primary'
@@ -223,7 +230,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'add-variable',
             label: 'Add Variable',
-            icon: <span>➕</span>,
+            icon: <PlusIcon className="w-4 h-4" />,
             action: () => onToolAction?.('add-variable'),
             tooltip: 'Add new variable (Alt+N)',
             shortcut: 'Alt+N',
@@ -232,14 +239,14 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'debug-variables',
             label: 'Debug',
-            icon: <span>🐛</span>,
+            icon: <BugIcon className="w-4 h-4" />,
             action: () => onToolAction?.('debug-variables'),
             tooltip: 'Open variable debugger',
           },
           {
             id: 'export-variables',
             label: 'Export',
-            icon: <span>📤</span>,
+            icon: <ArrowDownTrayIcon className="w-4 h-4" />,
             action: () => onToolAction?.('export-variables'),
             tooltip: 'Export variable definitions',
           }
@@ -250,7 +257,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'import-assets',
             label: 'Import',
-            icon: <span>📥</span>,
+            icon: <UploadIcon className="w-4 h-4" />,
             action: () => onToolAction?.('import-assets'),
             tooltip: 'Import assets',
             variant: 'primary'
@@ -258,14 +265,14 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'organize-assets',
             label: 'Organize',
-            icon: <span>📁</span>,
+            icon: <FolderIcon className="w-4 h-4" />,
             action: () => onToolAction?.('organize-assets'),
             tooltip: 'Organize assets',
           },
           {
             id: 'unused-assets',
             label: 'Find Unused',
-            icon: <span>🔎</span>,
+            icon: <SearchIcon className="w-4 h-4" />,
             action: () => onToolAction?.('unused-assets'),
             tooltip: 'Find unused assets',
           }
@@ -276,14 +283,14 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'wizard-back',
             label: 'Back',
-            icon: <span>◀️</span>,
+            icon: <ArrowLeftIcon className="w-4 h-4" />,
             action: () => onToolAction?.('wizard-back'),
             tooltip: 'Previous step',
           },
           {
             id: 'wizard-next',
             label: 'Next',
-            icon: <span>▶️</span>,
+            icon: <ArrowRightIcon className="w-4 h-4" />,
             action: () => onToolAction?.('wizard-next'),
             tooltip: 'Next step',
             variant: 'primary'
@@ -291,7 +298,7 @@ export const ContextualToolbar: React.FC<ContextualToolbarProps> = ({
           {
             id: 'wizard-cancel',
             label: 'Cancel',
-            icon: <span>✖️</span>,
+            icon: <XMarkIcon className="w-4 h-4" />,
             action: () => onToolAction?.('wizard-cancel'),
             tooltip: 'Cancel wizard',
             variant: 'danger'

@@ -125,6 +125,31 @@ const ConditionsEditor: React.FC<{
     );
 };
 
+/** Collapsible section for organizing inspector properties */
+const CollapsibleSection: React.FC<{
+    title: string;
+    defaultOpen?: boolean;
+    badge?: string;
+    hint?: string;
+    children: React.ReactNode;
+}> = ({ title, defaultOpen = false, badge, hint, children }) => {
+    const [isOpen, setIsOpen] = React.useState(defaultOpen);
+    return (
+        <div className="rounded-lg overflow-hidden border border-slate-700/60">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-700/30 transition-colors text-left"
+            >
+                <span className={`text-[10px] text-slate-500 transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
+                <span className="text-xs font-semibold text-slate-300 flex-1">{title}</span>
+                {badge && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-400">{badge}</span>}
+            </button>
+            {hint && !isOpen && <p className="text-[10px] text-slate-500 px-3 pb-2 -mt-1">{hint}</p>}
+            {isOpen && <div className="px-3 pb-3 border-t border-slate-700/40 pt-2">{children}</div>}
+        </div>
+    );
+};
+
 const generateOptionId = () => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
         return crypto.randomUUID();
@@ -306,43 +331,54 @@ const UIElementInspector: React.FC<{
                 <FormField label="Width %"><TextInput type="number" value={element.width} onChange={e => updateElement({ width: parseFloat(e.target.value) || 0 })} /></FormField>
                 <FormField label="Height %"><TextInput type="number" value={element.height} onChange={e => updateElement({ height: parseFloat(e.target.value) || 0 })} /></FormField>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-                <FormField label="Anchor X (0-1)"><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
-                <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
-            </div>
             
             <FormField label={`Opacity: ${Math.round((element.opacity ?? 1) * 100)}%`}>
                 <input type="range" min="0" max="1" step="0.01" value={element.opacity ?? 1} onChange={e => updateElement({ opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
             </FormField>
             
-            <h3 className="font-bold mt-3 mb-2 text-slate-400">Element Transition</h3>
-            <div className="grid grid-cols-2 gap-2">
-                <FormField label="Transition In">
-                    <Select value={element.transitionIn || 'fade'} onChange={e => updateElement({ transitionIn: e.target.value as any })}>
-                        <option value="none">None</option>
-                        <option value="fade">Fade</option>
-                        <option value="slideUp">Slide Up</option>
-                        <option value="slideDown">Slide Down</option>
-                        <option value="slideLeft">Slide Left</option>
-                        <option value="slideRight">Slide Right</option>
-                        <option value="scale">Scale</option>
-                    </Select>
-                </FormField>
-                <FormField label="Duration (ms)">
-                    <TextInput type="number" value={element.transitionDuration || 300} onChange={e => updateElement({ transitionDuration: parseInt(e.target.value) || 300 })} />
-                </FormField>
+            <div className="space-y-2 mt-3">
+                <CollapsibleSection title="Position & Anchor" hint="Fine-tune anchor point">
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                        <FormField label="Anchor X (0-1)"><TextInput type="number" step="0.1" value={element.anchorX} onChange={e => updateElement({ anchorX: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label="Anchor Y (0-1)"><TextInput type="number" step="0.1" value={element.anchorY} onChange={e => updateElement({ anchorY: parseFloat(e.target.value) || 0 })} /></FormField>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Transition" hint={`${element.transitionIn || 'fade'} ${element.transitionDuration || 300}ms`}>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                        <FormField label="Transition In">
+                            <Select value={element.transitionIn || 'fade'} onChange={e => updateElement({ transitionIn: e.target.value as any })}>
+                                <option value="none">None</option>
+                                <option value="fade">Fade</option>
+                                <option value="slideUp">Slide Up</option>
+                                <option value="slideDown">Slide Down</option>
+                                <option value="slideLeft">Slide Left</option>
+                                <option value="slideRight">Slide Right</option>
+                                <option value="scale">Scale</option>
+                            </Select>
+                        </FormField>
+                        <FormField label="Duration (ms)">
+                            <TextInput type="number" value={element.transitionDuration || 300} onChange={e => updateElement({ transitionDuration: parseInt(e.target.value) || 300 })} />
+                        </FormField>
+                    </div>
+                    <FormField label="Delay (ms)">
+                        <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} />
+                    </FormField>
+                </CollapsibleSection>
+                
+                <CollapsibleSection 
+                    title="Visibility Conditions" 
+                    hint="Show/hide based on variables"
+                    badge={element.conditions?.length ? String(element.conditions.length) : undefined}
+                >
+                    <p className="text-[10px] text-slate-500 mb-2">This element will only be visible if all conditions are met.</p>
+                    <ConditionsEditor 
+                        conditions={element.conditions} 
+                        project={project} 
+                        onChange={(cs) => updateElement({ conditions: cs })}
+                    />
+                </CollapsibleSection>
             </div>
-            <FormField label="Delay (ms)">
-                <TextInput type="number" value={element.transitionDelay || 0} onChange={e => updateElement({ transitionDelay: parseInt(e.target.value) || 0 })} />
-            </FormField>
-            
-            <h3 className="font-bold mt-3 mb-2 text-slate-400">Visibility Conditions</h3>
-            <p className="text-xs text-slate-500 mb-2">This element will only be visible if all conditions are met.</p>
-            <ConditionsEditor 
-                conditions={element.conditions} 
-                project={project} 
-                onChange={(cs) => updateElement({ conditions: cs })}
-            />
         </>
     );
 
@@ -838,7 +874,14 @@ const UIElementInspector: React.FC<{
                 const el = element as UICharacterPreviewElement;
                 const character = el.characterId ? project.characters[el.characterId] : null;
                 const stringVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'string');
+                const layerCount = character ? Object.keys(character.layers).length : 0;
+                const mappedCount = character ? Object.values(el.layerVariableMap || {}).filter(Boolean).length : 0;
+                
                 return <>
+                    <p className="text-xs text-slate-400 mb-3">
+                        Displays a live preview of the character, updating automatically as the player makes customization choices.
+                    </p>
+
                     <FormField label="Character">
                         <Select value={el.characterId || ''} onChange={e => {
                             const newCharId = e.target.value;
@@ -866,43 +909,55 @@ const UIElementInspector: React.FC<{
                         </FormField>
                     )}
                     
-                    {character && Object.keys(character.layers).length > 0 && (
-                        <>
-                            <h3 className="font-bold my-2 text-slate-400">Layer Variable Mappings</h3>
-                            <p className="text-xs text-slate-400 mb-2">
-                                Map layers to string variables containing asset IDs to dynamically control assets. Layers without mappings will use the default expression.
-                            </p>
-                            
-                            {Object.values(character.layers).map((layerUnknown: unknown) => {
-                                const layer = layerUnknown as VNCharacterLayer;
-                                return (
-                                    <FormField key={layer.id} label={layer.name}>
-                                        <Select 
-                                            value={el.layerVariableMap[layer.id] || ''} 
-                                            onChange={e => {
-                                                const newMap = { ...el.layerVariableMap };
-                                                if (e.target.value) {
-                                                    newMap[layer.id] = e.target.value;
-                                                } else {
-                                                    delete newMap[layer.id];
-                                                }
-                                                updateElement({ layerVariableMap: newMap });
-                                            }}
-                                        >
-                                            <option value="">None (use default expression)</option>
-                                            {stringVariables.map(v => (
-                                                <option key={v.id} value={v.id}>{v.name}</option>
-                                            ))}
-                                        </Select>
-                                    </FormField>
-                                );
-                            })}
-                        </>
+                    {character && layerCount > 0 && (
+                        <div className="mt-3">
+                            <CollapsibleSection 
+                                title="Layer Connections" 
+                                defaultOpen={true}
+                                badge={`${mappedCount}/${layerCount}`}
+                                hint="Which variable drives each layer"
+                            >
+                                <p className="text-[10px] text-slate-500 mb-2">
+                                    Connect each layer to the variable set by its Asset Cycler. The preview will update live as the player cycles through options.
+                                </p>
+                                {mappedCount === 0 && layerCount > 0 && (
+                                    <p className="text-[10px] text-amber-400/70 mb-2">
+                                        💡 Tip: Use the Character Customization Wizard to auto-configure these mappings.
+                                    </p>
+                                )}
+                                
+                                {Object.values(character.layers).map((layerUnknown: unknown) => {
+                                    const layer = layerUnknown as VNCharacterLayer;
+                                    const isMapped = !!el.layerVariableMap[layer.id];
+                                    return (
+                                        <FormField key={layer.id} label={layer.name}>
+                                            <Select 
+                                                value={el.layerVariableMap[layer.id] || ''} 
+                                                onChange={e => {
+                                                    const newMap = { ...el.layerVariableMap };
+                                                    if (e.target.value) {
+                                                        newMap[layer.id] = e.target.value;
+                                                    } else {
+                                                        delete newMap[layer.id];
+                                                    }
+                                                    updateElement({ layerVariableMap: newMap });
+                                                }}
+                                            >
+                                                <option value="">None (use default expression)</option>
+                                                {stringVariables.map(v => (
+                                                    <option key={v.id} value={v.id}>{v.name}</option>
+                                                ))}
+                                            </Select>
+                                        </FormField>
+                                    );
+                                })}
+                            </CollapsibleSection>
+                        </div>
                     )}
                     
-                    {character && Object.keys(character.layers).length === 0 && (
+                    {character && layerCount === 0 && (
                         <p className="text-xs text-slate-400 mt-2">
-                            This character has no layers. Add layers to enable variable-driven customization.
+                            This character has no layers yet. Add layers in the Characters tab to enable customization.
                         </p>
                     )}
                 </>
@@ -1287,8 +1342,17 @@ const UIElementInspector: React.FC<{
                 const el = element as UIAssetCyclerElement;
                 const character = project.characters[el.characterId];
                 const layer = character?.layers[el.layerId];
+                const assetCount = layer ? Object.keys(layer.assets).length : 0;
+                const selectedCount = el.assetIds?.length || 0;
+                const hasConditions = (el.assetConditions && el.assetConditions.length > 0) || !!el.filterPattern;
+                
                 return <>
-                    <h3 className="font-bold my-2 text-slate-400">Character & Layer</h3>
+                    {/* Brief description */}
+                    <p className="text-xs text-slate-400 mb-3">
+                        Lets the player cycle through appearance options (e.g., hair styles, skin tones) using arrow buttons.
+                    </p>
+
+                    {/* ── ESSENTIALS: Character, Layer, Label ── */}
                     <FormField label="Character">
                         <Select value={el.characterId} onChange={e => {
                             const charId = e.target.value as VNID;
@@ -1296,355 +1360,245 @@ const UIElementInspector: React.FC<{
                             const firstLayerId = char ? Object.keys(char.layers)[0] : '';
                             const firstLayer = firstLayerId && char ? char.layers[firstLayerId] : null;
                             const assetIds = firstLayer ? Object.keys(firstLayer.assets) : [];
-                            
-                            updateElement({ 
-                                characterId: charId,
-                                layerId: firstLayerId,
-                                assetIds
-                            });
+                            updateElement({ characterId: charId, layerId: firstLayerId, assetIds });
                         }}>
-                            <option value="">-- Select Character --</option>
+                            <option value="">Select Character...</option>
                             {Object.values(project.characters).map((c: VNCharacter) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </Select>
                     </FormField>
 
-                    <FormField label="Layer">
+                    <FormField label="Layer to Customize">
                         <Select value={el.layerId} onChange={e => {
                             const layerId = e.target.value as VNID;
                             const newLayer = character?.layers[layerId];
                             const assetIds = newLayer ? Object.keys(newLayer.assets) : [];
-                            
-                            updateElement({ 
-                                layerId,
-                                assetIds
-                            });
+                            updateElement({ layerId, assetIds });
                         }}>
-                            <option value="">-- Select Layer --</option>
+                            <option value="">Select Layer...</option>
                             {character && Object.values(character.layers).map((l: VNCharacterLayer) => (
-                                <option key={l.id} value={l.id}>{l.name}</option>
+                                <option key={l.id} value={l.id}>{l.name} ({Object.keys(l.assets).length} assets)</option>
                             ))}
                         </Select>
                     </FormField>
-
-                    <h3 className="font-bold my-2 text-slate-400">Assets to Cycle</h3>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                        {layer && Object.values(layer.assets).map((asset: VNLayerAsset) => {
-                            const isSelected = el.assetIds.includes(asset.id);
-                            return (
-                                <div key={asset.id} className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={e => {
-                                            const newAssetIds = e.target.checked
-                                                ? [...el.assetIds, asset.id]
-                                                : el.assetIds.filter(id => id !== asset.id);
-                                            updateElement({ assetIds: newAssetIds });
-                                        }}
-                                    />
-                                    <span className="text-sm">{asset.name}</span>
-                                </div>
-                            );
-                        })}
-                        {(!layer || Object.keys(layer.assets).length === 0) && (
-                            <div className="text-sm text-slate-500 italic">No assets available</div>
-                        )}
-                    </div>
-
-                    <h3 className="font-bold my-2 text-slate-400">Variable</h3>
-                    <FormField label="Variable to Store Selection">
-                        <Select value={el.variableId} onChange={e => updateElement({ variableId: e.target.value as VNID })}>
-                            <option value="">-- Select Variable --</option>
-                            {Object.values(project.variables).map(v => {
-                                const varItem = v as VNVariable;
-                                return <option key={varItem.id} value={varItem.id}>{varItem.name} ({varItem.type})</option>;
-                            })}
-                        </Select>
-                    </FormField>
-
-                    <h3 className="font-bold my-2 text-slate-400">Label & Display</h3>
-                    <FormField label="Label (optional)">
+                    
+                    <FormField label="Label">
                         <TextInput 
                             value={el.label || ''}
                             onChange={e => updateElement({ label: e.target.value })}
                             placeholder="e.g., Hair Color"
                         />
                     </FormField>
-                    <FormField label="Visible">
-                        <input
-                            type="checkbox"
-                            checked={el.visible !== false}
-                            onChange={e => updateElement({ visible: e.target.checked })}
-                        />
-                    </FormField>
-                    <FormField label="Show Asset Name">
-                        <input
-                            type="checkbox"
-                            checked={el.showAssetName !== false}
-                            onChange={e => updateElement({ showAssetName: e.target.checked })}
-                        />
-                    </FormField>
+                    
+                    <div className="flex items-center gap-4 my-2">
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" checked={el.showAssetName !== false} onChange={e => updateElement({ showAssetName: e.target.checked })} className="accent-purple-500" />
+                            Show name
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" checked={el.visible !== false} onChange={e => updateElement({ visible: e.target.checked })} className="accent-purple-500" />
+                            Visible
+                        </label>
+                    </div>
 
-                    <h3 className="font-bold my-2 text-slate-400">Dynamic Filtering (Optional)</h3>
-                    <p className="text-xs text-slate-400 mb-2">
-                        Filter which assets show based on other variables. Use {'{varId}'} in the pattern to insert variable values.
-                    </p>
-                    <FormField label="Filter Variables">
-                        <div className="flex flex-col gap-2">
-                            {(el.filterVariableIds || []).map((varId, index) => (
-                                <div key={index} className="flex gap-2 items-center">
-                                    <Select 
-                                        value={varId} 
-                                        onChange={e => {
-                                            const newIds = [...(el.filterVariableIds || [])];
-                                            newIds[index] = e.target.value as VNID;
-                                            updateElement({ filterVariableIds: newIds });
-                                        }}
-                                        className="flex-1"
-                                    >
-                                        <option value="">-- Select Variable --</option>
-                                        {Object.values(project.variables).filter(v => (v as VNVariable).type === 'string').map(v => {
-                                            const varItem = v as VNVariable;
-                                            return <option key={varItem.id} value={varItem.id}>{varItem.name}</option>;
-                                        })}
-                                    </Select>
-                                    <button
-                                        onClick={() => {
-                                            const newIds = (el.filterVariableIds || []).filter((_, i) => i !== index);
-                                            updateElement({ filterVariableIds: newIds.length > 0 ? newIds : undefined });
-                                        }}
-                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-sm"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            ))}
-                            <button
-                                onClick={() => {
-                                    const newIds = [...(el.filterVariableIds || []), Object.keys(project.variables)[0] || ''];
-                                    updateElement({ filterVariableIds: newIds });
-                                }}
-                                className="px-3 py-1 bg-[var(--accent-purple)] hover:opacity-80 rounded text-sm"
-                            >
-                                + Add Filter Variable
-                            </button>
-                        </div>
-                    </FormField>
-                    <FormField label="Filter Pattern">
-                        <TextInput 
-                            value={el.filterPattern || ''}
-                            onChange={e => updateElement({ filterPattern: e.target.value })}
-                            placeholder="e.g., {var-abc123}_{var-def456}"
-                        />
-                        <div className="text-xs text-slate-400 mt-1">
-                            Use {'{varId}'} to insert variable values. Copy variable IDs from the dropdowns above.
-                            <br />Example: If variables are "slim" and "light", pattern "{'{body_type}'}_{'{skin_tone}'}" matches "slim_light"
-                        </div>
-                    </FormField>
-
-                    <h3 className="font-bold my-2 text-slate-400">Asset Conditions (Simpler Alternative)</h3>
-                    <p className="text-xs text-slate-400 mb-2">
-                        Define when each asset should appear based on other variable values. 
-                        This is easier than filter patterns for most use cases.
-                    </p>
-                    {/* Asset Conditions Editor */}
-                    {el.assetConditions && el.assetConditions.length > 0 ? (
-                        <div className="space-y-3 max-h-60 overflow-y-auto">
-                            {el.assetConditions.map((assetCond, condIndex) => {
-                                const asset = layer?.assets[assetCond.assetId];
-                                return (
-                                    <div key={condIndex} className="p-2 bg-slate-800 rounded border border-slate-600">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-sm font-medium text-purple-300">
-                                                {asset?.name || assetCond.assetId}
-                                            </span>
-                                            <button
-                                                onClick={() => {
-                                                    const newConditions = el.assetConditions!.filter((_, i) => i !== condIndex);
-                                                    updateElement({ assetConditions: newConditions.length > 0 ? newConditions : undefined });
-                                                }}
-                                                className="text-red-400 hover:text-red-300 text-xs"
-                                            >
-                                                Remove
-                                            </button>
-                                        </div>
-                                        
-                                        {assetCond.conditions.length === 0 && (
-                                            <div className="text-xs text-slate-500 italic mb-2">No conditions (always visible)</div>
-                                        )}
-                                        
-                                        {assetCond.conditions.map((cond, subIndex) => {
-                                            const condVar = project.variables[cond.variableId];
-                                            return (
-                                                <div key={subIndex} className="flex gap-1 items-center mb-1 text-xs">
-                                                    <Select 
-                                                        value={cond.variableId}
-                                                        onChange={e => {
-                                                            const newConditions = [...el.assetConditions!];
-                                                            newConditions[condIndex] = {
-                                                                ...newConditions[condIndex],
-                                                                conditions: newConditions[condIndex].conditions.map((c, i) => 
-                                                                    i === subIndex ? { ...c, variableId: e.target.value as VNID } : c
-                                                                )
-                                                            };
-                                                            updateElement({ assetConditions: newConditions });
-                                                        }}
-                                                        className="flex-1 text-xs"
-                                                    >
-                                                        <option value="">-- Variable --</option>
-                                                        {Object.values(project.variables).map(v => {
-                                                            const varItem = v as VNVariable;
-                                                            return <option key={varItem.id} value={varItem.id}>{varItem.name}</option>;
-                                                        })}
-                                                    </Select>
-                                                    <span>=</span>
-                                                    <TextInput 
-                                                        value={cond.value}
-                                                        onChange={e => {
-                                                            const newConditions = [...el.assetConditions!];
-                                                            newConditions[condIndex] = {
-                                                                ...newConditions[condIndex],
-                                                                conditions: newConditions[condIndex].conditions.map((c, i) => 
-                                                                    i === subIndex ? { ...c, value: e.target.value } : c
-                                                                )
-                                                            };
-                                                            updateElement({ assetConditions: newConditions });
-                                                        }}
-                                                        placeholder="value"
-                                                        className="w-20 text-xs"
-                                                    />
-                                                    <button
-                                                        onClick={() => {
-                                                            const newConditions = [...el.assetConditions!];
-                                                            newConditions[condIndex] = {
-                                                                ...newConditions[condIndex],
-                                                                conditions: newConditions[condIndex].conditions.filter((_, i) => i !== subIndex)
-                                                            };
-                                                            updateElement({ assetConditions: newConditions });
-                                                        }}
-                                                        className="text-red-400 hover:text-red-300 px-1"
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                        
-                                        <button
+                    <div className="space-y-2 mt-3">
+                        {/* ── ASSETS: Which options can the player cycle through ── */}
+                        <CollapsibleSection title="Available Assets" defaultOpen={true} badge={`${selectedCount}/${assetCount}`}>
+                            {assetCount > 0 ? (
+                                <>
+                                    <div className="flex justify-between mb-2">
+                                        <span className="text-[10px] text-slate-500">Check/uncheck which assets the player can pick</span>
+                                        <button 
                                             onClick={() => {
-                                                const newConditions = [...el.assetConditions!];
-                                                const firstVarId = Object.keys(project.variables)[0] || '';
-                                                newConditions[condIndex] = {
-                                                    ...newConditions[condIndex],
-                                                    conditions: [...newConditions[condIndex].conditions, { variableId: firstVarId as VNID, value: '' }]
-                                                };
-                                                updateElement({ assetConditions: newConditions });
+                                                const allIds = layer ? Object.keys(layer.assets) : [];
+                                                const allSelected = allIds.every(id => el.assetIds.includes(id));
+                                                updateElement({ assetIds: allSelected ? [] : allIds });
                                             }}
-                                            className="text-xs text-purple-400 hover:text-purple-300 mt-1"
+                                            className="text-[10px] text-purple-400 hover:text-purple-300"
                                         >
-                                            + Add Condition
+                                            {selectedCount === assetCount ? 'Deselect All' : 'Select All'}
                                         </button>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="text-xs text-slate-500 italic mb-2">No asset conditions defined</div>
-                    )}
-                    
-                    {/* Add Asset Condition Button */}
-                    <div className="mt-2">
-                        <FormField label="Add Condition for Asset">
-                            <div className="flex gap-2">
-                                <Select 
-                                    id="add-asset-condition-select"
-                                    value=""
-                                    onChange={e => {
-                                        const assetId = e.target.value as VNID;
-                                        if (!assetId) return;
-                                        
-                                        const existingConditions = el.assetConditions || [];
-                                        // Check if this asset already has conditions
-                                        if (existingConditions.some(c => c.assetId === assetId)) {
-                                            alert('This asset already has conditions defined');
-                                            return;
-                                        }
-                                        
-                                        const newCondition: AssetCondition = {
-                                            assetId,
-                                            conditions: []
-                                        };
-                                        updateElement({ assetConditions: [...existingConditions, newCondition] });
-                                        
-                                        // Reset the select
-                                        (document.getElementById('add-asset-condition-select') as HTMLSelectElement).value = '';
-                                    }}
-                                    className="flex-1"
-                                >
-                                    <option value="">-- Select Asset --</option>
-                                    {layer && Object.values(layer.assets)
-                                        .filter(asset => el.assetIds.includes((asset as VNLayerAsset).id))
-                                        .map(asset => {
-                                            const a = asset as VNLayerAsset;
-                                            const hasCondition = el.assetConditions?.some(c => c.assetId === a.id);
+                                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                                        {layer && Object.values(layer.assets).map((asset: VNLayerAsset) => {
+                                            const isSelected = el.assetIds.includes(asset.id);
                                             return (
-                                                <option key={a.id} value={a.id} disabled={hasCondition}>
-                                                    {a.name} {hasCondition ? '(has conditions)' : ''}
-                                                </option>
+                                                <label key={asset.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-700/30 rounded px-1 py-0.5">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={e => {
+                                                            const newAssetIds = e.target.checked
+                                                                ? [...el.assetIds, asset.id]
+                                                                : el.assetIds.filter(id => id !== asset.id);
+                                                            updateElement({ assetIds: newAssetIds });
+                                                        }}
+                                                        className="accent-purple-500"
+                                                    />
+                                                    <span className="text-sm text-slate-300">{asset.name}</span>
+                                                </label>
                                             );
-                                        })
-                                    }
-                                </Select>
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-xs text-slate-500 italic">
+                                    {layer ? 'This layer has no assets. Upload assets in the Characters tab first.' : 'Select a layer above.'}
+                                </p>
+                            )}
+                        </CollapsibleSection>
+
+                        {/* ── APPEARANCE: Arrow and background styling ── */}
+                        <CollapsibleSection title="Appearance" hint="Arrow color, size, and background">
+                            <div className="grid grid-cols-2 gap-2 mt-1">
+                                <FormField label="Arrow Color">
+                                    <input type="color" className="w-full" value={el.arrowColor || '#a855f7'} onChange={e => updateElement({ arrowColor: e.target.value })} />
+                                </FormField>
+                                <FormField label="Arrow Size">
+                                    <TextInput type="number" value={String(el.arrowSize || 24)} onChange={e => updateElement({ arrowSize: Number(e.target.value) })} min="12" max="48" />
+                                </FormField>
                             </div>
-                        </FormField>
-                    </div>
-                    
-                    {el.assetConditions && el.assetConditions.length > 0 && (
-                        <button
-                            onClick={() => updateElement({ assetConditions: undefined })}
-                            className="text-xs text-red-400 hover:text-red-300 mt-2"
+                            <FormField label="Background">
+                                <input type="color" className="w-full" value={el.backgroundColor?.replace(/rgba?\([^)]+\)/, '#1e293b') || '#1e293b'} onChange={e => {
+                                    const hex = e.target.value;
+                                    const rgba = `rgba(${parseInt(hex.slice(1,3), 16)}, ${parseInt(hex.slice(3,5), 16)}, ${parseInt(hex.slice(5,7), 16)}, 0.8)`;
+                                    updateElement({ backgroundColor: rgba });
+                                }} />
+                            </FormField>
+                            <h4 className="font-bold text-xs mt-3 mb-1 text-slate-400">Font</h4>
+                            <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                        </CollapsibleSection>
+
+                        {/* ── ADVANCED: Variable binding & conditional filtering ── */}
+                        <CollapsibleSection 
+                            title="Advanced" 
+                            hint={hasConditions ? 'Has filtering rules' : 'Variable binding & conditional filtering'}
+                            badge={hasConditions ? '⚡' : undefined}
                         >
-                            Clear All Asset Conditions
-                        </button>
-                    )}
+                            <p className="text-[10px] text-slate-500 mb-2">
+                                These settings are auto-configured by the wizard. Only edit if you know what you&apos;re doing.
+                            </p>
 
-                    <h3 className="font-bold my-2 text-slate-400">Styling</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                        <FormField label="Arrow Color">
-                            <input 
-                                type="color" 
-                                className="w-full" 
-                                value={el.arrowColor || '#a855f7'} 
-                                onChange={e => updateElement({ arrowColor: e.target.value })} 
-                            />
-                        </FormField>
-                        <FormField label="Arrow Size">
-                            <TextInput 
-                                type="number"
-                                value={String(el.arrowSize || 24)}
-                                onChange={e => updateElement({ arrowSize: Number(e.target.value) })}
-                                min="12"
-                                max="48"
-                            />
-                        </FormField>
+                            <FormField label="Variable (stores selection)">
+                                <Select value={el.variableId} onChange={e => updateElement({ variableId: e.target.value as VNID })}>
+                                    <option value="">Select Variable...</option>
+                                    {Object.values(project.variables).map(v => {
+                                        const varItem = v as VNVariable;
+                                        return <option key={varItem.id} value={varItem.id}>{varItem.name} ({varItem.type})</option>;
+                                    })}
+                                </Select>
+                            </FormField>
+                            
+                            {/* Asset Conditions (the simpler system) */}
+                            <h4 className="font-bold text-xs mt-3 mb-1 text-slate-400">Conditional Filtering</h4>
+                            <p className="text-[10px] text-slate-500 mb-2">
+                                Show/hide assets based on other selections. E.g., only show certain hairstyles when a specific body type is selected.
+                            </p>
+                            
+                            {el.assetConditions && el.assetConditions.length > 0 ? (
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {el.assetConditions.map((assetCond, condIndex) => {
+                                        const asset = layer?.assets[assetCond.assetId];
+                                        return (
+                                            <div key={condIndex} className="p-2 bg-slate-800 rounded border border-slate-600">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-xs font-medium text-purple-300">{asset?.name || assetCond.assetId}</span>
+                                                    <button onClick={() => {
+                                                        const newConditions = el.assetConditions!.filter((_, i) => i !== condIndex);
+                                                        updateElement({ assetConditions: newConditions.length > 0 ? newConditions : undefined });
+                                                    }} className="text-red-400 hover:text-red-300 text-[10px]">Remove</button>
+                                                </div>
+                                                {assetCond.conditions.length === 0 && <div className="text-[10px] text-slate-500 italic">Always visible</div>}
+                                                {assetCond.conditions.map((cond, subIndex) => (
+                                                    <div key={subIndex} className="flex gap-1 items-center mb-1 text-xs">
+                                                        <Select value={cond.variableId} onChange={e => {
+                                                            const newConditions = [...el.assetConditions!];
+                                                            newConditions[condIndex] = { ...newConditions[condIndex], conditions: newConditions[condIndex].conditions.map((c, i) => i === subIndex ? { ...c, variableId: e.target.value as VNID } : c) };
+                                                            updateElement({ assetConditions: newConditions });
+                                                        }} className="flex-1 text-xs">
+                                                            <option value="">Variable...</option>
+                                                            {Object.values(project.variables).map(v => { const vi = v as VNVariable; return <option key={vi.id} value={vi.id}>{vi.name}</option>; })}
+                                                        </Select>
+                                                        <span className="text-slate-500">=</span>
+                                                        <TextInput value={cond.value} onChange={e => {
+                                                            const newConditions = [...el.assetConditions!];
+                                                            newConditions[condIndex] = { ...newConditions[condIndex], conditions: newConditions[condIndex].conditions.map((c, i) => i === subIndex ? { ...c, value: e.target.value } : c) };
+                                                            updateElement({ assetConditions: newConditions });
+                                                        }} placeholder="value" className="w-20 text-xs" />
+                                                        <button onClick={() => {
+                                                            const newConditions = [...el.assetConditions!];
+                                                            newConditions[condIndex] = { ...newConditions[condIndex], conditions: newConditions[condIndex].conditions.filter((_, i) => i !== subIndex) };
+                                                            updateElement({ assetConditions: newConditions });
+                                                        }} className="text-red-400 hover:text-red-300 px-1">×</button>
+                                                    </div>
+                                                ))}
+                                                <button onClick={() => {
+                                                    const newConditions = [...el.assetConditions!];
+                                                    const firstVarId = Object.keys(project.variables)[0] || '';
+                                                    newConditions[condIndex] = { ...newConditions[condIndex], conditions: [...newConditions[condIndex].conditions, { variableId: firstVarId as VNID, value: '' }] };
+                                                    updateElement({ assetConditions: newConditions });
+                                                }} className="text-[10px] text-purple-400 hover:text-purple-300 mt-1">+ Add Rule</button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-[10px] text-slate-500 italic">No filtering rules — all assets always available.</p>
+                            )}
+                            
+                            <div className="flex gap-2 mt-2">
+                                <Select value="" onChange={e => {
+                                    const assetId = e.target.value as VNID;
+                                    if (!assetId) return;
+                                    if ((el.assetConditions || []).some(c => c.assetId === assetId)) return;
+                                    updateElement({ assetConditions: [...(el.assetConditions || []), { assetId, conditions: [] }] });
+                                }} className="flex-1 text-xs">
+                                    <option value="">Add rule for asset...</option>
+                                    {layer && Object.values(layer.assets).filter(a => el.assetIds.includes((a as VNLayerAsset).id)).map(a => {
+                                        const asset = a as VNLayerAsset;
+                                        const has = el.assetConditions?.some(c => c.assetId === asset.id);
+                                        return <option key={asset.id} value={asset.id} disabled={has}>{asset.name}{has ? ' ✓' : ''}</option>;
+                                    })}
+                                </Select>
+                                {el.assetConditions && el.assetConditions.length > 0 && (
+                                    <button onClick={() => updateElement({ assetConditions: undefined })} className="text-[10px] text-red-400 hover:text-red-300 whitespace-nowrap">Clear All</button>
+                                )}
+                            </div>
+
+                            {/* Legacy filter pattern — hidden unless already in use */}
+                            {(el.filterPattern || (el.filterVariableIds && el.filterVariableIds.length > 0)) && (
+                                <>
+                                    <h4 className="font-bold text-xs mt-4 mb-1 text-amber-400/80">Legacy Filter Pattern</h4>
+                                    <p className="text-[10px] text-slate-500 mb-1">This is an older filtering method. Consider using conditional filtering above instead.</p>
+                                    <FormField label="Filter Variables">
+                                        <div className="flex flex-col gap-1">
+                                            {(el.filterVariableIds || []).map((varId, index) => (
+                                                <div key={index} className="flex gap-1 items-center">
+                                                    <Select value={varId} onChange={e => {
+                                                        const newIds = [...(el.filterVariableIds || [])];
+                                                        newIds[index] = e.target.value as VNID;
+                                                        updateElement({ filterVariableIds: newIds });
+                                                    }} className="flex-1 text-xs">
+                                                        <option value="">Variable...</option>
+                                                        {Object.values(project.variables).filter(v => (v as VNVariable).type === 'string').map(v => { const vi = v as VNVariable; return <option key={vi.id} value={vi.id}>{vi.name}</option>; })}
+                                                    </Select>
+                                                    <button onClick={() => {
+                                                        const newIds = (el.filterVariableIds || []).filter((_, i) => i !== index);
+                                                        updateElement({ filterVariableIds: newIds.length > 0 ? newIds : undefined });
+                                                    }} className="text-red-400 text-xs px-1">×</button>
+                                                </div>
+                                            ))}
+                                            <button onClick={() => updateElement({ filterVariableIds: [...(el.filterVariableIds || []), Object.keys(project.variables)[0] || ''] })} className="text-[10px] text-purple-400">+ Add</button>
+                                        </div>
+                                    </FormField>
+                                    <FormField label="Pattern">
+                                        <TextInput value={el.filterPattern || ''} onChange={e => updateElement({ filterPattern: e.target.value })} placeholder="{var1}_{var2}" />
+                                    </FormField>
+                                </>
+                            )}
+                        </CollapsibleSection>
                     </div>
-                    <FormField label="Background Color">
-                        <input 
-                            type="color" 
-                            className="w-full" 
-                            value={el.backgroundColor?.replace(/rgba?\([^)]+\)/, '#1e293b') || '#1e293b'} 
-                            onChange={e => {
-                                const hex = e.target.value;
-                                const rgba = `rgba(${parseInt(hex.slice(1,3), 16)}, ${parseInt(hex.slice(3,5), 16)}, ${parseInt(hex.slice(5,7), 16)}, 0.8)`;
-                                updateElement({ backgroundColor: rgba });
-                            }} 
-                        />
-                    </FormField>
-
-                    <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
-                    <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
                 </>
             }
             case UIElementType.CGGallery: {

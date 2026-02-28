@@ -140,6 +140,11 @@ export const createInitialProject = (): VNProject => {
             dialogueNameFont: { family: 'Poppins, sans-serif', size: 22, color: '#FFFFFF', weight: 'bold', italic: false },
             dialogueTextFont: { family: 'Poppins, sans-serif', size: 20, color: '#FFFFFF', weight: 'normal', italic: false },
             choiceTextFont: { family: 'Poppins, sans-serif', size: 18, color: '#FFFFFF', weight: 'normal', italic: false },
+            inputBoxImage: null,
+            inputBoxBorderImage: null,
+            inputPromptFont: { family: 'Poppins, sans-serif', size: 18, color: '#FFFFFF', weight: 'normal', italic: false },
+            inputFieldFont: { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal', italic: false },
+            inputSubmitFont: { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal', italic: false },
             defaultGameSettings: {
                 textSpeed: 50,
                 musicVolume: 0.8,

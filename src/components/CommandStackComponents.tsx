@@ -60,7 +60,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
             case 'FlashScreen':
                 return `Flash`;
             case 'CreditRoll':
-                return `🎬 Credit Roll`;
+                return `▶ Credit Roll`;
             case 'Choice':
                 return `Choice (${(command as any).options?.length || 0} options)`;
             case 'Jump':
@@ -68,7 +68,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
             case 'JumpToLabel':
                 return `→ Label: ${(command as any).labelId || 'N/A'}`;
             case 'Label':
-                return `🏷 ${(command as any).labelId || 'N/A'}`;
+                return `# ${(command as any).labelId || 'N/A'}`;
             case 'TextInput':
                 return `Input → ${project.variables[(command as any).variableId]?.name || 'Var'}`;
             case 'StopMusic':
@@ -77,7 +77,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 return `■ Stop SFX`;
             case 'PlayMovie': {
                 const mode = (command as any).displayMode === 'overlay' ? '(overlay)' : '';
-                return `🎬 ${project.videos[(command as any).videoId]?.name || 'N/A'} ${mode}`.trim();
+                return `▶ ${project.videos[(command as any).videoId]?.name || 'N/A'} ${mode}`.trim();
             }
             case 'StopMovie':
                 return `■ Stop Movie`;
@@ -108,7 +108,12 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
             case 'BranchEnd':
                 return `End Branch`;
             case 'Group':
-                return `📁 ${(command as any).name || 'Group'}`;
+                return `⊞ ${(command as any).name || 'Group'}`;
+            case 'RunScript': {
+                const scriptId = (command as any).scriptId;
+                const script = scriptId ? (project.scripts || {})[scriptId] : null;
+                return `>_ ${(script as any)?.name || 'No Script'}`;
+            }
             default:
                 return command.type.replace(/([A-Z])/g, ' $1').trim();
         }
@@ -125,15 +130,15 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 onClick={onSelect}
                 className={`
                     relative flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all
-                    ${isSelected ? 'bg-sky-500/20 ring-2 ring-sky-500' : 'bg-slate-700 hover:bg-slate-600'}
-                    ${isStacked ? 'border-2 border-purple-500' : 'border border-slate-600'}
+                    ${isSelected ? 'bg-sky-500/20 ring-2 ring-sky-500' : 'bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]'}
+                    ${isStacked ? 'border-2 border-purple-500' : 'border border-[var(--border-default)]'}
                     ${isFirstInStack && !isLastInStack ? 'rounded-r-none border-r-0' : ''}
                     ${isLastInStack && !isFirstInStack ? 'rounded-l-none border-l-0' : ''}
                     ${!isFirstInStack && !isLastInStack && isStacked ? 'rounded-none border-x-0' : ''}
                 `}
             >
                 {/* Drag Handle */}
-                <span className="cursor-grab text-slate-400 flex-shrink-0">
+                <span className="cursor-grab text-[var(--text-secondary)] flex-shrink-0">
                     <GripVerticalIcon className="w-4 h-4" />
                 </span>
 
@@ -155,7 +160,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                             </span>
                         )}
                     </div>
-                    <p className="text-xs text-slate-400 truncate">{getCommandSummary()}</p>
+                    <p className="text-xs text-[var(--text-secondary)] truncate">{getCommandSummary()}</p>
                 </div>
 
                 {/* Stack Size Badge */}
@@ -286,7 +291,7 @@ export const DragDropIndicator: React.FC<DragDropIndicatorProps> = ({ position, 
     return (
         <div className={`absolute left-0 right-0 ${getPositionStyles()} ${getColorStyles()} rounded-full z-10 pointer-events-none`}>
             {message && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1 bg-slate-900 text-white text-xs rounded shadow-lg whitespace-nowrap">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1 bg-[var(--bg-primary)] text-white text-xs rounded shadow-lg whitespace-nowrap">
                     {message}
                 </div>
             )}

@@ -4,7 +4,6 @@ import { VNScene } from '../../features/scene/types';
 import { VNCharacter } from '../../features/character/types';
 import { EnhancedVariable } from '../../types/enhanced-variables';
 import { TemplateInstance } from '../../types/template';
-import { LogicGraph } from '../../types/logic';
 
 export interface ContextPanelServiceConfig {
   maxPanelsActive: number;
@@ -163,26 +162,6 @@ export class ContextPanelService {
       },
       provideContext: this.provideTemplateContext.bind(this),
       canProvideContext: this.canProvideTemplateContext.bind(this)
-    });
-
-    // Logic context provider
-    this.providers.set('logic', {
-      id: `provider_logic_${Date.now()}`,
-      type: 'logic',
-      name: 'Logic Context',
-      description: 'Provides logic editing assistance',
-      isActive: true,
-      priority: 'high',
-      scope: 'logic',
-      triggers: ['logic-editing', 'node-selected', 'connection-creating'],
-      config: {
-        showCompatibleNodes: true,
-        validateConnections: true,
-        suggestOptimizations: true,
-        maxSuggestions: 6
-      },
-      provideContext: this.provideLogicContext.bind(this),
-      canProvideContext: this.canProvideLogicContext.bind(this)
     });
 
     // Help context provider
@@ -590,51 +569,6 @@ export class ContextPanelService {
 
   private canProvideTemplateContext(state: EditorState): boolean {
     return state.selectedItems.length === 0 || state.activeTab === 'template-browser';
-  }
-
-  /**
-   * Logic context provider implementation
-   */
-  private async provideLogicContext(state: EditorState): Promise<ContextInfo | null> {
-    const suggestions: ContextSuggestion[] = [
-      {
-        id: `suggestion_logic_validate_${Date.now()}`,
-        type: 'validation',
-        title: 'Validate Logic Graph',
-        description: 'Check for logic errors and optimization opportunities',
-        relevance: 0.8,
-        action: {
-          id: `action_validate_logic_${Date.now()}`,
-          type: 'validate',
-          label: 'Validate Logic',
-          description: 'Run logic validation checks',
-          icon: 'check-circle',
-          handler: 'logic.validate',
-          params: {},
-          shortcut: 'Ctrl+Shift+V'
-        },
-        metadata: {
-          category: 'validation',
-          difficulty: 'intermediate'
-        }
-      }
-    ];
-
-    return {
-      title: 'Logic Context',
-      summary: 'Logic editing assistance',
-      items: [],
-      suggestions,
-      actions: [],
-      metadata: {
-        contextType: 'logic',
-        lastUpdated: new Date().toISOString()
-      }
-    };
-  }
-
-  private canProvideLogicContext(state: EditorState): boolean {
-    return state.activeTab === 'logic-editor';
   }
 
   /**

@@ -20,7 +20,6 @@ export type FeatureCategory =
   | 'basic-editing'
   | 'advanced-logic'
   | 'template-customization'
-  | 'visual-logic'
   | 'performance-tuning'
   | 'advanced-variables'
   | 'custom-scripting';
@@ -144,16 +143,6 @@ export class ProgressiveDisclosure {
 
       // Advanced features
       {
-        id: 'visual-logic-builder',
-        name: 'Visual Logic Builder',
-        description: 'Build complex logic with visual nodes',
-        category: 'visual-logic',
-        requiredLevel: 'advanced',
-        dependencies: ['choice-branching', 'variable-management'],
-        usageCount: 0,
-        unlocked: false
-      },
-      {
         id: 'template-customization',
         name: 'Template Customization',
         description: 'Customize and create templates',
@@ -181,7 +170,7 @@ export class ProgressiveDisclosure {
         description: 'Fine-tune project performance',
         category: 'performance-tuning',
         requiredLevel: 'expert',
-        dependencies: ['visual-logic-builder', 'advanced-variables'],
+        dependencies: ['advanced-variables'],
         usageCount: 0,
         unlocked: false
       },
@@ -191,7 +180,7 @@ export class ProgressiveDisclosure {
         description: 'Write custom JavaScript logic',
         category: 'custom-scripting',
         requiredLevel: 'expert',
-        dependencies: ['visual-logic-builder'],
+        dependencies: ['advanced-variables'],
         usageCount: 0,
         unlocked: false
       }

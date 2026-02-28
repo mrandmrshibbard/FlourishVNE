@@ -12,8 +12,7 @@
           "backgroundId": "back-jk0hyo4",
           "transition": "fade",
           "duration": 1,
-          "id": "cmd-tlk3nsa",
-          "modifiers": {}
+          "id": "cmd-tlk3nsa"
         },
         {
           "type": "PlayMusic",
@@ -251,6 +250,13 @@
           "modifiers": {}
         },
         {
+          "type": "SetVariable",
+          "variableId": "var-7t1jqgs",
+          "operator": "set",
+          "value": true,
+          "id": "cmd-o142tzm"
+        },
+        {
           "type": "ShowCharacter",
           "characterId": "char-2lmqqwo",
           "expressionId": "expr-c195cl8",
@@ -279,7 +285,7 @@
         },
         {
           "type": "StopMusic",
-          "fadeDuration": 1,
+          "fadeDuration": 2,
           "id": "cmd-bh1iziq",
           "modifiers": {}
         }
@@ -364,7 +370,7 @@
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
-          "expressionId": "expr-7v5lgcm",
+          "expressionId": "expr-6vjb0m6",
           "position": "center",
           "transition": "fade",
           "duration": 1,
@@ -381,7 +387,7 @@
         {
           "type": "ShowCharacter",
           "characterId": "char-ld8azvx",
-          "expressionId": "expr-7x1d594",
+          "expressionId": "expr-b78omwz",
           "position": "center",
           "transition": "fade",
           "duration": 1,
@@ -855,7 +861,7 @@
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
-          "text": "Come on!!! Let's get some snacks!",
+          "text": "Come on!!! I bet they have nachos... and SODA! AND CHOCOLATE!",
           "id": "cmd-cskmyr1",
           "modifiers": {}
         },
@@ -1055,7 +1061,7 @@
         {
           "type": "Dialogue",
           "characterId": "char-2lmqqwo",
-          "text": "This is okay I guess!",
+          "text": "Hey, not bad!",
           "id": "cmd-tqp6aw6",
           "conditions": [
             {
@@ -1070,6 +1076,13 @@
             }
           ],
           "modifiers": {}
+        },
+        {
+          "type": "SetVariable",
+          "variableId": "var-rk5i513",
+          "operator": "set",
+          "value": true,
+          "id": "cmd-ydyoqrh"
         },
         {
           "type": "StopMusic",
@@ -1091,11 +1104,10 @@
         },
         {
           "type": "SetBackground",
-          "backgroundId": "back-93rn4x9",
-          "transition": "dissolve",
+          "backgroundId": "imag-gx27t95",
+          "transition": "fade",
           "duration": 1,
-          "id": "cmd-dqctxs1",
-          "modifiers": {}
+          "id": "cmd-13ywbdy"
         },
         {
           "type": "Wait",
@@ -1110,15 +1122,8 @@
           "loop": true,
           "fadeDuration": 1,
           "id": "cmd-b9lfe7q",
-          "modifiers": {}
-        },
-        {
-          "type": "SetBackground",
-          "backgroundId": "back-s661ohf",
-          "transition": "fade",
-          "duration": 1,
-          "id": "cmd-248g0qk",
-          "modifiers": {}
+          "modifiers": {},
+          "volume": 0.32
         },
         {
           "type": "ShowCharacter",
@@ -1619,7 +1624,8 @@
           "loop": true,
           "fadeDuration": 1,
           "id": "cmd-ywzaord",
-          "modifiers": {}
+          "modifiers": {},
+          "volume": 0.32
         },
         {
           "type": "ShowCharacter",
@@ -1685,12 +1691,20 @@
           "allowSkip": true,
           "onComplete": "advance",
           "id": "cmd-qgph2xf",
-          "backgrounds": [
+          "backgrounds": [],
+          "media": [
             {
-              "assetId": "back-7k3rptv",
-              "displayDuration": 10,
+              "assetId": "vide-ymhsi1r",
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 30,
+              "opacity": 1,
+              "objectFit": "contain",
+              "showAt": 0,
+              "hideAt": 0,
               "transition": "fade",
-              "transitionDuration": 0.8
+              "transitionDuration": 0.5
             }
           ]
         }
@@ -1728,25 +1742,25 @@
               "name": "alana_embaressed",
               "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-fmxfxm5_alana_embaressed.png"
             },
-            "asset-ry9diww": {
-              "id": "asset-ry9diww",
-              "name": "alana_anxious",
-              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-ry9diww_alana_anxious.png"
-            },
             "asset-rdbyddr": {
               "id": "asset-rdbyddr",
               "name": "alana_headon",
               "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-rdbyddr_alana_headon.png"
             },
-            "asset-e974d7m": {
-              "id": "asset-e974d7m",
-              "name": "alana_anxious2",
-              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-e974d7m_alana_anxious2.png"
-            },
             "asset-8bv5dzd": {
               "id": "asset-8bv5dzd",
               "name": "alana_bed",
               "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-8bv5dzd_alana_bed.png"
+            },
+            "asset-7ceatkg": {
+              "id": "asset-7ceatkg",
+              "name": "asset-ry9diww_alana_anxious",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-7ceatkg_asset-ry9diww_alana_anxious.png"
+            },
+            "asset-ryd8m70": {
+              "id": "asset-ryd8m70",
+              "name": "asset-e974d7m_alana_anxious2",
+              "imageUrl": "assets/characters/char-ld8azvx/layer-yv9lobm/asset-ryd8m70_asset-e974d7m_alana_anxious2.png"
             }
           }
         },
@@ -1829,25 +1843,11 @@
             "layer-yv9lobm": "asset-o31zo1q"
           }
         },
-        "expr-7v5lgcm": {
-          "id": "expr-7v5lgcm",
-          "name": "Anxious",
-          "layerConfiguration": {
-            "layer-yv9lobm": "asset-ry9diww"
-          }
-        },
         "expr-2jnu1nm": {
           "id": "expr-2jnu1nm",
           "name": "Idle_headon",
           "layerConfiguration": {
             "layer-yv9lobm": "asset-rdbyddr"
-          }
-        },
-        "expr-7x1d594": {
-          "id": "expr-7x1d594",
-          "name": "Anxious 2",
-          "layerConfiguration": {
-            "layer-yv9lobm": "asset-e974d7m"
           }
         },
         "expr-ob27uus": {
@@ -1899,6 +1899,24 @@
           "name": "bed",
           "layerConfiguration": {
             "layer-yv9lobm": "asset-8bv5dzd",
+            "layer-cdv853a": null,
+            "layer-qdn7vok": null
+          }
+        },
+        "expr-6vjb0m6": {
+          "id": "expr-6vjb0m6",
+          "name": "alana_anxious",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-7ceatkg",
+            "layer-cdv853a": null,
+            "layer-qdn7vok": null
+          }
+        },
+        "expr-b78omwz": {
+          "id": "expr-b78omwz",
+          "name": "alana_anxious2",
+          "layerConfiguration": {
+            "layer-yv9lobm": "asset-ryd8m70",
             "layer-cdv853a": null,
             "layer-qdn7vok": null
           }
@@ -2353,11 +2371,6 @@
       "name": "movietheater",
       "imageUrl": "assets/backgrounds/back-lta167r_movietheater.png"
     },
-    "back-s661ohf": {
-      "id": "back-s661ohf",
-      "name": "sakura_garden_night",
-      "imageUrl": "assets/backgrounds/back-s661ohf_sakura_garden_night.png"
-    },
     "back-93rn4x9": {
       "id": "back-93rn4x9",
       "name": "transition2",
@@ -2439,6 +2452,24 @@
       "id": "imag-x2se6or",
       "name": "popcorn",
       "imageUrl": "assets/images/imag-x2se6or_popcorn.png"
+    },
+    "imag-o8lelrg": {
+      "id": "imag-o8lelrg",
+      "name": "hungyhungyhungy",
+      "path": "",
+      "imageUrl": "assets/images/imag-o8lelrg_hungyhungyhungy.jpg"
+    },
+    "imag-ukga3bs": {
+      "id": "imag-ukga3bs",
+      "name": "couple_goals",
+      "path": "",
+      "imageUrl": "assets/images/imag-ukga3bs_couple_goals.jpg"
+    },
+    "imag-gx27t95": {
+      "id": "imag-gx27t95",
+      "name": "back-s661ohf_sakura_garden_night",
+      "path": "",
+      "imageUrl": "assets/images/imag-gx27t95_back-s661ohf_sakura_garden_night.png"
     }
   },
   "audio": {
@@ -2651,6 +2682,20 @@
       "name": "go_on_date",
       "type": "boolean",
       "defaultValue": false
+    },
+    "var-7t1jqgs": {
+      "id": "var-7t1jqgs",
+      "name": "scene1",
+      "type": "boolean",
+      "defaultValue": false,
+      "scope": "persistent"
+    },
+    "var-rk5i513": {
+      "id": "var-rk5i513",
+      "name": "saw_movie",
+      "type": "boolean",
+      "defaultValue": false,
+      "scope": "persistent"
     }
   },
   "ui": {
@@ -2685,6 +2730,38 @@
       "color": "#FFFFFF",
       "weight": "normal",
       "italic": false
+    },
+    "inputBoxImage": null,
+    "inputBoxBorderImage": null,
+    "inputPromptFont": {
+      "family": "Poppins, sans-serif",
+      "size": 18,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "inputFieldFont": {
+      "family": "Poppins, sans-serif",
+      "size": 16,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "inputSubmitFont": {
+      "family": "Poppins, sans-serif",
+      "size": 16,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "defaultGameSettings": {
+      "textSpeed": 50,
+      "musicVolume": 0.8,
+      "sfxVolume": 0.8,
+      "ambientVolume": 0.8,
+      "enableSkip": true,
+      "autoAdvance": false,
+      "autoAdvanceDelay": 3
     }
   },
   "uiScreens": {
@@ -2697,7 +2774,8 @@
       },
       "music": {
         "audioId": "audi-b7kvjt0",
-        "policy": "continue"
+        "policy": "continue",
+        "volume": 0.33
       },
       "elements": {
         "elem-qysni8q": {
@@ -2814,23 +2892,60 @@
           },
           "clickSoundId": null,
           "hoverSoundId": null
+        },
+        "elem-wjirqyu": {
+          "id": "elem-wjirqyu",
+          "name": "Button",
+          "x": 42.02839756592293,
+          "y": 87.23912553527158,
+          "width": 20,
+          "height": 10,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "Button",
+          "text": "CG Gallery",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 18,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-428ge1z"
+          },
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null,
+          "backgroundColor": "#4D3273",
+          "hoverBackgroundColor": "#6B4C9A"
         }
       },
       "ambientNoise": {
         "audioId": null,
         "policy": "continue"
-      }
+      },
+      "transitionIn": "crossfade",
+      "transitionOut": "crossfade",
+      "transitionInDuration": 500,
+      "transitionOutDuration": 700
     },
     "screen-hd90m1b": {
       "id": "screen-hd90m1b",
       "name": "Save Screen",
       "background": {
-        "type": "color",
-        "value": "#1a102c"
+        "type": "image",
+        "assetId": "back-7k3rptv"
       },
       "music": {
         "audioId": null,
-        "policy": "continue"
+        "policy": "continue",
+        "volume": 0.32
       },
       "elements": {
         "el-n1a6n94": {
@@ -2847,9 +2962,21 @@
           "font": {
             "family": "Poppins, sans-serif",
             "size": 48,
-            "color": "#f0e6ff",
+            "color": "#6b4e97",
             "weight": "bold",
-            "italic": false
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
           },
           "textAlign": "center",
           "verticalAlign": "middle"
@@ -2895,7 +3022,10 @@
           "action": {
             "type": "ReturnToPreviousScreen"
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": null,
           "hoverSoundId": null
@@ -2910,12 +3040,13 @@
       "id": "screen-eiwd08q",
       "name": "Load Screen",
       "background": {
-        "type": "color",
-        "value": "#1a102c"
+        "type": "image",
+        "assetId": "back-7k3rptv"
       },
       "music": {
         "audioId": null,
-        "policy": "continue"
+        "policy": "continue",
+        "volume": 0.32
       },
       "elements": {
         "el-reu1vop": {
@@ -2932,9 +3063,21 @@
           "font": {
             "family": "Poppins, sans-serif",
             "size": 48,
-            "color": "#f0e6ff",
+            "color": "#533088",
             "weight": "bold",
-            "italic": false
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
           },
           "textAlign": "center",
           "verticalAlign": "middle"
@@ -2980,7 +3123,10 @@
           "action": {
             "type": "ReturnToPreviousScreen"
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": null,
           "hoverSoundId": null
@@ -2995,12 +3141,13 @@
       "id": "screen-zircrw6",
       "name": "Settings Screen",
       "background": {
-        "type": "color",
-        "value": "#1a102c"
+        "type": "image",
+        "assetId": "back-7k3rptv"
       },
       "music": {
         "audioId": null,
-        "policy": "continue"
+        "policy": "continue",
+        "volume": 0.32
       },
       "elements": {
         "el-bvp174v": {
@@ -3017,9 +3164,21 @@
           "font": {
             "family": "Poppins, sans-serif",
             "size": 48,
-            "color": "#f0e6ff",
+            "color": "#6536ab",
             "weight": "bold",
-            "italic": false
+            "italic": false,
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            },
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            }
           },
           "textAlign": "center",
           "verticalAlign": "middle"
@@ -3037,10 +3196,22 @@
           "anchorY": 0.5,
           "font": {
             "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
+            "size": 36,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            },
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#f9ebeb"
+            }
           },
           "textAlign": "left",
           "verticalAlign": "middle"
@@ -3062,7 +3233,7 @@
           "name": "SFX Volume Label",
           "type": "Text",
           "text": "Sound FX Volume",
-          "x": 35,
+          "x": 34.79716024340771,
           "y": 40,
           "width": 20,
           "height": 5,
@@ -3070,10 +3241,22 @@
           "anchorY": 0.5,
           "font": {
             "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
+            "size": 36,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#fffafa"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
           },
           "textAlign": "left",
           "verticalAlign": "middle"
@@ -3103,10 +3286,22 @@
           "anchorY": 0.5,
           "font": {
             "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
+            "size": 36,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            },
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            }
           },
           "textAlign": "left",
           "verticalAlign": "middle"
@@ -3137,10 +3332,22 @@
           "anchorY": 0.5,
           "font": {
             "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
+            "size": 36,
+            "color": "#4d3273",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
           }
         },
         "el-5ufh35i": {
@@ -3162,9 +3369,13 @@
             "italic": false
           },
           "action": {
-            "type": "ReturnToPreviousScreen"
+            "type": "GoToScreen",
+            "targetScreenId": "screen-gsjihqh"
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": null,
           "hoverSoundId": null
@@ -3183,17 +3394,34 @@
           "text": "Auto Advance",
           "font": {
             "family": "Poppins, sans-serif",
-            "size": 18,
-            "color": "#FFFFFF",
-            "weight": "normal",
-            "italic": false
+            "size": 36,
+            "color": "#4d3273",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
           }
         }
       },
       "ambientNoise": {
         "audioId": null,
-        "policy": "continue"
-      }
+        "policy": "continue",
+        "volume": 0.32
+      },
+      "transitionIn": "crossfade",
+      "transitionOut": "crossfade",
+      "transitionInDuration": 500,
+      "transitionOutDuration": 700
     },
     "screen-do9rrh1": {
       "id": "screen-do9rrh1",
@@ -3355,30 +3583,10 @@
       },
       "music": {
         "audioId": "audi-b7kvjt0",
-        "policy": "continue"
+        "policy": "continue",
+        "volume": 0.32
       },
       "elements": {
-        "elem-8x9zfrh": {
-          "id": "elem-8x9zfrh",
-          "name": "Header",
-          "type": "Text",
-          "text": "Load Game",
-          "x": 50,
-          "y": 10,
-          "width": 60,
-          "height": 10,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "font": {
-            "family": "Poppins, sans-serif",
-            "size": 48,
-            "color": "#f0e6ff",
-            "weight": "bold",
-            "italic": false
-          },
-          "textAlign": "center",
-          "verticalAlign": "middle"
-        },
         "elem-myfcqkf": {
           "id": "elem-myfcqkf",
           "name": "Load Slots",
@@ -3418,7 +3626,8 @@
             "italic": false
           },
           "action": {
-            "type": "ReturnToPreviousScreen"
+            "type": "GoToScreen",
+            "targetScreenId": "screen-gsjihqh"
           },
           "image": {
             "type": "image",
@@ -3430,12 +3639,49 @@
           },
           "clickSoundId": null,
           "hoverSoundId": null
+        },
+        "elem-3u3yh02": {
+          "id": "elem-3u3yh02",
+          "name": "Header (copy)",
+          "type": "Text",
+          "text": "Load Game",
+          "x": 51.087221095334684,
+          "y": 12,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#533088",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
         }
       },
       "ambientNoise": {
         "audioId": null,
         "policy": "continue"
-      }
+      },
+      "transitionIn": "crossfade",
+      "transitionOut": "crossfade",
+      "transitionInDuration": 500,
+      "transitionOutDuration": 700
     },
     "screen-9i7rzju": {
       "id": "screen-9i7rzju",
@@ -3446,51 +3692,10 @@
       },
       "music": {
         "audioId": "audi-b7kvjt0",
-        "policy": "continue"
+        "policy": "continue",
+        "volume": 0.32
       },
       "elements": {
-        "elem-japjggv": {
-          "id": "elem-japjggv",
-          "name": "Header",
-          "type": "Text",
-          "text": "Settings",
-          "x": 50,
-          "y": 10,
-          "width": 60,
-          "height": 10,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "font": {
-            "family": "Poppins, sans-serif",
-            "size": 48,
-            "color": "#f0e6ff",
-            "weight": "bold",
-            "italic": false
-          },
-          "textAlign": "center",
-          "verticalAlign": "middle"
-        },
-        "elem-11jb113": {
-          "id": "elem-11jb113",
-          "name": "Music Volume Label",
-          "type": "Text",
-          "text": "Music Volume",
-          "x": 35,
-          "y": 30,
-          "width": 20,
-          "height": 5,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "font": {
-            "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
-          },
-          "textAlign": "left",
-          "verticalAlign": "middle"
-        },
         "elem-ups17pa": {
           "id": "elem-ups17pa",
           "name": "Music Volume Slider",
@@ -3502,27 +3707,6 @@
           "height": 5,
           "anchorX": 0.5,
           "anchorY": 0.5
-        },
-        "elem-w3zfs2v": {
-          "id": "elem-w3zfs2v",
-          "name": "SFX Volume Label",
-          "type": "Text",
-          "text": "Sound FX Volume",
-          "x": 35,
-          "y": 40,
-          "width": 20,
-          "height": 5,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "font": {
-            "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
-          },
-          "textAlign": "left",
-          "verticalAlign": "middle"
         },
         "elem-ct70mcg": {
           "id": "elem-ct70mcg",
@@ -3536,27 +3720,6 @@
           "anchorX": 0.5,
           "anchorY": 0.5
         },
-        "elem-g95m5rp": {
-          "id": "elem-g95m5rp",
-          "name": "Text Speed Label",
-          "type": "Text",
-          "text": "Text Speed",
-          "x": 35,
-          "y": 50,
-          "width": 20,
-          "height": 5,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "font": {
-            "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
-          },
-          "textAlign": "left",
-          "verticalAlign": "middle"
-        },
         "elem-kychx96": {
           "id": "elem-kychx96",
           "name": "Text Speed Slider",
@@ -3568,26 +3731,6 @@
           "height": 5,
           "anchorX": 0.5,
           "anchorY": 0.5
-        },
-        "elem-zrp1hat": {
-          "id": "elem-zrp1hat",
-          "name": "Enable Skip Toggle",
-          "type": "SettingsToggle",
-          "setting": "enableSkip",
-          "text": "Enable Skip",
-          "x": 50,
-          "y": 60,
-          "width": 30,
-          "height": 5,
-          "anchorX": 0.5,
-          "anchorY": 0.5,
-          "font": {
-            "family": "Poppins, sans-serif",
-            "size": 24,
-            "color": "#f0e6ff",
-            "weight": "normal",
-            "italic": false
-          }
         },
         "elem-dfl6bdf": {
           "id": "elem-dfl6bdf",
@@ -3608,7 +3751,8 @@
             "italic": false
           },
           "action": {
-            "type": "ReturnToPreviousScreen"
+            "type": "GoToScreen",
+            "targetScreenId": "screen-gsjihqh"
           },
           "image": {
             "type": "image",
@@ -3620,12 +3764,212 @@
           },
           "clickSoundId": null,
           "hoverSoundId": null
+        },
+        "elem-w3d45f1": {
+          "id": "elem-w3d45f1",
+          "name": "Header (copy)",
+          "type": "Text",
+          "text": "Settings",
+          "x": 52,
+          "y": 12,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            },
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            }
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "elem-8ykx3yq": {
+          "id": "elem-8ykx3yq",
+          "name": "SFX Volume Label (copy)",
+          "type": "Text",
+          "text": "Sound FX Volume",
+          "x": 36.79716024340771,
+          "y": 42,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 36,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#fffafa"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "elem-hoy3ei8": {
+          "id": "elem-hoy3ei8",
+          "name": "Music Volume Label (copy)",
+          "type": "Text",
+          "text": "Music Volume",
+          "x": 37,
+          "y": 32,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 36,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            },
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#f9ebeb"
+            }
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "elem-hro2gvh": {
+          "id": "elem-hro2gvh",
+          "name": "Text Speed Label (copy)",
+          "type": "Text",
+          "text": "Text Speed",
+          "x": 37,
+          "y": 52,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 36,
+            "color": "#6536ab",
+            "weight": "bold",
+            "italic": false,
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            },
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            }
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "elem-q1mtb80": {
+          "id": "elem-q1mtb80",
+          "name": "Enable Skip Toggle (copy)",
+          "type": "SettingsToggle",
+          "setting": "enableSkip",
+          "text": "Enable Skip",
+          "x": 52,
+          "y": 62,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 36,
+            "color": "#4d3273",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
+          }
+        },
+        "elem-poina70": {
+          "id": "elem-poina70",
+          "name": "Settings Toggle (copy)",
+          "x": 37.170966027850056,
+          "y": 68.60275419568212,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "SettingsToggle",
+          "setting": "autoAdvance",
+          "text": "Auto Advance",
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 36,
+            "color": "#4d3273",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
+          }
         }
       },
       "ambientNoise": {
         "audioId": null,
         "policy": "continue"
-      }
+      },
+      "transitionIn": "crossfade",
+      "transitionOut": "crossfade",
+      "transitionInDuration": 500,
+      "transitionOutDuration": 700
     },
     "screen-qgvldy4": {
       "id": "screen-qgvldy4",
@@ -3756,7 +4100,7 @@
         "elem-7tbh0ng": {
           "id": "elem-7tbh0ng",
           "name": "Finished",
-          "x": 12.718631811833678,
+          "x": 12.820051690129825,
           "y": 77.81108401487097,
           "width": 20,
           "height": 10,
@@ -3775,9 +4119,12 @@
             "type": "SetVariable",
             "variableId": "var-4narp3z",
             "operator": "set",
-            "value": "false"
+            "value": false
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": null,
           "hoverSoundId": null,
@@ -3804,7 +4151,8 @@
       },
       "music": {
         "audioId": "audi-r27oe5h",
-        "policy": "continue"
+        "policy": "stop",
+        "volume": 0.33
       },
       "ambientNoise": {
         "audioId": null,
@@ -3831,8 +4179,8 @@
         "elem-17vw8ip": {
           "id": "elem-17vw8ip",
           "name": "Image",
-          "x": 15.779468242701116,
-          "y": 10.503395192587568,
+          "x": 13.548230920185903,
+          "y": 3.1110129523351464,
           "width": 27.18631162029747,
           "height": 28.410632530801045,
           "anchorX": 0,
@@ -3848,8 +4196,8 @@
         "elem-6kk7qso": {
           "id": "elem-6kk7qso",
           "name": "Image",
-          "x": 39.33460077589838,
-          "y": 12.483033099125317,
+          "x": 38.7260815061215,
+          "y": 6.352764899891601,
           "width": 26.520912396195854,
           "height": 23.06561018314913,
           "anchorX": 0,
@@ -3865,8 +4213,8 @@
         "elem-gihgicv": {
           "id": "elem-gihgicv",
           "name": "Image",
-          "x": 60.09505656786885,
-          "y": 13.076924471086642,
+          "x": 60.50073608105344,
+          "y": 6.04514624255385,
           "width": 26.387832551375528,
           "height": 28.014704949493495,
           "anchorX": 0,
@@ -3882,8 +4230,8 @@
         "elem-0k9chlp": {
           "id": "elem-0k9chlp",
           "name": "Image",
-          "x": 15.513308553060474,
-          "y": 54.25339292707178,
+          "x": 13.5863308654337,
+          "y": 47.04131269267918,
           "width": 27.053231775477148,
           "height": 22.471718811187806,
           "anchorX": 0,
@@ -3899,8 +4247,8 @@
         "elem-kr3u8sp": {
           "id": "elem-kr3u8sp",
           "name": "Image",
-          "x": 36.80608372431224,
-          "y": 53.263573973802906,
+          "x": 38.124542142162134,
+          "y": 45.14998371011122,
           "width": 25.58935348245359,
           "height": 24.847284299033102,
           "anchorX": 0,
@@ -3916,8 +4264,8 @@
         "elem-et8o936": {
           "id": "elem-et8o936",
           "name": "Image",
-          "x": 57.699619361103025,
-          "y": 49.30429816072741,
+          "x": 59.93085668361824,
+          "y": 42.99372795563389,
           "width": 28.916349602961677,
           "height": 29.994342856031246,
           "anchorX": 0,
@@ -3933,8 +4281,8 @@
         "elem-s1lgphn": {
           "id": "elem-s1lgphn",
           "name": "Text",
-          "x": 20.703422501053087,
-          "y": 35.24886902430941,
+          "x": 17.153726760687974,
+          "y": 28.938298819215877,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -3942,10 +4290,10 @@
           "type": "Text",
           "text": "Water - 1$",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#272525",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
@@ -3954,8 +4302,8 @@
         "elem-e7muk13": {
           "id": "elem-e7muk13",
           "name": "Text",
-          "x": 42.794676741226795,
-          "y": 33.86312248973299,
+          "x": 41.37479844508075,
+          "y": 29.175270337377793,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -3963,10 +4311,10 @@
           "type": "Text",
           "text": "Soda - 2$",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#292929",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
@@ -3975,8 +4323,8 @@
         "elem-9129lq9": {
           "id": "elem-9129lq9",
           "name": "Text",
-          "x": 62.49049377463467,
-          "y": 33.66515869907921,
+          "x": 64.21463170566915,
+          "y": 28.977306546724012,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -3984,10 +4332,10 @@
           "type": "Text",
           "text": "Licorice - 1$",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#222020",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
@@ -3996,8 +4344,8 @@
         "elem-m35mnpp": {
           "id": "elem-m35mnpp",
           "name": "Text",
-          "x": 18.97338451838888,
-          "y": 73.25791682983416,
+          "x": 15.62652853461606,
+          "y": 67.30795063646026,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -4005,10 +4353,10 @@
           "type": "Text",
           "text": "Chocolate - 2$",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#272525",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
@@ -4017,8 +4365,8 @@
         "elem-1noesu6": {
           "id": "elem-1noesu6",
           "name": "Text",
-          "x": 41.06463875856259,
-          "y": 73.45588062048792,
+          "x": 42.180257419820194,
+          "y": 67.3256124212542,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -4026,10 +4374,10 @@
           "type": "Text",
           "text": "Popcorn - 1$",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#201d1d",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
@@ -4038,8 +4386,8 @@
         "elem-0tymb6t": {
           "id": "elem-0tymb6t",
           "name": "Text",
-          "x": 62.88973330909565,
-          "y": 72.66402545787282,
+          "x": 64.41103148353783,
+          "y": 67.43526728793819,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -4047,10 +4395,10 @@
           "type": "Text",
           "text": "Nachos - 2$",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#141414",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
@@ -4059,8 +4407,8 @@
         "elem-q1h8swz": {
           "id": "elem-q1h8swz",
           "name": "Button",
-          "x": 23.36501939745956,
-          "y": 43.9592758130755,
+          "x": 20.52526280516747,
+          "y": 36.74719557868289,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4080,7 +4428,10 @@
             "operator": "subtract",
             "value": 1
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
@@ -4110,7 +4461,7 @@
           "id": "elem-kxkojkh",
           "name": "Button",
           "x": 44.524714723890995,
-          "y": 44.35520339438305,
+          "y": 36.96282115413062,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4130,7 +4481,10 @@
             "operator": "subtract",
             "value": 2
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
@@ -4160,7 +4514,7 @@
           "id": "elem-vbzz0ny",
           "name": "Button",
           "x": 67.25614820036576,
-          "y": 43.36588145306107,
+          "y": 36.87500924210772,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4180,7 +4534,10 @@
             "operator": "subtract",
             "value": 1
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
@@ -4209,8 +4566,8 @@
         "elem-nko03tb": {
           "id": "elem-nko03tb",
           "name": "Button",
-          "x": 21.799721226139855,
-          "y": 84.80597028861999,
+          "x": 19.669903781920787,
+          "y": 76.69238002492831,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4230,7 +4587,10 @@
             "operator": "subtract",
             "value": 2
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
@@ -4259,8 +4619,8 @@
         "elem-h4936zv": {
           "id": "elem-h4936zv",
           "name": "Button",
-          "x": 43.46007596532841,
-          "y": 84.14592531579176,
+          "x": 44.9813741397706,
+          "y": 76.93384508139916,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4280,7 +4640,10 @@
             "operator": "subtract",
             "value": 1
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
@@ -4309,8 +4672,8 @@
         "elem-z1gyk45": {
           "id": "elem-z1gyk45",
           "name": "Button",
-          "x": 66.6159689640647,
-          "y": 83.35407015317666,
+          "x": 67.22448823384158,
+          "y": 76.86319794222332,
           "width": 14.543726362366737,
           "height": 5.644796605616956,
           "anchorX": 0,
@@ -4330,7 +4693,10 @@
             "operator": "subtract",
             "value": 2
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": "audi-njzhpab",
           "hoverSoundId": null,
@@ -4359,8 +4725,8 @@
         "elem-p1i1zwx": {
           "id": "elem-p1i1zwx",
           "name": "Button",
-          "x": 62.35741392981434,
-          "y": 90.48076661671256,
+          "x": 41.56633887910441,
+          "y": 84.71110242919848,
           "width": 20,
           "height": 10,
           "anchorX": 0,
@@ -4378,7 +4744,10 @@
             "type": "JumpToScene",
             "targetSceneId": "scene-536upln"
           },
-          "image": null,
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
           "hoverImage": null,
           "clickSoundId": null,
           "hoverSoundId": null,
@@ -4387,8 +4756,8 @@
         "elem-1kpkuun": {
           "id": "elem-1kpkuun",
           "name": "Text",
-          "x": 62.22433408499402,
-          "y": 9.513576239318699,
+          "x": 62.934273233067046,
+          "y": 84.15860666528218,
           "width": 23.593155810148737,
           "height": 10,
           "anchorX": 0,
@@ -4396,16 +4765,145 @@
           "type": "Text",
           "text": "Current Money: ${money}.00",
           "font": {
-            "family": "Poppins, sans-serif",
-            "size": 20,
+            "family": "Merriweather, serif",
+            "size": 24,
             "color": "#1a1919",
-            "weight": "normal",
+            "weight": "bold",
             "italic": false
           },
           "textAlign": "center",
           "verticalAlign": "middle"
         }
-      }
+      },
+      "transitionIn": "crossfade",
+      "transitionOut": "crossfade"
+    },
+    "screen-428ge1z": {
+      "id": "screen-428ge1z",
+      "name": "CG Gallery",
+      "background": {
+        "type": "image",
+        "assetId": "back-7k3rptv"
+      },
+      "music": {
+        "audioId": "audi-b7kvjt0",
+        "policy": "continue",
+        "volume": 0.32
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue",
+        "volume": 0.8
+      },
+      "elements": {
+        "elem-20prcqe": {
+          "id": "elem-20prcqe",
+          "name": "CG Gallery",
+          "x": 10,
+          "y": 15,
+          "width": 80,
+          "height": 70,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "CGGallery",
+          "columns": 4,
+          "gap": 8,
+          "backgroundColor": "#594b68",
+          "thumbnailBorderColor": "#6e49a2",
+          "thumbnailBorderRadius": 8,
+          "showNames": true,
+          "nameFont": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#40225d",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
+          },
+          "lockedColor": "#1e293b",
+          "lockedText": "🔒",
+          "opacity": 0.89
+        },
+        "elem-9tjj00l": {
+          "id": "elem-9tjj00l",
+          "name": "Back Button (copy)",
+          "type": "Button",
+          "text": "Back",
+          "x": 52,
+          "y": 92,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-gsjihqh"
+          },
+          "image": {
+            "type": "image",
+            "id": "imag-x8hvoqs"
+          },
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "elem-y4ll0n7": {
+          "id": "elem-y4ll0n7",
+          "name": "Header (copy)",
+          "type": "Text",
+          "text": "Load Game",
+          "x": 51.89858012170385,
+          "y": 7.8530538652242505,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#533088",
+            "weight": "bold",
+            "italic": false,
+            "textBorder": {
+              "enabled": true,
+              "width": 1,
+              "color": "#ffffff"
+            },
+            "textShadow": {
+              "enabled": true,
+              "offsetX": 2,
+              "offsetY": 2,
+              "blur": 4,
+              "color": "#000000"
+            }
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        }
+      },
+      "effects": [],
+      "transitionIn": "crossfade",
+      "transitionOut": "crossfade",
+      "transitionInDuration": 500,
+      "transitionOutDuration": 700
     }
   },
   "fonts": {},
@@ -4418,5 +4916,30 @@
       "from": "1.0.0",
       "to": "2.0.0"
     }
-  }
+  },
+  "cgGallery": {
+    "entries": {
+      "cg-kuvrvxc": {
+        "id": "cg-kuvrvxc",
+        "name": "Couple Goals",
+        "assetId": "imag-ukga3bs",
+        "unlockable": true,
+        "order": 1,
+        "unlockVariableId": "var-7t1jqgs"
+      },
+      "cg-bjgx5xh": {
+        "id": "cg-bjgx5xh",
+        "name": "Hungeeee!",
+        "assetId": "imag-o8lelrg",
+        "unlockable": true,
+        "order": 2,
+        "unlockVariableId": "var-rk5i513"
+      }
+    },
+    "unlockScope": "global",
+    "columns": 4
+  },
+  "scripts": {},
+  "plugins": {},
+  "pluginRegistry": {}
 }

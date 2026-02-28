@@ -426,25 +426,57 @@ const StagingArea: React.FC<{
 
     const renderDialogueBox = (dialogue: NonNullable<StageState['dialogue']>) => {
         const interpolatedText = interpolateVariables(dialogue.text, currentVariables, project);
+        const showNamebox = dialogue.characterName !== 'Narrator';
+        const nameStyle: React.CSSProperties = {
+            ...fontSettingsToStyle(project.ui.dialogueNameFont),
+            ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
+        };
         return (
-            <div className="absolute z-20 rounded-lg"
+            <div className="absolute z-20"
                  style={{
                      bottom: `${dialogueBoxBottomMargin}px`,
                      left: `${(100 - dialogueBoxWidth) / 2}%`,
                      right: `${(100 - dialogueBoxWidth) / 2}%`,
                      ...(dialogueBorderImageUrl 
-                         ? { backgroundImage: `url(${dialogueBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px` }
+                         ? { backgroundImage: `url(${dialogueBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px`, borderRadius: '0.5rem' }
                          : {})
                  }}>
-                <div className={`relative rounded-lg ${!hasCustomDialogueImage ? 'bg-black/70 border-2 border-slate-500' : ''}`}
-                     style={dialogueBoxImageUrl 
-                         ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }), padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px` } 
-                         : { padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }) }}>
-                    {dialogue.characterName !== 'Narrator' && (
-                        <h3 className="mb-2" style={{...fontSettingsToStyle(project.ui.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
+                {/* Floating namebox tab */}
+                {showNamebox && !hasCustomDialogueImage && (
+                    <div className="absolute z-10"
+                         style={{
+                             top: '-1.6em',
+                             left: `${dialogueBoxPadding}px`,
+                             background: 'linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.88) 100%)',
+                             border: '1px solid rgba(148,163,184,0.35)',
+                             borderBottom: 'none',
+                             borderRadius: '0.375rem 0.375rem 0 0',
+                             padding: '0.2em 0.9em',
+                         }}>
+                        <span style={{...nameStyle, lineHeight: 1.3}}>
                             <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                        </h3>
-                    )}
+                        </span>
+                    </div>
+                )}
+                {showNamebox && hasCustomDialogueImage && (
+                    <div style={{ marginBottom: '2px', paddingLeft: `${dialogueBoxPadding}px` }}>
+                        <span style={nameStyle}>
+                            <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                        </span>
+                    </div>
+                )}
+                <div className={`relative ${!hasCustomDialogueImage ? 'rounded-lg' : ''}`}
+                     style={{
+                         ...(hasCustomDialogueImage ? {} : {
+                             background: 'linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.94) 100%)',
+                             border: '1px solid rgba(148,163,184,0.25)',
+                             borderRadius: '0.5rem',
+                             boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                         }),
+                         ...(dialogueBoxImageUrl 
+                             ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), padding: `${dialogueBoxPadding}px` } 
+                             : { padding: `${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }) })
+                     }}>
                     <p className="leading-relaxed" style={{...fontSettingsToStyle(project.ui.dialogueTextFont), wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
                         <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
                     </p>
@@ -454,18 +486,35 @@ const StagingArea: React.FC<{
     };
 
     const renderChoiceMenu = (choices: NonNullable<StageState['choices']>) => (
-        <div className="absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8 space-y-4">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8" style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.25) 100%)' }}>
             {choices.map((choice) => {
                  const interpolatedText = interpolateVariables(choice.text, currentVariables, project);
                 return (
                     <div key={choice.id}
+                         className="mb-3"
                          style={choiceBorderImageUrl 
-                             ? { backgroundImage: `url(${choiceBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }), borderRadius: '0.5rem' }
-                             : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }) }}>
-                        <button className={`relative rounded-lg overflow-hidden w-full ${!hasCustomChoiceImage ? 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500' : ''} ${choiceBorderImageUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : (!hasCustomChoiceImage ? '' : 'hover:brightness-110 hover:scale-105 transition-all')}`}
-                                style={choiceButtonImageUrl 
-                                    ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choicePadding}px ${choicePadding * 2}px`, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), ...fontSettingsToStyle(project.ui.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const } 
-                                    : { padding: `${choicePadding}px ${choicePadding * 2}px`, ...fontSettingsToStyle(project.ui.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}) }}>
+                             ? { backgroundImage: `url(${choiceBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: '0.5rem' }
+                             : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }) }}>
+                        <button className={`relative rounded-lg overflow-hidden w-full transition-all duration-200 ${!hasCustomChoiceImage ? 'hover:scale-[1.03]' : 'hover:brightness-110 hover:scale-[1.03]'}`}
+                                style={{
+                                    ...(choiceButtonImageUrl 
+                                        ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } 
+                                        : !hasCustomChoiceImage 
+                                            ? {
+                                                background: 'linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(51,65,85,0.85) 100%)',
+                                                border: '1px solid rgba(148,163,184,0.3)',
+                                                boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                              } 
+                                            : {}),
+                                    padding: `${choicePadding}px ${choicePadding * 2}px`,
+                                    minWidth: '200px',
+                                    ...(choiceHeight ? { height: `${choiceHeight}px` } : {}),
+                                    ...fontSettingsToStyle(project.ui.choiceTextFont),
+                                    textAlign: 'center' as const,
+                                    wordBreak: 'break-word' as const,
+                                    overflowWrap: 'break-word' as const,
+                                    cursor: 'pointer',
+                                }}>
                             <span style={extractTextGradientStyle(project.ui.choiceTextFont) || undefined}>{interpolatedText}</span>
                         </button>
                     </div>
@@ -499,7 +548,7 @@ const StagingArea: React.FC<{
             <div className="w-full h-full flex items-center justify-center p-2">
                 <div 
                     ref={stageRef}
-                    className="relative bg-slate-900/50 rounded-md overflow-hidden" 
+                    className="relative bg-[var(--bg-primary)]/50 rounded-md overflow-hidden" 
                     style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}
                 >
                     {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
@@ -676,13 +725,13 @@ const StagingArea: React.FC<{
                     </div>
                 )}
 
-                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-50">
+                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
                     <button
                         onClick={() => setShowCommandIndicators(s => !s)}
                         className={`p-2 rounded-full transition-all border ${
                             showCommandIndicators
                                 ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
-                                : 'bg-slate-800/70 border-slate-500/40 text-slate-300 hover:bg-slate-700/80 hover:border-slate-400/50'
+                                : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
                         }`}
                         title={showCommandIndicators ? 'Hide Command Indicators' : 'Show Command Indicators'}
                     >
@@ -693,7 +742,7 @@ const StagingArea: React.FC<{
                         className={`p-2 rounded-full transition-all border ${
                             showVariableState
                                 ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
-                                : 'bg-slate-800/70 border-slate-500/40 text-slate-300 hover:bg-slate-700/80 hover:border-slate-400/50'
+                                : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
                         }`}
                         title={showVariableState ? 'Hide Variable State' : 'Show Variable State'}
                     >

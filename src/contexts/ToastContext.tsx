@@ -6,7 +6,7 @@ export interface Toast {
     id: string;
     message: string;
     type: ToastType;
-    duration?: number;
+    duration?: number; // display duration in milliseconds (default 3000; 0 = persistent)
     action?: {
         label: string;
         onClick: () => void;

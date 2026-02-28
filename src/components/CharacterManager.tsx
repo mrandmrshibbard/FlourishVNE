@@ -83,6 +83,7 @@ const CharacterManager: React.FC<CharacterManagerProps> = ({
                     <CharacterEditor
                         activeCharacterId={activeCharacterId}
                         selectedExpressionId={selectedExpressionId}
+                        setSelectedExpressionId={setSelectedExpressionId}
                     />
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-400">

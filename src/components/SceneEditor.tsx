@@ -155,6 +155,11 @@ const CommandItem: React.FC<{
                 }
                 return `Hide Button: "${targetCmd?.text ?? 'Unknown'}" (${command.transition}, ${command.duration}s)`;
             }
+            case CommandType.RunScript: {
+                const scriptId = (command as any).scriptId;
+                const script = scriptId ? (project.scripts || {})[scriptId] : null;
+                return `Run Script: ${(script as any)?.name || 'No Script'}`;
+            }
             default: return (command as any).type;
         }
     };
@@ -217,7 +222,7 @@ const CommandItem: React.FC<{
     return (
         <div 
             data-command-id={command.id}
-            className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : multiSelectClass} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-slate-700'}`}
+            className={`py-1 px-2 rounded flex items-center gap-1.5 border ${groupClasses} ${branchClasses} ${isSelected ? 'ring-2 ring-sky-500' : multiSelectClass} ${isGroup || isBranch ? '' : commandColor || 'bg-[var(--bg-secondary)] border-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)]'}`}
             style={{ 
                 paddingLeft: leftPadding,
                 borderColor: isGroup ? 'rgb(245, 158, 11)' : isBranch ? branchColor : undefined,
@@ -239,7 +244,7 @@ const CommandItem: React.FC<{
                     <ChevronDownIcon className="w-3 h-3" />
                 </button>
             )}
-            <span className="cursor-grab text-slate-400 flex-shrink-0"><GripVerticalIcon className="w-3 h-3" /></span>
+            <span className="cursor-grab text-[var(--text-secondary)] flex-shrink-0"><GripVerticalIcon className="w-3 h-3" /></span>
             {isGroup && <FolderIcon className="text-amber-500 w-4 h-4 flex-shrink-0" />}
             <div className="flex-1 flex items-center gap-2 min-w-0">
                 {isEditing && isGroup ? (
@@ -250,7 +255,7 @@ const CommandItem: React.FC<{
                         onBlur={handleFinishEdit}
                         onKeyDown={handleKeyDown}
                         autoFocus
-                        className="bg-slate-900 text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full text-xs"
+                        className="bg-[var(--bg-primary)] text-amber-500 font-bold px-2 py-1 rounded border border-amber-500 w-full text-xs"
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
@@ -265,7 +270,7 @@ const CommandItem: React.FC<{
                         >
                             {command.type === CommandType.BranchStart ? 'Branch' : command.type.replace(/([A-Z])/g, ' $1').trim()}
                         </p>
-                        <p className="text-xs text-slate-400 truncate flex-1">{getCommandSummary()}</p>
+                        <p className="text-xs text-[var(--text-secondary)] truncate flex-1">{getCommandSummary()}</p>
                     </>
                 )}
             </div>
@@ -1117,8 +1122,8 @@ const SceneEditor: React.FC<{
                                                     dropTarget.position === 'inside' 
                                                         ? '⊕ Add to Stack' 
                                                         : dropTarget.position === 'before' 
-                                                            ? '⬆ Place Above' 
-                                                            : '⬇ Place Below'
+                                                            ? '↑ Place Above' 
+                                                            : '↓ Place Below'
                                                 }
                                             />
                                         )}
@@ -1202,15 +1207,15 @@ const SceneEditor: React.FC<{
                                                     message={
                                                         dropTarget.position === 'inside' 
                                                             ? isGroup 
-                                                                ? '📁 Add to Group'
+                                                                ? '⊞ Add to Group'
                                                                 : isBranchStart
-                                                                    ? '🔀 Add to Branch'
+                                                                    ? '⤙ Add to Branch'
                                                                     : canStackCommands([cmd]).canStack 
                                                                         ? '⊕ Stack Here' 
-                                                                        : `❌ ${canStackCommands([cmd]).reason}`
+                                                                        : `✗ ${canStackCommands([cmd]).reason}`
                                                             : dropTarget.position === 'before' 
-                                                                ? '⬆ Place Above' 
-                                                                : '⬇ Place Below'
+                                                                ? '↑ Place Above' 
+                                                                : '↓ Place Below'
                                                     }
                                                 />
                                             )}
@@ -1449,8 +1454,8 @@ const SceneEditor: React.FC<{
                                                                                 canDrop={true}
                                                                                 message={
                                                                                     dropTarget.position === 'before' 
-                                                                                        ? '⬆ Place Above' 
-                                                                                        : '⬇ Place Below'
+                                                                                        ? '↑ Place Above' 
+                                                                                        : '↓ Place Below'
                                                                                 }
                                                                             />
                                                                         )}
@@ -1488,7 +1493,7 @@ const SceneEditor: React.FC<{
                                                                 }}
                                                                 onDrop={handleBranchDrop}
                                                             >
-                                                                {dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? '⬇ Drop at End' : 'Drop zone'}
+                                                                {dropTarget?.commandId === `branch-bottom-${branchCmd.branchId}` ? '↓ Drop at End' : 'Drop zone'}
                                                             </div>
                                                         </>
                                                     )}
@@ -1601,8 +1606,8 @@ const SceneEditor: React.FC<{
                                                                     canDrop={true}
                                                                     message={
                                                                         dropTarget.position === 'before' 
-                                                                            ? '⬆ Place Above' 
-                                                                            : '⬇ Place Below'
+                                                                            ? '↑ Place Above' 
+                                                                            : '↓ Place Below'
                                                                     }
                                                                 />
                                                             )}
@@ -1667,7 +1672,7 @@ const SceneEditor: React.FC<{
                                                             setDropTarget(null);
                                                         }}
                                                     >
-                                                        {dropTarget?.commandId === `group-bottom-${cmd.id}` ? '⬇ Drop at End' : 'Drop zone'}
+                                                        {dropTarget?.commandId === `group-bottom-${cmd.id}` ? '↓ Drop at End' : 'Drop zone'}
                                                     </div>
                                                 )}
                                             </div>
@@ -1743,9 +1748,9 @@ const SceneEditor: React.FC<{
                             dragItem.current = null;
                         }}
                     >
-                        <p className="text-slate-500 text-xs italic">
+                        <p className="text-[var(--text-muted)] text-xs italic">
                             {dropTarget?.commandId === 'scene-bottom' 
-                                ? '⬇ Drop here to add command' 
+                                ? '↓ Drop here to add command' 
                                 : activeScene.commands.length === 0 
                                     ? 'Drag commands here to start' 
                                     : 'Drop zone'
@@ -1765,7 +1770,7 @@ const SceneEditor: React.FC<{
                         className="bg-[var(--bg-secondary)] border-2 border-[var(--accent-cyan)] rounded-lg p-6 max-w-md mx-4"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">⚠️ Cannot Stack Commands</h3>
+                        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">Cannot Stack Commands</h3>
                         <p className="text-[var(--text-secondary)] mb-6">{warningModal.message}</p>
                         <button
                             onClick={() => setWarningModal(null)}

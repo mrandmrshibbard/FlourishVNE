@@ -156,22 +156,31 @@ export const ChangelogModal: React.FC<{
             </div>
             {release.html_url && (
               <div className="mt-4 flex items-center gap-3 flex-wrap">
-                <a
-                  href={release.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-cyan)]/20 hover:bg-[var(--accent-cyan)]/30 text-[var(--accent-cyan)] rounded-lg text-sm font-medium transition-colors"
-                >
-                  📥 Download from GitHub →
-                </a>
-                <a
-                  href="https://memento-morii1.itch.io/flourish-visual-novel-engine"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-pink)]/20 hover:bg-[var(--accent-pink)]/30 text-[var(--accent-pink)] rounded-lg text-sm font-medium transition-colors"
-                >
-                  🎮 itch.io
-                </a>
+                {hasUpdate && isElectron ? (
+                  <button
+                    onClick={() => {
+                      const api = (window as any).electronAPI;
+                      if (api?.installUpdate) {
+                        api.installUpdate();
+                      } else if (api?.checkForUpdates) {
+                        api.checkForUpdates();
+                        onClose();
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-pink)]/25 text-white rounded-lg text-sm font-medium transition-all"
+                  >
+                    🔄 Restart &amp; Update
+                  </button>
+                ) : (
+                  <a
+                    href={release.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-cyan)]/20 hover:bg-[var(--accent-cyan)]/30 text-[var(--accent-cyan)] rounded-lg text-sm font-medium transition-colors"
+                  >
+                    📥 View on GitHub →
+                  </a>
+                )}
               </div>
             )}
           </div>

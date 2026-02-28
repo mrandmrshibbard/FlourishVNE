@@ -5,7 +5,6 @@ import PropertiesInspector from './PropertiesInspector';
 import { VNID } from '../types';
 import LivePreview from './LivePreview';
 import Panel from './ui/Panel';
-import CharacterInspector from './CharacterInspector';
 import NavigationTabs, { NavigationTab } from './NavigationTabs';
 import SceneManager from './SceneManager';
 import CharacterManager from './CharacterManager';
@@ -22,6 +21,7 @@ import InfoModal from './ui/InfoModal';
 import KeyboardShortcutsModal from './ui/KeyboardShortcutsModal';
 import GuidedTour from './GuidedTour';
 import { PhotoIcon, Cog6ToothIcon } from './icons';
+import { toggleBackgroundMusic, isBgmPlaying } from '../utils/hubAudio';
 import { TemplateService } from '../features/templates/TemplateService';
 import { TemplateGenerator } from '../features/templates/TemplateGenerator';
 import { Template, TemplateConfig as TConfig } from '../types/template';
@@ -187,11 +187,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             />;
         }
         if (activeCharacterId) {
-            return <CharacterInspector 
-                activeCharacterId={activeCharacterId} 
-                selectedExpressionId={selectedExpressionId}
-                setSelectedExpressionId={setSelectedExpressionId}
-            />;
+            // Character properties are now integrated into the unified CharacterEditor
+            return null;
         }
         if (activeMenuScreenId) {
             if (selectedUIElementIds.length > 0) {
@@ -458,7 +455,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             <Header
                 title={project.title}
                 onTitleChange={handleTitleChange}
-                onPlay={() => setIsPlaying(true)}
+                onPlay={() => {
+                    // Stop hub background music before starting live preview
+                    if (isBgmPlaying()) {
+                        toggleBackgroundMusic(false);
+                    }
+                    setIsPlaying(true);
+                }}
                 onExit={onExit}
                 navigationTabs={
                     <NavigationTabs

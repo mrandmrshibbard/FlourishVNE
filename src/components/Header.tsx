@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon } from './icons';
+import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon, GlobeIcon, CodeBracketIcon, PuzzlePieceIcon, GamepadIcon, HelpIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import { exportProject } from '../utils/projectPackager';
 import { saveRecentProject } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
@@ -9,10 +10,11 @@ import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager'
 import InfoModal from './ui/InfoModal';
 import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
-import ContentWizardModal from './ContentWizardModal';
-import VisualLogicCanvas from './VisualLogicCanvas';
 import LocalizationPanel from './LocalizationPanel';
 import HelpPanel from './HelpPanel';
+import ScriptEditor from './ScriptEditor';
+import PluginManagerUI from './PluginManagerUI';
+
 
 function isEditorDebugEnabled(): boolean {
     try {
@@ -39,19 +41,21 @@ const Header: React.FC<{
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
-    const [showWizardModal, setShowWizardModal] = useState(false);
-    const [showLogicCanvas, setShowLogicCanvas] = useState(false);
     const [showLocalization, setShowLocalization] = useState(false);
     const [showHelpPanel, setShowHelpPanel] = useState(false);
     const [showToolsMenu, setShowToolsMenu] = useState(false);
+    const [showScriptEditor, setShowScriptEditor] = useState(false);
+    const [showPluginManager, setShowPluginManager] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [isExporting, setIsExporting] = useState(false);
     const [isExportingQuick, setIsExportingQuick] = useState(false);
     const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
-    const { project, undo, redo, canUndo, canRedo, isDirty, markSaved } = useProject();
+    const { project, dispatch, undo, redo, canUndo, canRedo, isDirty, markSaved } = useProject();
+    const toast = useToast();
     const isChildWindow = isManagerWindow();
+
     const isDirtyRef = useRef(isDirty);
     isDirtyRef.current = isDirty;
 
@@ -100,10 +104,10 @@ const Header: React.FC<{
     const handleExport = async () => {
         setIsExportingQuick(true);
         try {
-            const didSave = await exportProject(project);
-            if (didSave) {
+            const result = await exportProject(project);
+            if (result.saved) {
                 // Save to recent projects now that we have a saved file
-                saveRecentProject(project);
+                saveRecentProject(project, result.filePath);
                 markSaved();
             }
         } catch (error) {
@@ -131,15 +135,15 @@ const Header: React.FC<{
         const mode = exitMode;
         setIsExporting(true);
         try {
-            const didSave = await exportProject(project);
+            const result = await exportProject(project);
 
-            if (!didSave) {
+            if (!result.saved) {
                 setIsExporting(false);
                 return;
             }
             
             // Save to recent projects now that we have a saved file
-            saveRecentProject(project);
+            saveRecentProject(project, result.filePath);
             markSaved();
             
             // Wait a moment for the export to complete
@@ -198,7 +202,7 @@ const Header: React.FC<{
     return (
         <>
         <header 
-            className="px-3 py-2 flex items-center z-10 relative"
+            className="px-3 py-2 flex items-center z-50 relative"
             style={{ 
                 background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
                 borderBottom: '1px solid var(--border-subtle)',
@@ -314,32 +318,33 @@ const Header: React.FC<{
                                         }}
                                     >
                                         <button
-                                            onClick={() => { setShowWizardModal(true); setShowToolsMenu(false); }}
-                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)]"
-                                        >
-                                            <SparklesIcon className="w-4 h-4" />
-                                            Content Wizards
-                                        </button>
-                                        <button
-                                            onClick={() => { setShowLogicCanvas(true); setShowToolsMenu(false); }}
-                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)]"
-                                        >
-                                            <span className="text-sm">🔀</span>
-                                            Logic Canvas
-                                        </button>
-                                        <button
                                             onClick={() => { setShowLocalization(true); setShowToolsMenu(false); }}
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-mint)]"
                                         >
-                                            <span className="text-sm">🌐</span>
+                                            <GlobeIcon className="w-4 h-4" />
                                             Localization
+                                        </button>
+                                        <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                        <button
+                                            onClick={() => { setShowScriptEditor(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-emerald-400"
+                                        >
+                                            <CodeBracketIcon className="w-4 h-4" />
+                                            Script Editor
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowPluginManager(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"
+                                        >
+                                            <PuzzlePieceIcon className="w-4 h-4" />
+                                            Plugin Manager
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
                                             onClick={() => { setShowHelpPanel(true); setShowToolsMenu(false); }}
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)]"
                                         >
-                                            <span className="text-sm">?</span>
+                                            <HelpIcon className="w-4 h-4" />
                                             Help & Docs
                                         </button>
                                     </div>
@@ -349,17 +354,17 @@ const Header: React.FC<{
                         <button
                             onClick={handleExport}
                             className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title="Export Project as .zip"
+                            title="Save project to disk (.flourish)"
                         >
                             <SaveIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                            Export
+                            Save
                         </button>
                         <button
                             onClick={() => setShowBuilder(true)}
                             className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs shadow-md hover:shadow-lg hover:shadow-green-500/20"
                             title="Build standalone game (no coding required!)"
                         >
-                            🎮 Build
+                            <GamepadIcon className="w-4 h-4" /> Build
                         </button>
                         <button
                             onClick={onPlay}
@@ -373,16 +378,6 @@ const Header: React.FC<{
             )}
         </header>
         {!isChildWindow && showBuilder && <GameBuilder project={project} onClose={() => setShowBuilder(false)} />}
-        
-        {!isChildWindow && (
-            <ContentWizardModal
-                isOpen={showWizardModal}
-                onClose={() => setShowWizardModal(false)}
-                onComplete={(result) => {
-                    console.log('Wizard completed:', result);
-                }}
-            />
-        )}
         
         {/* Exit Confirmation Modal */}
         {showExitModal && ReactDOM.createPortal(
@@ -450,17 +445,6 @@ const Header: React.FC<{
         />
         
         {!isChildWindow && (
-            <VisualLogicCanvas
-                isOpen={showLogicCanvas}
-                onClose={() => setShowLogicCanvas(false)}
-                onExport={(conditions) => {
-                    console.log('Exported conditions:', conditions);
-                    setShowLogicCanvas(false);
-                }}
-            />
-        )}
-        
-        {!isChildWindow && (
             <LocalizationPanel
                 isOpen={showLocalization}
                 onClose={() => setShowLocalization(false)}
@@ -473,6 +457,14 @@ const Header: React.FC<{
                 isOpen={showHelpPanel}
                 onClose={() => setShowHelpPanel(false)}
             />
+        )}
+        
+        {!isChildWindow && showScriptEditor && (
+            <ScriptEditor onClose={() => setShowScriptEditor(false)} />
+        )}
+        
+        {!isChildWindow && showPluginManager && (
+            <PluginManagerUI onClose={() => setShowPluginManager(false)} />
         )}
     </>
     );

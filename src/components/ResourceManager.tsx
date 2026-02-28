@@ -163,12 +163,12 @@ const ResourceItem: React.FC<{
         >
             {thumbnailUrl ? (
                 isVideo ? (
-                    <video src={thumbnailUrl} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-slate-700" muted playsInline />
+                    <video src={thumbnailUrl} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-[var(--bg-secondary)]" muted playsInline />
                 ) : (
-                    <img src={thumbnailUrl} alt={item.name} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-slate-700"/>
+                    <img src={thumbnailUrl} alt={item.name} className="w-8 h-8 rounded-md object-cover flex-shrink-0 bg-[var(--bg-secondary)]"/>
                 )
             ) : colorSwatch ? (
-                <div className="w-8 h-8 rounded-md flex-shrink-0 flex items-center justify-center bg-slate-700">
+                <div className="w-8 h-8 rounded-md flex-shrink-0 flex items-center justify-center bg-[var(--bg-secondary)]">
                     <div className="w-6 h-6 rounded-full" style={{ backgroundColor: colorSwatch }}></div>
                 </div>
             ) : (
@@ -191,24 +191,24 @@ const ResourceItem: React.FC<{
                 )}
             </div>
             <div className="flex items-center ml-auto flex-shrink-0 pl-1">
-                {isStartScene && <SparkleIcon className="w-4 h-4 text-yellow-400" title="Start Scene"/>}
-                {isLocked && <LockClosedIcon className="w-4 h-4 text-slate-500" title="This screen is essential and cannot be deleted or renamed." />}
+                {isStartScene && <SparkleIcon className="w-5 h-5 text-yellow-400" title="Start Scene"/>}
+                {isLocked && <LockClosedIcon className="w-5 h-5 text-[var(--text-muted)]" title="This screen is essential and cannot be deleted or renamed." />}
                 {onDuplicate && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-                        className="p-1 text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] bg-slate-700 hover:bg-slate-600 rounded"
+                        className="p-1.5 text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded"
                         title="Duplicate"
                     >
-                        <DuplicateIcon className="w-4 h-4" />
+                        <DuplicateIcon className="w-5 h-5" />
                     </button>
                 )}
                 {onDelete && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                        className="p-1 text-[var(--accent-pink)] hover:text-red-400 bg-slate-700 hover:bg-slate-600 rounded"
+                        className="p-1.5 text-[var(--accent-pink)] hover:text-red-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded"
                         title="Delete"
                     >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-5 h-5" />
                     </button>
                 )}
             </div>
@@ -601,22 +601,22 @@ const ResourceManager: React.FC<{
                                 <h4 className="text-sm font-medium text-[var(--text-secondary)]">Project Font Library (TTF/OTF)</h4>
                                 <button
                                     onClick={addProjectFont}
-                                    className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded text-xs"
+                                    className="bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] text-white px-3 py-1 rounded text-xs"
                                 >
                                     Upload Font
                                 </button>
                             </div>
                             {projectFontsArray.length === 0 ? (
-                                <div className="text-xs text-slate-400">No custom fonts uploaded yet. Upload a .ttf/.otf to make it selectable in menu/dialogue font pickers.</div>
+                                <div className="text-xs text-[var(--text-secondary)]">No custom fonts uploaded yet. Upload a .ttf/.otf to make it selectable in menu/dialogue font pickers.</div>
                             ) : (
                                 <div className="space-y-2">
                                     {projectFontsArray.map((f) => (
-                                        <div key={f.id} className="flex items-center justify-between bg-slate-900/40 border border-white/10 rounded px-2 py-2">
+                                        <div key={f.id} className="flex items-center justify-between bg-[var(--bg-primary)]/40 border border-white/10 rounded px-2 py-2">
                                             <div className="min-w-0">
                                                 <div className="text-sm text-white truncate" style={{ fontFamily: f.fontFamily }}>
                                                     {f.name}
                                                 </div>
-                                                <div className="text-[11px] text-slate-400 truncate">{f.fontFamily}</div>
+                                                <div className="text-[11px] text-[var(--text-secondary)] truncate">{f.fontFamily}</div>
                                             </div>
                                             <button
                                                 onClick={() => deleteProjectFont(f.id)}

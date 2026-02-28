@@ -48,6 +48,11 @@ export const COMMAND_CATEGORIES = {
         color: 'bg-indigo-500/20 border-indigo-500 text-indigo-300',
         headerColor: 'bg-indigo-600/30 text-indigo-200',
         commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait]
+    },
+    'Scripting': {
+        color: 'bg-emerald-500/20 border-emerald-500 text-emerald-300',
+        headerColor: 'bg-emerald-600/30 text-emerald-200',
+        commands: [CommandType.RunScript]
     }
 } as const;
 
@@ -61,7 +66,7 @@ export const getCommandColor = (commandType: CommandType): string => {
             return category.color;
         }
     }
-    return 'bg-slate-500/20 border-slate-500 text-slate-300'; // default
+    return 'bg-slate-500/20 border-[var(--border-default)] text-[var(--text-primary)]'; // default
 };
 
 // Helper function to format command display name
@@ -99,7 +104,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <div className="px-1.5 py-1 border-b border-slate-700 flex-shrink-0">
+            <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0">
                 <h2 className="text-xs font-bold text-white">Commands</h2>
             </div>
             

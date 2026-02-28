@@ -19,7 +19,7 @@ import {
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
-    CreditRollCommand, CreditBackground, CreditMedia
+    CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -82,6 +82,25 @@ function savePersistentVariables(projectId: string, vars: Record<string, string 
     }
 }
 
+/** Build initial variable state: defaults + persistent overrides from storage */
+function getInitialVariablesWithPersistent(
+    projectVariables: Record<string, any>,
+    projectId: string
+): Record<string, string | number | boolean> {
+    const vars: Record<string, string | number | boolean> = {};
+    Object.values(projectVariables).forEach((v: any) => {
+        vars[v.id] = v.defaultValue;
+    });
+    // Layer in any persistent-scope values saved from previous sessions
+    const persistentVars = loadPersistentVariables(projectId);
+    Object.values(projectVariables).forEach((v: any) => {
+        if ((v.scope || 'global') === 'persistent' && persistentVars[v.id] !== undefined) {
+            vars[v.id] = persistentVars[v.id];
+        }
+    });
+    return vars;
+}
+
 /** Get default values for all local-scope variables in a project */
 function getLocalVariableDefaults(projectVariables: Record<string, any>): Record<string, string | number | boolean> {
     const defaults: Record<string, string | number | boolean> = {};
@@ -127,6 +146,7 @@ import {
     handleFlashScreen,
     handleTextInput,
     handleCreditRoll,
+    handleRunScript,
 } from './live-preview/command-handlers';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
@@ -157,8 +177,7 @@ import { getOverlayTransitionClass } from './live-preview/systems/transitionUtil
 // import { TextOverlayElement } from './live-preview/renderers/TextOverlayRenderer';
 // import { ImageOverlayElement } from './live-preview/renderers/ImageOverlayRenderer';
 // import { ButtonOverlayElement } from './live-preview/renderers/ButtonOverlayRenderer';
-// import { DialogueBox } from './live-preview/renderers/DialogueRenderer';
-// import { ChoiceMenu } from './live-preview/renderers/ChoiceMenuRenderer';
+
 
 const defaultSettings: GameSettings = {
     textSpeed: 50,
@@ -690,25 +709,72 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     };
 
     const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
+    const showNamebox = dialogue.characterName !== 'Narrator';
+
+    // Namebox style: uses name font with character colour override
+    const nameStyle: React.CSSProperties = {
+        ...fontSettingsToStyle(projectUI.dialogueNameFont),
+        ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
+    };
 
     return (
         <div 
-            className={`absolute z-20 cursor-pointer rounded-lg`}
+            className="absolute z-20 cursor-pointer"
             style={{
                 bottom: `${dialogueBoxBottomMargin}px`,
                 left: `${(100 - dialogueBoxWidth) / 2}%`,
                 right: `${(100 - dialogueBoxWidth) / 2}%`,
+                animation: 'vnDialogueIn 0.25s ease-out',
                 ...(dialogueBorderUrl 
-                    ? { backgroundImage: `url(${dialogueBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px` }
+                    ? { backgroundImage: `url(${dialogueBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px`, borderRadius: '0.5rem' }
                     : {})
             }}
             onClick={handleClick}
         >
+            {/* Floating namebox tab — positioned above the dialogue box */}
+            {showNamebox && !hasCustomImage && (
+                <div 
+                    className="absolute z-10"
+                    style={{
+                        top: '-1.6em',
+                        left: `${dialogueBoxPadding}px`,
+                        background: 'linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.88) 100%)',
+                        border: '1px solid rgba(148,163,184,0.35)',
+                        borderBottom: 'none',
+                        borderRadius: '0.375rem 0.375rem 0 0',
+                        padding: '0.2em 0.9em',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                    }}
+                >
+                    <span style={{...nameStyle, lineHeight: 1.3}}>
+                        <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                    </span>
+                </div>
+            )}
+            {/* Floating namebox tab — when custom images are used, render inline above content */}
+            {showNamebox && hasCustomImage && (
+                <div style={{ marginBottom: '2px', paddingLeft: `${dialogueBoxPadding}px` }}>
+                    <span style={nameStyle}>
+                        <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                    </span>
+                </div>
+            )}
             <div 
-                className={`relative rounded-lg ${!hasCustomImage ? 'bg-black/70 border-2 border-slate-500' : ''}`}
-                style={dialogueBoxUrl && !isDialogueBoxVideo 
-                    ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }), padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px` } 
-                    : { padding: `${dialogueBoxPadding}px ${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '150px' }) }}
+                className={`relative ${!hasCustomImage ? 'rounded-lg' : ''}`}
+                style={{
+                    ...(hasCustomImage ? {} : {
+                        background: 'linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.94) 100%)',
+                        border: '1px solid rgba(148,163,184,0.25)',
+                        borderRadius: '0.5rem',
+                        boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                        backdropFilter: 'blur(8px)',
+                        WebkitBackdropFilter: 'blur(8px)',
+                    }),
+                    ...(dialogueBoxUrl && !isDialogueBoxVideo 
+                        ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), padding: `${dialogueBoxPadding}px` } 
+                        : { padding: `${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }) })
+                }}
             >
                 {isDialogueBoxVideo && dialogueBoxUrl && (
                     <video 
@@ -721,16 +787,51 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         <source src={dialogueBoxUrl} />
                     </video>
                 )}
-                {dialogue.characterName !== 'Narrator' && (
-                    <h3 className="mb-2" style={{...fontSettingsToStyle(projectUI.dialogueNameFont), ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})}}>
-                        <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                    </h3>
-                )}
                 <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
                     <span style={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}>{displayText}</span>
-                    {!hasFinished && <span className="animate-ping">_</span>}
+                    {!hasFinished && (
+                        <span style={{ 
+                            display: 'inline-block', 
+                            width: '0.5em', 
+                            height: '1em', 
+                            marginLeft: '2px', 
+                            verticalAlign: 'text-bottom',
+                            backgroundColor: dialogueTextStyle.color || projectUI.dialogueTextFont?.color || '#FFFFFF',
+                            animation: 'vnCursorBlink 0.8s step-end infinite',
+                            opacity: 0.85
+                        }} />
+                    )}
                 </p>
+                {/* Click-to-advance indicator */}
+                {hasFinished && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '8px',
+                        right: '12px',
+                        animation: 'vnAdvanceBounce 1.2s ease-in-out infinite',
+                        opacity: 0.6,
+                        fontSize: 'calc(var(--font-scale, 1) * 12px)',
+                        color: '#94a3b8',
+                    }}>
+                        ▼
+                    </div>
+                )}
             </div>
+            {/* Inject keyframe animations */}
+            <style>{`
+                @keyframes vnDialogueIn {
+                    from { opacity: 0; transform: translateY(12px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes vnCursorBlink {
+                    0%, 100% { opacity: 0.85; }
+                    50% { opacity: 0; }
+                }
+                @keyframes vnAdvanceBounce {
+                    0%, 100% { transform: translateY(0); }
+                    50% { transform: translateY(4px); }
+                }
+            `}</style>
         </div>
     );
 };
@@ -759,23 +860,44 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
 
     return (
-        <div className="absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8 space-y-4">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8" style={{ animation: 'vnChoiceOverlayIn 0.3s ease-out', background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.25) 100%)' }}>
             {choices.map((choice, index) => {
                 const interpolatedText = interpolateVariables(choice.text, variables, project);
                 return (
                     <div
                         key={index}
-                        className={`${choiceBorderUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : ''}`}
-                        style={choiceBorderUrl 
-                            ? { backgroundImage: `url(${choiceBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }), borderRadius: '0.5rem' }
-                            : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%' }) }}
+                        className="mb-3"
+                        style={{
+                            animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                            ...(choiceBorderUrl 
+                                ? { backgroundImage: `url(${choiceBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: '0.5rem' }
+                                : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }) })
+                        }}
                     >
                         <button 
                             onClick={() => onSelect(choice)}
-                            className={`relative rounded-lg overflow-hidden w-full ${!hasCustomChoiceImage ? 'bg-slate-800/80 hover:bg-slate-700/90 border-2 border-slate-500' : ''} ${!choiceBorderUrl ? 'hover:brightness-110 hover:scale-105 transition-all' : ''}`}
-                            style={choiceButtonUrl && !isChoiceButtonVideo 
-                                ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choicePadding}px ${choicePadding * 2}px`, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), ...fontSettingsToStyle(projectUI.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const } 
-                                : { padding: `${choicePadding}px ${choicePadding * 2}px`, ...fontSettingsToStyle(projectUI.choiceTextFont), textAlign: 'center' as const, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const, minWidth: '200px', ...(choiceHeight ? { height: `${choiceHeight}px` } : {}) }}
+                            className={`relative rounded-lg overflow-hidden w-full transition-all duration-200 ${!hasCustomChoiceImage ? 'hover:scale-[1.03]' : 'hover:brightness-110 hover:scale-[1.03]'}`}
+                            style={{
+                                ...(choiceButtonUrl && !isChoiceButtonVideo 
+                                    ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } 
+                                    : !hasCustomChoiceImage 
+                                        ? { 
+                                            background: 'linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(51,65,85,0.85) 100%)',
+                                            border: '1px solid rgba(148,163,184,0.3)',
+                                            boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                            backdropFilter: 'blur(6px)',
+                                            WebkitBackdropFilter: 'blur(6px)',
+                                          } 
+                                        : {}),
+                                padding: `${choicePadding}px ${choicePadding * 2}px`, 
+                                minWidth: '200px', 
+                                ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), 
+                                ...fontSettingsToStyle(projectUI.choiceTextFont), 
+                                textAlign: 'center' as const, 
+                                wordBreak: 'break-word' as const, 
+                                overflowWrap: 'break-word' as const,
+                                cursor: 'pointer',
+                            }}
                         >
                             {isChoiceButtonVideo && choiceButtonUrl && (
                                 <video 
@@ -793,11 +915,22 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                     </div>
                 );
             })}
+            {/* Inject choice keyframe animations */}
+            <style>{`
+                @keyframes vnChoiceOverlayIn {
+                    from { opacity: 0; }
+                    to   { opacity: 1; }
+                }
+                @keyframes vnChoiceSlideIn {
+                    from { opacity: 0; transform: translateY(16px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </div>
     );
 };
 
-const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], onSubmit: (value: string) => void, variables: Record<VNID, string | number | boolean>, project: VNProject }> = ({ textInput, onSubmit, variables, project }) => {
+const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], onSubmit: (value: string) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, projectUI?: any }> = ({ textInput, onSubmit, variables, project, projectUI }) => {
     const [inputValue, setInputValue] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -807,27 +940,106 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
 
     const interpolatedPrompt = interpolateVariables(textInput.prompt, variables, project);
 
+    // Resolve input box image/video URL
+    const inputBoxUrl = projectUI?.inputBoxImage
+        ? (projectUI.inputBoxImage.type === 'video'
+            ? project.videos[projectUI.inputBoxImage.id]?.videoUrl
+            : (project.images[projectUI.inputBoxImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxImage.id]?.imageUrl)
+          )
+        : null;
+    const isInputBoxVideo = projectUI?.inputBoxImage?.type === 'video';
+
+    // Resolve input box border image URL
+    const inputBorderUrl = projectUI?.inputBoxBorderImage
+        ? (project.images[projectUI.inputBoxBorderImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxBorderImage.id]?.imageUrl)
+        : null;
+    const inputBorderPadding = projectUI?.inputBorderPadding ?? 8;
+    const inputBoxWidth = projectUI?.inputBoxWidth || 0;
+    const inputBoxPadding = projectUI?.inputBoxPadding ?? 24;
+
+    const hasCustomImage = inputBoxUrl || inputBorderUrl;
+
+    // Font styles
+    const promptStyle: React.CSSProperties = projectUI?.inputPromptFont
+        ? { ...fontSettingsToStyle(projectUI.inputPromptFont), textAlign: projectUI.inputPromptFont.align || 'center' }
+        : { color: '#FFFFFF', textAlign: 'center' };
+    const fieldStyle: React.CSSProperties = projectUI?.inputFieldFont
+        ? fontSettingsToStyle(projectUI.inputFieldFont)
+        : { color: '#FFFFFF' };
+    const submitStyle: React.CSSProperties = projectUI?.inputSubmitFont
+        ? fontSettingsToStyle(projectUI.inputSubmitFont)
+        : { color: '#FFFFFF' };
+
     return (
         <div className="absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8">
-            <div className="bg-black/70 rounded-lg border-2 border-slate-500 p-6 max-w-md w-full">
-                <p className="text-white mb-4 text-center">{interpolatedPrompt}</p>
-                <form onSubmit={handleSubmit}>
-                    <input
-                        type="text"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        placeholder={textInput.placeholder}
-                        maxLength={textInput.maxLength}
-                        className="w-full px-3 py-2 bg-slate-800 text-white border border-slate-600 rounded focus:outline-none focus:border-slate-400"
-                        autoFocus
-                    />
-                    <button
-                        type="submit"
-                        className="w-full mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
-                    >
-                        Submit
-                    </button>
-                </form>
+            <div
+                className={`relative ${!hasCustomImage ? 'rounded-lg' : ''}`}
+                style={{
+                    ...(inputBoxWidth ? { width: `${inputBoxWidth}px` } : { maxWidth: '28rem', width: '100%' }),
+                    ...(inputBorderUrl
+                        ? { backgroundImage: `url(${inputBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${inputBorderPadding}px`, borderRadius: '0.5rem' }
+                        : {}),
+                    animation: 'vnDialogueIn 0.25s ease-out',
+                }}
+            >
+                <div
+                    className={`relative ${!hasCustomImage ? 'rounded-lg' : ''}`}
+                    style={{
+                        ...(hasCustomImage ? {} : {
+                            background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.96) 100%)',
+                            border: '1px solid rgba(148,163,184,0.3)',
+                            borderRadius: '0.5rem',
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
+                        }),
+                        ...(inputBoxUrl && !isInputBoxVideo
+                            ? { backgroundImage: `url(${inputBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${inputBoxPadding}px` }
+                            : { padding: `${inputBoxPadding}px` })
+                    }}
+                >
+                    {isInputBoxVideo && inputBoxUrl && (
+                        <video
+                            autoPlay
+                            loop
+                            muted
+                            className="absolute inset-0 w-full h-full rounded-lg -z-10"
+                            style={{ pointerEvents: 'none', objectFit: 'fill' }}
+                        >
+                            <source src={inputBoxUrl} />
+                        </video>
+                    )}
+                    <p className="mb-4" style={promptStyle}>
+                        <span style={extractTextGradientStyle(projectUI?.inputPromptFont) || undefined}>{interpolatedPrompt}</span>
+                    </p>
+                    <form onSubmit={handleSubmit}>
+                        <input
+                            type="text"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            placeholder={textInput.placeholder}
+                            maxLength={textInput.maxLength}
+                            className="w-full px-3 py-2 rounded focus:outline-none transition-colors"
+                            style={{
+                                ...fieldStyle,
+                                backgroundColor: 'rgba(15,23,42,0.6)',
+                                border: '1px solid rgba(148,163,184,0.3)',
+                            }}
+                            autoFocus
+                        />
+                        <button
+                            type="submit"
+                            className="w-full mt-4 px-4 py-2 rounded transition-colors hover:brightness-110"
+                            style={{
+                                ...submitStyle,
+                                backgroundColor: hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)',
+                                border: '1px solid rgba(148,163,184,0.2)',
+                            }}
+                        >
+                            <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>Submit</span>
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
     );
@@ -2178,21 +2390,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [isJustLoaded, setIsJustLoaded] = useState(false);
     
     // Menu variables: used for UI screens before game starts (e.g., character customization)
+    // Includes persistent variable overrides so CG unlock status is visible on title/menu screens
     const [menuVariables, setMenuVariables] = useState<Record<VNID, string | number | boolean>>(() => {
-        const initVars: Record<VNID, string | number | boolean> = {};
-        Object.values(project.variables).forEach((v: any) => {
-            initVars[v.id] = v.defaultValue;
-        });
-        return initVars;
+        return getInitialVariablesWithPersistent(project.variables, project.id);
     });
     
     // UI variables: used for UI screens during gameplay (separate from game variables until merged back)
     const [uiVariables, setUiVariables] = useState<Record<VNID, string | number | boolean>>(() => {
-        const initVars: Record<VNID, string | number | boolean> = {};
-        Object.values(project.variables).forEach((v: any) => {
-            initVars[v.id] = v.defaultValue;
-        });
-        return initVars;
+        return getInitialVariablesWithPersistent(project.variables, project.id);
     });
     const uiVariablesRef = useRef<Record<VNID, string | number | boolean>>(uiVariables);
 
@@ -2638,7 +2843,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 variables: saveData.playerStateData.variables,
                 stageState: saveData.playerStateData.stageState,
                 history: [],
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
+                savedInputs: {},
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
@@ -2712,7 +2918,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             variables: initialVariables,
             stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
             history: [],
-            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null },
+            savedInputs: {},
+            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
         });
         setScreenStack([]);
@@ -3312,6 +3519,44 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
     }, [isJustLoaded, playerState, assetResolver, fadeAudio, settings.musicVolume]);
 
+    // Reactive music sync: when musicState changes (e.g. from backward skip restoring a
+    // snapshot), drive the actual <audio> element to match. Uses a ref to track the last
+    // audioId we applied so we don't re-trigger on every render.
+    const lastSyncedMusicIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing' || isJustLoaded) return;
+        const { musicState } = playerState;
+        const audio = musicAudioRef.current;
+        if (!audio) return;
+
+        const currentAudioId = musicState.audioId || null;
+        const previousAudioId = lastSyncedMusicIdRef.current;
+
+        // Only act when the audioId actually changed
+        if (currentAudioId === previousAudioId) return;
+        lastSyncedMusicIdRef.current = currentAudioId;
+
+        if (!currentAudioId) {
+            // Music was cleared — stop playback
+            audio.pause();
+            audio.currentTime = 0;
+            audio.src = '';
+            return;
+        }
+
+        // Music changed — load and play the new track
+        const url = assetResolver(currentAudioId, 'audio');
+        if (!url) return;
+        audio.src = url;
+        audio.loop = musicState.loop;
+        audio.currentTime = musicState.currentTime || 0;
+        if (musicState.isPlaying) {
+            audio.play().then(() => {
+                fadeAudio(audio, settings.musicVolume, 0.3);
+            }).catch(e => console.error('[Music Sync] Failed to play restored music:', e));
+        }
+    }, [playerState?.musicState?.audioId, playerState?.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
+
     const stopAllSfx = useCallback(() => {
         // Stop any WebAudio buffer sources
         try {
@@ -3753,6 +3998,49 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 });
             };
             
+            // --- Auto-replay saved inputs from backward skip ---
+            // When the player goes backward and then advances forward again, previously-
+            // entered choices and text inputs are replayed automatically instead of
+            // re-prompting the player.
+            const savedInputKey = `${playerState.currentSceneId}:${playerState.currentIndex}`;
+            const savedInput = playerState.savedInputs[savedInputKey];
+
+            if (savedInput && command.type === CommandType.Choice && savedInput.type === 'choice') {
+                runtimeDebugLog('[BACKWARD REPLAY] Auto-replaying saved choice:', savedInput.choice.text);
+                handleChoiceSelect(savedInput.choice);
+                return;
+            }
+
+            if (savedInput && command.type === CommandType.TextInput && savedInput.type === 'textInput') {
+                runtimeDebugLog('[BACKWARD REPLAY] Auto-replaying saved text input:', savedInput.value);
+                const cmd = command as TextInputCommand;
+                updatePlayerState(p => {
+                    if (!p) return p;
+                    const historyEntry: HistoryEntry = {
+                        timestamp: Date.now(),
+                        type: 'textInput',
+                        text: `Input: ${savedInput.value}`,
+                        inputValue: savedInput.value,
+                        variableId: cmd.variableId,
+                        sceneId: p.currentSceneId,
+                        commandIndex: p.currentIndex,
+                        stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                        variablesSnapshot: { ...p.variables },
+                        musicSnapshot: { ...p.musicState },
+                    };
+                    const newHistory = [...p.history, historyEntry];
+                    if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
+                    return {
+                        ...p,
+                        currentIndex: p.currentIndex + 1,
+                        variables: { ...p.variables, [cmd.variableId]: savedInput.value },
+                        history: newHistory,
+                        uiState: { ...p.uiState, isWaitingForInput: false, textInput: null }
+                    };
+                });
+                return;
+            }
+
             switch (command.type) {
                 case CommandType.Group: {
                     const result = handleGroup();
@@ -3818,6 +4106,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.Jump: {
+                    // Stop skip-forward on scene change
+                    if (playerState.uiState.isSkipping) {
+                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+                    }
                     startSceneExitTransition(playerState.currentSceneId, () => {
                         const result = handleJump(command as JumpCommand, commandContext);
                         applyResult(result);
@@ -4121,6 +4413,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                case CommandType.RunScript: {
+                    const result = handleRunScript(command as RunScriptCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
             }
             
             // Handle command advancement based on async modifier
@@ -4156,20 +4453,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
             
-            // Add dialogue to history
+            // Add dialogue to history with full state snapshot for skip-backward
             const historyEntry: HistoryEntry = {
                 timestamp: Date.now(),
                 type: 'dialogue',
                 characterName: p.uiState.dialogue.characterName,
                 characterColor: p.uiState.dialogue.characterColor,
                 text: p.uiState.dialogue.text,
+                sceneId: p.currentSceneId,
+                commandIndex: p.currentIndex,
+                // Full state snapshots for backward navigation
+                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                variablesSnapshot: { ...p.variables },
+                musicSnapshot: { ...p.musicState },
             };
+            
+            // Cap history at 200 entries to prevent unbounded memory growth
+            const newHistory = [...p.history, historyEntry];
+            if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
             
             return {
                 ...p,
                 currentIndex: p.currentIndex + 1,
-                history: [...p.history, historyEntry],
-                uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null }
+                history: newHistory,
+                uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false }
             };
         });
     };
@@ -4179,14 +4486,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (!p) return null;
             let newState = { ...p };
             
-            // Add choice to history
+            // Add choice to history with full state snapshot (BEFORE actions modify state)
             const historyEntry: HistoryEntry = {
                 timestamp: Date.now(),
                 type: 'choice',
                 text: `Choice: ${choice.text}`,
                 choiceText: choice.text,
+                choiceOption: choice,
+                sceneId: p.currentSceneId,
+                commandIndex: p.currentIndex,
+                // Full state snapshots for backward navigation
+                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                variablesSnapshot: { ...p.variables },
+                musicSnapshot: { ...p.musicState },
             };
             newState.history = [...newState.history, historyEntry];
+            if (newState.history.length > 200) newState.history.splice(0, newState.history.length - 200);
+            
+            // Save this choice for skip-backward replay
+            const inputKey = `${p.currentSceneId}:${p.currentIndex}`;
+            newState.savedInputs = { ...newState.savedInputs, [inputKey]: { type: 'choice', choice } };
             
             const actions = choice.actions || [];
             if (!choice.actions && choice.targetSceneId) {
@@ -4316,13 +4635,122 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
 
     const handleTextInputSubmit = (value: string) => {
-    updatePlayerState(p => p ? { 
-            ...p, 
-            currentIndex: p.currentIndex + 1, 
-            variables: { ...p.variables, [p.uiState.textInput!.variableId]: value },
-            uiState: { ...p.uiState, isWaitingForInput: false, textInput: null } 
-        } : null);
+        updatePlayerState(p => {
+            if (!p || !p.uiState.textInput) return p;
+            
+            // Add text input to history with full state snapshot (BEFORE input modifies state)
+            const historyEntry: HistoryEntry = {
+                timestamp: Date.now(),
+                type: 'textInput',
+                text: `Input: ${value}`,
+                inputValue: value,
+                variableId: p.uiState.textInput.variableId,
+                sceneId: p.currentSceneId,
+                commandIndex: p.currentIndex,
+                // Full state snapshots for backward navigation
+                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                variablesSnapshot: { ...p.variables },
+                musicSnapshot: { ...p.musicState },
+            };
+
+            // Save this input for skip-backward replay
+            const inputKey = `${p.currentSceneId}:${p.currentIndex}`;
+            
+            return {
+                ...p,
+                currentIndex: p.currentIndex + 1,
+                variables: { ...p.variables, [p.uiState.textInput.variableId]: value },
+                history: (() => { const h = [...p.history, historyEntry]; if (h.length > 200) h.splice(0, h.length - 200); return h; })(),
+                savedInputs: { ...p.savedInputs, [inputKey]: { type: 'textInput', value } },
+                uiState: { ...p.uiState, isWaitingForInput: false, textInput: null }
+            };
+        });
     };
+
+    /** Skip backward: navigate to the previous dialogue entry in history.
+     *  - Fully restores visual state (background, characters, overlays) from snapshots.
+     *  - Saved choices/inputs are replayed automatically when advancing forward again.
+     *  - Properly handles cross-scene navigation, restoring the target scene's state.
+     */
+    const handleSkipBackward = useCallback(() => {
+        updatePlayerState(p => {
+            if (!p || p.history.length === 0) return p;
+            
+            // Find the last dialogue entry (skip over choice/textInput entries to find
+            // the previous dialogue to show). We walk backward from end of history.
+            let targetIdx = p.history.length - 1;
+            
+            // If we're currently showing dialogue, that means the most recent history entry
+            // is the CURRENT dialogue. We need to go back one more to find the PREVIOUS.
+            if (p.uiState.dialogue) {
+                targetIdx = p.history.length - 2;
+            }
+            
+            // Walk backward to find the previous dialogue entry
+            while (targetIdx >= 0 && p.history[targetIdx].type !== 'dialogue') {
+                targetIdx--;
+            }
+            
+            if (targetIdx < 0) return p; // No previous dialogue to go back to
+            
+            const target = p.history[targetIdx];
+            
+            // Restore scene navigation
+            let newSceneId = target.sceneId || p.currentSceneId;
+            let newCommands = p.currentCommands;
+            let newCommandIndex = target.commandIndex ?? p.currentIndex;
+            
+            // Always load commands from the target scene (even same scene - ensures consistency)
+            const targetScene = project.scenes[newSceneId];
+            if (targetScene) {
+                newCommands = targetScene.commands;
+            } else if (target.sceneId && target.sceneId !== p.currentSceneId) {
+                return p; // Target scene not found, can't navigate
+            }
+            
+            // Trim history to the target entry (remove everything after it)
+            const trimmedHistory = p.history.slice(0, targetIdx);
+            
+            // Restore full visual state from snapshot if available
+            const restoredStage = target.stageSnapshot
+                ? JSON.parse(JSON.stringify(target.stageSnapshot))
+                : p.stageState;
+            const restoredVariables = target.variablesSnapshot
+                ? { ...target.variablesSnapshot }
+                : p.variables;
+            const restoredMusic = target.musicSnapshot
+                ? { ...target.musicSnapshot }
+                : p.musicState;
+            
+            return {
+                ...p,
+                currentSceneId: newSceneId,
+                currentCommands: newCommands,
+                currentIndex: newCommandIndex,
+                history: trimmedHistory,
+                // Restore full visual/audio state from snapshot
+                stageState: restoredStage,
+                variables: restoredVariables,
+                musicState: restoredMusic,
+                uiState: {
+                    ...p.uiState,
+                    dialogue: {
+                        characterName: target.characterName || 'Narrator',
+                        characterColor: target.characterColor || '#FFFFFF',
+                        characterId: null,
+                        text: target.text,
+                    },
+                    choices: null,
+                    textInput: null,
+                    isWaitingForInput: true,
+                    isSkipping: false,
+                    showHistory: false,
+                    movieUrl: null,
+                    movieLoop: false,
+                }
+            };
+        });
+    }, [project.scenes]);
 
     const handleUIAction = (action: VNUIAction) => {
         runtimeDebugLog('handleUIAction called with:', action.type, action);
@@ -4552,13 +4980,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Clear player state, uiVariables, and return to title screen
             updatePlayerState(null);
             setHudStack([]);
-            // Reset uiVariables to defaults when quitting to title
-            const resetVars: Record<VNID, string | number | boolean> = {};
-            Object.values(project.variables).forEach((v: any) => {
-                resetVars[v.id] = v.defaultValue;
-            });
+            // Reset variables to defaults + persistent overrides when quitting to title
+            // This ensures CG unlock status (persistent vars) is still visible on menu screens
+            const resetVars = getInitialVariablesWithPersistent(project.variables, project.id);
             setUiVariables(resetVars);
             uiVariablesRef.current = resetVars;
+            setMenuVariables(resetVars);
             runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
             uiDirtyVariableIdsRef.current.clear();
             if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
@@ -5052,6 +5479,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         runtimeDebugLog('[commitUiVariables] Clearing dirty set after successful commit');
         uiDirtyVariableIdsRef.current.clear();
     }, [mergeDirtyUiVariables]);
+
+    // Compute the variables that UI screens should see: canonical playerState.variables
+    // with any dirty (uncommitted) UI-only changes layered on top. This ensures that
+    // in-game SetVariable commands (e.g. CG unlock flags) are visible to screens
+    // immediately, while keeping UI-screen-originated edits intact until committed.
+    const screenVariables = useMemo(() => {
+        if (!playerState) return menuVariables;
+        const base = { ...playerState.variables };
+        // Overlay any dirty UI edits that haven't been committed yet
+        uiDirtyVariableIdsRef.current.forEach(id => {
+            if (Object.prototype.hasOwnProperty.call(uiVariablesRef.current, id)) {
+                base[id] = uiVariablesRef.current[id];
+            }
+        });
+        return base;
+    }, [playerState, playerState?.variables, menuVariables, uiVariables]);
     
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -5070,6 +5513,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
                 return;
             }
+            
+            // Ctrl key to toggle skip forward
+            if (e.key === 'Control' && playerState.mode === 'playing' && !playerState.uiState.showHistory && settings.enableSkip) {
+                e.preventDefault();
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: !p.uiState.isSkipping } } : null);
+                return;
+            }
+            
+            // Arrow Up / Page Up to skip backward
+            if ((e.key === 'ArrowUp' || e.key === 'PageUp') && playerState.mode === 'playing' && !playerState.uiState.showHistory && !playerState.uiState.choices && !playerState.uiState.textInput) {
+                e.preventDefault();
+                handleSkipBackward();
+                return;
+            }
+            
+            // Mouse scroll up to skip backward (handled via wheel event separately)
             
             if (e.key === 'Escape') {
                 // Close history if open
@@ -5105,7 +5564,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [playerState, project.ui.pauseScreenId, screenStack, handleDialogueAdvance]);
+    }, [playerState, project.ui.pauseScreenId, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
 
     // Auto-advance effect
     useEffect(() => {
@@ -5118,6 +5577,31 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         
         return () => clearTimeout(timer);
     }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, handleDialogueAdvance]);
+
+    // Skip-forward effect: rapidly advance through dialogue when skipping is active
+    // Stops at choices, text inputs, and scene changes (handled by command execution)
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing' || !playerState.uiState.isSkipping) return;
+        if (!settings.enableSkip) {
+            // If skip is disabled in settings, cancel skip mode
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+            return;
+        }
+        
+        // Stop skipping at choices, text inputs
+        if (playerState.uiState.choices || playerState.uiState.textInput) {
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+            return;
+        }
+        
+        // If dialogue is showing, auto-advance it quickly
+        if (playerState.uiState.dialogue) {
+            const timer = setTimeout(() => {
+                handleDialogueAdvance();
+            }, 50); // Very fast skip speed
+            return () => clearTimeout(timer);
+        }
+    }, [playerState?.uiState.isSkipping, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, settings.enableSkip, handleDialogueAdvance]);
 
 
     // --- Stage Rendering ---
@@ -5156,11 +5640,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
         };
 
+        const handleWheel = (e: React.WheelEvent) => {
+            // Scroll up to skip backward when dialogue is showing
+            if (e.deltaY < 0 && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+                e.preventDefault();
+                handleSkipBackward();
+            }
+        };
+
         return (
             <div 
                 ref={stageRef} 
                 className="w-full h-full relative overflow-hidden bg-black"
                 onClick={handleStageClick}
+                onWheel={handleWheel}
                 style={{ cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default' }}
             >
                 <div style={panZoomStyle}>
@@ -5312,7 +5805,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 animationDuration = `${char.transition.duration}s`;
                             }
                             return (
-                                <div key={char.charId} className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`} style={{...positionStyle, animationDuration, ...slideStyle}}>
+                                <div key={char.charId} className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`} style={{...positionStyle, animationDuration, ...slideStyle, zIndex: 5}}>
                                     {char.isVideo && char.videoUrls ? (
                                         char.videoUrls.map((url, index) => (
                                             <video 
@@ -5573,47 +6066,99 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         );
     };
 
-    // History component
-    const HistoryPanel: React.FC<{ history: HistoryEntry[], onClose: () => void }> = ({ history, onClose }) => {
+    // History / Backlog component
+    const HistoryPanel: React.FC<{ history: HistoryEntry[], onClose: () => void, onJumpTo?: (index: number) => void }> = ({ history, onClose, onJumpTo }) => {
+        const scrollRef = React.useRef<HTMLDivElement>(null);
+        
+        // Auto-scroll to bottom on open
+        React.useEffect(() => {
+            if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+        }, []);
+        
         return (
-            <div className="absolute inset-0 bg-black/90 z-50 flex flex-col">
+            <div className="absolute inset-0 bg-black/92 z-50 flex flex-col" style={{ backdropFilter: 'blur(4px)' }}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-600">
-                    <h2 className="text-white text-2xl font-bold">Dialogue History</h2>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/60"
+                    style={{ background: 'linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.8) 100%)' }}>
+                    <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h2 className="text-white text-xl font-bold tracking-wide">Text History</h2>
+                        <span className="text-slate-500 text-sm">({history.length} entries)</span>
+                    </div>
                     <button 
                         onClick={onClose}
-                        className="text-white hover:text-slate-300 text-sm px-4 py-2 bg-slate-700 rounded"
+                        className="text-slate-300 hover:text-white text-sm px-4 py-2 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/40 rounded-lg transition-colors"
                     >
-                        Close (ESC / H)
+                        Close (H / ESC)
                     </button>
                 </div>
                 
                 {/* History content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
                     {history.length === 0 ? (
-                        <p className="text-slate-400 text-center mt-8">No dialogue history yet.</p>
+                        <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                            <svg className="w-12 h-12 mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <p className="text-sm">No history yet. Play through some dialogue first.</p>
+                        </div>
                     ) : (
                         history.map((entry, index) => (
                             <div 
                                 key={index}
-                                className={`p-3 rounded ${entry.type === 'choice' ? 'bg-blue-900/30 border-l-4 border-blue-500' : 'bg-slate-800/50'}`}
+                                className={`group p-3 rounded-lg transition-colors ${
+                                    entry.type === 'choice' 
+                                        ? 'bg-blue-900/20 border-l-3 border-blue-500/60 hover:bg-blue-900/30' 
+                                        : entry.type === 'textInput'
+                                        ? 'bg-emerald-900/20 border-l-3 border-emerald-500/60 hover:bg-emerald-900/30'
+                                        : 'bg-slate-800/30 hover:bg-slate-800/50'
+                                }`}
+                                style={{ cursor: onJumpTo ? 'pointer' : 'default' }}
+                                onClick={() => onJumpTo?.(index)}
                             >
-                                {entry.type === 'dialogue' && entry.characterName && (
-                                    <div 
-                                        className="font-bold mb-1"
-                                        style={{ color: entry.characterColor || '#fff' }}
-                                    >
-                                        {entry.characterName}
+                                <div className="flex items-start gap-3">
+                                    {/* Type indicator */}
+                                    <div className="mt-0.5 flex-shrink-0">
+                                        {entry.type === 'dialogue' && (
+                                            <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                            </svg>
+                                        )}
+                                        {entry.type === 'choice' && (
+                                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        )}
+                                        {entry.type === 'textInput' && (
+                                            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        )}
                                     </div>
-                                )}
-                                <div className="text-white">
-                                    {entry.text}
+                                    
+                                    {/* Content */}
+                                    <div className="flex-1 min-w-0">
+                                        {entry.type === 'dialogue' && entry.characterName && entry.characterName !== 'Narrator' && (
+                                            <div className="font-semibold text-sm mb-0.5" style={{ color: entry.characterColor || '#94a3b8' }}>
+                                                {entry.characterName}
+                                            </div>
+                                        )}
+                                        <div className="text-white/90 text-sm leading-relaxed">
+                                            {entry.type === 'choice' ? entry.choiceText || entry.text : 
+                                             entry.type === 'textInput' ? `"${entry.inputValue}"` : entry.text}
+                                        </div>
+                                        {entry.type === 'choice' && (
+                                            <div className="text-blue-400/70 text-xs mt-1 font-medium">Selected choice</div>
+                                        )}
+                                        {entry.type === 'textInput' && (
+                                            <div className="text-emerald-400/70 text-xs mt-1 font-medium">Text input</div>
+                                        )}
+                                    </div>
                                 </div>
-                                {entry.type === 'choice' && (
-                                    <div className="text-blue-300 text-sm mt-1 italic">
-                                        Selected choice
-                                    </div>
-                                )}
                             </div>
                         ))
                     )}
@@ -5691,10 +6236,100 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             )}
             {/* Show dialogue if: 1) dialogue exists, AND 2) either no HUD screen or HUD screen has showDialogue enabled */}
             {uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && (
-                <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />
+                <>
+                    {/* Skip controls bar — positioned above dialogue box */}
+                    <div className="absolute z-25 flex items-center justify-center gap-2" 
+                        style={{ 
+                            bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
+                            left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
+                            right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
+                            {/* Skip Backward button */}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleSkipBackward(); }}
+                                disabled={playerState.history.length === 0}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all"
+                                style={{
+                                    background: playerState.history.length > 0 ? 'rgba(15,23,42,0.75)' : 'rgba(15,23,42,0.4)',
+                                    border: '1px solid rgba(148,163,184,0.2)',
+                                    color: playerState.history.length > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)',
+                                    backdropFilter: 'blur(4px)',
+                                    cursor: playerState.history.length > 0 ? 'pointer' : 'default',
+                                }}
+                                title="Skip Backward (Arrow Up)"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                </svg>
+                                Back
+                            </button>
+                            
+                            {/* History button */}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all hover:brightness-125"
+                                style={{
+                                    background: 'rgba(15,23,42,0.75)',
+                                    border: '1px solid rgba(148,163,184,0.2)',
+                                    color: 'rgba(255,255,255,0.8)',
+                                    backdropFilter: 'blur(4px)',
+                                }}
+                                title="Text History (H)"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Log
+                            </button>
+                            
+                            {/* Auto-advance toggle */}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all"
+                                style={{
+                                    background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : 'rgba(15,23,42,0.75)',
+                                    border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`,
+                                    color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)',
+                                    backdropFilter: 'blur(4px)',
+                                }}
+                                title="Auto-Advance"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Auto
+                            </button>
+                            
+                            {/* Skip Forward button */}
+                            {settings.enableSkip && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); }}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all"
+                                    style={{
+                                        background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : 'rgba(15,23,42,0.75)',
+                                        border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`,
+                                        color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)',
+                                        backdropFilter: 'blur(4px)',
+                                    }}
+                                    title="Skip Forward (Ctrl)"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                    </svg>
+                                    Skip
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />
+                </>
             )}
             {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} />}
-            {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} />}
+            {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} projectUI={project.ui} />}
             {activeFlashRef.current && <div 
                 key={activeFlashRef.current.key}
                 className="absolute inset-0 z-50 pointer-events-none" 
@@ -6030,7 +6665,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         assetResolver={assetResolver}
                         gameSaves={gameSaves}
                         playSound={playSound}
-                        variables={playerState ? {...uiVariables} : {...menuVariables}}
+                        variables={screenVariables}
                         onVariableChange={handleVariableChange}
                         isClosing={true}
                         evaluateConditions={evaluateConditions}
@@ -6046,15 +6681,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         assetResolver={assetResolver}
                         gameSaves={gameSaves}
                         playSound={playSound}
-                        variables={playerState ? (() => {
-                            const vars = {...uiVariables};
-                            runtimeDebugLog('[Screen Stack UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
-                            return vars;
-                        })() : (() => {
-                            const vars = {...menuVariables};
-                            runtimeDebugLog('[Screen Stack UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
-                            return vars;
-                        })()}
+                        variables={screenVariables}
                         onVariableChange={handleVariableChange}
                         isClosing={closingScreens.has(currentScreenId)}
                         evaluateConditions={evaluateConditions}
@@ -6076,7 +6703,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             assetResolver={assetResolver}
                             gameSaves={gameSaves}
                             playSound={playSound}
-                            variables={{...uiVariables}}
+                            variables={screenVariables}
                             onVariableChange={handleVariableChange}
                             isClosing={true}
                             evaluateConditions={evaluateConditions}
@@ -6098,15 +6725,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     assetResolver={assetResolver}
                                     gameSaves={gameSaves}
                                     playSound={playSound}
-                                    variables={playerState ? (() => {
-                                        const vars = {...uiVariables};
-                                        runtimeDebugLog('[HUD UI] Receiving uiVariables:', JSON.stringify(vars, null, 2));
-                                        return vars;
-                                    })() : (() => {
-                                        const vars = {...menuVariables};
-                                        runtimeDebugLog('[HUD UI] Receiving menuVariables:', JSON.stringify(vars, null, 2));
-                                        return vars;
-                                    })()}
+                                    variables={screenVariables}
                                     onVariableChange={handleVariableChange}
                                     isClosing={closingScreens.has(hudScreenId)}
                                     evaluateConditions={evaluateConditions}

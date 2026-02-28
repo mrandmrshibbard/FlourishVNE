@@ -268,6 +268,11 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             };
             return command;
         }
+        case CommandType.RunScript: {
+            const firstScriptId = Object.keys(project.scripts || {})[0];
+            const command = { type, scriptId: firstScriptId || '', waitForCompletion: true };
+            return command;
+        }
         default: 
             return null;
     }

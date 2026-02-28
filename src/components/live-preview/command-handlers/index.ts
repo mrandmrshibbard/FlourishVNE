@@ -15,3 +15,4 @@ export * from './controlFlowHandler';
 export * from './effectsHandler';
 export * from './textInputHandler';
 export * from './creditRollHandler';
+export * from './scriptHandler';

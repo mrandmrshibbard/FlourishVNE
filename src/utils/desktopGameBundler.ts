@@ -17,10 +17,13 @@ const isElectron = typeof window !== 'undefined' &&
  * 2. Adding Electron wrapper for native file-based saves
  * 3. Running electron-builder to create executable
  */
+export type DesktopFormat = 'standalone' | 'installer';
+
 export async function buildDesktopGame(
   project: VNProject,
   onProgress: (progress: BuildProgress) => void,
-  iconDataUrl?: string
+  iconDataUrl?: string,
+  desktopFormat: DesktopFormat = 'standalone'
 ): Promise<Blob> {
   
   // Check if running in Electron
@@ -93,11 +96,35 @@ export async function buildDesktopGame(
   ];
   if (hasCustomIcon) buildFiles.push('icon.png');
 
-  const winConfig: Record<string, unknown> = { target: 'portable' };
+  const isInstaller = desktopFormat === 'installer';
+
+  const winConfig: Record<string, unknown> = isInstaller
+    ? {
+        target: 'nsis',
+        icon: hasCustomIcon ? 'icon.png' : undefined,
+      }
+    : {
+        target: 'portable',
+        icon: hasCustomIcon ? 'icon.png' : undefined,
+      };
+
+  // NSIS installer configuration
+  const nsisConfig: Record<string, unknown> | undefined = isInstaller
+    ? {
+        oneClick: false,
+        allowToChangeInstallationDirectory: true,
+        createDesktopShortcut: true,
+        createStartMenuShortcut: true,
+        shortcutName: appName,
+        installerIcon: hasCustomIcon ? 'icon.png' : undefined,
+        uninstallerIcon: hasCustomIcon ? 'icon.png' : undefined,
+        installerHeaderIcon: hasCustomIcon ? 'icon.png' : undefined,
+      }
+    : undefined;
+
   const macConfig: Record<string, unknown> = { target: 'dir' };
   const linuxConfig: Record<string, unknown> = { target: 'dir' };
   if (hasCustomIcon) {
-    winConfig.icon = 'icon.png';
     macConfig.icon = 'icon.png';
     linuxConfig.icon = 'icon.png';
   }
@@ -130,7 +157,8 @@ export async function buildDesktopGame(
       files: buildFiles,
       win: winConfig,
       mac: macConfig,
-      linux: linuxConfig
+      linux: linuxConfig,
+      ...(nsisConfig ? { nsis: nsisConfig } : {})
     }
   }, null, 2);
   

@@ -413,6 +413,198 @@ export class ContentWizardService {
     };
 
     this.registerWizard(sceneWizard);
+
+    // CG Gallery Wizard
+    const cgGalleryWizard: ContentWizard = {
+      id: `wizard_cg_gallery_${Date.now()}`,
+      type: 'cg-gallery',
+      name: 'CG Gallery',
+      description: 'Set up an unlockable art gallery to showcase CGs, backgrounds, and key art',
+      icon: 'gallery',
+      category: 'ui',
+      complexity: 'beginner',
+      targetContentType: 'ui-screen',
+      steps: [
+        {
+          id: `step_cg_basics_${Date.now()}`,
+          title: 'Gallery Layout',
+          description: 'Configure the overall look of your CG Gallery',
+          fields: [
+            {
+              id: 'cg_columns',
+              type: 'number',
+              label: 'Grid Columns',
+              defaultValue: 4,
+              required: true,
+              validation: [
+                {
+                  type: 'min-length',
+                  value: 1,
+                  message: 'Must have at least 1 column'
+                }
+              ],
+              helpText: 'Number of columns in the thumbnail grid (2–6 recommended)'
+            },
+            {
+              id: 'cg_gap',
+              type: 'number',
+              label: 'Thumbnail Gap (px)',
+              defaultValue: 8,
+              required: false,
+              helpText: 'Space between thumbnails in pixels'
+            },
+            {
+              id: 'cg_thumbnail_border_radius',
+              type: 'number',
+              label: 'Thumbnail Border Radius (px)',
+              defaultValue: 8,
+              required: false,
+              helpText: 'Corner rounding for thumbnail slots in pixels'
+            },
+            {
+              id: 'cg_show_names',
+              type: 'boolean',
+              label: 'Show Entry Names',
+              defaultValue: true,
+              required: false,
+              helpText: 'Display the name beneath each thumbnail'
+            }
+          ],
+          canSkip: false,
+          canGoBack: false,
+          estimatedTime: 2,
+          helpContent: 'Choose how your gallery grid will look. You can always adjust these settings later.'
+        },
+        {
+          id: `step_cg_unlock_${Date.now()}`,
+          title: 'Unlock Behaviour',
+          description: 'Decide how CG entries are revealed to the player',
+          fields: [
+            {
+              id: 'cg_unlock_scope',
+              type: 'select',
+              label: 'Unlock Scope',
+              required: true,
+              defaultValue: 'global',
+              options: [
+                { value: 'global', label: 'Global — unlocks persist across all save slots' },
+                { value: 'per-save', label: 'Per-Save — unlocks are tied to each save slot' }
+              ],
+              helpText: 'Controls whether CG unlocks are shared globally or per save file'
+            },
+            {
+              id: 'cg_locked_text',
+              type: 'text',
+              label: 'Locked Placeholder Text',
+              defaultValue: '🔒',
+              required: false,
+              helpText: 'Text or emoji shown on locked gallery entries'
+            },
+            {
+              id: 'cg_locked_color',
+              type: 'color',
+              label: 'Locked Entry Color',
+              defaultValue: '#1e293b',
+              required: false,
+              helpText: 'Background color for entries that are still locked'
+            }
+          ],
+          canSkip: false,
+          canGoBack: true,
+          estimatedTime: 2,
+          helpContent: 'Choose whether unlocked CGs persist across save files or are tied to individual saves.'
+        },
+        {
+          id: `step_cg_styling_${Date.now()}`,
+          title: 'Gallery Styling',
+          description: 'Fine-tune the colors and appearance',
+          fields: [
+            {
+              id: 'cg_background_color',
+              type: 'color',
+              label: 'Gallery Background',
+              defaultValue: '#0f172a',
+              required: false,
+              helpText: 'Background color of the gallery area'
+            },
+            {
+              id: 'cg_thumbnail_border_color',
+              type: 'color',
+              label: 'Thumbnail Border Color',
+              defaultValue: '#4D3273',
+              required: false,
+              helpText: 'Border color around each thumbnail slot'
+            },
+            {
+              id: 'cg_viewer_background_color',
+              type: 'color',
+              label: 'Full-View Background',
+              defaultValue: '#000000',
+              required: false,
+              helpText: 'Background color when viewing a CG at full size'
+            }
+          ],
+          canSkip: true,
+          canGoBack: true,
+          estimatedTime: 2,
+          helpContent: 'Customise the colours to match your project\'s theme. You can skip this for sensible defaults.'
+        },
+        {
+          id: `step_cg_entries_${Date.now()}`,
+          title: 'Initial Entries',
+          description: 'Add your first gallery entries (you can add more later)',
+          fields: [
+            {
+              id: 'cg_entry_count',
+              type: 'select',
+              label: 'Starter Entries',
+              required: true,
+              defaultValue: '3',
+              options: [
+                { value: '0', label: 'None — I\'ll add entries manually later' },
+                { value: '3', label: '3 placeholder entries' },
+                { value: '6', label: '6 placeholder entries' },
+                { value: '9', label: '9 placeholder entries' }
+              ],
+              helpText: 'Create placeholder entries to get started quickly. You can assign images later.'
+            },
+            {
+              id: 'cg_default_category',
+              type: 'text',
+              label: 'Default Category',
+              defaultValue: 'General',
+              required: false,
+              helpText: 'Category name for the initial entries (e.g. "Chapter 1", "Characters")'
+            }
+          ],
+          canSkip: true,
+          canGoBack: true,
+          estimatedTime: 1,
+          helpContent: 'Placeholder entries let you see the gallery in action immediately. Assign real artwork at any time.'
+        }
+      ],
+      totalSteps: 4,
+      estimatedTime: 7,
+      prerequisites: [],
+      outputConfig: {
+        generateScenes: false,
+        generateCharacters: false,
+        generateUIScreens: true,
+        generateVariables: true,
+        generateAssets: false,
+        applyOptimizations: false,
+        createBackup: true,
+        integrationPoints: ['ui-manager', 'cg-gallery']
+      },
+      version: '1.0.0',
+      author: 'FlourishVNE',
+      tags: ['cg', 'gallery', 'artwork', 'unlock', 'beginner'],
+      usageCount: 0,
+      lastUpdated: new Date(),
+      isCustom: false
+    };
+
+    this.registerWizard(cgGalleryWizard);
   }
 
   /**

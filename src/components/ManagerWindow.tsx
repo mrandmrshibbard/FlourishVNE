@@ -42,10 +42,10 @@ const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
     // Safety checks for project data
     if (!project) {
         return (
-            <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900">
+            <div className="h-screen flex items-center justify-center bg-gradient-to-br from-[var(--bg-primary)] via-purple-900/20 to-[var(--bg-primary)]">
                 <div className="text-center">
                     <div className="text-white text-xl mb-4">Loading project...</div>
-                    <div className="text-slate-400 text-sm">Initializing manager window</div>
+                    <div className="text-[var(--text-secondary)] text-sm">Initializing manager window</div>
                 </div>
             </div>
         );
@@ -67,9 +67,9 @@ const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
     };
 
     return (
-        <div className="h-screen flex flex-col bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900">
+        <div className="h-screen flex flex-col bg-gradient-to-br from-[var(--bg-primary)] via-purple-900/20 to-[var(--bg-primary)]">
             {/* Minimal Header */}
-            <div className="flex items-center justify-between gap-2 p-2 panel border-b border-slate-700">
+            <div className="flex items-center justify-between gap-2 p-2 panel border-b border-[var(--border-subtle)]">
             
                 <NavigationTabs
                     activeTab={activeTab}

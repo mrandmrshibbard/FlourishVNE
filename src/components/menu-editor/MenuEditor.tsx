@@ -11,6 +11,7 @@ import { createUIElement } from '../../utils/uiElementFactory';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustomizationWizard';
+import CGGalleryWizard, { CGGalleryGeneratedConfig } from './CGGalleryWizard';
 
 // Safe wrapper for element rendering to prevent crashes.
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
@@ -346,6 +347,7 @@ const MenuEditor: React.FC<{
     const toast = useToast();
     const screen = project.uiScreens[activeScreenId];
     const [showWizard, setShowWizard] = useState(false);
+    const [showCGGalleryWizard, setShowCGGalleryWizard] = useState(false);
     const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
     const stageRef = useRef<HTMLDivElement>(null);
@@ -608,6 +610,40 @@ const MenuEditor: React.FC<{
             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
         }
     };
+
+    const handleCGGalleryGenerate = (config: CGGalleryGeneratedConfig) => {
+        // 1. Create unlock variables (if locked by default)
+        config.unlockVariables.forEach(varConfig => {
+            dispatch({
+                type: 'ADD_VARIABLE',
+                payload: {
+                    id: varConfig.id,
+                    name: varConfig.name,
+                    type: 'boolean',
+                    defaultValue: false,
+                },
+            });
+        });
+
+        // 2. Set the CG Gallery config on the project
+        dispatch({ type: 'UPDATE_PROJECT', payload: { cgGallery: config.galleryConfig } });
+
+        // 2. Add the CG Gallery UI element to the current screen
+        dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: config.galleryElement } });
+
+        // 3. Add a "Close" button below the gallery
+        const buttonElement = createUIElement(UIElementType.Button, project) as UIButtonElement;
+        if (buttonElement) {
+            buttonElement.name = 'Close Gallery';
+            buttonElement.text = 'Close';
+            buttonElement.x = 35;
+            buttonElement.y = 90;
+            buttonElement.width = 30;
+            buttonElement.height = 7;
+            buttonElement.actions = [{ type: 'CloseScreen' }];
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
+        }
+    };
     
     const getBackground = () => {
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
@@ -713,6 +749,20 @@ const MenuEditor: React.FC<{
                             <button
                                 onClick={() => {
                                     setShowTemplateSelector(false);
+                                    setShowCGGalleryWizard(true);
+                                }}
+                                className="w-full bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 p-4 rounded-lg flex items-center gap-4 text-left transition-all hover:scale-[1.02]"
+                            >
+                                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">🖼️</div>
+                                <div>
+                                    <div className="font-semibold">CG Gallery</div>
+                                    <div className="text-xs text-white/70">Create a CG art gallery with unlockable entries</div>
+                                </div>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setShowTemplateSelector(false);
                                     // TODO: Open shop wizard
                                     alert('Shop Template coming soon!');
                                 }}
@@ -743,6 +793,15 @@ const MenuEditor: React.FC<{
                 project={project}
                 screenId={activeScreenId}
                 onGenerate={handleWizardGenerate}
+            />
+
+            {/* CG Gallery Wizard */}
+            <CGGalleryWizard
+                isOpen={showCGGalleryWizard}
+                onClose={() => setShowCGGalleryWizard(false)}
+                project={project}
+                screenId={activeScreenId}
+                onGenerate={handleCGGalleryGenerate}
             />
         </div>
     );

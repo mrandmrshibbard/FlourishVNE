@@ -6,6 +6,8 @@ import { characterReducer } from '../features/character/state/characterReducer';
 import { sceneReducer } from '../features/scene/state/sceneReducer';
 import { uiReducer } from '../features/ui/state/uiReducer';
 import { variableReducer } from '../features/variables/state/variableReducer';
+import { scriptReducer } from '../features/scripting/state/scriptReducer';
+import { pluginReducer } from '../features/plugins/state/pluginReducer';
 
 const reducers = [
   projectReducer,
@@ -14,6 +16,8 @@ const reducers = [
   sceneReducer,
   uiReducer,
   variableReducer,
+  scriptReducer,
+  pluginReducer,
 ];
 
 export const rootReducer = (state: VNProject, action: ProjectAction): VNProject => {

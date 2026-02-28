@@ -4,6 +4,8 @@ import { CharacterAction } from '../features/character/state/characterReducer';
 import { SceneAction } from '../features/scene/state/sceneReducer';
 import { UIAction } from '../features/ui/state/uiReducer';
 import { VariableAction } from '../features/variables/state/variableReducer';
+import { ScriptAction } from '../features/scripting/state/scriptReducer';
+import { PluginAction } from '../features/plugins/state/pluginReducer';
 
 export type ProjectAction =
     | ProjectAction_Project
@@ -11,4 +13,6 @@ export type ProjectAction =
     | CharacterAction
     | SceneAction
     | UIAction
-    | VariableAction;
+    | VariableAction
+    | ScriptAction
+    | PluginAction;

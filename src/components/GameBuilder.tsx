@@ -8,6 +8,7 @@ import React, { useState, useMemo } from 'react';
 import { VNProject } from '../types/project';
 import { buildStandaloneGame, downloadBlob, estimateBuildSize, BuildProgress } from '../utils/gameBundler';
 import { validateProjectForBuild, ValidationResult } from '../utils/buildValidator';
+import { GamepadIcon, XMarkIcon, GlobeIcon, SaveIcon, CheckIcon, ArrowDownTrayIcon } from './icons';
 
 interface GameBuilderProps {
   project: VNProject;
@@ -16,10 +17,12 @@ interface GameBuilderProps {
 
 type BuildStep = 'idle' | 'building' | 'success' | 'error';
 type BuildType = 'web' | 'desktop';
+type DesktopFormat = 'standalone' | 'installer';
 
 export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) => {
   const [buildStep, setBuildStep] = useState<BuildStep>('idle');
   const [buildType, setBuildType] = useState<BuildType>('web');
+  const [desktopFormat, setDesktopFormat] = useState<DesktopFormat>('standalone');
   const [progress, setProgress] = useState<BuildProgress>({
     step: 'prepare',
     progress: 0,
@@ -60,7 +63,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
         const { buildDesktopGame } = await import('../utils/desktopGameBundler');
         blob = await buildDesktopGame(project, (prog) => {
           setProgress(prog);
-        }, iconDataUrl || undefined);
+        }, iconDataUrl || undefined, desktopFormat);
         
         // Desktop builds save the file directly via Electron,
         // so we don't need to download the blob
@@ -85,10 +88,26 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!gameBlob) return;
     
     const filename = `${project.title?.replace(/[^a-z0-9]/gi, '_') || 'game'}_standalone.zip`;
+
+    // In Electron, use a native save dialog defaulting to Builds/Web
+    const api = (window as any).electronAPI;
+    if (api?.saveProjectToPath) {
+      try {
+        const paths = await api.getUserDataPaths?.();
+        const defaultDir = paths?.buildsWeb;
+        const archiveData = new Uint8Array(await gameBlob.arrayBuffer());
+        await api.saveProjectToPath(archiveData, filename, undefined, 'zip', defaultDir);
+      } catch (err) {
+        console.error('Save dialog failed, falling back to browser download:', err);
+        downloadBlob(gameBlob, filename);
+      }
+      return;
+    }
+
     downloadBlob(gameBlob, filename);
   };
 
@@ -103,8 +122,8 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <h2 style={styles.title}>🎮 Build Standalone Game</h2>
-          <button onClick={onClose} style={styles.closeButton}>✕</button>
+          <h2 style={styles.title}><GamepadIcon style={{ display: 'inline-block', verticalAlign: 'middle', width: 28, height: 28, marginRight: 8 }} /> Build Standalone Game</h2>
+          <button onClick={onClose} style={styles.closeButton}><XMarkIcon style={{ width: 24, height: 24 }} /></button>
         </div>
 
         <div style={styles.content}>
@@ -120,7 +139,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       ...(buildType === 'web' ? styles.buildTypeButtonActive : {})
                     }}
                   >
-                    <div style={styles.buildTypeIcon}>🌐</div>
+                    <div style={styles.buildTypeIcon}><GlobeIcon style={{ width: 48, height: 48 }} /></div>
                     <div style={styles.buildTypeName}>Web Build</div>
                     <div style={styles.buildTypeDesc}>
                       Play in browser • itch.io ready • No saves persist
@@ -133,7 +152,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       ...(buildType === 'desktop' ? styles.buildTypeButtonActive : {})
                     }}
                   >
-                    <div style={styles.buildTypeIcon}>💾</div>
+                    <div style={styles.buildTypeIcon}><SaveIcon style={{ width: 48, height: 48 }} /></div>
                     <div style={styles.buildTypeName}>Desktop Build</div>
                     <div style={styles.buildTypeDesc}>
                       Windows/Mac/Linux • Save progress • Offline play
@@ -144,7 +163,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
               <div style={styles.infoBox}>
                 <h3 style={styles.infoTitle}>
-                  {buildType === 'web' ? '🌐 Web Build' : '💾 Desktop Build'}
+                  {buildType === 'web' ? 'Web Build' : 'Desktop Build'}
                 </h3>
                 {buildType === 'web' ? (
                   <>
@@ -171,9 +190,16 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       <li>🖥️ Works on Windows, Mac, and Linux</li>
                       <li>📦 Requires Electron (included in build)</li>
                     </ul>
-                    <p style={styles.warningText}>
-                      ⚠️ Desktop builds are larger (~200MB) due to Electron framework
-                    </p>
+                    {desktopFormat === 'installer' && (
+                      <p style={styles.warningText}>
+                        ⚡ Installer builds are faster to build and launch instantly after install — the setup extracts all files ahead of time
+                      </p>
+                    )}
+                    {desktopFormat === 'standalone' && (
+                      <p style={styles.warningText}>
+                        ⏱ Standalone builds take longer to build and are slower to start — the exe must unpack itself into a temp folder on every launch
+                      </p>
+                    )}
                   </>
                 )}
                 <p style={styles.infoText}>
@@ -200,7 +226,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       {iconDataUrl ? (
                         <img src={iconDataUrl} alt="App icon" style={styles.iconPreviewImg} />
                       ) : (
-                        <span style={styles.iconPlaceholder}>📦</span>
+                        <span style={styles.iconPlaceholder}><SaveIcon style={{ width: 28, height: 28, opacity: 0.5 }} /></span>
                       )}
                     </div>
                     <div style={styles.iconPickerInfo}>
@@ -220,6 +246,58 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       )}
                       <p style={styles.iconHint}>Recommended: 256×256 PNG</p>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {buildType === 'desktop' && (
+                <div style={{ margin: '12px 0', padding: '12px 16px', borderRadius: '8px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(100,116,139,0.3)' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px', color: '#e2e8f0' }}>Build Format</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setDesktopFormat('standalone')}
+                      style={{
+                        flex: 1,
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: desktopFormat === 'standalone' ? '2px solid #8b5cf6' : '1px solid rgba(100,116,139,0.4)',
+                        background: desktopFormat === 'standalone' ? 'rgba(139,92,246,0.15)' : 'rgba(30,41,59,0.4)',
+                        color: '#e2e8f0',
+                        cursor: 'pointer',
+                        textAlign: 'left' as const,
+                        fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>📦 Standalone .exe</div>
+                      <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                        Single portable executable — no installation needed, just run
+                      </div>
+                      <div style={{ fontSize: '10px', opacity: 0.5, marginTop: '4px' }}>
+                        ⏱ Slower build &amp; startup — exe must unpack on every launch
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setDesktopFormat('installer')}
+                      style={{
+                        flex: 1,
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: desktopFormat === 'installer' ? '2px solid #8b5cf6' : '1px solid rgba(100,116,139,0.4)',
+                        background: desktopFormat === 'installer' ? 'rgba(139,92,246,0.15)' : 'rgba(30,41,59,0.4)',
+                        color: '#e2e8f0',
+                        cursor: 'pointer',
+                        textAlign: 'left' as const,
+                        fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>🔧 Installer (Setup)</div>
+                      <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                        Setup wizard with shortcuts, install directory, uninstaller, and game saves folder
+                      </div>
+                      <div style={{ fontSize: '10px', opacity: 0.5, marginTop: '4px' }}>
+                        ⚡ Faster build &amp; startup — files are pre-extracted during install
+                      </div>
+                    </button>
                   </div>
                 </div>
               )}
@@ -276,8 +354,8 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 disabled={validation.errors.length > 0}
               >
                 {validation.errors.length > 0 
-                  ? '⛔ Fix Errors Before Building' 
-                  : buildType === 'web' ? '🌐 Build Web Game' : '💾 Build Desktop App'}
+                  ? 'Fix Errors Before Building' 
+                  : buildType === 'web' ? 'Build Web Game' : desktopFormat === 'installer' ? 'Build Installer' : 'Build Standalone EXE'}
               </button>
 
               <div style={styles.helpBox}>
@@ -326,14 +404,16 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
           {buildStep === 'success' && (
             <div style={styles.successContainer}>
-              <div style={styles.successIcon}>✅</div>
+              <div style={styles.successIcon}><CheckIcon style={{ width: 64, height: 64, color: '#4CAF50' }} /></div>
               <h3 style={styles.successTitle}>
-                {buildType === 'web' ? 'Web Game Built Successfully!' : 'Desktop App Built Successfully!'}
+                {buildType === 'web' ? 'Web Game Built Successfully!' : desktopFormat === 'installer' ? 'Installer Built Successfully!' : 'Desktop App Built Successfully!'}
               </h3>
               <p style={styles.successText}>
                 {buildType === 'web' 
                   ? 'Your game is ready to share on the web!'
-                  : 'Your desktop game with save system is ready!'}
+                  : desktopFormat === 'installer'
+                  ? 'Your installer with shortcuts and game saves directory is ready!'
+                  : 'Your standalone desktop game is ready!'}
               </p>
 
               {buildType === 'web' && (
@@ -348,7 +428,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                   </div>
 
                   <button onClick={handleDownload} style={styles.downloadButton}>
-                    ⬇️ Download Web Game ZIP
+                    <ArrowDownTrayIcon style={{ display: 'inline-block', verticalAlign: 'middle', width: 20, height: 20, marginRight: 8 }} /> Download Web Game ZIP
                   </button>
                 </>
               )}
@@ -356,7 +436,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
               {buildType === 'desktop' && (
                 <div style={styles.successMessage}>
                   <p style={{ fontSize: '16px', color: '#10b981', margin: '16px 0' }}>
-                    ✅ Executable saved successfully!
+                    Executable saved successfully!
                   </p>
                   <p style={{ fontSize: '14px', color: '#94a3b8' }}>
                     Check the location you selected to find your game's executable file.
@@ -391,7 +471,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 ) : (
                   <ol style={styles.nextStepsList}>
                     <li>
-                      <strong>Test Your Game:</strong> Double-click the executable to test your game
+                      <strong>Test Your Game:</strong> {desktopFormat === 'installer' ? 'Run the Setup installer to install your game' : 'Double-click the executable to test your game'}
                       <br />
                       • Windows: .exe file
                       <br />
@@ -400,9 +480,11 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       • Linux: .AppImage file
                     </li>
                     <li>
-                      <strong>Distribute:</strong> Share the executable with players!
+                      <strong>Distribute:</strong> Share the {desktopFormat === 'installer' ? 'installer' : 'executable'} with players!
                       <br />
-                      They just download and run - no installation needed
+                      {desktopFormat === 'installer' 
+                        ? 'The installer will create desktop/start menu shortcuts, an install directory, and a game saves folder'
+                        : 'They just download and run - no installation needed'}
                     </li>
                     <li>
                       <strong>Save System:</strong> Your game includes:
@@ -413,8 +495,21 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       <br />
                       • Works offline with no server needed
                     </li>
+                    {desktopFormat === 'installer' && (
+                      <li>
+                        <strong>Installer Features:</strong>
+                        <br />
+                        • Custom install directory selection
+                        <br />
+                        • Desktop and Start Menu shortcuts
+                        <br />
+                        • Clean uninstaller included
+                        <br />
+                        • Game saves stored in user data folder
+                      </li>
+                    )}
                     <li>
-                      <strong>Note:</strong> The executable is platform-specific
+                      <strong>Note:</strong> The {desktopFormat === 'installer' ? 'installer' : 'executable'} is platform-specific
                       <br />
                       Build on Windows for .exe, Mac for .app, Linux for .AppImage
                     </li>
@@ -430,7 +525,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
           {buildStep === 'error' && (
             <div style={styles.errorContainer}>
-              <div style={styles.errorIcon}>❌</div>
+              <div style={styles.errorIcon}><XMarkIcon style={{ width: 64, height: 64, color: '#f44336' }} /></div>
               <h3 style={styles.errorTitle}>Build Failed</h3>
               <p style={styles.errorMessage}>{error}</p>
               
@@ -859,5 +954,9 @@ const styles = {
     fontSize: '11px',
     margin: 0,
     width: '100%'
+  },
+  successMessage: {
+    textAlign: 'center' as const,
+    margin: '16px 0'
   }
 };

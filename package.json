@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Flourish VNE",
   "author": "Flourish Team",
   "type": "module",
@@ -63,15 +63,38 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
       ],
       "icon": "public/Flourish.png",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Flourish VNE",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerIcon": "public/Flourish.png",
+      "uninstallerIcon": "public/Flourish.png",
+      "installerHeaderIcon": "public/Flourish.png"
+    },
+    "fileAssociations": [
+      {
+        "ext": "flourish",
+        "name": "Flourish VNE Project",
+        "description": "Flourish Visual Novel Engine Project",
+        "mimeType": "application/x-flourish-project",
+        "icon": "public/Flourish.png",
+        "role": "Editor"
+      }
+    ],
     "mac": {
       "target": [
         "dmg",

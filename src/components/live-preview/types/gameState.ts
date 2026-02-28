@@ -145,6 +145,8 @@ export interface PlayerState {
     stageState: StageState;
     musicState: MusicState;
     history: HistoryEntry[];
+    /** Saved choice/input responses for skip-backward replay (keyed by `sceneId:commandIndex`) */
+    savedInputs: Record<string, { type: 'choice'; choice: ChoiceOption } | { type: 'textInput'; value: string }>;
     uiState: {
         dialogue: {
             characterName: string;
@@ -167,6 +169,8 @@ export interface PlayerState {
         flash: { color: string, duration: number } | null;
         showHistory: boolean;
         screenSceneId: VNID | null; // Track which scene a UI screen was opened from
+        /** Whether skip-forward is currently active */
+        isSkipping: boolean;
     };
 }
 
@@ -188,11 +192,25 @@ export interface GameStateSave {
 
 export interface HistoryEntry {
     timestamp: number;
-    type: 'dialogue' | 'choice';
+    type: 'dialogue' | 'choice' | 'textInput';
     characterName?: string;
     characterColor?: string;
     text: string;
     choiceText?: string; // For tracking which choice was selected
+    inputValue?: string; // For tracking text input values
+    /** Scene + command index snapshot for skip-backward navigation */
+    sceneId?: VNID;
+    commandIndex?: number;
+    /** For choice entries: the full choice option so we can replay it */
+    choiceOption?: ChoiceOption;
+    /** For textInput entries: the variable that was set */
+    variableId?: VNID;
+    /** Full stage state snapshot for backward navigation (background, characters, overlays) */
+    stageSnapshot?: StageState;
+    /** Variables snapshot for backward navigation */
+    variablesSnapshot?: Record<VNID, string | number | boolean>;
+    /** Music state snapshot for backward navigation */
+    musicSnapshot?: MusicState;
 }
 
 export interface GameSettings {

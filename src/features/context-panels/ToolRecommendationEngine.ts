@@ -174,18 +174,6 @@ export class ToolRecommendationEngine {
       });
     }
 
-    // Visual logic for advanced users
-    if (progress.level === 'advanced' && progressiveDisclosure.isFeatureUnlocked('visual-logic-builder')) {
-      recs.push({
-        id: 'discover-visual-logic',
-        title: 'Visual Logic Builder',
-        description: 'Build complex branching with drag-and-drop',
-        action: 'goto-logic',
-        relevanceScore: 5,
-        category: 'feature-discovery'
-      });
-    }
-
     return recs;
   }
 

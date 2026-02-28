@@ -141,7 +141,7 @@ const sanitizeFilename = (name: string, fallback: string): string => {
     return name.replace(/[^a-z0-9_.\-]/gi, '_').replace(/_{2,}/g, '_').toLowerCase();
 };
 
-export const exportProject = async (project: VNProject): Promise<boolean> => {
+export const exportProject = async (project: VNProject): Promise<{ saved: boolean; filePath?: string }> => {
     if (!project) {
         throw new Error('A valid project object must be provided for export.');
     }
@@ -629,7 +629,7 @@ export const exportProject = async (project: VNProject): Promise<boolean> => {
 
     const archiveData = await zip.generateAsync({ type: 'uint8array' });
     const safeTitle = project.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const filename = `${safeTitle}_export.zip`;
+    const filename = `${safeTitle}.flourish`;
 
     const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
     if (electronAPI?.saveProjectExport) {
@@ -637,20 +637,20 @@ export const exportProject = async (project: VNProject): Promise<boolean> => {
 
         if (!result?.success) {
             if (result?.canceled) {
-                return false;
+                return { saved: false };
             }
             throw new Error(result?.error || 'Failed to save project export.');
         }
 
-        return true;
+        return { saved: true, filePath: result.filePath };
     }
 
-    const blob = new Blob([archiveData], { type: 'application/zip' });
+    const blob = new Blob([archiveData], { type: 'application/octet-stream' });
     saveAs(blob, filename);
-    return true;
+    return { saved: true };
 };
 
-export const importProject = async (file: File): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
+export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
     const zip = await JSZip.loadAsync(file);
     const projectFile = zip.file('project.json');
 
@@ -709,6 +709,9 @@ export const importProject = async (file: File): Promise<{ project: VNProject; m
     // --- DATA HYDRATION: Ensure project structure is up-to-date ---
     if (!project.images) project.images = {};
     if (!project.fonts) project.fonts = {} as any;
+    if (!project.scripts) project.scripts = {};
+    if (!project.plugins) project.plugins = {};
+    if (!project.pluginRegistry) project.pluginRegistry = {};
     if (project.characters) {
         for (const charId in project.characters) {
             const char = project.characters[charId];

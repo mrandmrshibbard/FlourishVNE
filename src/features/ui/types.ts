@@ -47,6 +47,14 @@ export interface VNProjectUI {
     choiceButtonWidth?: number; // px explicit width, 0/undefined = auto (default auto)
     choiceButtonHeight?: number; // px explicit height, 0/undefined = auto (default auto)
     choiceButtonPadding?: number; // px inner content padding (default 16)
+    inputBoxImage: UIAsset | null;
+    inputBoxBorderImage: UIAsset | null;
+    inputBorderPadding?: number; // px of border visible around the background (default 8)
+    inputBoxWidth?: number; // px explicit width, 0/undefined = auto (default auto, max-w-md)
+    inputBoxPadding?: number; // px inner content padding (default 24)
+    inputPromptFont: VNFontSettings;
+    inputFieldFont: VNFontSettings;
+    inputSubmitFont: VNFontSettings;
     dialogueNameFont: VNFontSettings;
     dialogueTextFont: VNFontSettings;
     choiceTextFont: VNFontSettings;

@@ -118,18 +118,18 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 w-[95vw] h-[90vh] rounded-xl border border-slate-700 flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+      <div className="bg-[var(--bg-primary)] w-[95vw] h-[90vh] rounded-xl border border-[var(--border-subtle)] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🌐</span>
             <h2 className="text-xl font-bold text-white">Localization Manager</h2>
-            <span className="text-sm text-slate-400">
+            <span className="text-sm text-[var(--text-secondary)]">
               {strings.length} string{strings.length !== 1 ? 's' : ''}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-[var(--text-secondary)] hover:text-white p-2 rounded-lg hover:bg-[var(--bg-primary)] transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -137,7 +137,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
           </button>
         </div>
 
-        <div className="px-6 py-3 border-b border-slate-700 flex items-center gap-3 flex-wrap">
+        <div className="px-6 py-3 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
           {languages.map(lang => (
             <div
               key={lang.code}
@@ -170,7 +170,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
               {!lang.isDefault && (
                 <button
                   onClick={() => handleRemoveLanguage(lang.code)}
-                  className="text-slate-500 hover:text-red-400 transition-colors ml-1"
+                  className="text-[var(--text-muted)] hover:text-red-400 transition-colors ml-1"
                   title={`Remove ${lang.name}`}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -183,7 +183,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowLangDropdown(!showLangDropdown)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] hover:text-white hover:border-[var(--border-default)] transition-colors"
               disabled={availableToAdd.length === 0}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
@@ -192,14 +192,14 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
               Add Language
             </button>
             {showLangDropdown && availableToAdd.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-10 py-1 min-w-[180px]">
+              <div className="absolute top-full left-0 mt-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg shadow-xl z-10 py-1 min-w-[180px]">
                 {availableToAdd.map(lang => (
                   <button
                     key={lang.code}
                     onClick={() => handleAddLanguage(lang.code, lang.name)}
-                    className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                    className="w-full text-left px-4 py-2 text-sm text-[var(--text-primary)] hover:text-white hover:bg-[var(--bg-secondary)] transition-colors"
                   >
-                    {lang.name} <span className="text-slate-500">({lang.code})</span>
+                    {lang.name} <span className="text-[var(--text-muted)]">({lang.code})</span>
                   </button>
                 ))}
               </div>
@@ -207,9 +207,9 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
           </div>
         </div>
 
-        <div className="px-6 py-3 border-b border-slate-700 flex items-center gap-3">
+        <div className="px-6 py-3 border-b border-[var(--border-subtle)] flex items-center gap-3">
           <div className="relative flex-1 max-w-md">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
               <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
             </svg>
             <input
@@ -217,7 +217,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
               placeholder="Search by key or text..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
           <div className="flex items-center gap-1">
@@ -228,7 +228,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   tagFilter === tag
                     ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'bg-slate-800 text-slate-400 border border-slate-600 hover:text-slate-300'
+                    : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-default)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 {tag === 'all' ? 'All' : tag.charAt(0).toUpperCase() + tag.slice(1)}
@@ -239,7 +239,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
 
         <div className="flex-1 overflow-auto">
           {filteredStrings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
               <span className="text-4xl mb-3">📝</span>
               <p className="text-lg font-medium">No strings found</p>
               <p className="text-sm mt-1">
@@ -250,13 +250,13 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-900 z-10">
-                <tr className="border-b border-slate-700">
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium w-[200px] min-w-[200px]">Key</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium w-[140px] min-w-[140px]">Context</th>
-                  <th className="text-left px-4 py-3 text-slate-400 font-medium min-w-[200px]">Default Text</th>
+              <thead className="sticky top-0 bg-[var(--bg-primary)] z-10">
+                <tr className="border-b border-[var(--border-subtle)]">
+                  <th className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium w-[200px] min-w-[200px]">Key</th>
+                  <th className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium w-[140px] min-w-[140px]">Context</th>
+                  <th className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium min-w-[200px]">Default Text</th>
                   {additionalLanguages.map(lang => (
-                    <th key={lang.code} className="text-left px-4 py-3 text-slate-400 font-medium min-w-[200px]">
+                    <th key={lang.code} className="text-left px-4 py-3 text-[var(--text-secondary)] font-medium min-w-[200px]">
                       {lang.name} ({lang.code})
                     </th>
                   ))}
@@ -264,8 +264,8 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
               </thead>
               <tbody>
                 {filteredStrings.map(entry => (
-                  <tr key={entry.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                    <td className="px-4 py-2 font-mono text-xs text-slate-400 break-all border-r border-slate-800">
+                  <tr key={entry.id} className="border-b border-slate-800 hover:bg-[var(--bg-primary)]/50 transition-colors">
+                    <td className="px-4 py-2 font-mono text-xs text-[var(--text-secondary)] break-all border-r border-slate-800">
                       {entry.key}
                       <div className="flex gap-1 mt-1">
                         {entry.tags.map(t => (
@@ -282,8 +282,8 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
                         ))}
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-xs text-slate-500 border-r border-slate-800">{entry.context}</td>
-                    <td className="px-4 py-2 text-slate-300 border-r border-slate-800">
+                    <td className="px-4 py-2 text-xs text-[var(--text-muted)] border-r border-slate-800">{entry.context}</td>
+                    <td className="px-4 py-2 text-[var(--text-primary)] border-r border-slate-800">
                       {entry.defaultText}
                     </td>
                     {additionalLanguages.map(lang => {
@@ -300,7 +300,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
                             value={translation}
                             onChange={e => handleTranslationChange(entry.id, lang.code, e.target.value)}
                             placeholder="Enter translation..."
-                            className="w-full bg-transparent text-slate-300 placeholder-slate-600 px-2 py-1.5 rounded border border-transparent focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                            className="w-full bg-transparent text-[var(--text-primary)] placeholder-slate-600 px-2 py-1.5 rounded border border-transparent focus:border-blue-500 focus:outline-none transition-colors text-sm"
                             style={isEmpty ? { borderColor: 'rgba(234, 179, 8, 0.3)' } : undefined}
                           />
                         </td>
@@ -313,12 +313,12 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-slate-700 flex items-center justify-between">
+        <div className="px-6 py-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={handleExportCSV}
               disabled={strings.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] hover:text-white hover:border-[var(--border-default)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                 <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
@@ -328,7 +328,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] hover:text-white hover:border-[var(--border-default)] transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                 <path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" />
@@ -354,7 +354,7 @@ const LocalizationPanel: React.FC<LocalizationPanelProps> = ({ isOpen, onClose, 
               )}
             </div>
           )}
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-[var(--text-muted)]">
             Showing {filteredStrings.length} of {strings.length} strings
           </div>
         </div>

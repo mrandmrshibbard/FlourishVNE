@@ -200,8 +200,8 @@ export interface ContextRule {
 export interface ContextRuleAction {
   type: 'show-suggestion' | 'show-warning' | 'auto-fix' | 'highlight' | 'navigate';
   config: Record<string, any>;
-  delay?: number;
-  duration?: number;
+  delay?: number; // delay before executing in milliseconds
+  duration?: number; // how long the action stays visible in milliseconds
 }
 
 // Context analytics and insights
@@ -287,16 +287,16 @@ export interface ContextTheme {
   borderColor: string;
   accentColor: string;
   spacing: {
-    small: number;
-    medium: number;
-    large: number;
+    small: number; // in pixels
+    medium: number; // in pixels
+    large: number; // in pixels
   };
   typography: {
     fontFamily: string;
     fontSize: {
-      small: number;
-      medium: number;
-      large: number;
+      small: number; // in pixels
+      medium: number; // in pixels
+      large: number; // in pixels
     };
     fontWeight: {
       normal: number;
@@ -304,7 +304,7 @@ export interface ContextTheme {
     };
   };
   animations: {
-    duration: number;
+    duration: number; // in milliseconds
     easing: string;
     enabled: boolean;
   };
@@ -318,7 +318,7 @@ export interface ContextAccessibility {
   fontSize: 'small' | 'medium' | 'large' | 'extra-large';
   keyboardNavigation: boolean;
   focusIndicators: boolean;
-  tooltipDelay: number;
+  tooltipDelay: number; // delay before showing tooltip in milliseconds
   autoReadContent: boolean;
 }
 
@@ -397,6 +397,6 @@ export interface ContextNotificationSettings {
   playSound: boolean;
   soundVolume: number;
   showDesktopNotifications: boolean;
-  autoHideDelay: number;
+  autoHideDelay: number; // auto-hide delay in milliseconds
   maxVisibleNotifications: number;
 }

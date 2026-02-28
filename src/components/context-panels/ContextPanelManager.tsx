@@ -17,6 +17,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ContextPanel, ContextSuggestion, ContextAction } from '../../types/context-panels';
 import { ContextPanelService } from '../../features/context-panels/ContextPanelService';
 import { VNID } from '../../types';
+import { LightBulbIcon, XMarkIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from '../icons';
 
 // Create service instance
 const panelService = new ContextPanelService();
@@ -251,7 +252,7 @@ export const ContextPanelManager: React.FC<ContextPanelManagerProps> = ({
       {/* Suggestions section */}
       {suggestions.length > 0 && (
         <div className="context-panel-manager__suggestions">
-          <h3 className="suggestions-title">💡 Suggestions</h3>
+          <h3 className="suggestions-title"><LightBulbIcon className="w-4 h-4 inline-block mr-1 text-yellow-400" /> Suggestions</h3>
           <div className="suggestions-list">
             {suggestions.map(suggestion => (
               <SuggestionCard
@@ -327,7 +328,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({ suggestion, onClick }) 
       )}
       {suggestion.dismissible && (
         <button className="suggestion-card__dismiss" onClick={(e) => { e.stopPropagation(); }}>
-          ✕
+          <XMarkIcon className="w-3.5 h-3.5" />
         </button>
       )}
     </div>
@@ -420,7 +421,7 @@ const Panel: React.FC<PanelProps> = ({
           {icon && <span className="context-panel__icon">{icon}</span>}
           <h3 className="context-panel__title">{panel.content.title}</h3>
           <button className="context-panel__toggle" title={isExpanded ? 'Collapse' : 'Expand'}>
-            {isExpanded ? '▼' : '▶'}
+            {isExpanded ? <ChevronDownIcon className="w-3.5 h-3.5" /> : <ChevronRightIcon className="w-3.5 h-3.5" />}
           </button>
         </div>
         {panel.content.summary && (
@@ -514,14 +515,14 @@ const Panel: React.FC<PanelProps> = ({
             onClick={() => onReorder('up')}
             title="Move up"
           >
-            ↑
+            <ChevronUpIcon className="w-3.5 h-3.5" />
           </button>
           <button
             className="reorder-btn reorder-btn--down"
             onClick={() => onReorder('down')}
             title="Move down"
           >
-            ↓
+            <ChevronDownIcon className="w-3.5 h-3.5" />
           </button>
         </div>
       )}

@@ -49,35 +49,41 @@ export const assetReducer = (state: VNProject, action: AssetAction): VNProject =
 
         let newState = { ...state, [assetType]: remainingAssets };
 
-        // Only update commands if there's a valid fallback
-        if (fallbackId) {
-            const newScenes = JSON.parse(JSON.stringify(state.scenes));
-            for (const sceneId in newScenes) {
-                newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd: VNCommand) => {
-                    // Backgrounds can be used in SetBackground commands
-                    if (assetType === 'backgrounds' && cmd.type === CommandType.SetBackground && cmd.backgroundId === assetId) {
-                        return { ...cmd, backgroundId: fallbackId };
-                    }
-                    // Images can be used in both ShowImage and SetBackground commands
-                    if (assetType === 'images' && cmd.type === CommandType.ShowImage && (cmd as ShowImageCommand).imageId === assetId) {
-                        return { ...cmd, imageId: fallbackId };
-                    }
-                    if (assetType === 'images' && cmd.type === CommandType.SetBackground && cmd.backgroundId === assetId) {
-                        return { ...cmd, backgroundId: fallbackId };
-                    }
-                    if (assetType === 'audio' && (cmd.type === CommandType.PlayMusic || cmd.type === CommandType.PlaySoundEffect) && cmd.audioId === assetId) {
-                        return { ...cmd, audioId: fallbackId };
-                    }
-                    if (assetType === 'videos' && cmd.type === CommandType.PlayMovie && cmd.videoId === assetId) {
-                        return { ...cmd, videoId: fallbackId };
-                    }
-                    return cmd;
-                });
-            }
+        // Always update commands that reference the deleted asset.
+        // If a fallback exists, rewire to it; otherwise clear the reference
+        // so commands don't hold dangling IDs that block builds.
+        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        let scenesChanged = false;
+        for (const sceneId in newScenes) {
+            newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd: VNCommand) => {
+                // Backgrounds can be used in SetBackground commands
+                if (assetType === 'backgrounds' && cmd.type === CommandType.SetBackground && cmd.backgroundId === assetId) {
+                    scenesChanged = true;
+                    return { ...cmd, backgroundId: fallbackId || '' };
+                }
+                // Images can be used in both ShowImage and SetBackground commands
+                if (assetType === 'images' && cmd.type === CommandType.ShowImage && (cmd as ShowImageCommand).imageId === assetId) {
+                    scenesChanged = true;
+                    return { ...cmd, imageId: fallbackId || '' };
+                }
+                if (assetType === 'images' && cmd.type === CommandType.SetBackground && cmd.backgroundId === assetId) {
+                    scenesChanged = true;
+                    return { ...cmd, backgroundId: fallbackId || '' };
+                }
+                if (assetType === 'audio' && (cmd.type === CommandType.PlayMusic || cmd.type === CommandType.PlaySoundEffect) && cmd.audioId === assetId) {
+                    scenesChanged = true;
+                    return { ...cmd, audioId: fallbackId || '' };
+                }
+                if (assetType === 'videos' && cmd.type === CommandType.PlayMovie && cmd.videoId === assetId) {
+                    scenesChanged = true;
+                    return { ...cmd, videoId: fallbackId || '' };
+                }
+                return cmd;
+            });
+        }
+        if (scenesChanged) {
             newState.scenes = newScenes;
         }
-        // If there's no fallback, we just remove the asset and leave commands with dangling IDs.
-        // The UI should handle this broken reference.
         return newState;
     }
     

@@ -51,5 +51,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getAppVersion: () =>
     ipcRenderer.invoke('get-app-version'),
+
+  // ── Auto-Update ──
+  onUpdateStatus: (callback) =>
+    ipcRenderer.on('update-status', (_event, data) => callback(data)),
+
+  installUpdate: () =>
+    ipcRenderer.send('install-update'),
+
+  checkForUpdates: () =>
+    ipcRenderer.invoke('check-for-updates'),
+
+  // ── File System / Project Management ──
+  getUserDataPaths: () =>
+    ipcRenderer.invoke('get-user-data-paths'),
+
+  saveProjectToPath: (data, filename, filePath, ext, defaultDir) =>
+    ipcRenderer.invoke('save-project-to-path', { data, filename, filePath, ext, defaultDir }),
+
+  openProjectDialog: () =>
+    ipcRenderer.invoke('open-project-dialog'),
+
+  readProjectFile: (filePath) =>
+    ipcRenderer.invoke('read-project-file', filePath),
+
+  listProjectFiles: () =>
+    ipcRenderer.invoke('list-project-files'),
+
+  revealInExplorer: (dirPath) =>
+    ipcRenderer.invoke('reveal-in-explorer', dirPath),
+
+  /** Fired when the user double-clicks a .flourish file or the app is
+   *  launched with a file path argument. */
+  onOpenFile: (callback) =>
+    ipcRenderer.on('open-file', (_event, filePath) => callback(filePath)),
 });
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "exportedAt": "2026-02-13T00:34:01.828Z",
+  "exportedAt": "2026-02-28T00:55:58.299Z",
   "project": {
     "id": "proj-1760830281303",
     "title": "Welcome-Onboarding"
@@ -15,7 +15,6 @@
       "assets/backgrounds/back-pwmdrvz_transition.png",
       "assets/backgrounds/back-2mk2136_background.png",
       "assets/backgrounds/back-lta167r_movietheater.png",
-      "assets/backgrounds/back-s661ohf_sakura_garden_night.png",
       "assets/backgrounds/back-93rn4x9_transition2.png",
       "assets/backgrounds/back-55y7jbp_snackbar.png",
       "assets/backgrounds/back-xmpipnr_blackbackground.png"
@@ -33,7 +32,10 @@
       "assets/images/imag-gz1unn1_25dde2a93322c4d0298d2e71f01f2c2a.jpg",
       "assets/images/imag-mx7dp1p_blossom_smile_2_.png",
       "assets/images/imag-vw7jvs2_blossom_excited.png",
-      "assets/images/imag-x2se6or_popcorn.png"
+      "assets/images/imag-x2se6or_popcorn.png",
+      "assets/images/imag-o8lelrg_hungyhungyhungy.jpg",
+      "assets/images/imag-ukga3bs_couple_goals.jpg",
+      "assets/images/imag-gx27t95_back-s661ohf_sakura_garden_night.png"
     ],
     "audio": [
       "assets/audio/audi-m96fo4k_find_my_light.mp3",
@@ -67,10 +69,10 @@
       "assets/characters/char-ld8azvx/layer-yv9lobm/asset-o31zo1q_alana_lovie.png",
       "assets/characters/char-ld8azvx/layer-yv9lobm/asset-kpd5uqb_alana_happy.png",
       "assets/characters/char-ld8azvx/layer-yv9lobm/asset-fmxfxm5_alana_embaressed.png",
-      "assets/characters/char-ld8azvx/layer-yv9lobm/asset-ry9diww_alana_anxious.png",
       "assets/characters/char-ld8azvx/layer-yv9lobm/asset-rdbyddr_alana_headon.png",
-      "assets/characters/char-ld8azvx/layer-yv9lobm/asset-e974d7m_alana_anxious2.png",
       "assets/characters/char-ld8azvx/layer-yv9lobm/asset-8bv5dzd_alana_bed.png",
+      "assets/characters/char-ld8azvx/layer-yv9lobm/asset-7ceatkg_asset-ry9diww_alana_anxious.png",
+      "assets/characters/char-ld8azvx/layer-yv9lobm/asset-ryd8m70_asset-e974d7m_alana_anxious2.png",
       "assets/characters/char-ld8azvx/layer-cdv853a/asset-85hr8l5_alana_redskirt_blackshoes.png",
       "assets/characters/char-ld8azvx/layer-cdv853a/asset-w134y9v_alana_redskirt_boots.png",
       "assets/characters/char-ld8azvx/layer-cdv853a/asset-54qrudi_alana_purpleshirt_boots.png",

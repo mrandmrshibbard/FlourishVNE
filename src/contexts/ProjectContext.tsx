@@ -14,9 +14,9 @@ interface UndoRedoState {
 }
 
 const log = createLogger('ProjectContext');
-const AUTO_SAVE_INTERVAL = 2 * 60 * 1000;
+const AUTO_SAVE_INTERVAL = 2 * 60 * 1000; // milliseconds (2 minutes)
 const MAX_HISTORY = 20;
-const COALESCE_MS = 300;
+const COALESCE_MS = 300; // milliseconds
 
 const NON_UNDOABLE_ACTIONS = new Set([
   'UPDATE_PROJECT_TITLE',

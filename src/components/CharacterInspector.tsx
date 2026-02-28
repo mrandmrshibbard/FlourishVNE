@@ -80,8 +80,8 @@ const ExpressionItem: React.FC<{
                 />
             ) : (<span className="truncate">{expr.name}</span>)}
             <div className="flex items-center flex-shrink-0">
-                <button onClick={(e) => { e.stopPropagation(); onStartRename(); }} className="text-slate-500 hover:text-[var(--accent-cyan)] p-1 opacity-0 group-hover:opacity-100 transition-opacity"><PencilIcon className="w-4 h-4" /></button>
-                <button onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }} className="text-slate-500 hover:text-[var(--accent-pink)] p-1 opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onStartRename(); }} className="text-[var(--text-muted)] hover:text-[var(--accent-cyan)] p-1 opacity-0 group-hover:opacity-100 transition-opacity"><PencilIcon className="w-4 h-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); onDeleteRequest(); }} className="text-[var(--text-muted)] hover:text-[var(--accent-pink)] p-1 opacity-0 group-hover:opacity-100 transition-opacity"><TrashIcon className="w-4 h-4" /></button>
             </div>
         </div>
     );
@@ -262,7 +262,7 @@ const CharacterInspector: React.FC<{
                             id="font-italic"
                             checked={character.fontItalic || false}
                             onChange={e => updateCharacter({ fontItalic: e.target.checked })}
-                            className="h-4 w-4 rounded bg-slate-700 border-slate-600 focus:ring-sky-500"
+                            className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]"
                         />
                         <label htmlFor="font-italic" className="ml-2 text-sm">Italic</label>
                     </div>
@@ -272,9 +272,9 @@ const CharacterInspector: React.FC<{
                     <h4 className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Base Image/Video (Optional)</h4>
                     <div className="flex items-center gap-2">
                         {character.baseVideoUrl ? (
-                            <video src={character.baseVideoUrl} muted loop playsInline className="w-12 h-12 object-contain rounded-md bg-slate-700" />
+                            <video src={character.baseVideoUrl} muted loop playsInline className="w-12 h-12 object-contain rounded-md bg-[var(--bg-secondary)]" />
                         ) : character.baseImageUrl ? (
-                            <img src={character.baseImageUrl} alt="Base" className="w-12 h-12 object-contain rounded-md bg-slate-700" />
+                            <img src={character.baseImageUrl} alt="Base" className="w-12 h-12 object-contain rounded-md bg-[var(--bg-secondary)]" />
                         ) : null}
                         <button onClick={() => fileInputRef.current?.click()} className="flex-grow bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] text-sm p-2 rounded-md flex items-center justify-center gap-2"><UploadIcon /> {(character.baseImageUrl || character.baseVideoUrl) ? 'Change...' : 'Upload...'}</button>
                         {(character.baseImageUrl || character.baseVideoUrl) && <button onClick={() => updateCharacter({ baseImageUrl: null, baseVideoUrl: null, isBaseVideo: false })} className="p-2 bg-red-600/50 hover:bg-red-500 rounded-md"><TrashIcon /></button>}
@@ -282,10 +282,10 @@ const CharacterInspector: React.FC<{
                     </div>
                 </div>
 
-                <hr className="border-slate-700" />
+                <hr className="border-[var(--border-subtle)]" />
                 
                 <div>
-                    <h3 className="font-bold text-slate-300 mb-2">Expressions</h3>
+                    <h3 className="font-bold text-[var(--text-primary)] mb-2">Expressions</h3>
                     <div className="space-y-1">
                         {Object.values(character.expressions).map((expr: VNCharacterExpression) => (
                             <ExpressionItem
@@ -304,9 +304,9 @@ const CharacterInspector: React.FC<{
 
                 {selectedExpression && Object.keys(character.layers).length > 0 && (
                     <>
-                        <hr className="border-slate-700" />
+                        <hr className="border-[var(--border-subtle)]" />
                         <div>
-                            <h3 className="font-bold text-slate-300 mb-2">Expression Configuration: <span className="text-sky-400">{selectedExpression.name}</span></h3>
+                            <h3 className="font-bold text-[var(--text-primary)] mb-2">Expression Configuration: <span className="text-sky-400">{selectedExpression.name}</span></h3>
                             <div className="space-y-2">
                                 {Object.values(character.layers).map((layer: VNCharacterLayer) => (
                                     <FormField key={layer.id} label={layer.name}>

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { VNProject } from './types/project';
 import LivePreview from './components/LivePreview';
 import { ProjectProvider } from './contexts/ProjectContext';
+import { ToastProvider } from './contexts/ToastContext';
 // @ts-ignore - Importing logo as base64
 import flourishLogo from '../public/Flourish.png';
 
@@ -141,9 +142,11 @@ const StandalonePlayer: React.FC<StandalonePlayerProps> = ({ project }) => {
                     -ms-user-select: text;
                 }
             `}</style>
-            <ProjectProvider initialProject={project}>
-                <LivePreview onClose={() => {}} hideCloseButton={true} autoStartMusic={true} />
-            </ProjectProvider>
+            <ToastProvider>
+                <ProjectProvider initialProject={project}>
+                    <LivePreview onClose={() => {}} hideCloseButton={true} autoStartMusic={true} />
+                </ProjectProvider>
+            </ToastProvider>
         </div>
     );
 };

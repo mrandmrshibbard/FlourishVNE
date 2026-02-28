@@ -4,28 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flourish Visual Novel Engine</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      // Configure Tailwind to use CSS variables for theme support
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              slate: {
-                400: 'var(--slate-400)',
-                500: 'var(--slate-500)',
-                600: 'var(--slate-600)',
-                700: 'var(--slate-700)',
-                800: 'var(--slate-800)',
-                900: 'var(--slate-900)',
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Caveat&family=Lato&family=Merriweather&family=Oswald&family=Pacifico&family=Playfair+Display&family=Poppins:ital,wght@0,400;0,700;1,400&family=Roboto&display=swap" rel="stylesheet">
@@ -381,7 +359,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-slate-900 text-slate-100">
+<body class="bg-slate-900 text-slate-100" style="background-color:#1a102c;color:#f0e6ff;">
     <!-- Splash screen: visible instantly before any JS loads -->
     <div id="flourish-splash" style="
       position: fixed; inset: 0; z-index: 99999;
@@ -413,8 +391,7 @@
       ">Loading editor...</div>
     </div>
 
-    <div id="root"></div>
-
+    <!-- Splash animation runs immediately – no external dependencies -->
     <script>
       // Animate the splash progress bar while loading
       (function() {
@@ -451,6 +428,31 @@
         };
       })();
     </script>
+
+    <!-- CDN scripts moved from <head> so the splash renders before they download -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                400: 'var(--slate-400)',
+                500: 'var(--slate-500)',
+                600: 'var(--slate-600)',
+                700: 'var(--slate-700)',
+                800: 'var(--slate-800)',
+                900: 'var(--slate-900)',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <div id="root"></div>
 
     <script type="module" src="/src/index.tsx"></script>
     <script>

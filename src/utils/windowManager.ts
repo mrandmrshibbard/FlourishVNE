@@ -16,8 +16,8 @@ export type ManagerWindowType =
 
 interface WindowConfig {
   type: ManagerWindowType;
-  width: number;
-  height: number;
+  width: number; // in pixels
+  height: number; // in pixels
   title: string;
 }
 

@@ -179,14 +179,14 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           boxShadow: '-8px 0 30px rgba(0, 0, 0, 0.5)',
         }}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
           <div className="flex items-center gap-2">
             <span className="text-lg">📖</span>
             <h2 className="text-white font-semibold text-base">Help & Reference</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors"
+            className="text-[var(--text-secondary)] hover:text-white p-1 rounded-md hover:bg-[var(--bg-primary)] transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -194,13 +194,13 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        <div className="px-4 py-3 border-b border-slate-700">
+        <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
           <div className="relative">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
-              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
             >
               <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
             </svg>
@@ -209,12 +209,12 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
               placeholder="Search commands, shortcuts, tips..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800 text-white text-sm pl-9 pr-3 py-2 rounded-lg border border-slate-600 focus:border-cyan-500 focus:outline-none placeholder-slate-500"
+              className="w-full bg-[var(--bg-primary)] text-white text-sm pl-9 pr-3 py-2 rounded-lg border border-[var(--border-default)] focus:border-cyan-500 focus:outline-none placeholder-slate-500"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                   <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
@@ -226,35 +226,35 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 #0f172a' }}>
           {hasGettingStartedMatch && (
-            <div className="border-b border-slate-700/50">
+            <div className="border-b border-[var(--border-subtle)]/50">
               <button
                 onClick={() => toggleSection('gettingStarted')}
-                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <ChevronIcon isOpen={sections.gettingStarted} />
                 <span className="text-cyan-400 font-medium text-sm">Getting Started</span>
               </button>
               {sections.gettingStarted && (
                 <div className="px-4 pb-4 space-y-3">
-                  <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
                     <h4 className="text-white text-xs font-semibold mb-1">1. Create a Project</h4>
-                    <p className="text-slate-400 text-xs leading-relaxed">From the Project Hub, click "New Project" to start fresh or open an existing .zip project file.</p>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">From the Project Hub, click "New Project" to start fresh or open an existing .zip project file.</p>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
                     <h4 className="text-white text-xs font-semibold mb-1">2. Add Scenes</h4>
-                    <p className="text-slate-400 text-xs leading-relaxed">Use the Scenes tab to create scenes. Each scene contains a sequence of commands that make up your story.</p>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Use the Scenes tab to create scenes. Each scene contains a sequence of commands that make up your story.</p>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
                     <h4 className="text-white text-xs font-semibold mb-1">3. Add Commands</h4>
-                    <p className="text-slate-400 text-xs leading-relaxed">Inside a scene, add commands like Dialogue, ShowCharacter, and SetBackground to build your visual novel.</p>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Inside a scene, add commands like Dialogue, ShowCharacter, and SetBackground to build your visual novel.</p>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
                     <h4 className="text-white text-xs font-semibold mb-1">4. Add Characters & Assets</h4>
-                    <p className="text-slate-400 text-xs leading-relaxed">Use the Characters tab to create characters with expressions, and the Assets tab to import backgrounds, images, and audio.</p>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Use the Characters tab to create characters with expressions, and the Assets tab to import backgrounds, images, and audio.</p>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
                     <h4 className="text-white text-xs font-semibold mb-1">5. Preview & Export</h4>
-                    <p className="text-slate-400 text-xs leading-relaxed">Click "Play" to preview your game live. When ready, use "Export" to save as .zip or "Build" to create a standalone game.</p>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Click "Play" to preview your game live. When ready, use "Export" to save as .zip or "Build" to create a standalone game.</p>
                   </div>
                 </div>
               )}
@@ -262,16 +262,16 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           )}
 
           {filteredCommands.length > 0 && (
-            <div className="border-b border-slate-700/50">
+            <div className="border-b border-[var(--border-subtle)]/50">
               <button
                 onClick={() => toggleSection('commands')}
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <ChevronIcon isOpen={sections.commands} />
                   <span className="text-cyan-400 font-medium text-sm">Commands Reference</span>
                 </div>
-                <span className="text-slate-500 text-xs">{filteredCommands.length} commands</span>
+                <span className="text-[var(--text-muted)] text-xs">{filteredCommands.length} commands</span>
               </button>
               {sections.commands && (
                 <div className="px-4 pb-4 space-y-4">
@@ -299,10 +299,10 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           )}
 
           {filteredShortcuts.length > 0 && (
-            <div className="border-b border-slate-700/50">
+            <div className="border-b border-[var(--border-subtle)]/50">
               <button
                 onClick={() => toggleSection('shortcuts')}
-                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <ChevronIcon isOpen={sections.shortcuts} />
                 <span className="text-cyan-400 font-medium text-sm">Keyboard Shortcuts</span>
@@ -310,9 +310,9 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
               {sections.shortcuts && (
                 <div className="px-4 pb-4 space-y-1">
                   {filteredShortcuts.map((shortcut, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-slate-800/50">
-                      <span className="text-slate-300 text-xs">{shortcut.action}</span>
-                      <kbd className="bg-slate-800 border border-slate-600 text-slate-300 text-[10px] px-2 py-0.5 rounded font-mono">
+                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-[var(--bg-primary)]/50">
+                      <span className="text-[var(--text-primary)] text-xs">{shortcut.action}</span>
+                      <kbd className="bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-primary)] text-[10px] px-2 py-0.5 rounded font-mono">
                         {shortcut.keys}
                       </kbd>
                     </div>
@@ -323,10 +323,10 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           )}
 
           {filteredTips.length > 0 && (
-            <div className="border-b border-slate-700/50">
+            <div className="border-b border-[var(--border-subtle)]/50">
               <button
                 onClick={() => toggleSection('tips')}
-                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <ChevronIcon isOpen={sections.tips} />
                 <span className="text-cyan-400 font-medium text-sm">Tips & Tricks</span>
@@ -334,9 +334,9 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
               {sections.tips && (
                 <div className="px-4 pb-4 space-y-2">
                   {filteredTips.map((tip, i) => (
-                    <div key={i} className="bg-slate-800/50 rounded-lg p-3">
+                    <div key={i} className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
                       <h4 className="text-amber-400 text-xs font-semibold mb-1">💡 {tip.title}</h4>
-                      <p className="text-slate-400 text-xs leading-relaxed">{tip.tip}</p>
+                      <p className="text-[var(--text-secondary)] text-xs leading-relaxed">{tip.tip}</p>
                     </div>
                   ))}
                 </div>
@@ -347,14 +347,14 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           {searchQuery && filteredCommands.length === 0 && filteredShortcuts.length === 0 && filteredTips.length === 0 && !hasGettingStartedMatch && (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <span className="text-3xl mb-3">🔍</span>
-              <p className="text-slate-400 text-sm">No results found for "{searchQuery}"</p>
-              <p className="text-slate-500 text-xs mt-1">Try searching for a command name, category, or keyword.</p>
+              <p className="text-[var(--text-secondary)] text-sm">No results found for "{searchQuery}"</p>
+              <p className="text-[var(--text-muted)] text-xs mt-1">Try searching for a command name, category, or keyword.</p>
             </div>
           )}
         </div>
 
-        <div className="px-4 py-2 border-t border-slate-700 bg-slate-900/80">
-          <p className="text-slate-500 text-[10px] text-center">Flourish Visual Novel Engine</p>
+        <div className="px-4 py-2 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80">
+          <p className="text-[var(--text-muted)] text-[10px] text-center">Flourish Visual Novel Engine</p>
         </div>
       </div>
     </>
@@ -366,7 +366,7 @@ const CommandCard: React.FC<{ cmd: CommandDoc }> = ({ cmd }) => {
 
   return (
     <div
-      className="bg-slate-800/60 rounded-lg border border-slate-700/50 overflow-hidden cursor-pointer hover:border-slate-600 transition-colors"
+      className="bg-[var(--bg-primary)]/60 rounded-lg border border-[var(--border-subtle)]/50 overflow-hidden cursor-pointer hover:border-[var(--border-default)] transition-colors"
       onClick={() => setIsExpanded(!isExpanded)}
     >
       <div className="flex items-center justify-between px-3 py-2">
@@ -376,14 +376,14 @@ const CommandCard: React.FC<{ cmd: CommandDoc }> = ({ cmd }) => {
         <ChevronIcon isOpen={isExpanded} />
       </div>
       {isExpanded && (
-        <div className="px-3 pb-3 space-y-2 border-t border-slate-700/30 pt-2">
-          <p className="text-slate-300 text-xs leading-relaxed">{cmd.description}</p>
+        <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-subtle)]/30 pt-2">
+          <p className="text-[var(--text-primary)] text-xs leading-relaxed">{cmd.description}</p>
           {cmd.params.length > 0 && (
             <div>
-              <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Parameters</span>
+              <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold">Parameters</span>
               <div className="flex flex-wrap gap-1 mt-1">
                 {cmd.params.map(p => (
-                  <span key={p} className="bg-slate-700/80 text-cyan-300 text-[10px] px-1.5 py-0.5 rounded font-mono">
+                  <span key={p} className="bg-[var(--bg-secondary)]/80 text-cyan-300 text-[10px] px-1.5 py-0.5 rounded font-mono">
                     {p}
                   </span>
                 ))}
@@ -391,7 +391,7 @@ const CommandCard: React.FC<{ cmd: CommandDoc }> = ({ cmd }) => {
             </div>
           )}
           <div>
-            <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">Example</span>
+            <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold">Example</span>
             <p className="text-emerald-400/80 text-xs mt-0.5 italic">"{cmd.example}"</p>
           </div>
         </div>

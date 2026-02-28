@@ -19,6 +19,7 @@ export type WizardType =
   | 'achievement-system'
   | 'save-system'
   | 'scene-transition'
+  | 'cg-gallery'
   | 'custom';
 
 // Content types that wizards can generate
@@ -294,7 +295,7 @@ export interface WizardSessionOptions {
   autoPreview: boolean;
   showHints: boolean;
   debugMode: boolean;
-  saveInterval: number; // seconds
+  saveInterval: number; // auto-save interval in milliseconds
 }
 
 export interface WizardSavePoint {
