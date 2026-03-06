@@ -728,11 +728,11 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
             return {
                 borderImageSource: `url(${url})`,
                 borderImageSlice: `${s} fill`,
-                borderImageWidth: `${s}px`,
+                borderImageWidth: `calc(var(--font-scale,1) * ${s}px)`,
                 borderImageRepeat: 'stretch',
                 borderStyle: 'solid',
                 borderColor: 'transparent',
-                borderWidth: `${s}px`,
+                borderWidth: `calc(var(--font-scale,1) * ${s}px)`,
             };
         }
         case 'contain':
@@ -746,6 +746,10 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
             return { backgroundImage: `url(${url})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
     }
 }
+
+/** Scale a pixel value by the --font-scale CSS variable so layout proportions
+ *  remain consistent regardless of actual container size. */
+const scalePx = (n: number) => `calc(var(--font-scale,1) * ${n}px)`;
 
 // --- Player UI Components ---
 const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject }> = ({ dialogue, settings, projectUI, onFinished, variables, project }) => {
@@ -828,8 +832,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
 
     // Build namebox background style
     const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
-        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: `${nameboxBorderRadius}px` }
-        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: `${nameboxBorderRadius}px` };
+        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: scalePx(nameboxBorderRadius) }
+        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: scalePx(nameboxBorderRadius) };
 
     // Build dialogue box background color (used when no image, or behind transparent images)
     const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
@@ -839,131 +843,169 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         ? buildImageBackgroundStyle(dialogueBoxUrl, dialogueSizeMode, dialogueSlice)
         : {};
 
+    /* ── Percentage-based layout rects (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+
+    const dialogueHPct = dialogueBoxHeight ? (dialogueBoxHeight * 100 / gameH) : 20;
+    const dialogueXPct = projectUI.dialogueBoxX ?? ((100 - dialogueBoxWidth) / 2);
+    const bmPct = dialogueBoxBottomMargin * 100 / gameH;
+    const dialogueYPct = projectUI.dialogueBoxY ?? (100 - dialogueHPct - bmPct);
+
+    const nameWPct = projectUI.nameboxWidth ?? 15;
+    const nameHPct = projectUI.nameboxHeight ?? 5;
+    const nameXPct = projectUI.nameboxX ?? (dialogueXPct + nameboxOffsetX * 100 / gameW);
+    const nameYPct = projectUI.nameboxY ?? (dialogueYPct - nameHPct - nameboxOffsetY * 100 / gameH);
+
+    const textPadTop = projectUI.dialogueTextPaddingTop ?? 0;
+    const textPadBot = projectUI.dialogueTextPaddingBottom ?? 0;
+    const textPadLeft = projectUI.dialogueTextPaddingLeft ?? 0;
+    const textPadRight = projectUI.dialogueTextPaddingRight ?? 0;
+
     return (
-        <div 
-            className="absolute z-20 cursor-pointer"
-            style={{
-                bottom: `${dialogueBoxBottomMargin}px`,
-                left: `${(100 - dialogueBoxWidth) / 2}%`,
-                right: `${(100 - dialogueBoxWidth) / 2}%`,
-                animation: 'vnDialogueIn 0.25s ease-out',
-                ...(dialogueBorderUrl 
-                    ? { ...buildImageBackgroundStyle(dialogueBorderUrl, dialogueSizeMode, dialogueSlice), padding: `${dialogueBorderPadding}px`, borderRadius: `${dialogueBorderRadius}px` }
-                    : {})
-            }}
-            onClick={handleClick}
-        >
-            {/* Namebox (character name label) */}
+        <>
+            {/* Namebox – positioned independently (matching InGameUIEditor) */}
             {showNamebox && (
-                <div 
-                    className="z-10"
+                <div
+                    className="absolute z-[21] cursor-pointer"
                     style={{
-                        position: hasCustomImage ? 'relative' : 'absolute',
-                        ...(hasCustomImage 
-                            ? { marginBottom: `${nameboxOffsetY + 2}px`, marginLeft: `${nameboxOffsetX}px` }
-                            : { top: `${-(nameboxPadding * 2 + (projectUI.dialogueNameFont?.size || 22)) - nameboxOffsetY}px`, left: `${nameboxOffsetX}px` }
-                        ),
-                        display: 'inline-block',
+                        left: `${nameXPct}%`,
+                        top: `${nameYPct}%`,
+                        width: `${nameWPct}%`,
+                        height: `${nameHPct}%`,
+                        animation: 'vnDialogueIn 0.25s ease-out',
+                    }}
+                    onClick={handleClick}
+                >
+                    <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
                         ...nameboxBgStyle,
-                        padding: `${nameboxPadding}px ${nameboxHPadding}px`,
+                        padding: `${scalePx(nameboxPadding)} ${scalePx(nameboxHPadding)}`,
                         ...(hasCustomImage || nameboxImageUrl ? {} : {
                             border: '1px solid rgba(148,163,184,0.35)',
-                            borderBottom: hasCustomImage ? undefined : 'none',
                             backdropFilter: 'blur(6px)',
                             WebkitBackdropFilter: 'blur(6px)',
                         }),
-                    }}
-                >
-                    <span style={{...nameStyle, lineHeight: 1.3}}>
-                        <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                    </span>
+                    }}>
+                        <span style={{...nameStyle, lineHeight: 1.3}}>
+                            <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                        </span>
+                    </div>
                 </div>
             )}
+            {/* Dialogue box – percentage positioned (matching InGameUIEditor) */}
             <div 
-                className="relative"
+                className="absolute z-20 cursor-pointer"
                 style={{
-                    borderRadius: `${dialogueBorderRadius}px`,
-                    overflow: 'hidden',
-                    ...(hasCustomImage ? {} : {
-                        backgroundColor: dialogueBgColor,
-                        border: '1px solid rgba(148,163,184,0.25)',
-                        boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                    }),
-                    ...(dialogueBoxUrl && !isDialogueBoxVideo 
-                        ? { 
-                            ...dialogueImageStyle,
-                            backgroundColor: dialogueBgColor,
-                            ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), 
-                            ...(dialogueSizeMode !== 'nine-slice' ? { padding: `${dialogueBoxPadding}px` } : {})
-                          } 
-                        : { padding: `${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }) })
+                    left: `${dialogueXPct}%`,
+                    top: `${dialogueYPct}%`,
+                    width: `${dialogueBoxWidth}%`,
+                    height: `${dialogueHPct}%`,
+                    animation: 'vnDialogueIn 0.25s ease-out',
+                    ...(dialogueBorderUrl 
+                        ? { ...buildImageBackgroundStyle(dialogueBorderUrl, dialogueSizeMode, dialogueSlice), padding: scalePx(dialogueBorderPadding), borderRadius: scalePx(dialogueBorderRadius) }
+                        : {})
                 }}
+                onClick={handleClick}
             >
-                {isDialogueBoxVideo && dialogueBoxUrl && (
-                    <video 
-                        autoPlay 
-                        loop 
-                        muted 
-                        className="absolute inset-0 w-full h-full -z-10"
-                        style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: `${dialogueBorderRadius}px` }}
-                    >
-                        <source src={dialogueBoxUrl} />
-                    </video>
-                )}
-                <div style={{ position: 'relative', zIndex: 1, padding: dialogueSizeMode === 'nine-slice' && dialogueBoxUrl ? `${dialogueBoxPadding}px` : undefined }}>
-                    <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
-                        <AnimatedDialogueText 
-                            displayText={displayText}
-                            textEffect={dialogue.textEffect}
-                            gradientStyle={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}
-                        />
-                        {!hasFinished && (
-                            <span style={{ 
-                                display: 'inline-block', 
-                                width: '0.5em', 
-                                height: '1em', 
-                                marginLeft: '2px', 
-                                verticalAlign: 'text-bottom',
-                                backgroundColor: dialogueTextStyle.color || projectUI.dialogueTextFont?.color || '#FFFFFF',
-                                animation: 'vnCursorBlink 0.8s step-end infinite',
-                                opacity: 0.85
-                            }} />
-                        )}
-                    </p>
-                    {/* Click-to-advance indicator */}
-                    {hasFinished && (
-                        <div style={{
-                            position: 'absolute',
-                            bottom: '8px',
-                            right: '12px',
-                            animation: 'vnAdvanceBounce 1.2s ease-in-out infinite',
-                            opacity: 0.6,
-                            fontSize: 'calc(var(--font-scale, 1) * 12px)',
-                            color: '#94a3b8',
-                        }}>
-                            ▼
-                        </div>
+                <div 
+                    className="relative"
+                    style={{
+                        borderRadius: scalePx(dialogueBorderRadius),
+                        overflow: 'hidden',
+                        width: '100%',
+                        height: '100%',
+                        ...(hasCustomImage ? {} : {
+                            backgroundColor: dialogueBgColor,
+                            border: '1px solid rgba(148,163,184,0.25)',
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
+                        }),
+                        ...(dialogueBoxUrl && !isDialogueBoxVideo 
+                            ? { 
+                                ...dialogueImageStyle,
+                                backgroundColor: dialogueBgColor,
+                                ...(dialogueSizeMode !== 'nine-slice' ? { padding: scalePx(dialogueBoxPadding) } : {})
+                              } 
+                            : { padding: scalePx(dialogueBoxPadding) })
+                    }}
+                >
+                    {isDialogueBoxVideo && dialogueBoxUrl && (
+                        <video 
+                            autoPlay 
+                            loop 
+                            muted 
+                            className="absolute inset-0 w-full h-full -z-10"
+                            style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(dialogueBorderRadius) }}
+                        >
+                            <source src={dialogueBoxUrl} />
+                        </video>
                     )}
+                    <div style={{
+                        position: 'relative',
+                        zIndex: 1,
+                        padding: dialogueSizeMode === 'nine-slice' && dialogueBoxUrl ? scalePx(dialogueBoxPadding) : undefined,
+                        paddingTop: textPadTop ? scalePx(textPadTop) : undefined,
+                        paddingBottom: textPadBot ? scalePx(textPadBot) : undefined,
+                        paddingLeft: textPadLeft ? scalePx(textPadLeft) : undefined,
+                        paddingRight: textPadRight ? scalePx(textPadRight) : undefined,
+                    }}>
+                        <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                            <AnimatedDialogueText 
+                                displayText={displayText}
+                                textEffect={dialogue.textEffect}
+                                gradientStyle={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}
+                            />
+                            {!hasFinished && (
+                                <span style={{ 
+                                    display: 'inline-block', 
+                                    width: '0.5em', 
+                                    height: '1em', 
+                                    marginLeft: '2px', 
+                                    verticalAlign: 'text-bottom',
+                                    backgroundColor: dialogueTextStyle.color || projectUI.dialogueTextFont?.color || '#FFFFFF',
+                                    animation: 'vnCursorBlink 0.8s step-end infinite',
+                                    opacity: 0.85
+                                }} />
+                            )}
+                        </p>
+                        {/* Click-to-advance indicator */}
+                        {hasFinished && (
+                            <div style={{
+                                position: 'absolute',
+                                bottom: '8px',
+                                right: '12px',
+                                animation: 'vnAdvanceBounce 1.2s ease-in-out infinite',
+                                opacity: 0.6,
+                                fontSize: 'calc(var(--font-scale, 1) * 12px)',
+                                color: '#94a3b8',
+                            }}>
+                                ▼
+                            </div>
+                        )}
+                    </div>
                 </div>
+                {/* Inject keyframe animations */}
+                <style>{`
+                    @keyframes vnDialogueIn {
+                        from { opacity: 0; transform: translateY(12px); }
+                        to   { opacity: 1; transform: translateY(0); }
+                    }
+                    @keyframes vnCursorBlink {
+                        0%, 100% { opacity: 0.85; }
+                        50% { opacity: 0; }
+                    }
+                    @keyframes vnAdvanceBounce {
+                        0%, 100% { transform: translateY(0); }
+                        50% { transform: translateY(4px); }
+                    }
+                `}</style>
             </div>
-            {/* Inject keyframe animations */}
-            <style>{`
-                @keyframes vnDialogueIn {
-                    from { opacity: 0; transform: translateY(12px); }
-                    to   { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes vnCursorBlink {
-                    0%, 100% { opacity: 0.85; }
-                    50% { opacity: 0; }
-                }
-                @keyframes vnAdvanceBounce {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(4px); }
-                }
-            `}</style>
-        </div>
+        </>
     );
 };
 
@@ -1007,8 +1049,23 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
     const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
 
+    /* ── Percentage-based layout rect (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+    const choiceWPct = choiceWidth ? (choiceWidth * 100 / gameW) : 30;
+    const choiceHPct = choiceHeight ? (choiceHeight * 100 / gameH) : 25;
+    const choiceXPct = projectUI.choiceButtonX ?? (50 - choiceWPct / 2);
+    const choiceYPct = projectUI.choiceButtonY ?? 35;
+
     return (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8" style={{ animation: 'vnChoiceOverlayIn 0.3s ease-out', background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.25) 100%)' }}>
+        <div className="absolute z-30 flex flex-col items-center justify-center"
+             style={{
+                 left: `${choiceXPct}%`,
+                 top: `${choiceYPct}%`,
+                 width: `${choiceWPct}%`,
+                 height: `${choiceHPct}%`,
+                 animation: 'vnChoiceOverlayIn 0.3s ease-out',
+             }}>
             {choices.map((choice, index) => {
                 const interpolatedText = interpolateVariables(choice.text, variables, project);
                 const isHovered = hoveredIndex === index;
@@ -1021,9 +1078,10 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                         className="mb-3"
                         style={{
                             animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                            width: '100%',
                             ...(choiceBorderUrl 
-                                ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: `${choiceBorderRadius}px` }
-                                : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }) })
+                                ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) }
+                                : {})
                         }}
                     >
                         <button 
@@ -1032,7 +1090,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                             onMouseLeave={() => setHoveredIndex(null)}
                             className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
                             style={{
-                                borderRadius: `${choiceBorderRadius}px`,
+                                borderRadius: scalePx(choiceBorderRadius),
                                 ...(activeButtonUrl && !isChoiceButtonVideo 
                                     ? { 
                                         ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
@@ -1047,9 +1105,8 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                                             WebkitBackdropFilter: 'blur(6px)',
                                           } 
                                         : { backgroundColor: isHovered ? choiceHoverBgColor : 'transparent' }),
-                                padding: `${choicePadding}px ${choicePadding * 2}px`, 
-                                minWidth: '200px', 
-                                ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), 
+                                padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`, 
+                                ...(choiceHeight ? { height: scalePx(choiceHeight) } : {}), 
                                 ...fontSettingsToStyle(projectUI.choiceTextFont), 
                                 textAlign: 'center' as const, 
                                 wordBreak: 'break-word' as const, 
@@ -1063,7 +1120,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                                     loop 
                                     muted 
                                     className="absolute inset-0 w-full h-full -z-10"
-                                    style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: `${choiceBorderRadius}px` }}
+                                    style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(choiceBorderRadius) }}
                                 >
                                     <source src={choiceButtonUrl} />
                                 </video>
@@ -1136,15 +1193,29 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
         ? fontSettingsToStyle(projectUI.inputSubmitFont)
         : { color: '#FFFFFF' };
 
+    /* ── Percentage-based layout rect (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+    const inputWPct = inputBoxWidth ? (inputBoxWidth * 100 / gameW) : 30;
+    const inputHPct = projectUI?.inputBoxHeight ? (projectUI.inputBoxHeight * 100 / gameH) : 20;
+    const inputXPct = projectUI?.inputBoxX ?? (50 - inputWPct / 2);
+    const inputYPct = projectUI?.inputBoxY ?? 40;
+
     return (
-        <div className="absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8">
+        <div className="absolute z-30 flex flex-col items-center justify-center"
+             style={{
+                 left: `${inputXPct}%`,
+                 top: `${inputYPct}%`,
+                 width: `${inputWPct}%`,
+                 height: `${inputHPct}%`,
+             }}>
             <div
                 className="relative"
                 style={{
-                    borderRadius: `${inputBorderRadius}px`,
-                    ...(inputBoxWidth ? { width: `${inputBoxWidth}px` } : { maxWidth: '28rem', width: '100%' }),
+                    borderRadius: scalePx(inputBorderRadius),
+                    width: '100%',
                     ...(inputBorderUrl
-                        ? { ...buildImageBackgroundStyle(inputBorderUrl, inputSizeMode, inputSlice), padding: `${inputBorderPadding}px` }
+                        ? { ...buildImageBackgroundStyle(inputBorderUrl, inputSizeMode, inputSlice), padding: scalePx(inputBorderPadding) }
                         : {}),
                     animation: 'vnDialogueIn 0.25s ease-out',
                 }}
@@ -1152,7 +1223,7 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                 <div
                     className="relative"
                     style={{
-                        borderRadius: `${inputBorderRadius}px`,
+                        borderRadius: scalePx(inputBorderRadius),
                         overflow: 'hidden',
                         ...(hasCustomImage ? {} : {
                             backgroundColor: inputBgColor,
@@ -1162,8 +1233,8 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                             WebkitBackdropFilter: 'blur(8px)',
                         }),
                         ...(inputBoxUrl && !isInputBoxVideo
-                            ? { ...buildImageBackgroundStyle(inputBoxUrl, inputSizeMode, inputSlice), backgroundColor: inputBgColor, ...(inputSizeMode !== 'nine-slice' ? { padding: `${inputBoxPadding}px` } : {}) }
-                            : { padding: `${inputBoxPadding}px` })
+                            ? { ...buildImageBackgroundStyle(inputBoxUrl, inputSizeMode, inputSlice), backgroundColor: inputBgColor, ...(inputSizeMode !== 'nine-slice' ? { padding: scalePx(inputBoxPadding) } : {}) }
+                            : { padding: scalePx(inputBoxPadding) })
                     }}
                 >
                     {isInputBoxVideo && inputBoxUrl && (
@@ -1172,12 +1243,12 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                             loop
                             muted
                             className="absolute inset-0 w-full h-full -z-10"
-                            style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: `${inputBorderRadius}px` }}
+                            style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(inputBorderRadius) }}
                         >
                             <source src={inputBoxUrl} />
                         </video>
                     )}
-                    <div style={{ position: 'relative', zIndex: 1, padding: inputSizeMode === 'nine-slice' && inputBoxUrl ? `${inputBoxPadding}px` : undefined }}>
+                    <div style={{ position: 'relative', zIndex: 1, padding: inputSizeMode === 'nine-slice' && inputBoxUrl ? scalePx(inputBoxPadding) : undefined }}>
                         <p className="mb-4" style={promptStyle}>
                             <span style={extractTextGradientStyle(projectUI?.inputPromptFont) || undefined}>{interpolatedPrompt}</span>
                         </p>
@@ -1193,7 +1264,7 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                                     ...fieldStyle,
                                     backgroundColor: 'rgba(15,23,42,0.6)',
                                     border: '1px solid rgba(148,163,184,0.3)',
-                                    borderRadius: `${Math.max(4, inputBorderRadius - 4)}px`,
+                                    borderRadius: scalePx(Math.max(4, inputBorderRadius - 4)),
                                 }}
                                 autoFocus
                             />
@@ -1204,7 +1275,7 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                                     ...submitStyle,
                                     backgroundColor: hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)',
                                     border: '1px solid rgba(148,163,184,0.2)',
-                                    borderRadius: `${Math.max(4, inputBorderRadius - 4)}px`,
+                                    borderRadius: scalePx(Math.max(4, inputBorderRadius - 4)),
                                 }}
                             >
                                 <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>Submit</span>

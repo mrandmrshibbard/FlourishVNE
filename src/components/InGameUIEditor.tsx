@@ -11,6 +11,7 @@ import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { VNProject } from '../types/project';
 import { VNProjectUI, VNFontSettings } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
+import { fontSettingsToStyle } from '../utils/styleUtils';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
 import {
     ChatBubbleIcon, BookmarkSquareIcon, SparklesIcon, PencilIcon,
@@ -56,63 +57,81 @@ function hexToRgba(hex: string, opacityPct: number): string {
 
 function fontToStyle(f: VNFontSettings | undefined): React.CSSProperties {
     if (!f) return {};
-    return {
-        fontFamily: f.family,
-        fontSize: `calc(var(--font-scale, 1) * ${f.size}px)`,
-        color: f.color,
-        fontWeight: f.weight,
-        fontStyle: f.italic ? 'italic' : 'normal',
-        textAlign: f.align || 'left',
-        letterSpacing: f.letterSpacing ? `${f.letterSpacing}px` : undefined,
-    };
+    return fontSettingsToStyle(f);
+}
+
+function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: number): React.CSSProperties {
+    switch (sizeMode) {
+        case 'nine-slice': {
+            const s = slicePx ?? 30;
+            return {
+                borderImageSource: `url(${url})`,
+                borderImageSlice: `${s} fill`,
+                borderImageWidth: `calc(var(--font-scale,1) * ${s}px)`,
+                borderImageRepeat: 'stretch',
+                borderStyle: 'solid',
+                borderColor: 'transparent',
+                borderWidth: `calc(var(--font-scale,1) * ${s}px)`,
+            };
+        }
+        case 'contain':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'cover':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'tile':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'auto', backgroundRepeat: 'repeat' };
+        case 'stretch':
+        default:
+            return { backgroundImage: `url(${url})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+    }
 }
 
 /* ------------------------------------------------------------------ */
 /*  Default layout helpers  (%)                                        */
 /* ------------------------------------------------------------------ */
 
-function getDialogueRect(ui: VNProjectUI) {
+function getDialogueRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     const w = ui.dialogueBoxWidth ?? 100;
-    const h = ui.dialogueBoxHeight ? (ui.dialogueBoxHeight / 10.8) : 20; // approx of 1080 base
+    const h = ui.dialogueBoxHeight ? (ui.dialogueBoxHeight * 100 / gameH) : 20;
     const x = ui.dialogueBoxX ?? ((100 - w) / 2);
     const bm = ui.dialogueBoxBottomMargin ?? 20;
-    const y = ui.dialogueBoxY ?? (100 - h - (bm / 10.8));
+    const y = ui.dialogueBoxY ?? (100 - h - (bm * 100 / gameH));
     return { x, y, width: w, height: h };
 }
 
-function getNameboxRect(ui: VNProjectUI) {
-    const dRect = getDialogueRect(ui);
+function getNameboxRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
+    const dRect = getDialogueRect(ui, gameW, gameH);
     const w = ui.nameboxWidth ?? 15;
     const h = ui.nameboxHeight ?? 5;
-    const x = ui.nameboxX ?? (dRect.x + (ui.nameboxOffsetX ?? 20) / 19.2);
-    const y = ui.nameboxY ?? (dRect.y - h - (ui.nameboxOffsetY ?? 0) / 10.8);
+    const x = ui.nameboxX ?? (dRect.x + (ui.nameboxOffsetX ?? 20) * 100 / gameW);
+    const y = ui.nameboxY ?? (dRect.y - h - (ui.nameboxOffsetY ?? 0) * 100 / gameH);
     return { x, y, width: w, height: h };
 }
 
-function getChoiceRect(ui: VNProjectUI) {
-    const w = ui.choiceButtonWidth ? (ui.choiceButtonWidth / 19.2) : 30;
-    const h = ui.choiceButtonHeight ? (ui.choiceButtonHeight / 10.8) : 25;
+function getChoiceRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
+    const w = ui.choiceButtonWidth ? (ui.choiceButtonWidth * 100 / gameW) : 30;
+    const h = ui.choiceButtonHeight ? (ui.choiceButtonHeight * 100 / gameH) : 25;
     const x = ui.choiceButtonX ?? (50 - w / 2);
     const y = ui.choiceButtonY ?? 35;
     return { x, y, width: w, height: h };
 }
 
-function getInputRect(ui: VNProjectUI) {
-    const w = ui.inputBoxWidth ? (ui.inputBoxWidth / 19.2) : 30;
-    const h = ui.inputBoxHeight ? (typeof ui.inputBoxHeight === 'number' ? ui.inputBoxHeight / 10.8 : 20) : 20;
+function getInputRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
+    const w = ui.inputBoxWidth ? (ui.inputBoxWidth * 100 / gameW) : 30;
+    const h = ui.inputBoxHeight ? (typeof ui.inputBoxHeight === 'number' ? ui.inputBoxHeight * 100 / gameH : 20) : 20;
     const x = ui.inputBoxX ?? (50 - w / 2);
     const y = ui.inputBoxY ?? 40;
     return { x, y, width: w, height: h };
 }
 
-function getQuickMenuRect(ui: VNProjectUI) {
+function getQuickMenuRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     const w = ui.quickMenuWidth ?? 40;
     const h = ui.quickMenuHeight ?? 4;
     let x = ui.quickMenuX ?? 30;
     let y = ui.quickMenuY ?? 73;
     if (!ui.quickMenuX && !ui.quickMenuY) {
         const pos = ui.quickMenuPosition ?? 'above-dialogue';
-        const dRect = getDialogueRect(ui);
+        const dRect = getDialogueRect(ui, gameW, gameH);
         if (pos === 'top-right') { x = 75; y = 2; }
         else if (pos === 'bottom-right') { x = 75; y = 92; }
         else if (pos === 'above-dialogue') { x = dRect.x + dRect.width / 2 - w / 2; y = dRect.y - h - 1; }
@@ -132,6 +151,8 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
     const textPadBot = ui.dialogueTextPaddingBottom ?? 0;
     const textPadLeft = ui.dialogueTextPaddingLeft ?? 0;
     const textPadRight = ui.dialogueTextPaddingRight ?? 0;
+    const sizeMode = ui.dialogueBoxSizeMode ?? 'stretch';
+    const slice = ui.dialogueBoxSlice ?? 30;
 
     // Resolve images
     const bgImgId = ui.dialogueBoxImage?.id;
@@ -139,27 +160,49 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
         ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
         : null;
 
+    // Resolve border image
+    const borderImgId = ui.dialogueBoxBorderImage?.id;
+    const borderUrl = borderImgId
+        ? ((project.images as any)[borderImgId]?.imageUrl || (project.backgrounds as any)[borderImgId]?.imageUrl)
+        : null;
+    const borderPadding = ui.dialogueBorderPadding ?? 12;
+
+    const hasCustomImage = bgUrl || borderUrl;
+
     return (
         <div className="w-full h-full relative" style={{
-            backgroundColor: bgUrl ? undefined : bgColor,
-            borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
-            overflow: 'hidden',
-            ...(bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            ...(borderUrl
+                ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
+                : {}),
         }}>
-            <div style={{
-                padding: `calc(var(--font-scale,1) * ${padding}px)`,
-                paddingTop: `calc(var(--font-scale,1) * ${padding + textPadTop}px)`,
-                paddingBottom: `calc(var(--font-scale,1) * ${padding + textPadBot}px)`,
-                paddingLeft: `calc(var(--font-scale,1) * ${padding + textPadLeft}px)`,
-                paddingRight: `calc(var(--font-scale,1) * ${padding + textPadRight}px)`,
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'flex-start',
+            <div className="w-full h-full relative" style={{
+                borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
+                overflow: 'hidden',
+                ...(hasCustomImage ? {} : {
+                    backgroundColor: bgColor,
+                    border: '1px solid rgba(148,163,184,0.25)',
+                    boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                }),
+                ...(bgUrl
+                    ? { ...buildImageBackgroundStyle(bgUrl, sizeMode, slice), backgroundColor: bgColor,
+                        ...(sizeMode !== 'nine-slice' ? { padding: `calc(var(--font-scale,1) * ${padding}px)` } : {}) }
+                    : { padding: `calc(var(--font-scale,1) * ${padding}px)` }),
             }}>
-                <p style={fontToStyle(ui.dialogueTextFont)} className="leading-relaxed opacity-80">
-                    This is a sample line of dialogue text to preview how it will look in-game…
-                </p>
+                <div style={{
+                    padding: sizeMode === 'nine-slice' && bgUrl ? `calc(var(--font-scale,1) * ${padding}px)` : undefined,
+                    paddingTop: textPadTop ? `calc(var(--font-scale,1) * ${textPadTop}px)` : undefined,
+                    paddingBottom: textPadBot ? `calc(var(--font-scale,1) * ${textPadBot}px)` : undefined,
+                    paddingLeft: textPadLeft ? `calc(var(--font-scale,1) * ${textPadLeft}px)` : undefined,
+                    paddingRight: textPadRight ? `calc(var(--font-scale,1) * ${textPadRight}px)` : undefined,
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-start',
+                }}>
+                    <p style={fontToStyle(ui.dialogueTextFont)} className="leading-relaxed opacity-80">
+                        This is a sample line of dialogue text to preview how it will look in-game…
+                    </p>
+                </div>
             </div>
         </div>
     );
@@ -181,7 +224,7 @@ const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui,
             backgroundColor: bgUrl ? undefined : bgColor,
             borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
             padding: `calc(var(--font-scale,1) * ${pad}px) calc(var(--font-scale,1) * ${hPad}px)`,
-            ...(bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            ...(bgUrl ? buildImageBackgroundStyle(bgUrl, ui.nameboxSizeMode ?? 'stretch') : {}),
         }}>
             <span style={fontToStyle(ui.dialogueNameFont)} className="opacity-90">Character Name</span>
         </div>
@@ -205,7 +248,7 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                     backgroundColor: bgUrl ? undefined : bgColor,
                     borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
                     padding: `calc(var(--font-scale,1) * ${pad}px)`,
-                    ...(bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                    ...(bgUrl ? buildImageBackgroundStyle(bgUrl, ui.choiceButtonSizeMode ?? 'stretch') : {}),
                 }}>
                     <span style={fontToStyle(ui.choiceTextFont)} className="opacity-90">{label}</span>
                 </div>
@@ -229,7 +272,7 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
             backgroundColor: bgUrl ? undefined : bgColor,
             borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
             padding: `calc(var(--font-scale,1) * ${pad}px)`,
-            ...(bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+            ...(bgUrl ? buildImageBackgroundStyle(bgUrl, ui.inputBoxSizeMode ?? 'stretch') : {}),
         }}>
             <p style={fontToStyle(ui.inputPromptFont)} className="opacity-90 text-center">What is your name?</p>
             <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={fontToStyle(ui.inputFieldFont)}>
@@ -274,41 +317,49 @@ interface PropsEditorProps {
     onUpdate: (updates: Partial<VNProjectUI>) => void;
 }
 
-const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project, onUpdate }) => {
-    const inputCls = "w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-sky-500 text-sm";
-    const labelCls = "block text-xs font-medium text-[var(--text-secondary)] mb-1";
+/* ── Shared CSS classes and helper components for the properties panel ── */
+const propsInputCls = "w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-sky-500 text-sm";
+const propsLabelCls = "block text-xs font-medium text-[var(--text-secondary)] mb-1";
 
+const PropsField: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+    <div><label className={propsLabelCls}>{label}</label>{children}</div>
+);
+
+const PropsNumInput: React.FC<{ label: string; value: number | undefined; fallback: number; onChange: (v: number) => void; min?: number; max?: number; step?: number }> = ({ label, value, fallback, onChange, min, max, step }) => (
+    <PropsField label={label}>
+        <input type="number" className={propsInputCls} value={value ?? fallback} min={min} max={max} step={step}
+            onChange={e => onChange(parseFloat(e.target.value) || fallback)} />
+    </PropsField>
+);
+
+const PropsColorField: React.FC<{ label: string; value: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
+    <PropsField label={label}>
+        <input type="color" value={value} onChange={e => onChange(e.target.value)} className="w-full h-8 rounded cursor-pointer border border-[var(--border-default)]" />
+    </PropsField>
+);
+
+const PropsOpacityField: React.FC<{ label: string; value: number; onChange: (v: number) => void }> = ({ label, value, onChange }) => (
+    <PropsField label={label}>
+        <div className="flex items-center gap-2">
+            <input type="range" min={0} max={100} value={value} onChange={e => onChange(parseInt(e.target.value))} className="flex-1 accent-sky-500" />
+            <span className="text-xs text-[var(--text-secondary)] w-8 text-right">{value}%</span>
+        </div>
+    </PropsField>
+);
+
+const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project, onUpdate }) => {
     // Gather all available images (images + backgrounds) for background image selectors
     const allImages = useMemo(() => [
         ...Object.values(project.images || {}) as any[],
         ...Object.values(project.backgrounds || {}) as any[],
     ], [project.images, project.backgrounds]);
 
-    const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-        <div><label className={labelCls}>{label}</label>{children}</div>
-    );
-
-    const NumInput: React.FC<{ label: string; value: number | undefined; fallback: number; onChange: (v: number) => void; min?: number; max?: number; step?: number }> = ({ label, value, fallback, onChange, min, max, step }) => (
-        <Field label={label}>
-            <input type="number" className={inputCls} value={value ?? fallback} min={min} max={max} step={step}
-                onChange={e => onChange(parseFloat(e.target.value) || fallback)} />
-        </Field>
-    );
-
-    const ColorField: React.FC<{ label: string; value: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
-        <Field label={label}>
-            <input type="color" value={value} onChange={e => onChange(e.target.value)} className="w-full h-8 rounded cursor-pointer border border-[var(--border-default)]" />
-        </Field>
-    );
-
-    const OpacityField: React.FC<{ label: string; value: number; onChange: (v: number) => void }> = ({ label, value, onChange }) => (
-        <Field label={label}>
-            <div className="flex items-center gap-2">
-                <input type="range" min={0} max={100} value={value} onChange={e => onChange(parseInt(e.target.value))} className="flex-1 accent-sky-500" />
-                <span className="text-xs text-[var(--text-secondary)] w-8 text-right">{value}%</span>
-            </div>
-        </Field>
-    );
+    // Local aliases for brevity
+    const Field = PropsField;
+    const NumInput = PropsNumInput;
+    const ColorField = PropsColorField;
+    const OpacityField = PropsOpacityField;
+    const inputCls = propsInputCls;
 
     /* Dialogue Box properties */
     if (element === 'dialogueBox') {
@@ -338,6 +389,36 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
+
+                {ui.dialogueBoxImage && (
+                    <Field label="Image Fit Mode">
+                        <select className={inputCls} value={ui.dialogueBoxSizeMode ?? 'stretch'}
+                            onChange={e => onUpdate({ dialogueBoxSizeMode: e.target.value as any })}>
+                            <option value="stretch">Stretch (fill box)</option>
+                            <option value="contain">Contain (fit inside)</option>
+                            <option value="cover">Cover (fill & crop)</option>
+                            <option value="tile">Tile (repeat)</option>
+                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                        </select>
+                    </Field>
+                )}
+                {ui.dialogueBoxImage && (ui.dialogueBoxSizeMode ?? 'stretch') === 'nine-slice' && (
+                    <NumInput label="Slice (px)" value={ui.dialogueBoxSlice} fallback={30} min={1} onChange={v => onUpdate({ dialogueBoxSlice: v })} />
+                )}
+
+                <Field label="Border Image">
+                    <select className={inputCls} value={ui.dialogueBoxBorderImage?.id || ''}
+                        onChange={e => {
+                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                            onUpdate({ dialogueBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
+                        }}>
+                        <option value="">None</option>
+                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                    </select>
+                </Field>
+                {ui.dialogueBoxBorderImage && (
+                    <NumInput label="Border Padding (px)" value={ui.dialogueBorderPadding} fallback={12} min={0} onChange={v => onUpdate({ dialogueBorderPadding: v })} />
+                )}
 
                 {/* Text padding inside dialogue */}
                 <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-2">Text Position (padding px)</h4>
@@ -377,6 +458,19 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
+
+                {ui.nameboxImage && (
+                    <Field label="Image Fit Mode">
+                        <select className={inputCls} value={ui.nameboxSizeMode ?? 'stretch'}
+                            onChange={e => onUpdate({ nameboxSizeMode: e.target.value as any })}>
+                            <option value="stretch">Stretch (fill box)</option>
+                            <option value="contain">Contain (fit inside)</option>
+                            <option value="cover">Cover (fill & crop)</option>
+                            <option value="tile">Tile (repeat)</option>
+                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                        </select>
+                    </Field>
+                )}
             </div>
         );
     }
@@ -408,6 +502,47 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
+
+                {ui.choiceButtonImage && (
+                    <Field label="Image Fit Mode">
+                        <select className={inputCls} value={ui.choiceButtonSizeMode ?? 'stretch'}
+                            onChange={e => onUpdate({ choiceButtonSizeMode: e.target.value as any })}>
+                            <option value="stretch">Stretch (fill box)</option>
+                            <option value="contain">Contain (fit inside)</option>
+                            <option value="cover">Cover (fill & crop)</option>
+                            <option value="tile">Tile (repeat)</option>
+                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                        </select>
+                    </Field>
+                )}
+                {ui.choiceButtonImage && (ui.choiceButtonSizeMode ?? 'stretch') === 'nine-slice' && (
+                    <NumInput label="Slice (px)" value={ui.choiceButtonSlice} fallback={15} min={1} onChange={v => onUpdate({ choiceButtonSlice: v })} />
+                )}
+
+                <Field label="Hover Image">
+                    <select className={inputCls} value={ui.choiceHoverImage?.id || ''}
+                        onChange={e => {
+                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                            onUpdate({ choiceHoverImage: asset ? { type: 'image', id: asset.id } : null });
+                        }}>
+                        <option value="">None</option>
+                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                    </select>
+                </Field>
+
+                <Field label="Border Image">
+                    <select className={inputCls} value={ui.choiceButtonBorderImage?.id || ''}
+                        onChange={e => {
+                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                            onUpdate({ choiceButtonBorderImage: asset ? { type: 'image', id: asset.id } : null });
+                        }}>
+                        <option value="">None</option>
+                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                    </select>
+                </Field>
+                {ui.choiceButtonBorderImage && (
+                    <NumInput label="Border Padding (px)" value={ui.choiceBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ choiceBorderPadding: v })} />
+                )}
             </div>
         );
     }
@@ -436,6 +571,36 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
+
+                {ui.inputBoxImage && (
+                    <Field label="Image Fit Mode">
+                        <select className={inputCls} value={ui.inputBoxSizeMode ?? 'stretch'}
+                            onChange={e => onUpdate({ inputBoxSizeMode: e.target.value as any })}>
+                            <option value="stretch">Stretch (fill box)</option>
+                            <option value="contain">Contain (fit inside)</option>
+                            <option value="cover">Cover (fill & crop)</option>
+                            <option value="tile">Tile (repeat)</option>
+                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                        </select>
+                    </Field>
+                )}
+                {ui.inputBoxImage && (ui.inputBoxSizeMode ?? 'stretch') === 'nine-slice' && (
+                    <NumInput label="Slice (px)" value={ui.inputBoxSlice} fallback={20} min={1} onChange={v => onUpdate({ inputBoxSlice: v })} />
+                )}
+
+                <Field label="Border Image">
+                    <select className={inputCls} value={ui.inputBoxBorderImage?.id || ''}
+                        onChange={e => {
+                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                            onUpdate({ inputBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
+                        }}>
+                        <option value="">None</option>
+                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                    </select>
+                </Field>
+                {ui.inputBoxBorderImage && (
+                    <NumInput label="Border Padding (px)" value={ui.inputBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ inputBorderPadding: v })} />
+                )}
             </div>
         );
     }
@@ -529,11 +694,11 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     }, [dispatch]);
 
     /* ─── Per-element rectangles ─── */
-    const dialogueRect = useMemo(() => getDialogueRect(ui), [ui]);
-    const nameboxRect = useMemo(() => getNameboxRect(ui), [ui]);
-    const choiceRect = useMemo(() => getChoiceRect(ui), [ui]);
-    const inputRect = useMemo(() => getInputRect(ui), [ui]);
-    const quickMenuRect = useMemo(() => getQuickMenuRect(ui), [ui]);
+    const dialogueRect = useMemo(() => getDialogueRect(ui, gameW, gameH), [ui, gameW, gameH]);
+    const nameboxRect = useMemo(() => getNameboxRect(ui, gameW, gameH), [ui, gameW, gameH]);
+    const choiceRect = useMemo(() => getChoiceRect(ui, gameW, gameH), [ui, gameW, gameH]);
+    const inputRect = useMemo(() => getInputRect(ui, gameW, gameH), [ui, gameW, gameH]);
+    const quickMenuRect = useMemo(() => getQuickMenuRect(ui, gameW, gameH), [ui, gameW, gameH]);
 
     /* ─── Drag update handlers ─── */
     const handleDragDialogue = useCallback((u: { x: number; y: number; width: number; height: number }) => {

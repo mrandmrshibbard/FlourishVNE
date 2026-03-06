@@ -38,8 +38,7 @@ const Header: React.FC<{
     navigationTabs?: React.ReactNode;
     onShowKeyboardShortcuts?: () => void;
     onOpenCommonEvents?: () => void;
-    onOpenScripting?: () => void;
-}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts, onOpenCommonEvents, onOpenScripting }) => {
+}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts, onOpenCommonEvents }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
@@ -341,13 +340,6 @@ const Header: React.FC<{
                                         >
                                             <CommonEventsIcon className="w-4 h-4" />
                                             Common Events
-                                        </button>
-                                        <button
-                                            onClick={() => { onOpenScripting?.(); setShowToolsMenu(false); }}
-                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-purple-400"
-                                        >
-                                            <CodeBracketIcon className="w-4 h-4" />
-                                            Scripting (JSON)
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button

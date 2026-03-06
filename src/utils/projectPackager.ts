@@ -351,6 +351,22 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
                 if (img.image?.type === 'video' && img.image.id) assetsToProcess.videos.add(img.image.id);
             }
         }
+
+        // Scan Hot Zone Elements (hot zone screens)
+        if ((screen as any).hotZoneElements) {
+            for (const el of Object.values((screen as any).hotZoneElements) as any[]) {
+                if (el.imageId) assetsToProcess.images.add(el.imageId);
+                if (el.videoId) assetsToProcess.videos.add(el.videoId);
+                if (el.clickSoundId) assetsToProcess.audio.add(el.clickSoundId);
+                if (el.hoverSoundId) assetsToProcess.audio.add(el.hoverSoundId);
+            }
+        }
+        // Scan Hot Spots
+        if ((screen as any).hotSpots) {
+            for (const spot of Object.values((screen as any).hotSpots) as any[]) {
+                if (spot.imageId) assetsToProcess.images.add(spot.imageId);
+            }
+        }
     }
 
     // --- 2. PROCESS AND ZIP ASSETS ---
@@ -551,6 +567,68 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
         }
     }
 
+    // Process namebox image
+    if (projectClone.ui.nameboxImage) {
+        const assetId = projectClone.ui.nameboxImage.id;
+        const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+        const assetUrl = (asset as any)?.imageUrl;
+        if (assetUrl && !processedAssetIds.has(assetId)) {
+            if (assetUrl.startsWith('data:')) {
+                const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+                const filename = `namebox_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                (asset as any).imageUrl = embeddedPath;
+                processedAssetIds.add(assetId);
+            } else {
+                const fetched = await fetchUrlToBlob(assetUrl);
+                if (fetched) {
+                    const { blob, mimeType } = fetched;
+                    const filename = `namebox_${assetId}.${mimeToExtension(mimeType)}`;
+                    assetFolder.folder('ui')?.file(filename, blob);
+                    const embeddedPath = `assets/ui/${filename}`;
+                    addEmbedded('ui', embeddedPath);
+                    (asset as any).imageUrl = embeddedPath;
+                    processedAssetIds.add(assetId);
+                } else {
+                    addFailure(`ui:namebox`);
+                }
+            }
+        }
+    }
+
+    // Process input box image
+    if (projectClone.ui.inputBoxImage) {
+        const assetId = projectClone.ui.inputBoxImage.id;
+        const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+        const assetUrl = (asset as any)?.imageUrl;
+        if (assetUrl && !processedAssetIds.has(assetId)) {
+            if (assetUrl.startsWith('data:')) {
+                const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+                const filename = `inputbox_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                (asset as any).imageUrl = embeddedPath;
+                processedAssetIds.add(assetId);
+            } else {
+                const fetched = await fetchUrlToBlob(assetUrl);
+                if (fetched) {
+                    const { blob, mimeType } = fetched;
+                    const filename = `inputbox_${assetId}.${mimeToExtension(mimeType)}`;
+                    assetFolder.folder('ui')?.file(filename, blob);
+                    const embeddedPath = `assets/ui/${filename}`;
+                    addEmbedded('ui', embeddedPath);
+                    (asset as any).imageUrl = embeddedPath;
+                    processedAssetIds.add(assetId);
+                } else {
+                    addFailure(`ui:inputBox`);
+                }
+            }
+        }
+    }
+
     // Process dialogue box border image
     if (projectClone.ui.dialogueBoxBorderImage) {
         const assetId = projectClone.ui.dialogueBoxBorderImage.id;
@@ -619,6 +697,78 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
                 }
             } else {
                 addFailure(`ui:choiceBorder`);
+            }
+        }
+    }
+
+    // Process input box border image
+    if (projectClone.ui.inputBoxBorderImage) {
+        const assetId = projectClone.ui.inputBoxBorderImage.id;
+        const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+        const assetUrl = (asset as VNBackground)?.imageUrl || (asset as any)?.imageUrl;
+        
+        if (assetUrl && assetUrl.startsWith('data:')) {
+            const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+            const filename = `input_border_${assetId}.${mimeToExtension(mimeType)}`;
+            assetFolder.folder('ui')?.file(filename, blob);
+            const embeddedPath = `assets/ui/${filename}`;
+            addEmbedded('ui', embeddedPath);
+            if (projectClone.images[assetId]) {
+                (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+            } else {
+                (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+            }
+        } else if (assetUrl) {
+            const fetched = await fetchUrlToBlob(assetUrl);
+            if (fetched) {
+                const { blob, mimeType } = fetched;
+                const filename = `input_border_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                if (projectClone.images[assetId]) {
+                    (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+                } else {
+                    (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+                }
+            } else {
+                addFailure(`ui:inputBorder`);
+            }
+        }
+    }
+
+    // Process choice hover image
+    if (projectClone.ui.choiceHoverImage) {
+        const assetId = projectClone.ui.choiceHoverImage.id;
+        const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+        const assetUrl = (asset as VNBackground)?.imageUrl || (asset as any)?.imageUrl;
+        
+        if (assetUrl && assetUrl.startsWith('data:')) {
+            const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+            const filename = `choice_hover_${assetId}.${mimeToExtension(mimeType)}`;
+            assetFolder.folder('ui')?.file(filename, blob);
+            const embeddedPath = `assets/ui/${filename}`;
+            addEmbedded('ui', embeddedPath);
+            if (projectClone.images[assetId]) {
+                (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+            } else {
+                (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+            }
+        } else if (assetUrl) {
+            const fetched = await fetchUrlToBlob(assetUrl);
+            if (fetched) {
+                const { blob, mimeType } = fetched;
+                const filename = `choice_hover_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                if (projectClone.images[assetId]) {
+                    (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+                } else {
+                    (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+                }
+            } else {
+                addFailure(`ui:choiceHover`);
             }
         }
     }

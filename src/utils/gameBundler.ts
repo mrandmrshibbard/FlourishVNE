@@ -883,6 +883,34 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
     if (bg) addAsset(bg.imageUrl, 'ui');
   }
 
+  // Collect input box border image
+  if (project.ui.inputBoxBorderImage) {
+    const assetId = project.ui.inputBoxBorderImage.id;
+    const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+    if (bg) addAsset(bg.imageUrl, 'ui');
+  }
+
+  // Collect choice hover image
+  if (project.ui.choiceHoverImage) {
+    const assetId = project.ui.choiceHoverImage.id;
+    const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+    if (bg) addAsset(bg.imageUrl, 'ui');
+  }
+
+  // Collect namebox image
+  if (project.ui.nameboxImage) {
+    const assetId = project.ui.nameboxImage.id;
+    const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+    if (bg) addAsset(bg.imageUrl, 'ui');
+  }
+
+  // Collect input box image
+  if (project.ui.inputBoxImage) {
+    const assetId = project.ui.inputBoxImage.id;
+    const bg = project.backgrounds?.[assetId] || project.images?.[assetId];
+    if (bg) addAsset(bg.imageUrl, 'ui');
+  }
+
   // Collect UI screens and elements
   Object.values(project.uiScreens || {}).forEach(screen => {
     Object.values(screen.elements || {}).forEach(element => {
@@ -954,6 +982,33 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
           const video = project.videos?.[assetId];
           if (video) addAsset(video.videoUrl, 'ui');
         }
+      }
+    });
+
+    // Collect Hot Zone element assets
+    Object.values(screen.hotZoneElements || {}).forEach((el: any) => {
+      if (el.imageId) {
+        const img = project.images?.[el.imageId];
+        if (img) addAsset(img.imageUrl, 'ui');
+      }
+      if (el.videoId) {
+        const vid = project.videos?.[el.videoId];
+        if (vid) addAsset(vid.videoUrl, 'ui');
+      }
+      if (el.clickSoundId) {
+        const audio = project.audio?.[el.clickSoundId];
+        if (audio) addAsset(audio.audioUrl, 'audio');
+      }
+      if (el.hoverSoundId) {
+        const audio = project.audio?.[el.hoverSoundId];
+        if (audio) addAsset(audio.audioUrl, 'audio');
+      }
+    });
+    // Collect Hot Spot assets
+    Object.values(screen.hotSpots || {}).forEach((spot: any) => {
+      if (spot.imageId) {
+        const img = project.images?.[spot.imageId];
+        if (img) addAsset(img.imageUrl, 'ui');
       }
     });
   });

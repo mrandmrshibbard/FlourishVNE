@@ -32,11 +32,11 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
             return {
                 borderImageSource: `url(${url})`,
                 borderImageSlice: `${s} fill`,
-                borderImageWidth: `${s}px`,
+                borderImageWidth: `calc(var(--font-scale,1) * ${s}px)`,
                 borderImageRepeat: 'stretch',
                 borderStyle: 'solid',
                 borderColor: 'transparent',
-                borderWidth: `${s}px`,
+                borderWidth: `calc(var(--font-scale,1) * ${s}px)`,
             };
         }
         case 'contain':
@@ -126,6 +126,7 @@ interface StageState {
     dialogue: {
         characterName: string;
         characterColor: string;
+        characterId: string | null;
         text: string;
     } | null;
     movie: {
@@ -366,7 +367,7 @@ const StagingArea: React.FC<{
             switch (currentCommand.type) {
                 case CommandType.Dialogue:
                     const char = currentCommand.characterId ? project.characters[currentCommand.characterId] : null;
-                    dialogue = { characterName: char?.name || 'Narrator', characterColor: char?.color || '#FFFFFF', text: currentCommand.text };
+                    dialogue = { characterName: char?.name || 'Narrator', characterColor: char?.color || '#FFFFFF', characterId: currentCommand.characterId || null, text: currentCommand.text };
                     break;
                 case CommandType.Choice:
                     choices = currentCommand.options.filter(opt => evaluateConditions(opt.conditions, currentVariables));
@@ -595,10 +596,38 @@ const StagingArea: React.FC<{
     const dialogueImageStyle: React.CSSProperties = dialogueBoxImageUrl
         ? buildImageBackgroundStyle(dialogueBoxImageUrl, dialogueSizeMode, dialogueSlice)
         : {};
+    /** Scale a pixel value by the --font-scale CSS variable so layout proportions
+     *  remain consistent regardless of actual container size. */
+    const s = (px: number) => `calc(var(--font-scale,1) * ${px}px)`;
+
     const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
-        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: `${nameboxBorderRadius}px` }
-        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: `${nameboxBorderRadius}px` };
+        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: s(nameboxBorderRadius) }
+        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: s(nameboxBorderRadius) };
     const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
+
+    /* ── Percentage-based layout rects (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+
+    const dialogueHPct = dialogueBoxHeight ? (dialogueBoxHeight * 100 / gameH) : 20;
+    const dialogueXPct = project.ui.dialogueBoxX ?? ((100 - dialogueBoxWidth) / 2);
+    const bmPct = dialogueBoxBottomMargin * 100 / gameH;
+    const dialogueYPct = project.ui.dialogueBoxY ?? (100 - dialogueHPct - bmPct);
+
+    const nameWPct = project.ui.nameboxWidth ?? 15;
+    const nameHPct = project.ui.nameboxHeight ?? 5;
+    const nameXPct = project.ui.nameboxX ?? (dialogueXPct + nameboxOffsetX * 100 / gameW);
+    const nameYPct = project.ui.nameboxY ?? (dialogueYPct - nameHPct - nameboxOffsetY * 100 / gameH);
+
+    const choiceWPct = choiceWidth ? (choiceWidth * 100 / gameW) : 30;
+    const choiceHPct = choiceHeight ? (choiceHeight * 100 / gameH) : 25;
+    const choiceXPct = project.ui.choiceButtonX ?? (50 - choiceWPct / 2);
+    const choiceYPct = project.ui.choiceButtonY ?? 35;
+
+    const textPadTop = project.ui.dialogueTextPaddingTop ?? 0;
+    const textPadBot = project.ui.dialogueTextPaddingBottom ?? 0;
+    const textPadLeft = project.ui.dialogueTextPaddingLeft ?? 0;
+    const textPadRight = project.ui.dialogueTextPaddingRight ?? 0;
 
     const renderDialogueBox = (dialogue: NonNullable<StageState['dialogue']>) => {
         const interpolatedText = interpolateVariables(dialogue.text, currentVariables, project);
@@ -607,79 +636,112 @@ const StagingArea: React.FC<{
             ...fontSettingsToStyle(project.ui.dialogueNameFont),
             ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
         };
+
+        // Character-specific font overrides (matching LivePreview)
+        const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
+        const dialogueTextStyle: React.CSSProperties = {
+            ...fontSettingsToStyle(project.ui.dialogueTextFont),
+            ...(character?.fontFamily ? { fontFamily: character.fontFamily } : {}),
+            ...(character?.fontSize ? { fontSize: s(character.fontSize) } : {}),
+            ...(character?.fontWeight ? { fontWeight: character.fontWeight } : {}),
+            ...(character?.fontItalic ? { fontStyle: 'italic' } : {}),
+        };
         return (
-            <div className="absolute z-20"
-                 style={{
-                     bottom: `${dialogueBoxBottomMargin}px`,
-                     left: `${(100 - dialogueBoxWidth) / 2}%`,
-                     right: `${(100 - dialogueBoxWidth) / 2}%`,
-                     ...(dialogueBorderImageUrl 
-                         ? { ...buildImageBackgroundStyle(dialogueBorderImageUrl, dialogueSizeMode, dialogueSlice), padding: `${dialogueBorderPadding}px`, borderRadius: `${dialogueBorderRadius}px` }
-                         : {})
-                 }}>
-                {/* Namebox (character name label) */}
+            <>
+                {/* Namebox – positioned independently (matching InGameUIEditor) */}
                 {showNamebox && (
-                    <div style={{
-                        position: hasCustomDialogueImage ? 'relative' as const : 'absolute' as const,
-                        ...(hasCustomDialogueImage 
-                            ? { marginBottom: `${nameboxOffsetY + 2}px`, marginLeft: `${nameboxOffsetX}px` }
-                            : { top: `${-(nameboxPadding * 2 + (project.ui.dialogueNameFont?.size || 22)) - nameboxOffsetY}px`, left: `${nameboxOffsetX}px` }
-                        ),
-                        display: 'inline-block',
-                        ...nameboxBgStyle,
-                        padding: `${nameboxPadding}px ${nameboxHPadding}px`,
-                        ...(hasCustomDialogueImage || nameboxImageUrl ? {} : {
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            borderBottom: hasCustomDialogueImage ? undefined : 'none',
-                        }),
-                        zIndex: 10,
-                    }}>
-                        <span style={{...nameStyle, lineHeight: 1.3}}>
-                            <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                        </span>
+                    <div className="absolute z-[21]"
+                         style={{
+                             left: `${nameXPct}%`,
+                             top: `${nameYPct}%`,
+                             width: `${nameWPct}%`,
+                             height: `${nameHPct}%`,
+                         }}>
+                        <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            ...nameboxBgStyle,
+                            padding: `${s(nameboxPadding)} ${s(nameboxHPadding)}`,
+                            ...(hasCustomDialogueImage || nameboxImageUrl ? {} : {
+                                border: '1px solid rgba(148,163,184,0.35)',
+                            }),
+                        }}>
+                            <span style={{...nameStyle, lineHeight: 1.3}}>
+                                <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                            </span>
+                        </div>
                     </div>
                 )}
-                <div className="relative"
+                {/* Dialogue box – percentage positioned (matching InGameUIEditor) */}
+                <div className="absolute z-20"
                      style={{
-                         borderRadius: `${dialogueBorderRadius}px`,
-                         overflow: 'hidden',
-                         ...(hasCustomDialogueImage ? {} : {
-                             backgroundColor: dialogueBgColor,
-                             border: '1px solid rgba(148,163,184,0.25)',
-                             boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
-                         }),
-                         ...(dialogueBoxImageUrl 
-                             ? { 
-                                 ...dialogueImageStyle,
-                                 backgroundColor: dialogueBgColor,
-                                 ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), 
-                                 ...(dialogueSizeMode !== 'nine-slice' ? { padding: `${dialogueBoxPadding}px` } : {})
-                               } 
-                             : { padding: `${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }) })
+                         left: `${dialogueXPct}%`,
+                         top: `${dialogueYPct}%`,
+                         width: `${dialogueBoxWidth}%`,
+                         height: `${dialogueHPct}%`,
+                         ...(dialogueBorderImageUrl 
+                             ? { ...buildImageBackgroundStyle(dialogueBorderImageUrl, dialogueSizeMode, dialogueSlice), padding: s(dialogueBorderPadding), borderRadius: s(dialogueBorderRadius) }
+                             : {})
                      }}>
-                    <div style={{ position: 'relative', zIndex: 1, padding: dialogueSizeMode === 'nine-slice' && dialogueBoxImageUrl ? `${dialogueBoxPadding}px` : undefined }}>
-                        <p className="leading-relaxed" style={{...fontSettingsToStyle(project.ui.dialogueTextFont), wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
-                            <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
-                        </p>
+                    <div className="relative"
+                         style={{
+                             borderRadius: s(dialogueBorderRadius),
+                             overflow: 'hidden',
+                             width: '100%',
+                             height: '100%',
+                             ...(hasCustomDialogueImage ? {} : {
+                                 backgroundColor: dialogueBgColor,
+                                 border: '1px solid rgba(148,163,184,0.25)',
+                                 boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                             }),
+                             ...(dialogueBoxImageUrl 
+                                 ? { 
+                                     ...dialogueImageStyle,
+                                     backgroundColor: dialogueBgColor,
+                                     ...(dialogueSizeMode !== 'nine-slice' ? { padding: s(dialogueBoxPadding) } : {})
+                                   } 
+                                 : { padding: s(dialogueBoxPadding) })
+                         }}>
+                        <div style={{
+                            position: 'relative',
+                            zIndex: 1,
+                            padding: dialogueSizeMode === 'nine-slice' && dialogueBoxImageUrl ? s(dialogueBoxPadding) : undefined,
+                            paddingTop: textPadTop ? s(textPadTop) : undefined,
+                            paddingBottom: textPadBot ? s(textPadBot) : undefined,
+                            paddingLeft: textPadLeft ? s(textPadLeft) : undefined,
+                            paddingRight: textPadRight ? s(textPadRight) : undefined,
+                        }}>
+                            <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                                <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </>
         );
     };
 
     const renderChoiceMenu = (choices: NonNullable<StageState['choices']>) => (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8" style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.25) 100%)' }}>
+        <div className="absolute z-30 flex flex-col items-center justify-center"
+             style={{
+                 left: `${choiceXPct}%`,
+                 top: `${choiceYPct}%`,
+                 width: `${choiceWPct}%`,
+                 height: `${choiceHPct}%`,
+             }}>
             {choices.map((choice) => {
                  const interpolatedText = interpolateVariables(choice.text, currentVariables, project);
                 return (
                     <div key={choice.id}
                          className="mb-3"
                          style={choiceBorderImageUrl 
-                             ? { ...buildImageBackgroundStyle(choiceBorderImageUrl, choiceSizeMode, choiceSlice), padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: `${choiceBorderRadius}px` }
-                             : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }) }}>
+                             ? { ...buildImageBackgroundStyle(choiceBorderImageUrl, choiceSizeMode, choiceSlice), padding: s(choiceBorderPadding), width: '100%', borderRadius: s(choiceBorderRadius) }
+                             : { width: '100%' }}>
                         <button className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
                                 style={{
-                                    borderRadius: `${choiceBorderRadius}px`,
+                                    borderRadius: s(choiceBorderRadius),
                                     ...(choiceButtonImageUrl 
                                         ? { ...buildImageBackgroundStyle(choiceButtonImageUrl, choiceSizeMode, choiceSlice), backgroundColor: choiceBgColor } 
                                         : !hasCustomChoiceImage 
@@ -689,9 +751,8 @@ const StagingArea: React.FC<{
                                                 boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
                                               } 
                                             : {}),
-                                    padding: `${choicePadding}px ${choicePadding * 2}px`,
-                                    minWidth: '200px',
-                                    ...(choiceHeight ? { height: `${choiceHeight}px` } : {}),
+                                    padding: `${s(choicePadding)} ${s(choicePadding * 2)}`,
+                                    ...(choiceHeight ? { height: s(choiceHeight) } : {}),
                                     ...fontSettingsToStyle(project.ui.choiceTextFont),
                                     textAlign: 'center' as const,
                                     wordBreak: 'break-word' as const,
@@ -732,7 +793,7 @@ const StagingArea: React.FC<{
                 <div 
                     ref={stageRef}
                     className="relative bg-[var(--bg-primary)]/50 rounded-md overflow-hidden" 
-                    style={{ aspectRatio: '16/9', width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%' }}
+                    style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%', '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
                 >
                     {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
 

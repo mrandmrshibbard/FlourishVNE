@@ -16,7 +16,6 @@ const AssetManager = React.lazy(() => import('./AssetManager'));
 const VariableManager = React.lazy(() => import('./VariableManager'));
 const SettingsManager = React.lazy(() => import('./SettingsManager'));
 const CommonEventsManager = React.lazy(() => import('./CommonEventsManager'));
-const ScriptingEditor = React.lazy(() => import('./ScriptingEditor'));
 const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
@@ -490,7 +489,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 }
                 onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
                 onOpenCommonEvents={() => handleTabChange('commonEvents')}
-                onOpenScripting={() => handleTabChange('scripting')}
             />
             <main className="flex-grow flex overflow-hidden">
                 {/* Main Content Area - Full Width Managers */}
@@ -583,12 +581,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         <ErrorBoundary panelName="Common Events">
                             <Suspense fallback={<div className="text-slate-300 p-4">Loading common events…</div>}>
                                 <CommonEventsManager project={project} />
-                            </Suspense>
-                        </ErrorBoundary>
-                    ) : activeTab === 'scripting' ? (
-                        <ErrorBoundary panelName="Scripting">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading scripting editor…</div>}>
-                                <ScriptingEditor project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : null}
