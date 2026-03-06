@@ -19,14 +19,14 @@ const shortcutCategories: ShortcutCategory[] = [
         ]
     },
     {
-        title: 'Commands (Scene Editor)',
+        title: 'Events (Scene Editor)',
         shortcuts: [
-            { keys: 'Ctrl + C', description: 'Copy selected commands' },
-            { keys: 'Ctrl + V', description: 'Paste commands' },
-            { keys: 'Ctrl + A', description: 'Select all commands' },
-            { keys: 'Delete', description: 'Delete selected commands' },
-            { keys: 'Click', description: 'Select single command' },
-            { keys: 'Shift + Click', description: 'Select range of commands' },
+            { keys: 'Ctrl + C', description: 'Copy selected events' },
+            { keys: 'Ctrl + V', description: 'Paste events' },
+            { keys: 'Ctrl + A', description: 'Select all events' },
+            { keys: 'Delete', description: 'Delete selected events' },
+            { keys: 'Click', description: 'Select single event' },
+            { keys: 'Shift + Click', description: 'Select range of events' },
             { keys: 'Ctrl + Click', description: 'Add/remove from selection' },
         ]
     },

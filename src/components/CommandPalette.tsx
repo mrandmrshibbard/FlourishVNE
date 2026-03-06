@@ -32,7 +32,7 @@ export const COMMAND_CATEGORIES = {
     'Screen FX': {
         color: 'bg-orange-500/20 border-orange-500 text-orange-300',
         headerColor: 'bg-orange-600/30 text-orange-200',
-        commands: [CommandType.ShakeScreen, CommandType.TintScreen, CommandType.PanZoomScreen, CommandType.FlashScreen, CommandType.SetScreenOverlayEffect, CommandType.ResetScreenEffects]
+        commands: [CommandType.ShakeScreen, CommandType.TintScreen, CommandType.PanZoomScreen, CommandType.FlashScreen, CommandType.SetScreenOverlayEffect, CommandType.ResetScreenEffects, CommandType.SpawnParticles, CommandType.StopParticles]
     },
     'UI Elements': {
         color: 'bg-cyan-500/20 border-cyan-500 text-cyan-300',
@@ -47,12 +47,7 @@ export const COMMAND_CATEGORIES = {
     'Flow Control': {
         color: 'bg-indigo-500/20 border-indigo-500 text-indigo-300',
         headerColor: 'bg-indigo-600/30 text-indigo-200',
-        commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait]
-    },
-    'Scripting': {
-        color: 'bg-emerald-500/20 border-emerald-500 text-emerald-300',
-        headerColor: 'bg-emerald-600/30 text-emerald-200',
-        commands: [CommandType.RunScript]
+        commands: [CommandType.BranchStart, CommandType.BranchEnd, CommandType.Wait, CommandType.RunScript, CommandType.CallCommonEvent]
     }
 } as const;
 
@@ -82,7 +77,7 @@ interface CommandPaletteProps {
 }
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
-    const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+    const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set(Object.keys(COMMAND_CATEGORIES)));
 
     const toggleCategory = (category: string) => {
         setCollapsedCategories(prev => {
@@ -105,7 +100,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0">
-                <h2 className="text-xs font-bold text-white">Commands</h2>
+                <h2 className="text-xs font-bold text-white">Events</h2>
             </div>
             
             <div className="flex-1 overflow-y-auto px-1 py-1 space-y-1">
@@ -138,7 +133,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                                                 draggable
                                                 onDragStart={(e) => handleDragStart(e, commandType)}
                                                 className={`px-1.5 py-0.5 rounded text-xs border cursor-move ${category.color} hover:opacity-80 transition-opacity`}
-                                                title={`Drag to add ${formatCommandName(commandType)}`}
+                                                title={`Drag to add ${formatCommandName(commandType)} event`}
                                             >
                                                 {formatCommandName(commandType)}
                                             </div>

@@ -5,6 +5,7 @@ import { SceneAction } from '../features/scene/state/sceneReducer';
 import { UIAction } from '../features/ui/state/uiReducer';
 import { VariableAction } from '../features/variables/state/variableReducer';
 import { ScriptAction } from '../features/scripting/state/scriptReducer';
+import { CommonEventAction } from '../features/common-events/state/commonEventReducer';
 import { PluginAction } from '../features/plugins/state/pluginReducer';
 
 export type ProjectAction =
@@ -15,4 +16,5 @@ export type ProjectAction =
     | UIAction
     | VariableAction
     | ScriptAction
+    | CommonEventAction
     | PluginAction;

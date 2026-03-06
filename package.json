@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.3.0",
+  "version": "2.2.0",
   "description": "Flourish VNE",
   "author": "Flourish Team",
   "type": "module",
@@ -70,12 +70,11 @@
         }
       ],
       "icon": "public/Flourish.png",
-      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+      "artifactName": "Flourish-VNE-Setup-${version}-${arch}.${ext}"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Flourish VNE",

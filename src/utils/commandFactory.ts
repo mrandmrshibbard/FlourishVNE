@@ -260,6 +260,7 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
                     { kind: 'credit' as const, label: 'Created with', value: 'Flourish VNE' },
                 ],
                 duration: 15,
+                scrollSpeed: 60,
                 backgroundColor: '#000000FF',
                 textColor: '#FFFFFF',
                 allowSkip: true,
@@ -272,6 +273,43 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             const firstScriptId = Object.keys(project.scripts || {})[0];
             const command = { type, scriptId: firstScriptId || '', waitForCompletion: true };
             return command;
+        }
+        case CommandType.SpawnParticles: {
+            return {
+                type,
+                particleTag: 'particles_1',
+                config: {
+                    preset: 'fireflies',
+                    shape: 'circle' as const,
+                    colors: ['#FFFF66', '#CCFF33'],
+                    emitRate: 10,
+                    lifetime: 3,
+                    speedMin: 10,
+                    speedMax: 30,
+                    sizeMin: 2,
+                    sizeMax: 6,
+                    gravity: 0,
+                    wind: 0,
+                    directionMin: 0,
+                    directionMax: 360,
+                    emitterX: 50,
+                    emitterY: 50,
+                    emitterWidth: 100,
+                    emitterHeight: 100,
+                    fadeOut: true,
+                    shrink: false,
+                    rotationSpeed: 0,
+                    opacity: 0.9,
+                },
+                duration: 0,
+            };
+        }
+        case CommandType.StopParticles: {
+            return {
+                type,
+                particleTag: '',
+                fadeDuration: 1,
+            };
         }
         default: 
             return null;

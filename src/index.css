@@ -841,6 +841,45 @@ h1, h2, h3, h4, h5, h6 {
   animation: bounce-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
+/* === HOT ZONE ANIMATIONS === */
+@keyframes hz-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@keyframes hz-bounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-12px); }
+  50% { transform: translateY(0); }
+  70% { transform: translateY(-6px); }
+}
+@keyframes hz-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+@keyframes hz-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes hz-fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes hz-fadeOut {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes hz-slideIn {
+  0% { transform: translateX(-30px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes hz-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.6) drop-shadow(0 0 8px rgba(255,255,255,0.6)); }
+}
+
 /* === RESPONSIVE UTILITIES === */
 @media (max-width: 768px) {
   :root {
@@ -1037,6 +1076,19 @@ h1, h2, h3, h4, h5, h6 {
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
   scroll-behavior: auto !important;
+}
+
+/* Native Select / Option Styling (fix white-on-white in dark themes) */
+select {
+  color-scheme: dark;
+}
+select option {
+  background-color: var(--bg-secondary, #1a1229);
+  color: var(--text-primary, #f0eef5);
+}
+select option:checked {
+  background-color: var(--accent-lavender, #b87eff);
+  color: #ffffff;
 }
 
 /* Large Text Mode */

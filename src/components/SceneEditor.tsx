@@ -160,6 +160,15 @@ const CommandItem: React.FC<{
                 const script = scriptId ? (project.scripts || {})[scriptId] : null;
                 return `Run Script: ${(script as any)?.name || 'No Script'}`;
             }
+            case CommandType.SpawnParticles: {
+                const tag = (command as any).particleTag || 'particles';
+                const preset = (command as any).config?.preset;
+                return `Spawn Particles: ${preset && preset !== 'none' ? preset : tag}`;
+            }
+            case CommandType.StopParticles: {
+                const tag = (command as any).particleTag;
+                return `Stop Particles${tag ? `: ${tag}` : ' (all)'}`;
+            }
             default: return (command as any).type;
         }
     };

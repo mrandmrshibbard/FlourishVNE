@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scripting &amp; Plugins — FlourishVNE</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161d;
+    --surface2: #1e1e28;
+    --border: #2a2a3a;
+    --text: #e0dfe8;
+    --text-muted: #9a99a8;
+    --accent: #a78bfa;
+    --accent2: #7c3aed;
+    --accent-glow: rgba(167,139,250,.12);
+    --code-bg: #1a1a26;
+    --tip-bg: #1c2333;
+    --tip-border: #3b82f6;
+    --table-stripe: #1a1a24;
+    --link: #93c5fd;
+    --rainbow: linear-gradient(135deg,#f472b6,#a78bfa,#60a5fa,#34d399);
+    --kw: #c792ea;
+    --fn: #82aaff;
+    --str: #c3e88d;
+    --num: #f78c6c;
+    --cmt: #676e95;
+    --var: #f07178;
+    --op: #89ddff;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth;font-size:16px}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;display:flex;min-height:100vh}
+
+  /* ── Sidebar ── */
+  .sidebar{position:fixed;top:0;left:0;width:280px;height:100vh;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:24px 0;z-index:100;transition:transform .3s}
+  .sidebar-brand{padding:0 24px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+  .sidebar-brand h2{background:var(--rainbow);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:1.2rem;letter-spacing:.5px}
+  .sidebar-brand span{display:block;font-size:.75rem;color:var(--text-muted);margin-top:2px}
+  .sidebar nav{padding:0 12px}
+  .sidebar nav a{display:block;padding:6px 16px;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:.85rem;transition:background .15s,color .15s}
+  .sidebar nav a:hover{background:var(--accent-glow);color:var(--accent)}
+  .sidebar nav a.active{background:var(--accent-glow);color:var(--accent);font-weight:600}
+  .sidebar .nav-section{font-size:.7rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);padding:16px 16px 4px;opacity:.6}
+  .doc-links{border-top:1px solid var(--border);margin-top:16px;padding-top:12px}
+  .doc-links a{color:var(--link)}
+
+  /* ── Main ── */
+  .main{margin-left:280px;flex:1;max-width:900px;padding:48px 56px 80px}
+  h1{font-size:2rem;font-weight:700;margin-bottom:8px;background:var(--rainbow);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .subtitle{color:var(--text-muted);font-size:1.05rem;margin-bottom:40px}
+  h2{font-size:1.4rem;font-weight:700;margin-top:56px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border);color:#fff}
+  h3{font-size:1.1rem;font-weight:600;margin-top:28px;margin-bottom:10px;color:var(--accent)}
+  h4{font-size:1rem;font-weight:600;margin-top:20px;margin-bottom:8px;color:var(--text)}
+  p{margin-bottom:14px}
+  a{color:var(--link);text-decoration:none}
+  a:hover{text-decoration:underline}
+  strong{color:#fff}
+  ul,ol{margin:0 0 16px 24px}
+  li{margin-bottom:6px}
+  li > ul, li > ol {margin-top:6px}
+
+  /* ── Code ── */
+  code{font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:.88em;background:var(--code-bg);padding:2px 6px;border-radius:4px;color:#c4b5fd}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:18px 22px;overflow-x:auto;margin:12px 0 20px;line-height:1.55}
+  pre code{background:none;padding:0;font-size:.85rem;color:#d4d4d8}
+  /* syntax highlights */
+  .kw{color:var(--kw)}.fn{color:var(--fn)}.str{color:var(--str)}.num{color:var(--num)}.cmt{color:var(--cmt);font-style:italic}.vr{color:var(--var)}.op{color:var(--op)}
+
+  /* ── Tables ── */
+  table{width:100%;border-collapse:collapse;margin:12px 0 24px;font-size:.9rem}
+  th{text-align:left;padding:10px 14px;background:var(--surface2);color:var(--accent);font-weight:600;border-bottom:2px solid var(--border)}
+  td{padding:10px 14px;border-bottom:1px solid var(--border)}
+  tr:nth-child(even) td{background:var(--table-stripe)}
+
+  /* ── Tips ── */
+  .tip{background:var(--tip-bg);border-left:3px solid var(--tip-border);border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:.92rem}
+  .tip strong{color:var(--tip-border)}
+  .warning{background:#2a1f1a;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:.92rem}
+  .warning strong{color:#f59e0b}
+
+  kbd{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-family:inherit;font-size:.82em;color:var(--text);box-shadow:0 1px 0 var(--border)}
+
+  .divider{border:none;border-top:2px solid var(--accent2);margin:60px 0}
+
+  .menu-toggle{display:none;position:fixed;top:14px;left:14px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;cursor:pointer;font-size:1.1rem}
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%)}
+    .sidebar.open{transform:translateX(0)}
+    .main{margin-left:0;padding:32px 24px 60px}
+    .menu-toggle{display:block}
+  }
+</style>
+</head>
+<body>
+
+<button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle menu">☰</button>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <h2>FlourishVNE</h2>
+    <span>Scripting &amp; Plugins</span>
+  </div>
+  <nav>
+    <div class="nav-section">Scripting</div>
+    <a href="#getting-started">Getting Started</a>
+    <a href="#triggers">Script Triggers</a>
+    <a href="#game-api">The game API</a>
+    <a href="#examples">Examples</a>
+    <a href="#runscript">Using RunScript</a>
+    <a href="#security">Security &amp; Sandbox</a>
+    <a href="#validation">Validation</a>
+    <a href="#script-tips">Tips</a>
+
+    <div class="nav-section">Plugin System</div>
+    <a href="#plugin-start">Getting Started</a>
+    <a href="#plugin-structure">Plugin Structure</a>
+    <a href="#plugin-categories">Plugin Categories</a>
+    <a href="#plugin-api">Plugin API</a>
+    <a href="#plugin-examples">Example Plugins</a>
+    <a href="#plugin-lifecycle">Plugin Lifecycle</a>
+    <a href="#plugin-tips">Tips</a>
+
+    <div class="doc-links">
+      <div class="nav-section">Other Docs</div>
+      <a href="getting-started.html">Getting Started</a>
+      <a href="feature-workflows.html">Feature Workflows</a>
+    </div>
+  </nav>
+</aside>
+
+<main class="main">
+  <h1>Scripting &amp; Plugins</h1>
+  <p class="subtitle">Write custom JavaScript logic and extend the engine with plugins.</p>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!--              SCRIPTING SYSTEM              -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <h2 id="getting-started">Getting Started with Scripting</h2>
+  <p>The Scripting System lets you write custom JavaScript logic that runs inside your visual novel. Scripts can manipulate variables, trigger scene jumps, play audio, show dialogue, and much more — all through a safe, sandboxed API.</p>
+  <ol>
+    <li>Open the <strong>Script Editor</strong> from the <strong>Tools</strong> menu in the header toolbar</li>
+    <li>Click <strong>New Script</strong> to create a script</li>
+    <li>Write your logic using the <code>game</code> API object</li>
+    <li>Save with <kbd>Ctrl+S</kbd> and test with the <strong>▶ Test Run</strong> button</li>
+    <li>Use the <strong>RunScript</strong> command in your scene timeline to execute a script during gameplay</li>
+  </ol>
+
+  <!-- Triggers -->
+  <h2 id="triggers">Script Triggers</h2>
+  <p>Each script has a <strong>trigger</strong> that determines when it can run:</p>
+  <table>
+    <thead><tr><th>Trigger</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>command</code></td><td>Runs when a <strong>RunScript</strong> command executes in the scene timeline</td></tr>
+      <tr><td><code>onSceneEnter</code></td><td>Runs automatically when a scene is entered</td></tr>
+      <tr><td><code>onSceneExit</code></td><td>Runs automatically when a scene is exited</td></tr>
+      <tr><td><code>global</code></td><td>Utility script — can only be called explicitly via RunScript</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Game API -->
+  <h2 id="game-api">The <code>game</code> API</h2>
+  <p>Inside every script, a <code>game</code> object is available with the following methods and properties:</p>
+
+  <h3>Variables</h3>
+  <pre><code><span class="cmt">// Get a variable value by name or ID</span>
+<span class="kw">let</span> hp = game.<span class="fn">getVariable</span>(<span class="str">"playerHP"</span>);
+
+<span class="cmt">// Set a variable value</span>
+game.<span class="fn">setVariable</span>(<span class="str">"playerHP"</span>, <span class="num">100</span>);
+game.<span class="fn">setVariable</span>(<span class="str">"playerName"</span>, <span class="str">"Alex"</span>);
+game.<span class="fn">setVariable</span>(<span class="str">"hasKey"</span>, <span class="kw">true</span>);</code></pre>
+
+  <h3>Navigation</h3>
+  <pre><code><span class="cmt">// Jump to a different scene by name</span>
+game.<span class="fn">jumpToScene</span>(<span class="str">"Chapter 2"</span>);
+
+<span class="cmt">// Jump to a label within the current scene</span>
+game.<span class="fn">jumpToLabel</span>(<span class="str">"battle_start"</span>);</code></pre>
+
+  <h3>Dialogue &amp; Notifications</h3>
+  <pre><code><span class="cmt">// Show a dialogue box (character name, text)</span>
+game.<span class="fn">showDialogue</span>(<span class="str">"Narrator"</span>, <span class="str">"The adventure begins..."</span>);
+game.<span class="fn">showDialogue</span>(<span class="str">"Luna"</span>, <span class="str">"Watch out!"</span>);
+
+<span class="cmt">// Show a notification toast</span>
+game.<span class="fn">notify</span>(<span class="str">"Auto-saved!"</span>, <span class="str">"info"</span>);      <span class="cmt">// types: "info", "warning", "error", "success"</span></code></pre>
+
+  <h3>Audio</h3>
+  <pre><code><span class="cmt">// Play a sound effect (name, optional volume 0-1)</span>
+game.<span class="fn">playSFX</span>(<span class="str">"sword_clash"</span>, <span class="num">0.8</span>);
+
+<span class="cmt">// Play background music (name, loop, optional volume)</span>
+game.<span class="fn">playMusic</span>(<span class="str">"battle_theme"</span>, <span class="kw">true</span>, <span class="num">0.5</span>);
+
+<span class="cmt">// Stop all music (optional fade duration in seconds)</span>
+game.<span class="fn">stopMusic</span>(<span class="num">2</span>);</code></pre>
+
+  <h3>Project Info (Read-Only)</h3>
+  <pre><code><span class="cmt">// Get the current scene ID</span>
+<span class="kw">let</span> sceneId = game.currentSceneId;
+
+<span class="cmt">// Get a list of all scenes</span>
+<span class="kw">let</span> scenes = game.<span class="fn">getScenes</span>();
+<span class="cmt">// Returns: [{ id: "...", name: "Chapter 1" }, ...]</span>
+
+<span class="cmt">// Get all variables in the project</span>
+<span class="kw">let</span> vars = game.<span class="fn">getVariables</span>();
+<span class="cmt">// Returns: [{ id: "...", name: "playerHP", type: "number", defaultValue: 100 }, ...]</span></code></pre>
+
+  <h3>Math Utilities</h3>
+  <pre><code><span class="kw">let</span> r = game.<span class="fn">random</span>(<span class="num">1</span>, <span class="num">10</span>);      <span class="cmt">// random integer between 1 and 10</span>
+<span class="kw">let</span> c = game.<span class="fn">clamp</span>(value, <span class="num">0</span>, <span class="num">100</span>); <span class="cmt">// clamp value between min and max</span>
+<span class="kw">let</span> l = game.<span class="fn">lerp</span>(<span class="num">0</span>, <span class="num">100</span>, <span class="num">0.5</span>);    <span class="cmt">// linear interpolation → 50</span></code></pre>
+
+  <h3>Logging</h3>
+  <pre><code>game.<span class="fn">log</span>(<span class="str">"Debug message"</span>);          <span class="cmt">// appears in the console output</span>
+game.<span class="fn">log</span>(<span class="str">"HP:"</span>, game.<span class="fn">getVariable</span>(<span class="str">"playerHP"</span>));</code></pre>
+
+  <!-- Examples -->
+  <h2 id="examples">Examples</h2>
+
+  <h3>Damage Calculation</h3>
+  <pre><code><span class="cmt">// Calculate damage with randomness</span>
+<span class="kw">let</span> attack = game.<span class="fn">getVariable</span>(<span class="str">"playerAttack"</span>);
+<span class="kw">let</span> defense = game.<span class="fn">getVariable</span>(<span class="str">"enemyDefense"</span>);
+<span class="kw">let</span> baseDamage = Math.<span class="fn">max</span>(<span class="num">1</span>, attack - defense);
+<span class="kw">let</span> finalDamage = baseDamage + game.<span class="fn">random</span>(<span class="num">0</span>, <span class="num">5</span>);
+
+game.<span class="fn">setVariable</span>(<span class="str">"lastDamage"</span>, finalDamage);
+
+<span class="kw">let</span> enemyHP = game.<span class="fn">getVariable</span>(<span class="str">"enemyHP"</span>);
+enemyHP -= finalDamage;
+game.<span class="fn">setVariable</span>(<span class="str">"enemyHP"</span>, enemyHP);
+
+game.<span class="fn">showDialogue</span>(<span class="str">"System"</span>, <span class="str">`You deal ${finalDamage} damage!`</span>);
+
+<span class="kw">if</span> (enemyHP &lt;= <span class="num">0</span>) {
+    game.<span class="fn">notify</span>(<span class="str">"Enemy defeated!"</span>, <span class="str">"success"</span>);
+    game.<span class="fn">jumpToScene</span>(<span class="str">"Victory"</span>);
+}</code></pre>
+
+  <h3>Day/Night Cycle</h3>
+  <pre><code><span class="kw">let</span> hour = game.<span class="fn">getVariable</span>(<span class="str">"gameHour"</span>);
+hour += <span class="num">1</span>;
+
+<span class="kw">if</span> (hour >= <span class="num">24</span>) {
+    hour = <span class="num">0</span>;
+    <span class="kw">let</span> day = game.<span class="fn">getVariable</span>(<span class="str">"gameDay"</span>);
+    game.<span class="fn">setVariable</span>(<span class="str">"gameDay"</span>, day + <span class="num">1</span>);
+}
+
+game.<span class="fn">setVariable</span>(<span class="str">"gameHour"</span>, hour);
+
+<span class="kw">if</span> (hour >= <span class="num">6</span> &amp;&amp; hour &lt; <span class="num">18</span>) {
+    game.<span class="fn">setVariable</span>(<span class="str">"timeOfDay"</span>, <span class="str">"day"</span>);
+} <span class="kw">else</span> {
+    game.<span class="fn">setVariable</span>(<span class="str">"timeOfDay"</span>, <span class="str">"night"</span>);
+}</code></pre>
+
+  <h3>Inventory Check</h3>
+  <pre><code><span class="kw">let</span> hasKey = game.<span class="fn">getVariable</span>(<span class="str">"hasKey"</span>);
+<span class="kw">let</span> hasMap = game.<span class="fn">getVariable</span>(<span class="str">"hasMap"</span>);
+
+<span class="kw">if</span> (hasKey &amp;&amp; hasMap) {
+    game.<span class="fn">jumpToScene</span>(<span class="str">"Secret Room"</span>);
+} <span class="kw">else if</span> (hasKey) {
+    game.<span class="fn">showDialogue</span>(<span class="str">"Narrator"</span>, <span class="str">"You have the key, but you need a map to find the door."</span>);
+} <span class="kw">else</span> {
+    game.<span class="fn">showDialogue</span>(<span class="str">"Narrator"</span>, <span class="str">"The path forward is blocked."</span>);
+}</code></pre>
+
+  <!-- RunScript -->
+  <h2 id="runscript">Using RunScript in Scenes</h2>
+  <ol>
+    <li>Open the <strong>Command Palette</strong> and find the <strong>Scripting</strong> category</li>
+    <li>Drag <strong>RunScript</strong> into your scene timeline</li>
+    <li>In the <strong>Properties Inspector</strong>, select which script to run</li>
+    <li>Toggle <strong>Wait for Completion</strong> to control whether the engine pauses until the script finishes</li>
+  </ol>
+
+  <!-- Security -->
+  <h2 id="security">Security &amp; Sandbox</h2>
+  <p>Scripts run in a sandboxed environment. The following are <strong>blocked</strong> for security:</p>
+  <ul>
+    <li><code>document</code>, <code>window</code>, <code>globalThis</code></li>
+    <li><code>fetch</code>, <code>XMLHttpRequest</code>, <code>WebSocket</code></li>
+    <li><code>eval</code>, <code>Function</code></li>
+    <li><code>localStorage</code>, <code>sessionStorage</code></li>
+    <li><code>setTimeout</code>, <code>setInterval</code></li>
+    <li><code>importScripts</code>, <code>require</code>, <code>import</code></li>
+  </ul>
+  <p>Scripts can only interact with the game through the <code>game</code> API object.</p>
+
+  <!-- Validation -->
+  <h2 id="validation">Validation</h2>
+  <p>Click <strong>Validate</strong> in the Script Editor to check for:</p>
+  <ul>
+    <li><strong>Syntax errors</strong> — invalid JavaScript</li>
+    <li><strong>Blocked API usage</strong> — references to restricted globals</li>
+    <li><strong>Best practices</strong> — warnings about potentially unsafe patterns</li>
+  </ul>
+
+  <!-- Script Tips -->
+  <h2 id="script-tips">Tips</h2>
+  <ul>
+    <li>Use <code>game.log()</code> instead of <code>console.log()</code> for debugging — output appears in the Script Editor console</li>
+    <li>Keep scripts focused — one script per gameplay mechanic</li>
+    <li>Test scripts with <strong>▶ Test Run</strong> before using them in scenes</li>
+    <li>Disable scripts you're not using to prevent accidental execution</li>
+  </ul>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <hr class="divider">
+  <!-- ═══════════════════════════════════════════ -->
+
+  <h1 style="margin-top:8px">Plugin / Extension System</h1>
+  <p class="subtitle">Extend FlourishVNE with custom commands, effects, and hooks.</p>
+
+  <!-- Plugin Getting Started -->
+  <h2 id="plugin-start">Getting Started with Plugins</h2>
+  <ol>
+    <li>Open the <strong>Plugin Manager</strong> from the <strong>Tools</strong> menu</li>
+    <li>Click the <strong>Install Plugin</strong> tab</li>
+    <li>Paste your plugin source code</li>
+    <li>Click <strong>Install Plugin</strong></li>
+    <li>Enable/disable plugins from the <strong>Installed</strong> tab</li>
+  </ol>
+
+  <!-- Plugin Structure -->
+  <h2 id="plugin-structure">Plugin Structure</h2>
+  <p>Every plugin must define a <code>manifest</code> object and a <code>plugin</code> variable that bundles the manifest with hook functions:</p>
+  <pre><code><span class="cmt">// Required: Plugin manifest</span>
+<span class="kw">const</span> manifest = {
+    id: <span class="str">'my-plugin'</span>,              <span class="cmt">// unique identifier (lowercase, hyphens)</span>
+    name: <span class="str">'My Plugin'</span>,            <span class="cmt">// display name</span>
+    version: <span class="str">'1.0.0'</span>,             <span class="cmt">// semver version string</span>
+    description: <span class="str">'What this plugin does'</span>,
+    author: <span class="str">'Your Name'</span>,          <span class="cmt">// optional</span>
+    category: <span class="str">'utility'</span>,          <span class="cmt">// see categories below</span>
+    capabilities: [],             <span class="cmt">// reserved for future use</span>
+    dependencies: [],             <span class="cmt">// other plugin IDs this depends on</span>
+};
+
+<span class="cmt">// Lifecycle hooks (all optional)</span>
+<span class="kw">function</span> <span class="fn">onLoad</span>(api) {
+    <span class="cmt">// Called when the plugin is first loaded</span>
+}
+
+<span class="kw">function</span> <span class="fn">onEnable</span>(api) {
+    <span class="cmt">// Called when the plugin is enabled</span>
+}
+
+<span class="kw">function</span> <span class="fn">onDisable</span>(api) {
+    <span class="cmt">// Called when the plugin is disabled</span>
+}
+
+<span class="kw">function</span> <span class="fn">onBeforeCommand</span>(api, command) {
+    <span class="cmt">// Called before each command executes</span>
+    <span class="cmt">// Return modified command or undefined</span>
+}
+
+<span class="kw">function</span> <span class="fn">onAfterCommand</span>(api, command, result) {
+    <span class="cmt">// Called after each command executes</span>
+}
+
+<span class="kw">function</span> <span class="fn">onSceneChange</span>(api, fromSceneId, toSceneId) {
+    <span class="cmt">// Called when the scene changes</span>
+}
+
+<span class="kw">function</span> <span class="fn">onVariableChange</span>(api, variableId, oldValue, newValue) {
+    <span class="cmt">// Called when a variable changes</span>
+}
+
+<span class="kw">function</span> <span class="fn">onSave</span>(api, saveData) {
+    <span class="cmt">// Called before the game state is saved</span>
+    <span class="cmt">// Can modify saveData</span>
+}
+
+<span class="kw">function</span> <span class="fn">onLoad2</span>(api, saveData) {
+    <span class="cmt">// Called after a save is loaded</span>
+}
+
+<span class="cmt">// Required: Export the plugin</span>
+<span class="kw">const</span> plugin = {
+    manifest,
+    onLoad, onEnable, onDisable,
+    onBeforeCommand, onAfterCommand,
+    onSceneChange, onVariableChange,
+    onSave,
+    onLoad: onLoad2
+};</code></pre>
+
+  <!-- Plugin Categories -->
+  <h2 id="plugin-categories">Plugin Categories</h2>
+  <table>
+    <thead><tr><th>Category</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>commands</code></td><td>Adds new command types</td></tr>
+      <tr><td><code>effects</code></td><td>Adds custom visual/audio effects</td></tr>
+      <tr><td><code>ui</code></td><td>Modifies or extends the UI</td></tr>
+      <tr><td><code>assets</code></td><td>Adds asset processing pipelines</td></tr>
+      <tr><td><code>gameplay</code></td><td>Extends gameplay mechanics</td></tr>
+      <tr><td><code>integration</code></td><td>Connects to external services</td></tr>
+      <tr><td><code>utility</code></td><td>General-purpose utilities</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Plugin API -->
+  <h2 id="plugin-api">Plugin API (<code>api</code>)</h2>
+  <p>Every hook function receives an <code>api</code> object with these methods:</p>
+
+  <h3>Variables</h3>
+  <pre><code>api.<span class="fn">getVariable</span>(name);            <span class="cmt">// get variable value by name</span>
+api.<span class="fn">setVariable</span>(name, value);     <span class="cmt">// set variable value</span></code></pre>
+
+  <h3>Project Info</h3>
+  <pre><code>api.<span class="fn">getProjectInfo</span>();
+<span class="cmt">// Returns: { id, title, version, author, scenesCount, charactersCount }</span>
+
+api.<span class="fn">getScenes</span>();
+<span class="cmt">// Returns: [{ id, name, commandCount }, ...]</span></code></pre>
+
+  <h3>Custom Commands &amp; Effects</h3>
+  <pre><code><span class="cmt">// Register a custom command type</span>
+api.<span class="fn">registerCommand</span>({
+    id: <span class="str">'my-command'</span>,
+    name: <span class="str">'My Custom Command'</span>,
+    description: <span class="str">'Does something special'</span>,
+    category: <span class="str">'My Plugin'</span>,
+    defaultProperties: { speed: <span class="num">1.0</span> },
+    execute: (props, context) =&gt; {
+        <span class="cmt">// Command execution logic</span>
+        <span class="kw">return</span> { advance: <span class="kw">true</span> };
+    },
+    renderProperties: (props) =&gt; {
+        <span class="cmt">// Return property editor config (optional)</span>
+        <span class="kw">return</span> <span class="kw">null</span>;
+    }
+});
+
+<span class="cmt">// Register a custom visual effect</span>
+api.<span class="fn">registerEffect</span>({
+    id: <span class="str">'my-effect'</span>,
+    name: <span class="str">'My Custom Effect'</span>,
+    description: <span class="str">'A cool visual effect'</span>,
+    category: <span class="str">'My Plugin'</span>,
+    defaultConfig: { intensity: <span class="num">0.5</span> },
+    apply: (config, context) =&gt; {
+        <span class="cmt">// Apply the effect</span>
+    },
+    remove: (context) =&gt; {
+        <span class="cmt">// Clean up the effect</span>
+    }
+});</code></pre>
+
+  <h3>Plugin-Scoped Storage</h3>
+  <pre><code><span class="cmt">// Store data that persists across sessions (uses localStorage)</span>
+api.<span class="fn">setStorage</span>(<span class="str">'key'</span>, value);
+<span class="kw">let</span> value = api.<span class="fn">getStorage</span>(<span class="str">'key'</span>);</code></pre>
+
+  <h3>Logging</h3>
+  <pre><code>api.<span class="fn">log</span>(<span class="str">'Plugin message'</span>);    <span class="cmt">// prefixed with [PluginName]</span></code></pre>
+
+  <!-- Plugin Examples -->
+  <h2 id="plugin-examples">Example Plugins</h2>
+
+  <h3>Auto-Save Plugin</h3>
+  <pre><code><span class="kw">const</span> manifest = {
+    id: <span class="str">'auto-save'</span>,
+    name: <span class="str">'Auto Save'</span>,
+    version: <span class="str">'1.0.0'</span>,
+    description: <span class="str">'Automatically saves progress at scene transitions'</span>,
+    author: <span class="str">'FlourishVNE'</span>,
+    category: <span class="str">'utility'</span>,
+    capabilities: [],
+};
+
+<span class="kw">let</span> saveCount = <span class="num">0</span>;
+
+<span class="kw">function</span> <span class="fn">onEnable</span>(api) {
+    saveCount = api.<span class="fn">getStorage</span>(<span class="str">'saveCount'</span>) || <span class="num">0</span>;
+    api.<span class="fn">log</span>(<span class="str">`Auto-save enabled. ${saveCount} saves so far.`</span>);
+}
+
+<span class="kw">function</span> <span class="fn">onSceneChange</span>(api, fromSceneId, toSceneId) {
+    saveCount++;
+    api.<span class="fn">setStorage</span>(<span class="str">'saveCount'</span>, saveCount);
+    api.<span class="fn">log</span>(<span class="str">`Auto-saving at scene change #${saveCount}`</span>);
+}
+
+<span class="kw">const</span> plugin = { manifest, onEnable, onSceneChange };</code></pre>
+
+  <h3>Variable Logger Plugin</h3>
+  <pre><code><span class="kw">const</span> manifest = {
+    id: <span class="str">'var-logger'</span>,
+    name: <span class="str">'Variable Logger'</span>,
+    version: <span class="str">'1.0.0'</span>,
+    description: <span class="str">'Logs all variable changes to the console'</span>,
+    category: <span class="str">'utility'</span>,
+    capabilities: [],
+};
+
+<span class="kw">function</span> <span class="fn">onVariableChange</span>(api, variableId, oldValue, newValue) {
+    api.<span class="fn">log</span>(<span class="str">`Variable changed: ${variableId} = ${oldValue} → ${newValue}`</span>);
+}
+
+<span class="kw">const</span> plugin = { manifest, onVariableChange };</code></pre>
+
+  <h3>Custom Dice Roll Command</h3>
+  <pre><code><span class="kw">const</span> manifest = {
+    id: <span class="str">'dice-roller'</span>,
+    name: <span class="str">'Dice Roller'</span>,
+    version: <span class="str">'1.0.0'</span>,
+    description: <span class="str">'Adds a dice roll command for RPG mechanics'</span>,
+    category: <span class="str">'commands'</span>,
+    capabilities: [],
+};
+
+<span class="kw">function</span> <span class="fn">onEnable</span>(api) {
+    api.<span class="fn">registerCommand</span>({
+        id: <span class="str">'roll-dice'</span>,
+        name: <span class="str">'Roll Dice'</span>,
+        description: <span class="str">'Roll dice and store the result in a variable'</span>,
+        category: <span class="str">'RPG'</span>,
+        defaultProperties: {
+            sides: <span class="num">6</span>,
+            count: <span class="num">1</span>,
+            targetVariable: <span class="str">''</span>,
+        },
+        execute: (props, context) =&gt; {
+            <span class="kw">let</span> total = <span class="num">0</span>;
+            <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; props.count; i++) {
+                total += Math.<span class="fn">floor</span>(Math.<span class="fn">random</span>() * props.sides) + <span class="num">1</span>;
+            }
+            <span class="kw">if</span> (props.targetVariable) {
+                api.<span class="fn">setVariable</span>(props.targetVariable, total);
+            }
+            <span class="kw">return</span> { advance: <span class="kw">true</span> };
+        }
+    });
+}
+
+<span class="kw">const</span> plugin = { manifest, onEnable };</code></pre>
+
+  <!-- Plugin Lifecycle -->
+  <h2 id="plugin-lifecycle">Plugin Lifecycle</h2>
+  <ol>
+    <li><strong>Install</strong> — Plugin source is parsed and validated</li>
+    <li><strong>Load</strong> — <code>onLoad()</code> is called, plugin is in <code>loaded</code> state</li>
+    <li><strong>Enable</strong> — <code>onEnable()</code> is called, hooks become active</li>
+    <li><strong>Disable</strong> — <code>onDisable()</code> is called, hooks are deactivated</li>
+    <li><strong>Uninstall</strong> — Plugin is removed from the project</li>
+  </ol>
+
+  <h3>Plugin Details View</h3>
+  <p>From the <strong>Installed</strong> tab, click <strong>Details</strong> on any plugin to see:</p>
+  <ul>
+    <li>Manifest information (ID, version, author, category)</li>
+    <li>Registered custom commands</li>
+    <li>Registered custom effects</li>
+    <li>Plugin configuration</li>
+    <li>Enable/disable/uninstall controls</li>
+  </ul>
+
+  <!-- Plugin Tips -->
+  <h2 id="plugin-tips">Tips</h2>
+  <ul>
+    <li>Keep plugin IDs unique and lowercase (e.g., <code>my-cool-plugin</code>)</li>
+    <li>Use <code>api.log()</code> for debugging — output goes to the Plugin Manager console</li>
+    <li>Use scoped storage (<code>api.setStorage</code>) instead of global state</li>
+    <li>Test plugins in isolation before combining multiple plugins</li>
+    <li>Plugins run in a sandboxed environment similar to scripts</li>
+  </ul>
+</main>
+
+<script>
+const links = document.querySelectorAll('.sidebar nav a[href^="#"]');
+const sections = [...links].map(l => document.getElementById(l.getAttribute('href').slice(1))).filter(Boolean);
+function onScroll(){
+  let current = '';
+  for(const s of sections){if(s.getBoundingClientRect().top <= 120) current = s.id;}
+  links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#'+current));
+}
+window.addEventListener('scroll', onScroll, {passive:true});
+onScroll();
+</script>
+</body>
+</html>

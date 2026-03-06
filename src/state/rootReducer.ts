@@ -7,6 +7,7 @@ import { sceneReducer } from '../features/scene/state/sceneReducer';
 import { uiReducer } from '../features/ui/state/uiReducer';
 import { variableReducer } from '../features/variables/state/variableReducer';
 import { scriptReducer } from '../features/scripting/state/scriptReducer';
+import { commonEventReducer } from '../features/common-events/state/commonEventReducer';
 import { pluginReducer } from '../features/plugins/state/pluginReducer';
 
 const reducers = [
@@ -17,6 +18,7 @@ const reducers = [
   uiReducer,
   variableReducer,
   scriptReducer,
+  commonEventReducer,
   pluginReducer,
 ];
 

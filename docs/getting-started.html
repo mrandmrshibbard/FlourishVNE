@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Getting Started — FlourishVNE</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161d;
+    --surface2: #1e1e28;
+    --border: #2a2a3a;
+    --text: #e0dfe8;
+    --text-muted: #9a99a8;
+    --accent: #a78bfa;
+    --accent2: #7c3aed;
+    --accent-glow: rgba(167,139,250,.12);
+    --code-bg: #1a1a26;
+    --tip-bg: #1c2333;
+    --tip-border: #3b82f6;
+    --table-stripe: #1a1a24;
+    --link: #93c5fd;
+    --rainbow: linear-gradient(135deg,#f472b6,#a78bfa,#60a5fa,#34d399);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth;font-size:16px}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;display:flex;min-height:100vh}
+
+  /* ── Sidebar ── */
+  .sidebar{position:fixed;top:0;left:0;width:280px;height:100vh;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:24px 0;z-index:100;transition:transform .3s}
+  .sidebar-brand{padding:0 24px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+  .sidebar-brand h2{background:var(--rainbow);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:1.2rem;letter-spacing:.5px}
+  .sidebar-brand span{display:block;font-size:.75rem;color:var(--text-muted);margin-top:2px}
+  .sidebar nav{padding:0 12px}
+  .sidebar nav a{display:block;padding:6px 16px;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:.85rem;transition:background .15s,color .15s}
+  .sidebar nav a:hover{background:var(--accent-glow);color:var(--accent)}
+  .sidebar nav a.active{background:var(--accent-glow);color:var(--accent);font-weight:600}
+  .sidebar .nav-section{font-size:.7rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);padding:16px 16px 4px;opacity:.6}
+  .doc-links{border-top:1px solid var(--border);margin-top:16px;padding-top:12px}
+  .doc-links a{color:var(--link)}
+
+  /* ── Main ── */
+  .main{margin-left:280px;flex:1;max-width:860px;padding:48px 56px 80px}
+  h1{font-size:2rem;font-weight:700;margin-bottom:8px;background:var(--rainbow);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .subtitle{color:var(--text-muted);font-size:1.05rem;margin-bottom:40px}
+  h2{font-size:1.4rem;font-weight:700;margin-top:56px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border);color:#fff}
+  h3{font-size:1.1rem;font-weight:600;margin-top:28px;margin-bottom:10px;color:var(--accent)}
+  h4{font-size:1rem;font-weight:600;margin-top:20px;margin-bottom:8px;color:var(--text)}
+  p{margin-bottom:14px}
+  a{color:var(--link);text-decoration:none}
+  a:hover{text-decoration:underline}
+  strong{color:#fff}
+  ul,ol{margin:0 0 16px 24px}
+  li{margin-bottom:6px}
+  li > ul, li > ol {margin-top:6px}
+
+  /* ── Code ── */
+  code{font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:.88em;background:var(--code-bg);padding:2px 6px;border-radius:4px;color:#c4b5fd}
+  pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:18px 22px;overflow-x:auto;margin:12px 0 20px;line-height:1.55}
+  pre code{background:none;padding:0;font-size:.85rem;color:#d4d4d8}
+
+  /* ── Tables ── */
+  table{width:100%;border-collapse:collapse;margin:12px 0 24px;font-size:.9rem}
+  th{text-align:left;padding:10px 14px;background:var(--surface2);color:var(--accent);font-weight:600;border-bottom:2px solid var(--border)}
+  td{padding:10px 14px;border-bottom:1px solid var(--border)}
+  tr:nth-child(even) td{background:var(--table-stripe)}
+
+  /* ── Tips ── */
+  .tip{background:var(--tip-bg);border-left:3px solid var(--tip-border);border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:.92rem}
+  .tip strong{color:var(--tip-border)}
+
+  /* ── Keyboard ── */
+  kbd{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-family:inherit;font-size:.82em;color:var(--text);box-shadow:0 1px 0 var(--border)}
+
+  /* ── Hamburger (mobile) ── */
+  .menu-toggle{display:none;position:fixed;top:14px;left:14px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;cursor:pointer;font-size:1.1rem}
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%)}
+    .sidebar.open{transform:translateX(0)}
+    .main{margin-left:0;padding:32px 24px 60px}
+    .menu-toggle{display:block}
+  }
+</style>
+</head>
+<body>
+
+<button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle menu">☰</button>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <h2>FlourishVNE</h2>
+    <span>Getting Started Guide</span>
+  </div>
+  <nav>
+    <a href="#launching">1. Launching Flourish</a>
+    <a href="#project-hub">2. The Project Hub</a>
+    <a href="#first-project">3. Creating Your First Project</a>
+    <a href="#editor-layout">4. Editor Layout</a>
+    <a href="#first-scene">5. Adding Your First Scene</a>
+    <a href="#dialogue">6. Adding Dialogue</a>
+    <a href="#assets">7. Uploading Assets</a>
+    <a href="#background">8. Setting a Background</a>
+    <a href="#character">9. Creating a Character</a>
+    <a href="#show-character">10. Showing a Character</a>
+    <a href="#choices">11. Adding Player Choices</a>
+    <a href="#variables">12. Using Variables</a>
+    <a href="#preview">13. Previewing Your Game</a>
+    <a href="#saving">14. Saving Your Project</a>
+    <a href="#building">15. Building &amp; Exporting</a>
+    <a href="#shortcuts">16. Keyboard Shortcuts</a>
+    <a href="#voice-effects">18. Voice &amp; Text Effects</a>
+    <a href="#visual-particles">19. Visual &amp; Particle FX</a>
+    <a href="#next-steps">20. Next Steps</a>
+
+    <div class="doc-links">
+      <div class="nav-section">Other Docs</div>
+      <a href="feature-workflows.html">Feature Workflows</a>
+      <a href="scripting-and-plugins.html">Scripting &amp; Plugins</a>
+    </div>
+  </nav>
+</aside>
+
+<main class="main">
+  <h1>Getting Started Guide</h1>
+  <p class="subtitle">Everything you need to create your first visual novel with FlourishVNE.</p>
+
+  <!-- 1 -->
+  <h2 id="launching">1. Launching Flourish</h2>
+  <p><strong>Desktop (Electron):</strong> Run <code>Flourish(run_me).bat</code> or launch the executable (the rainbow icon).</p>
+  <p><strong>Browser:</strong> Open the app in any modern web browser — no installation required.</p>
+  <p>When the program loads, you'll arrive at the <strong>Project Hub</strong>.</p>
+
+  <!-- 2 -->
+  <h2 id="project-hub">2. The Project Hub</h2>
+  <p>The Project Hub is your home screen. From here you can:</p>
+  <ul>
+    <li><strong>Create New Project</strong> — starts a fresh project with a default scene and built-in UI screens</li>
+    <li><strong>Import Project</strong> — open a previously saved <code>.flourish</code> file</li>
+    <li><strong>Recent Projects</strong> — quickly reopen one of your last 5 projects</li>
+    <li><strong>Music Player</strong> — a dockable mini music player that runs in the background (click the speaker icon)</li>
+  </ul>
+  <p>If this is your first time, you'll see a <strong>Guided Tour</strong> overlay that walks you through the editor in 7 steps. You can dismiss it and re-access it later from the Help menu.</p>
+
+  <!-- 3 -->
+  <h2 id="first-project">3. Creating Your First Project</h2>
+  <ol>
+    <li>Click <strong>Create New Project</strong></li>
+    <li>You'll be taken directly into the main editor with a starter scene called "Scene 1"</li>
+    <li>The project automatically includes default UI screens (Title Screen, Save Screen, Load Screen, Settings Screen, Pause Menu)</li>
+  </ol>
+  <div class="tip"><strong>Tip:</strong> You can change your project's title, author, and description later in the <strong>Settings</strong> tab.</div>
+
+  <!-- 4 -->
+  <h2 id="editor-layout">4. Understanding the Editor Layout</h2>
+  <p>The editor has <strong>6 main tabs</strong> across the top. Switch between them by clicking or pressing <kbd>Shift</kbd>+<kbd>1</kbd> through <kbd>Shift</kbd>+<kbd>6</kbd>:</p>
+  <table>
+    <thead><tr><th>Tab</th><th>Shortcut</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Scenes</strong></td><td><kbd>Shift+1</kbd></td><td>Build your story — add dialogue, commands, and scene flow</td></tr>
+      <tr><td><strong>Characters</strong></td><td><kbd>Shift+2</kbd></td><td>Create and manage characters, sprite layers, and expressions</td></tr>
+      <tr><td><strong>UI Screens</strong></td><td><kbd>Shift+3</kbd></td><td>Design menus, title screens, and in-game UI with a visual editor</td></tr>
+      <tr><td><strong>Assets</strong></td><td><kbd>Shift+4</kbd></td><td>Upload and organize backgrounds, images, audio, and video files</td></tr>
+      <tr><td><strong>Variables</strong></td><td><kbd>Shift+5</kbd></td><td>Create variables for tracking player choices, stats, and state</td></tr>
+      <tr><td><strong>Settings</strong></td><td><kbd>Shift+6</kbd></td><td>Configure project settings, dialogue box styling, fonts, and build options</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Header Toolbar</h3>
+  <p>The toolbar at the top of every tab contains:</p>
+  <ul>
+    <li><strong>Home</strong> button — return to the Project Hub</li>
+    <li><strong>Save</strong> button — save your project (<kbd>Ctrl+S</kbd>)</li>
+    <li><strong>Undo / Redo</strong> buttons (<kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Shift+Z</kbd>)</li>
+    <li><strong>Play</strong> button — toggle the Live Preview</li>
+    <li><strong>Keyboard Shortcuts</strong> button (also available via <kbd>?</kbd> key)</li>
+    <li><strong>Theme Selector</strong> — switch between 6 editor color themes</li>
+    <li><strong>Tools</strong> menu — access Localization, Script Editor, Plugin Manager, and Help &amp; Docs</li>
+  </ul>
+  <div class="tip"><strong>Tip:</strong> Right-click any tab to open it in a <strong>separate window</strong>. This lets you view multiple tabs side by side.</div>
+
+  <!-- 5 -->
+  <h2 id="first-scene">5. Adding Your First Scene</h2>
+  <p>You start on the <strong>Scenes</strong> tab. The layout has three main areas:</p>
+  <ul>
+    <li><strong>Left panel — Resource Tree:</strong> Your scene list and the Command Palette (color-coded command categories)</li>
+    <li><strong>Center — Staging Area &amp; Scene Editor:</strong> The live preview on top, and the command timeline below</li>
+    <li><strong>Right panel — Properties Inspector:</strong> Edit the selected command's properties</li>
+  </ul>
+
+  <h3>Creating a new scene</h3>
+  <ol>
+    <li>Look at the <strong>Scenes</strong> section in the left panel</li>
+    <li>Click the <strong>+ (plus)</strong> button next to the "Scenes" header</li>
+    <li>A new scene appears in the list — click on it to select it</li>
+    <li>You can rename it by double-clicking the scene name</li>
+  </ol>
+
+  <h3>Setting the start scene</h3>
+  <p>Your project needs a <strong>starting scene</strong> — the first scene players see when they launch the game.</p>
+  <ol>
+    <li>Go to the <strong>Settings</strong> tab (<kbd>Shift+6</kbd>)</li>
+    <li>Under <strong>General</strong>, find <strong>Starting Scene</strong></li>
+    <li>Select your desired scene from the dropdown</li>
+  </ol>
+
+  <!-- 6 -->
+  <h2 id="dialogue">6. Adding Dialogue</h2>
+  <p>Dialogue is the core of any visual novel. Here's how to add it:</p>
+  <ol>
+    <li>Make sure you're on the <strong>Scenes</strong> tab with a scene selected</li>
+    <li>In the <strong>Command Palette</strong> (bottom-left), find the <strong>Story</strong> category</li>
+    <li><strong>Drag</strong> the <strong>Dialogue</strong> command into the <strong>Scene Editor</strong> (center-bottom area)</li>
+    <li>Click on the Dialogue command you just added — the <strong>Properties Inspector</strong> (right panel) will show its settings</li>
+    <li>Choose a <strong>Speaker</strong> (select a character or leave blank for Narrator)</li>
+    <li>Type your <strong>dialogue text</strong> in the text field</li>
+    <li>The <strong>Staging Area</strong> (center-top) will update in real-time as you edit</li>
+  </ol>
+
+  <h3>Variable interpolation in dialogue</h3>
+  <p>You can insert variable values into dialogue text using curly braces:</p>
+  <pre><code>Hello, {playerName}! You have {gold} gold coins.</code></pre>
+  <p>This will display the current values of the <code>playerName</code> and <code>gold</code> variables at runtime.</p>
+
+  <!-- 7 -->
+  <h2 id="assets">7. Uploading Assets</h2>
+  <p>Before you can use backgrounds, character sprites, music, or sound effects, you need to upload them.</p>
+  <ol>
+    <li>Go to the <strong>Assets</strong> tab (<kbd>Shift+4</kbd>)</li>
+    <li>Select a category on the left: <strong>Backgrounds</strong>, <strong>Images</strong>, <strong>Audio</strong>, or <strong>Videos</strong></li>
+    <li>Click the <strong>Upload</strong> button (top-right) or <strong>drag and drop</strong> files into the asset area</li>
+    <li>Your assets will appear in the grid/list view</li>
+    <li>Use the <strong>search bar</strong> to find assets, or create <strong>folders</strong> to organize them</li>
+  </ol>
+
+  <h3>Supported formats</h3>
+  <table>
+    <thead><tr><th>Type</th><th>Formats</th></tr></thead>
+    <tbody>
+      <tr><td>Images</td><td>PNG, JPG, JPEG, GIF, WebP, BMP, SVG</td></tr>
+      <tr><td>Audio</td><td>MP3, WAV, OGG, M4A, FLAC, AAC, WMA</td></tr>
+      <tr><td>Video</td><td>MP4, WebM, MOV, AVI, MKV</td></tr>
+      <tr><td>Fonts</td><td>TTF, OTF</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 8 -->
+  <h2 id="background">8. Setting a Background</h2>
+  <ol>
+    <li>Go to the <strong>Scenes</strong> tab</li>
+    <li>From the <strong>Command Palette</strong>, find <strong>Scenes → SetBackground</strong></li>
+    <li>Drag it into your scene timeline</li>
+    <li>Click on the command</li>
+    <li>In the <strong>Properties Inspector</strong>, select an image (or video) from your uploaded backgrounds</li>
+    <li>Choose a <strong>transition</strong> (fade, dissolve, etc.) and set the <strong>duration</strong></li>
+    <li>The Staging Area will preview the background immediately</li>
+  </ol>
+
+  <!-- 9 -->
+  <h2 id="character">9. Creating a Character</h2>
+  <p>Characters require setup across multiple tabs. Here's the workflow:</p>
+
+  <h3>Step 1: Upload character sprites (Assets tab)</h3>
+  <ol>
+    <li>Go to <strong>Assets → Images</strong></li>
+    <li>Upload your character sprite images (e.g., different expressions, poses, clothing layers)</li>
+    <li>Organize them in folders if you have many sprites (e.g., "Luna/happy.png", "Luna/sad.png")</li>
+  </ol>
+
+  <h3>Step 2: Create the character (Characters tab)</h3>
+  <ol>
+    <li>Go to the <strong>Characters</strong> tab (<kbd>Shift+2</kbd>)</li>
+    <li>Click the <strong>+ Add Character</strong> button</li>
+    <li>Enter the character's <strong>name</strong></li>
+    <li>Set the <strong>name color</strong> (used on the dialogue nameplate)</li>
+  </ol>
+
+  <h3>Step 3: Add layers</h3>
+  <p>Flourish uses a <strong>multi-layer sprite system</strong>. Each layer represents a compositable part of the character (e.g., body, eyes, mouth, hair, outfit).</p>
+  <ol>
+    <li>In the character editor, go to the <strong>Layers</strong> tab</li>
+    <li>Click <strong>Add Layer</strong></li>
+    <li>Name the layer (e.g., "Body", "Eyes", "Mouth")</li>
+    <li>Upload or assign image/video assets to the layer — each asset gets a name (e.g., "eyes_happy", "eyes_sad")</li>
+  </ol>
+  <div class="tip"><strong>Simple characters:</strong> If your character uses single full-body images per expression, you only need one layer (e.g., "Base") with multiple assets.</div>
+
+  <h3>Step 4: Create expressions</h3>
+  <p>Expressions map layer assets to a named pose (e.g., "Happy", "Sad", "Angry").</p>
+  <ol>
+    <li>Go to the <strong>Expressions</strong> tab</li>
+    <li>Click <strong>Add Expression</strong> and name it (e.g., "Happy")</li>
+    <li>For each layer, select which asset should display in this expression</li>
+    <li>The <strong>Character Preview</strong> on the left will show the composited result</li>
+  </ol>
+
+  <h3>Step 5: Style (optional)</h3>
+  <ol>
+    <li>Go to the <strong>Style</strong> tab</li>
+    <li>Set a custom <strong>font</strong> for this character's nameplate (family, size, weight, italic)</li>
+  </ol>
+
+  <!-- 10 -->
+  <h2 id="show-character">10. Showing a Character in a Scene</h2>
+  <ol>
+    <li>Go to the <strong>Scenes</strong> tab</li>
+    <li>From the <strong>Command Palette</strong>, find <strong>Characters → ShowCharacter</strong></li>
+    <li>Drag it into your scene timeline</li>
+    <li>In the <strong>Properties Inspector</strong>:
+      <ul>
+        <li>Select the <strong>Character</strong></li>
+        <li>Choose an <strong>Expression</strong> (e.g., "Happy")</li>
+        <li>Set the <strong>Position</strong> (left, center, right, off-left, off-right, or custom X,Y%)</li>
+        <li>Choose a <strong>Transition</strong> (fade, slide, dissolve, etc.) and <strong>Duration</strong></li>
+      </ul>
+    </li>
+    <li>The character will appear in the Staging Area</li>
+  </ol>
+  <p>To remove a character, use the <strong>HideCharacter</strong> command with a transition.</p>
+
+  <!-- 11 -->
+  <h2 id="choices">11. Adding Player Choices</h2>
+  <p>Choices let players make decisions that affect the story.</p>
+  <ol>
+    <li>From the <strong>Command Palette</strong>, find <strong>Story → Choice</strong></li>
+    <li>Drag it into your scene timeline</li>
+    <li>In the Properties Inspector, you'll see a list of choice options</li>
+    <li>For each option:
+      <ul>
+        <li>Enter the <strong>display text</strong> (what the player sees)</li>
+        <li>Add one or more <strong>actions</strong> (what happens when they click):
+          <ul>
+            <li><strong>JumpToScene</strong> — go to a different scene</li>
+            <li><strong>JumpToLabel</strong> — jump to a label in the current scene</li>
+            <li><strong>SetVariable</strong> — change a variable value</li>
+            <li><strong>GoToScreen</strong> — show a UI screen</li>
+            <li>And more (14 action types total)</li>
+          </ul>
+        </li>
+        <li>Optionally add <strong>conditions</strong> so the choice only appears when certain variables are set</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h3>Using Labels for branching</h3>
+  <p>Instead of creating separate scenes for every branch, you can use <strong>Labels</strong>:</p>
+  <ol>
+    <li>Add a <strong>Label</strong> command in your scene (Story → Label) and name it (e.g., "path_a")</li>
+    <li>In a Choice action, set <strong>JumpToLabel</strong> → "path_a"</li>
+    <li>The story will jump to that label's position in the scene</li>
+  </ol>
+
+  <!-- 12 -->
+  <h2 id="variables">12. Using Variables</h2>
+  <p>Variables track player state — names, stats, flags, choices, and more.</p>
+
+  <h3>Creating variables</h3>
+  <ol>
+    <li>Go to the <strong>Variables</strong> tab (<kbd>Shift+5</kbd>)</li>
+    <li>Click <strong>Add Variable</strong></li>
+    <li>Set the <strong>name</strong>, <strong>type</strong> (String, Number, or Boolean), and <strong>scope</strong>:
+      <ul>
+        <li><strong>Local</strong> — resets when the scene changes</li>
+        <li><strong>Global</strong> — persists across scenes within a playthrough</li>
+        <li><strong>Persistent</strong> — survives across play sessions (e.g., CG gallery unlocks)</li>
+      </ul>
+    </li>
+    <li>Set a <strong>default value</strong></li>
+  </ol>
+
+  <h3>Using variables in scenes</h3>
+  <ul>
+    <li><strong>SetVariable command</strong> — set, add, subtract, or randomize a variable</li>
+    <li><strong>Conditions</strong> — any command can have conditions that check variable values (10 operators: ==, !=, &gt;, &lt;, &gt;=, &lt;=, is true, is false, contains, startsWith)</li>
+    <li><strong>Dialogue text</strong> — insert values using <code>{variableName}</code> syntax</li>
+    <li><strong>Choice conditions</strong> — show/hide choices based on variables</li>
+  </ul>
+
+  <h3>Finding where a variable is used</h3>
+  <p>Click a variable in the Variables tab and use the <strong>Usage Tracker</strong> to see every command, condition, UI element, and dialogue line that references it.</p>
+
+  <!-- 13 -->
+  <h2 id="preview">13. Previewing Your Game</h2>
+  <p>The <strong>Live Preview</strong> (Staging Area) shows your game in real-time as you edit.</p>
+
+  <h3>Quick preview</h3>
+  <p>The staging area at the top of the Scenes tab always shows the current scene state. Click on any command in the timeline to see it rendered instantly.</p>
+
+  <h3>Full play mode</h3>
+  <ol>
+    <li>Click the <strong>Play</strong> button in the header toolbar (or toggle it)</li>
+    <li>The game will start from the beginning of the current scene</li>
+    <li>Click to advance dialogue, make choices, and interact with the game</li>
+    <li>Use the in-game controls:
+      <ul>
+        <li><strong>Skip</strong> — fast-forward through dialogue</li>
+        <li><strong>Auto</strong> — auto-advance dialogue at a configurable speed</li>
+        <li><strong>History/Backlog</strong> — view past dialogue</li>
+        <li><strong>Settings</strong> — adjust volume, text speed</li>
+        <li><strong>Save/Load</strong> — save and load game state (desktop only, 10 slots)</li>
+      </ul>
+    </li>
+  </ol>
+
+  <!-- 14 -->
+  <h2 id="saving">14. Saving Your Project</h2>
+
+  <h3>Manual save</h3>
+  <ul>
+    <li>Click the <strong>Save</strong> button in the header, or press <kbd>Ctrl+S</kbd></li>
+    <li>Choose a location to save your <code>.flourish</code> project file</li>
+  </ul>
+
+  <h3>Auto-save</h3>
+  <ul>
+    <li>Flourish automatically saves your project to IndexedDB in the background</li>
+    <li>If the app crashes, you can recover from auto-save when you reopen</li>
+  </ul>
+
+  <h3>Import / Export</h3>
+  <ul>
+    <li><strong>Export:</strong> Your project is saved as a <code>.flourish</code> file (a ZIP containing JSON data and embedded assets)</li>
+    <li><strong>Import:</strong> Open any <code>.flourish</code> file from the Project Hub</li>
+  </ul>
+
+  <!-- 15 -->
+  <h2 id="building">15. Building &amp; Exporting</h2>
+  <p>When your game is ready to share:</p>
+  <ol>
+    <li>Go to the <strong>Settings</strong> tab (<kbd>Shift+6</kbd>)</li>
+    <li>Scroll down to find the <strong>Build</strong> section, or look for the Build panel</li>
+    <li>Choose your build target:
+      <ul>
+        <li><strong>Web (HTML)</strong> — a single HTML file you can host anywhere or upload to itch.io</li>
+        <li><strong>Desktop (EXE)</strong> — a standalone Windows executable</li>
+        <li><strong>Installer</strong> — an NSIS installer with desktop shortcut</li>
+      </ul>
+    </li>
+    <li>Click <strong>Validate</strong> to check for missing assets or broken references</li>
+    <li>Click <strong>Build</strong> and wait for the progress indicator</li>
+    <li>Download your built game</li>
+  </ol>
+  <div class="tip"><strong>Tip:</strong> For itch.io, use the Web build — it generates an itch.io-ready ZIP package.</div>
+
+  <!-- 16 -->
+  <h2 id="shortcuts">16. Keyboard Shortcuts</h2>
+  <table>
+    <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Shift+1</kbd> through <kbd>Shift+6</kbd></td><td>Switch tabs (Scenes, Characters, UI, Assets, Variables, Settings)</td></tr>
+      <tr><td><kbd>Ctrl+S</kbd></td><td>Save project</td></tr>
+      <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo</td></tr>
+      <tr><td><kbd>Ctrl+Shift+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>Redo</td></tr>
+      <tr><td><kbd>Ctrl+C</kbd></td><td>Copy selected commands</td></tr>
+      <tr><td><kbd>Ctrl+V</kbd></td><td>Paste commands</td></tr>
+      <tr><td><kbd>Ctrl+A</kbd></td><td>Select all commands in scene</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>Delete selected commands</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Deselect / close panels</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Show keyboard shortcuts panel</td></tr>
+      <tr><td>Click</td><td>Select command</td></tr>
+      <tr><td><kbd>Shift</kbd>+Click</td><td>Range select commands</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+Click</td><td>Toggle select commands</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 18 -->
+  <h2 id="voice-effects">18. Voice Clips &amp; Dialogue Text Effects</h2>
+  <p>Flourish supports <strong>voice sync</strong> and <strong>animated text effects</strong> on dialogue lines.</p>
+
+  <h3>Adding a voice clip to a dialogue line</h3>
+  <ol>
+    <li>Upload your voice audio files in the <strong>Assets</strong> tab (<kbd>Shift+4</kbd>) under Audio</li>
+    <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>) and select a <strong>Dialogue</strong> command</li>
+    <li>In the Properties Inspector, find <strong>Voice Clip</strong> and search for your audio file</li>
+    <li>The clip will play automatically when this dialogue line appears on screen</li>
+  </ol>
+  <div class="tip"><strong>Tip:</strong> You can also set a <strong>Default Voice</strong> on each character (Characters tab → Style) so every line by that character plays the same audio. Per-line clips override the character default.</div>
+
+  <h3>Adding a text effect to dialogue</h3>
+  <ol>
+    <li>Select a <strong>Dialogue</strong> command in the Scene Editor</li>
+    <li>In Properties Inspector, find <strong>Text Effect</strong> and choose one:
+      <ul>
+        <li><strong>Shake</strong> — jittery letters (fear, anger)</li>
+        <li><strong>Wave</strong> — flowing sine-wave motion</li>
+        <li><strong>Rainbow</strong> — cycling HSL color per letter</li>
+        <li><strong>Glitch</strong> — digital corruption</li>
+        <li><strong>Pulse, Bounce, Fade-In, Typewriter Bounce</strong></li>
+      </ul>
+    </li>
+    <li>Adjust <strong>Speed</strong> (animation rate) and <strong>Intensity</strong> (how pronounced)</li>
+  </ol>
+  <p>You can also set a character-wide default text effect in the Characters tab under Style, which applies to all dialogue from that character unless overridden per-line.</p>
+
+  <!-- 19 -->
+  <h2 id="visual-particles">19. Character Visual Effects &amp; Particles</h2>
+
+  <h3>Character visual effects</h3>
+  <p>Apply looping visual effects to characters on stage:</p>
+  <ol>
+    <li>Select a <strong>ShowCharacter</strong> command in the Scene Editor</li>
+    <li>In Properties Inspector, find <strong>Visual Effect</strong></li>
+    <li>Choose from: <strong>Shake, Bounce, Float, Pulse, Glow, Tint, Silhouette, Breathing, Flicker</strong></li>
+    <li>Adjust <strong>Speed</strong>, <strong>Intensity</strong>, and <strong>Color</strong> (for Glow/Tint/Silhouette)</li>
+  </ol>
+  <div class="tip"><strong>Tip:</strong> Use <strong>Breathing</strong> to add subtle life to static sprites, or <strong>Glow</strong> to highlight the active speaker.</div>
+
+  <h3>Particle system</h3>
+  <p>Add atmospheric particle effects (fireflies, confetti, magic sparkles, and more) to any scene:</p>
+  <ol>
+    <li>Drag <strong>SpawnParticles</strong> from the Effects category in the Command Palette into your scene</li>
+    <li>Choose a <strong>Preset</strong>: Fireflies, Sparks, Bubbles, Confetti, Embers, Dust, Petals, Magic, Stars, or Custom</li>
+    <li>Set a <strong>Tag</strong> (unique name) and <strong>Duration</strong> (0 = runs forever)</li>
+    <li>To stop particles, add a <strong>StopParticles</strong> command and enter the tag (or leave empty to stop all)</li>
+  </ol>
+  <p>For full customization (shapes, colors, gravity, wind, emit rate, etc.), select the <strong>Custom</strong> preset and use the expanded editor. See the <a href="feature-workflows.html#particles">Feature Workflows → Particle System</a> guide for all parameters.</p>
+
+  <!-- 20 -->
+  <h2 id="next-steps">20. Next Steps</h2>
+  <p>Now that you've created your first scene, here are the next things to explore:</p>
+  <ul>
+    <li><strong>UI Screens</strong> — customize your title screen, save/load screens, and pause menu in the UI tab</li>
+    <li><strong>Audio</strong> — add background music (<code>PlayMusic</code>) and sound effects (<code>PlaySoundEffect</code>) to your scenes</li>
+    <li><strong>Video</strong> — embed cutscenes or animated backgrounds with the <code>PlayMovie</code> command</li>
+    <li><strong>Screen Effects</strong> — add dramatic flair with <code>ShakeScreen</code>, <code>FlashScreen</code>, <code>TintScreen</code>, <code>PanZoomScreen</code>, and 6 overlay effects (rain, snow, sunbeams, etc.)</li>
+    <li><strong>Particles</strong> — spawn atmospheric effects like fireflies, confetti, magic sparkles, and custom emitters with <code>SpawnParticles</code> / <code>StopParticles</code></li>
+    <li><strong>Voice Sync</strong> — attach voice audio clips to dialogue lines for fully-voiced or grunt-voiced characters</li>
+    <li><strong>Text &amp; Character Effects</strong> — animate dialogue text (shake, wave, rainbow, glitch) and character sprites (glow, float, breathing, flicker)</li>
+    <li><strong>Templates</strong> — browse the Template Gallery in the Settings tab for pre-built systems (character creator, shop, combat, etc.)</li>
+    <li><strong>Scripting</strong> — write custom JavaScript logic via Tools → Script Editor</li>
+    <li><strong>Localization</strong> — translate your game into multiple languages via Tools → Localization</li>
+    <li><strong>Branching</strong> — use <code>BranchStart</code>/<code>BranchEnd</code> commands for complex story paths with visual color coding</li>
+  </ul>
+  <p>For detailed workflow guides covering multi-step features, see the <a href="feature-workflows.html"><strong>Feature Workflows Guide</strong></a>.</p>
+  <p>For scripting and plugin documentation, see <a href="scripting-and-plugins.html"><strong>Scripting &amp; Plugins</strong></a>.</p>
+</main>
+
+<script>
+// Highlight active sidebar link on scroll
+const links = document.querySelectorAll('.sidebar nav a[href^="#"]');
+const sections = [...links].map(l => document.getElementById(l.getAttribute('href').slice(1))).filter(Boolean);
+function onScroll(){
+  let current = '';
+  for(const s of sections){if(s.getBoundingClientRect().top <= 120) current = s.id;}
+  links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#'+current));
+}
+window.addEventListener('scroll', onScroll, {passive:true});
+onScroll();
+</script>
+</body>
+</html>

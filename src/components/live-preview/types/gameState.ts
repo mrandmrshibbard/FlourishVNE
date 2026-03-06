@@ -7,6 +7,7 @@ import { VNID, VNPosition, VNTransition } from '../../../types';
 import { VNCommand } from '../../../features/scene/types';
 import { ChoiceOption } from '../../../features/scene/types';
 import type { VNScreenOverlayEffect } from '../../../types';
+import type { VNCharacterVisualEffect, VNDialogueTextEffect, VNParticleConfig } from '../../../features/scene/types';
 
 export type StageSize = { width: number; height: number };
 
@@ -96,6 +97,10 @@ export interface StageCharacterState {
     transition: StageCharacterTransition | null;
     expressionId?: VNID;
     layerVariableBindings?: Record<VNID, VNID>;
+    /** Per-character visual effects — multiple can stack (shake, glow, tint, etc.) */
+    visualEffects?: VNCharacterVisualEffect[];
+    /** The ShowCharacter command ID that placed this character on stage (for drag-to-position) */
+    sourceCommandId?: string;
 }
 
 export interface StageState {
@@ -126,6 +131,19 @@ export interface StageState {
         transitionDuration: number;
         overlayEffects: VNScreenOverlayEffect[];
     };
+    /** Active particle effects on stage */
+    particleEffects: Record<string, {
+        tag: string;
+        config: VNParticleConfig;
+        /** Timestamp when this effect started */
+        startTime: number;
+        /** Auto-stop duration (0 = persistent) */
+        duration: number;
+        /** Whether the effect is fading out */
+        fadingOut?: boolean;
+        /** Fade out duration remaining */
+        fadeOutDuration?: number;
+    }>;
 }
 
 export interface MusicState {
@@ -153,6 +171,10 @@ export interface PlayerState {
             characterColor: string;
             characterId: VNID | null;
             text: string;
+            /** Voice audio clip ID to play for this line */
+            voiceAudioId?: VNID | null;
+            /** Text effect for this dialogue line */
+            textEffect?: VNDialogueTextEffect;
         } | null;
         choices: ChoiceOption[] | null;
         textInput: {

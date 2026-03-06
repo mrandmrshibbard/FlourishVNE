@@ -33,7 +33,9 @@ const AutoUpdateBanner: React.FC = () => {
     const [status, setStatus] = useState<UpdateStatus | null>(null);
     const [newVersion, setNewVersion] = useState('');
     const [downloadPercent, setDownloadPercent] = useState(0);
+    const [errorMessage, setErrorMessage] = useState('');
     const [dismissed, setDismissed] = useState(false);
+    const [installing, setInstalling] = useState(false);
 
     useEffect(() => {
         const api = (window as any).electronAPI;
@@ -44,16 +46,33 @@ const AutoUpdateBanner: React.FC = () => {
 
             if (event.version) setNewVersion(event.version);
             if (typeof event.percent === 'number') setDownloadPercent(event.percent);
+            if (event.status === 'error') setErrorMessage(event.message || 'Update failed');
 
             // Reset dismissed when a new download completes
-            if (event.status === 'downloaded') setDismissed(false);
+            if (event.status === 'downloaded') {
+                setDismissed(false);
+                setInstalling(false);
+            }
         });
     }, []);
 
-    const handleInstall = useCallback(() => {
+    const handleInstall = useCallback(async () => {
         const api = (window as any).electronAPI;
         if (api?.installUpdate) {
-            api.installUpdate();
+            setInstalling(true);
+            setErrorMessage('');
+            try {
+                const result = await api.installUpdate();
+                if (result?.status === 'error') {
+                    setInstalling(false);
+                    setErrorMessage(result.message || 'Update failed');
+                    setStatus('error');
+                }
+            } catch (err: any) {
+                setInstalling(false);
+                setErrorMessage(err?.message || 'Update failed');
+                setStatus('error');
+            }
         }
     }, []);
 
@@ -61,9 +80,72 @@ const AutoUpdateBanner: React.FC = () => {
     if (dismissed) return null;
     if (!status || status === 'checking' || status === 'not-available') return null;
 
-    // Error state — show briefly then allow dismissal
+    // Error state — show the error so the user knows what happened
     if (status === 'error') {
-        return null; // Silently ignore update errors to avoid confusing users
+        return (
+            <div
+                style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 99999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    padding: '8px 16px',
+                    background: 'linear-gradient(135deg, rgba(220,38,38,0.95), rgba(185,28,28,0.90))',
+                    backdropFilter: 'blur(8px)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontFamily: "'Segoe UI', system-ui, sans-serif",
+                    boxShadow: '0 2px 12px rgba(220,38,38,0.4)',
+                }}
+            >
+                <span style={{ fontWeight: 500 }}>
+                    ⚠️ Update error: {errorMessage || 'Unknown error'}
+                </span>
+
+                <button
+                    onClick={() => {
+                        setStatus(null);
+                        setErrorMessage('');
+                        const api = (window as any).electronAPI;
+                        api?.checkForUpdates?.();
+                    }}
+                    style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: '1px solid rgba(255,255,255,0.35)',
+                        borderRadius: '6px',
+                        padding: '4px 14px',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                    }}
+                >
+                    Retry
+                </button>
+
+                <button
+                    onClick={() => setDismissed(true)}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: '16px',
+                        cursor: 'pointer',
+                        padding: '0 4px',
+                        lineHeight: 1,
+                    }}
+                    title="Dismiss"
+                    aria-label="Dismiss error"
+                >
+                    ✕
+                </button>
+            </div>
+        );
     }
 
     // Downloading state — show slim progress bar
@@ -131,6 +213,7 @@ const AutoUpdateBanner: React.FC = () => {
 
                 <button
                     onClick={handleInstall}
+                    disabled={installing}
                     style={{
                         background: 'rgba(255,255,255,0.2)',
                         border: '1px solid rgba(255,255,255,0.35)',
@@ -139,17 +222,18 @@ const AutoUpdateBanner: React.FC = () => {
                         color: '#fff',
                         fontSize: '12px',
                         fontWeight: 600,
-                        cursor: 'pointer',
+                        cursor: installing ? 'wait' : 'pointer',
+                        opacity: installing ? 0.6 : 1,
                         transition: 'background 0.2s',
                     }}
                     onMouseEnter={(e) => {
-                        (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.35)';
+                        if (!installing) (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.35)';
                     }}
                     onMouseLeave={(e) => {
                         (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.2)';
                     }}
                 >
-                    Restart &amp; Update
+                    {installing ? '⏳ Installing...' : 'Restart & Update'}
                 </button>
 
                 <button

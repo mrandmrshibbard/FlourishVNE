@@ -15,6 +15,8 @@ import UIElementInspector from './menu-editor/UIElementInspector';
 const AssetManager = React.lazy(() => import('./AssetManager'));
 const VariableManager = React.lazy(() => import('./VariableManager'));
 const SettingsManager = React.lazy(() => import('./SettingsManager'));
+const CommonEventsManager = React.lazy(() => import('./CommonEventsManager'));
+const ScriptingEditor = React.lazy(() => import('./ScriptingEditor'));
 const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
@@ -61,6 +63,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
     const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
     const [showTour, setShowTour] = useState(() => !localStorage.getItem('flourish:tourCompleted'));
+    const [uiEditorMode, setUiEditorMode] = useState<'screens' | 'ingame'>('screens');
 
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
@@ -177,6 +180,14 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     }
 
     const renderInspector = () => {
+        // InGameUIEditor has its own built-in properties panel
+        if (activeTab === 'ui' && uiEditorMode === 'ingame') return null;
+        // When on the UI tab in 'screens' mode with no screen selected, show placeholder
+        if (activeTab === 'ui' && !activeMenuScreenId && uiEditorMode === 'screens') {
+            return <Panel title="Properties" style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
+                <p className="text-xs text-slate-400">Select a UI screen to edit properties.</p>
+            </Panel>;
+        }
         if (isConfiguringScene) {
             return <PropertiesInspector
                 activeSceneId={activeSceneId}
@@ -191,6 +202,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             return null;
         }
         if (activeMenuScreenId) {
+            // HotZoneEditor has its own built-in properties panel
+            if (project.uiScreens[activeMenuScreenId]?.screenType === 'hotzone') return null;
             if (selectedUIElementIds.length > 0) {
                 const lastId = selectedUIElementIds[selectedUIElementIds.length - 1];
                 return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} />;
@@ -231,6 +244,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                       (project.audio ? Object.keys(project.audio).length : 0) +
                       (project.videos ? Object.keys(project.videos).length : 0);
     const variableCount = project.variables ? Object.keys(project.variables).length : 0;
+    const commonEventCount = (project as any).commonEvents ? Object.keys((project as any).commonEvents).length : 0;
     
     // Template system integration
     const [selectedTemplateId, setSelectedTemplateId] = useState<VNID | undefined>(undefined);
@@ -418,7 +432,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 return;
             }
 
-            // Map number keys 1-6 to tabs
+            // Map number keys 1-8 to tabs
             const tabMap: Record<string, NavigationTab> = {
                 '1': 'scenes',
                 '2': 'characters',
@@ -475,6 +489,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     />
                 }
                 onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
+                onOpenCommonEvents={() => handleTabChange('commonEvents')}
+                onOpenScripting={() => handleTabChange('scripting')}
             />
             <main className="flex-grow flex overflow-hidden">
                 {/* Main Content Area - Full Width Managers */}
@@ -542,6 +558,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 setActiveMenuScreenId={handleSetActiveMenuScreen}
                                 selectedUIElementIds={selectedUIElementIds}
                                 setSelectedUIElementIds={setSelectedUIElementIds}
+                                onEditorModeChange={setUiEditorMode}
                             />
                         </ErrorBoundary>
                     ) : activeTab === 'assets' ? (
@@ -560,6 +577,18 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         <ErrorBoundary panelName="Settings">
                             <Suspense fallback={<div className="text-slate-300 p-4">Loading settings…</div>}>
                                 <SettingsManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
+                    ) : activeTab === 'commonEvents' ? (
+                        <ErrorBoundary panelName="Common Events">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading common events…</div>}>
+                                <CommonEventsManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
+                    ) : activeTab === 'scripting' ? (
+                        <ErrorBoundary panelName="Scripting">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading scripting editor…</div>}>
+                                <ScriptingEditor project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : null}

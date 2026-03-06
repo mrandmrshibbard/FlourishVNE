@@ -498,7 +498,7 @@
         {
           "type": "BranchStart",
           "name": "Agree To Help",
-          "color": "#38bdf8",
+          "color": "#f89f3a",
           "branchId": "branch-4ahddrp",
           "isCollapsed": false,
           "id": "cmd-ztizxbz",
@@ -4869,7 +4869,7 @@
           "id": "elem-y4ll0n7",
           "name": "Header (copy)",
           "type": "Text",
-          "text": "Load Game",
+          "text": "CG Gallery",
           "x": 51.89858012170385,
           "y": 7.8530538652242505,
           "width": 60,

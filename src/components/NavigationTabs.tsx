@@ -2,7 +2,8 @@ import React from 'react';
 import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
-export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'settings';
+export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'scripting' | 'settings';
+// Note: 'commonEvents' and 'scripting' are accessed via the Tools dropdown, not as tabs.
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -21,6 +22,9 @@ const tabColors: Record<NavigationTab, { base: string; glow: string; pastel: str
     ui: { base: 'var(--accent-yellow)', glow: '0 0 20px rgba(255, 224, 102, 0.35)', pastel: 'var(--pastel-yellow)' },
     assets: { base: 'var(--accent-mint)', glow: 'var(--shadow-glow-mint)', pastel: 'var(--pastel-mint)' },
     variables: { base: 'var(--accent-cyan)', glow: 'var(--shadow-glow-cyan)', pastel: 'var(--pastel-cyan)' },
+    commonEvents: { base: '#f59e0b', glow: '0 0 20px rgba(245, 158, 11, 0.35)', pastel: '#fbbf24' },
+    scripting: { base: 'var(--accent-lavender, #a78bfa)', glow: '0 0 20px rgba(167, 139, 250, 0.35)', pastel: '#c4b5fd' },
+    // commonEvents and scripting colors kept for potential future use
     settings: { base: 'var(--accent-sky)', glow: '0 0 20px rgba(102, 179, 255, 0.35)', pastel: 'var(--pastel-sky)' },
 };
 
@@ -66,10 +70,10 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             },
             {
                 id: 'ui',
-                label: 'UI Screens',
+                label: 'UI / Screens',
                 icon: <UIScreensIcon className="w-4 h-4" />,
                 count: uiScreenCount,
-                description: 'Create menus, title screens, and interactive UI elements'
+                description: 'Design in-game UI elements and menu screens'
             },
             {
                 id: 'assets',

@@ -9,7 +9,8 @@ import {
     TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand, FlashScreenCommand, ShowScreenCommand,
     HideTextCommand, HideImageCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, HideButtonCommand,
     LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground, CreditMedia,
-    GroupCommand, RunScriptCommand,
+    GroupCommand, RunScriptCommand, CallCommonEventCommand,
+    SpawnParticlesCommand, StopParticlesCommand,
     VNScene,
     ChoiceAction,
 } from '../features/scene/types';
@@ -688,6 +689,22 @@ const PropertiesInspector: React.FC<{
                     { value: '', label: 'Narrator' },
                     ...Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }))
                 ];
+                const audioOptions = [
+                    { value: '', label: 'None' },
+                    ...Object.values(project.audio).map((a: any) => ({ value: a.id, label: a.name }))
+                ];
+                const textEffectOptions = [
+                    { value: 'none', label: 'None' },
+                    { value: 'shake', label: 'Shake' },
+                    { value: 'wave', label: 'Wave' },
+                    { value: 'rainbow', label: 'Rainbow' },
+                    { value: 'glitch', label: 'Glitch' },
+                    { value: 'pulse', label: 'Pulse' },
+                    { value: 'fade-in', label: 'Fade In' },
+                    { value: 'bounce', label: 'Bounce' },
+                    { value: 'typewriter-bounce', label: 'Typewriter Bounce' },
+                ];
+                const currentTextEffect = cmd.textEffect?.type || 'none';
                 return <>
                     <FormField label="Character">
                         <SearchableSelect 
@@ -700,6 +717,41 @@ const PropertiesInspector: React.FC<{
                     <FormField label="Dialogue Text">
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
+                    <FormField label="Voice Clip">
+                        <SearchableSelect
+                            options={audioOptions}
+                            value={cmd.voiceAudioId || ''}
+                            onChange={(value) => updateCommand({ voiceAudioId: value || null })}
+                            placeholder="Select voice clip..."
+                        />
+                    </FormField>
+                    <FormField label="Text Effect">
+                        <Select
+                            value={currentTextEffect}
+                            onChange={e => {
+                                const type = e.target.value as any;
+                                if (type === 'none') {
+                                    updateCommand({ textEffect: undefined });
+                                } else {
+                                    updateCommand({ textEffect: { type, speed: cmd.textEffect?.speed ?? 1, intensity: cmd.textEffect?.intensity ?? 1 } });
+                                }
+                            }}
+                        >
+                            {textEffectOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                    {currentTextEffect !== 'none' && <>
+                        <FormField label="Effect Speed">
+                            <input type="range" min="0.1" max="5" step="0.1" value={cmd.textEffect?.speed ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), speed: parseFloat(e.target.value) } })} className="w-full" />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.speed ?? 1).toFixed(1)}x</span>
+                        </FormField>
+                        <FormField label="Effect Intensity">
+                            <input type="range" min="0.1" max="3" step="0.1" value={cmd.textEffect?.intensity ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), intensity: parseFloat(e.target.value) } })} className="w-full" />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.intensity ?? 1).toFixed(1)}x</span>
+                        </FormField>
+                    </>}
                 </>;
             }
             case CommandType.SetBackground: {
@@ -787,6 +839,104 @@ const PropertiesInspector: React.FC<{
                         duration={cmd.duration} 
                         onUpdate={(updates) => updateCommand(updates)} 
                     />
+
+                    {/* Scale control */}
+                    <FormField label="Scale">
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="range" min="0.1" max="3" step="0.05"
+                                value={cmd.scale ?? 1}
+                                onChange={e => updateCommand({ scale: parseFloat(e.target.value) })}
+                                className="flex-1"
+                            />
+                            <TextInput 
+                                type="number" min="0.1" max="5" step="0.05"
+                                value={cmd.scale ?? 1}
+                                onChange={e => updateCommand({ scale: parseFloat(e.target.value) || 1 })}
+                                style={{ width: '60px' }}
+                            />
+                        </div>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>1 = 100% original size</p>
+                    </FormField>
+
+                    {/* Per-Character Visual Effects — multiple stacking */}
+                    <FormField label="Visual Effects">
+                        {(() => {
+                            // Normalize: prefer visualEffects array, fall back to legacy single visualEffect
+                            const effects: any[] = cmd.visualEffects && cmd.visualEffects.length > 0
+                                ? cmd.visualEffects
+                                : cmd.visualEffect && cmd.visualEffect.type !== 'none'
+                                    ? [cmd.visualEffect]
+                                    : [];
+
+                            const updateEffects = (newEffects: any[]) => {
+                                updateCommand({ visualEffects: newEffects.length > 0 ? newEffects : undefined, visualEffect: undefined });
+                            };
+
+                            const addEffect = () => {
+                                updateEffects([...effects, { type: 'breathing', speed: 1, intensity: 1 }]);
+                            };
+
+                            const removeEffect = (idx: number) => {
+                                const next = effects.filter((_: any, i: number) => i !== idx);
+                                updateEffects(next);
+                            };
+
+                            const updateEffect = (idx: number, patch: any) => {
+                                const next = effects.map((e: any, i: number) => i === idx ? { ...e, ...patch } : e);
+                                updateEffects(next);
+                            };
+
+                            return <>
+                                {effects.length === 0 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No effects applied.</p>}
+                                {effects.map((eff: any, idx: number) => (
+                                    <div key={idx} className="mb-3 p-2 rounded-lg" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-primary)' }}>
+                                        <div className="flex items-center gap-1 mb-2">
+                                            <Select className="flex-1" value={eff.type || 'none'} onChange={e => {
+                                                const type = e.target.value as any;
+                                                if (type === 'none') { removeEffect(idx); }
+                                                else { updateEffect(idx, { type }); }
+                                            }}>
+                                                <option value="none">Remove…</option>
+                                                <option value="shake">Shake</option>
+                                                <option value="bounce">Bounce</option>
+                                                <option value="float">Float</option>
+                                                <option value="pulse">Pulse</option>
+                                                <option value="glow">Glow</option>
+                                                <option value="tint">Tint</option>
+                                                <option value="silhouette">Silhouette</option>
+                                                <option value="breathing">Breathing</option>
+                                                <option value="flicker">Flicker</option>
+                                            </Select>
+                                            <button onClick={() => removeEffect(idx)} className="p-1 rounded hover:bg-[var(--bg-tertiary)]" title="Remove effect">
+                                                <svg className="w-3.5 h-3.5" style={{ color: 'var(--accent-coral)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>Speed</span>
+                                            <input type="range" min="0.1" max="5" step="0.1" value={eff.speed ?? 1} onChange={e => updateEffect(idx, { speed: parseFloat(e.target.value) })} className="flex-1" />
+                                            <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.speed ?? 1).toFixed(1)}x</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>Power</span>
+                                            <input type="range" min="0.1" max="3" step="0.1" value={eff.intensity ?? 1} onChange={e => updateEffect(idx, { intensity: parseFloat(e.target.value) })} className="flex-1" />
+                                            <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.intensity ?? 1).toFixed(1)}x</span>
+                                        </div>
+                                        {(eff.type === 'glow' || eff.type === 'tint' || eff.type === 'silhouette') && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>Color</span>
+                                                <input type="color" value={eff.color || '#FFFFFF'} onChange={e => updateEffect(idx, { color: e.target.value })} className="w-7 h-7 rounded cursor-pointer border-0" />
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                <button onClick={addEffect} className="w-full text-xs py-1.5 rounded-lg border border-dashed hover:border-solid transition-colors"
+                                    style={{ borderColor: 'var(--accent-lavender)', color: 'var(--accent-lavender)', background: 'transparent' }}>
+                                    + Add Visual Effect
+                                </button>
+                            </>;
+                        })()}
+                    </FormField>
                  </>;
             }
             case CommandType.HideCharacter: {
@@ -1792,8 +1942,13 @@ const PropertiesInspector: React.FC<{
                         </div>
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <FormField label="Scroll Duration (s)">
+                    <FormField label="Scroll Speed">
+                        <input type="range" min="10" max="200" step="5" value={cmd.scrollSpeed || 60} onChange={e => updateCommand({ scrollSpeed: parseInt(e.target.value) || 60 })} className="w-full" />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.scrollSpeed || 60} px/sec — {(cmd.scrollSpeed || 60) <= 40 ? 'Slow' : (cmd.scrollSpeed || 60) <= 80 ? 'Normal' : (cmd.scrollSpeed || 60) <= 130 ? 'Fast' : 'Very Fast'}</span>
+                    </FormField>
+                    <FormField label="Max Duration (s)">
                         <TextInput type="number" min="5" max="300" step="1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 15 })} />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Safety cap — credits end after this time regardless</span>
                     </FormField>
                     <FormField label="Background Color">
                         <div className="flex items-center gap-2">
@@ -2082,6 +2237,248 @@ const PropertiesInspector: React.FC<{
                             <span className="text-xs text-[var(--text-primary)]">Wait for script to finish before advancing</span>
                         </label>
                     </FormField>
+                </>;
+            }
+            case CommandType.SpawnParticles: {
+                const cmd = command as SpawnParticlesCommand;
+                const particlePresetOptions = [
+                    { value: 'none', label: 'Custom' },
+                    { value: 'fireflies', label: 'Fireflies' },
+                    { value: 'sparks', label: 'Sparks' },
+                    { value: 'bubbles', label: 'Bubbles' },
+                    { value: 'confetti', label: 'Confetti' },
+                    { value: 'embers', label: 'Embers' },
+                    { value: 'dust', label: 'Dust' },
+                    { value: 'petals', label: 'Petals' },
+                    { value: 'magic', label: 'Magic' },
+                    { value: 'stars', label: 'Stars' },
+                ];
+                const shapeOptions = [
+                    { value: 'circle', label: 'Circle' },
+                    { value: 'square', label: 'Square' },
+                    { value: 'star', label: 'Star' },
+                    { value: 'heart', label: 'Heart' },
+                    { value: 'sparkle', label: 'Sparkle' },
+                ];
+                const isCustom = !cmd.config?.preset || cmd.config.preset === 'none';
+                return <>
+                    <FormField label="Particle Tag">
+                        <TextInput value={cmd.particleTag || ''} onChange={e => updateCommand({ particleTag: e.target.value })} placeholder="e.g. firefly_glow" />
+                    </FormField>
+                    <FormField label="Preset">
+                        <Select value={cmd.config?.preset || 'none'} onChange={e => {
+                            const newPreset = e.target.value;
+                            if (newPreset === 'none') {
+                                // Switching to custom: keep current config values
+                                updateCommand({ config: { ...(cmd.config || {}), preset: 'none' } });
+                            } else {
+                                // Switching to a preset: reset config to ONLY the preset name
+                                // The ParticleSystem's resolveConfig() fills in preset defaults
+                                updateCommand({ config: { preset: newPreset } as any });
+                            }
+                        }}>
+                            {particlePresetOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                    <FormField label="Duration (sec)">
+                        <input type="number" min="0" step="0.5" value={cmd.duration || 0} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}
+                            className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>0 = persistent (until stopped)</span>
+                    </FormField>
+                    {/* Key controls shown for ALL modes (preset + custom) */}
+                    <FormField label="Density (emit rate)">
+                        <input type="range" min="1" max="200" value={cmd.config?.emitRate || 20} onChange={e => updateCommand({ config: { ...cmd.config, emitRate: parseInt(e.target.value) || 20 } })} className="w-full" />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.emitRate || 20} particles / sec</span>
+                    </FormField>
+                    <FormField label="Speed (min / max)">
+                        <div className="flex gap-1">
+                            <input type="number" min="0" value={cmd.config?.speedMin ?? 10} onChange={e => updateCommand({ config: { ...cmd.config, speedMin: parseFloat(e.target.value) || 0 } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                            <input type="number" min="0" value={cmd.config?.speedMax ?? 50} onChange={e => updateCommand({ config: { ...cmd.config, speedMax: parseFloat(e.target.value) || 0 } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        </div>
+                    </FormField>
+                    <FormField label="Size (min / max)">
+                        <div className="flex gap-1">
+                            <input type="number" min="0.5" value={cmd.config?.sizeMin ?? 2} onChange={e => updateCommand({ config: { ...cmd.config, sizeMin: parseFloat(e.target.value) || 1 } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                            <input type="number" min="0.5" value={cmd.config?.sizeMax ?? 8} onChange={e => updateCommand({ config: { ...cmd.config, sizeMax: parseFloat(e.target.value) || 1 } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        </div>
+                    </FormField>
+                    {/* Emission area controls — always visible */}
+                    <FormField label="Emission Area">
+                        <Select value={(() => {
+                            const eX = cmd.config?.emitterX ?? 50;
+                            const eY = cmd.config?.emitterY ?? 50;
+                            const eW = cmd.config?.emitterWidth ?? 100;
+                            const eH = cmd.config?.emitterHeight ?? 100;
+                            if (eW === 100 && eH === 100 && eX === 50 && eY === 50) return 'full-screen';
+                            if (eW >= 90 && eH <= 10 && eY <= 5) return 'top-edge';
+                            if (eW >= 90 && eH <= 10 && eY >= 95) return 'bottom-edge';
+                            if (eW >= 90 && eH <= 10 && eY >= 45 && eY <= 55) return 'horizontal-line';
+                            if (eW <= 10 && eH <= 10) return 'point';
+                            return 'custom';
+                        })()} onChange={e => {
+                            const mode = e.target.value;
+                            const areaPresets: Record<string, { emitterX: number; emitterY: number; emitterWidth: number; emitterHeight: number }> = {
+                                'full-screen': { emitterX: 50, emitterY: 50, emitterWidth: 100, emitterHeight: 100 },
+                                'top-edge': { emitterX: 50, emitterY: 0, emitterWidth: 100, emitterHeight: 5 },
+                                'bottom-edge': { emitterX: 50, emitterY: 100, emitterWidth: 100, emitterHeight: 5 },
+                                'horizontal-line': { emitterX: 50, emitterY: 50, emitterWidth: 100, emitterHeight: 5 },
+                                'point': { emitterX: 50, emitterY: 50, emitterWidth: 0, emitterHeight: 0 },
+                            };
+                            if (areaPresets[mode]) {
+                                updateCommand({ config: { ...cmd.config, ...areaPresets[mode] } });
+                            }
+                        }}>
+                            <option value="full-screen">Full Screen</option>
+                            <option value="top-edge">Top Edge</option>
+                            <option value="bottom-edge">Bottom Edge</option>
+                            <option value="horizontal-line">Horizontal Line (center)</option>
+                            <option value="point">Point Source</option>
+                            <option value="custom">Custom Area</option>
+                        </Select>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Where particles spawn from</span>
+                    </FormField>
+                    <FormField label="Emitter Center (X% / Y%)">
+                        <div className="flex gap-1">
+                            <input type="number" min="0" max="100" value={cmd.config?.emitterX ?? 50} onChange={e => updateCommand({ config: { ...cmd.config, emitterX: parseFloat(e.target.value) } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                            <input type="number" min="0" max="100" value={cmd.config?.emitterY ?? 50} onChange={e => updateCommand({ config: { ...cmd.config, emitterY: parseFloat(e.target.value) } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        </div>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Center position (0=left/top, 100=right/bottom)</span>
+                    </FormField>
+                    <FormField label="Emitter Spread (W% / H%)">
+                        <div className="flex gap-1">
+                            <input type="number" min="0" max="200" value={cmd.config?.emitterWidth ?? 100} onChange={e => updateCommand({ config: { ...cmd.config, emitterWidth: parseFloat(e.target.value) } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                            <input type="number" min="0" max="200" value={cmd.config?.emitterHeight ?? 100} onChange={e => updateCommand({ config: { ...cmd.config, emitterHeight: parseFloat(e.target.value) } })}
+                                className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        </div>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>0 = point, 100 = full width/height</span>
+                    </FormField>
+                    {/* Extended controls only for custom mode */}
+                    {isCustom && <>
+                        <FormField label="Shape">
+                            <Select value={cmd.config?.shape || 'circle'} onChange={e => updateCommand({ config: { ...cmd.config, shape: e.target.value } })}>
+                                {shapeOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                            </Select>
+                        </FormField>
+                        <FormField label="Lifetime (sec)">
+                            <input type="number" min="0.1" max="30" step="0.1" value={cmd.config?.lifetime || 3} onChange={e => updateCommand({ config: { ...cmd.config, lifetime: parseFloat(e.target.value) || 3 } })}
+                                className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        </FormField>
+                        <FormField label="Gravity">
+                            <input type="range" min="-100" max="100" value={cmd.config?.gravity || 0} onChange={e => updateCommand({ config: { ...cmd.config, gravity: parseFloat(e.target.value) } })} className="w-full" />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.gravity || 0} (- = up, + = down)</span>
+                        </FormField>
+                        <FormField label="Wind">
+                            <input type="range" min="-50" max="50" value={cmd.config?.wind || 0} onChange={e => updateCommand({ config: { ...cmd.config, wind: parseFloat(e.target.value) } })} className="w-full" />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.wind || 0}</span>
+                        </FormField>
+                        <FormField label="Color(s)">
+                            <TextInput value={(cmd.config?.colors || ['#FFFFFF']).join(', ')} onChange={e => updateCommand({ config: { ...cmd.config, colors: e.target.value.split(',').map((c: string) => c.trim()).filter(Boolean) } })} placeholder="#FF0000, #00FF00, #0000FF" />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Comma-separated hex colors</span>
+                        </FormField>
+                        <FormField label="Options">
+                            <label className="flex items-center gap-2">
+                                <input type="checkbox" checked={cmd.config?.fadeOut ?? true} onChange={e => updateCommand({ config: { ...cmd.config, fadeOut: e.target.checked } })} />
+                                <span className="text-xs text-[var(--text-primary)]">Fade out</span>
+                            </label>
+                            <label className="flex items-center gap-2 mt-1">
+                                <input type="checkbox" checked={cmd.config?.shrink ?? false} onChange={e => updateCommand({ config: { ...cmd.config, shrink: e.target.checked } })} />
+                                <span className="text-xs text-[var(--text-primary)]">Shrink over lifetime</span>
+                            </label>
+                        </FormField>
+                    </>}
+                </>;
+            }
+            case CommandType.StopParticles: {
+                const cmd = command as StopParticlesCommand;
+                return <>
+                    <FormField label="Particle Tag">
+                        <TextInput value={cmd.particleTag || ''} onChange={e => updateCommand({ particleTag: e.target.value })} placeholder="Leave empty to stop all" />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Empty = stop all particle effects</span>
+                    </FormField>
+                    <FormField label="Fade Duration (sec)">
+                        <input type="number" min="0" step="0.1" value={cmd.fadeDuration || 0} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}
+                            className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>0 = instant</span>
+                    </FormField>
+                </>;
+            }
+            case CommandType.CallCommonEvent: {
+                const cmd = command as CallCommonEventCommand;
+                const commonEvents = Object.values(project.commonEvents || {});
+                const selectedCE = cmd.commonEventId ? (project.commonEvents || {})[cmd.commonEventId] : null;
+                return <>
+                    <FormField label="Common Event">
+                        <Select value={cmd.commonEventId || ''} onChange={e => updateCommand({ commonEventId: e.target.value, arguments: {} })}>
+                            <option value="">Select Common Event...</option>
+                            {commonEvents.map((ce: any) => (
+                                <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? ' (disabled)' : ''}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                    {commonEvents.length === 0 && (
+                        <p className="text-xs text-amber-400">No Common Events created yet. Go to the Common Events tab to create one.</p>
+                    )}
+                    {selectedCE && (
+                        <div className="text-xs p-2 rounded mt-1" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
+                            <p><strong>Trigger:</strong> {selectedCE.trigger}</p>
+                            <p><strong>Commands:</strong> {selectedCE.commands?.length || 0}</p>
+                            {selectedCE.description && <p className="mt-0.5">{selectedCE.description}</p>}
+                        </div>
+                    )}
+                    {selectedCE && selectedCE.parameters && selectedCE.parameters.length > 0 && (
+                        <>
+                            <hr className="border-[var(--border-subtle)] my-2" />
+                            <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Arguments</h4>
+                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>
+                                Pass values to the Common Event's parameters.
+                            </p>
+                            {selectedCE.parameters.map((param: any) => (
+                                <FormField key={param.id} label={param.name}>
+                                    {param.type === 'boolean' ? (
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!(cmd.arguments || {})[param.id] ?? param.defaultValue}
+                                                onChange={e => updateCommand({
+                                                    arguments: { ...(cmd.arguments || {}), [param.id]: e.target.checked }
+                                                })}
+                                            />
+                                            <span className="text-xs text-[var(--text-secondary)]">{param.description || param.name}</span>
+                                        </label>
+                                    ) : param.type === 'number' ? (
+                                        <input
+                                            type="number"
+                                            value={Number((cmd.arguments || {})[param.id] ?? param.defaultValue)}
+                                            onChange={e => updateCommand({
+                                                arguments: { ...(cmd.arguments || {}), [param.id]: parseFloat(e.target.value) || 0 }
+                                            })}
+                                            className="w-full rounded px-2 py-1 text-sm"
+                                            style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}
+                                        />
+                                    ) : (
+                                        <TextInput
+                                            value={String((cmd.arguments || {})[param.id] ?? param.defaultValue)}
+                                            onChange={e => updateCommand({
+                                                arguments: { ...(cmd.arguments || {}), [param.id]: e.target.value }
+                                            })}
+                                            placeholder={param.description || `Value for ${param.name}`}
+                                        />
+                                    )}
+                                </FormField>
+                            ))}
+                        </>
+                    )}
                 </>;
             }
             default: return <p>This command has no properties.</p>;

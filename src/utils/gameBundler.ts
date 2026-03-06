@@ -455,12 +455,50 @@ export async function generateStandaloneHTML(project: VNProject): Promise<string
     .transition-slide-out-right { animation-name: slide-out-right; }
     .transition-slide { animation-name: slide; }
 
-    @keyframes scroll-up {
-      from { transform: translateY(100%); }
-      to { transform: translateY(-100%); }
+    /* Character Visual Effects */
+    @keyframes vnCharShake {
+        0%, 100% { transform: translate(0, 0); }
+        10% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), calc(-1 * var(--char-shake-px, 2px))); }
+        20% { transform: translate(var(--char-shake-px, 2px), 0); }
+        30% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), var(--char-shake-px, 2px)); }
+        40% { transform: translate(var(--char-shake-px, 2px), calc(-1 * var(--char-shake-px, 2px))); }
+        50% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), 0); }
+        60% { transform: translate(var(--char-shake-px, 2px), var(--char-shake-px, 2px)); }
+        70% { transform: translate(0, calc(-1 * var(--char-shake-px, 2px))); }
+        80% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), var(--char-shake-px, 2px)); }
+        90% { transform: translate(var(--char-shake-px, 2px), 0); }
     }
-    .credits-scroll {
-      animation: scroll-up 20s linear forwards;
+    @keyframes vnCharBounce {
+        0%, 100% { transform: translateY(0); }
+        30% { transform: translateY(var(--char-bounce-h, -8px)); }
+        50% { transform: translateY(0); }
+        70% { transform: translateY(calc(var(--char-bounce-h, -8px) / 2)); }
+    }
+    @keyframes vnCharFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(var(--char-float-h, -10px)); }
+    }
+    @keyframes vnCharPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(var(--char-pulse-scale, 1.05)); }
+    }
+    @keyframes vnCharGlow {
+        0%, 100% { filter: drop-shadow(0 0 var(--char-glow-size, 8px) var(--char-glow-color, #FFFFFF)); }
+        50% { filter: drop-shadow(0 0 var(--char-glow-size-max, 14px) var(--char-glow-color, #FFFFFF)); }
+    }
+    @keyframes vnCharBreathing {
+        0%, 100% { transform: scaleY(1); }
+        50% { transform: scaleY(var(--char-breathe-scale, 1.02)); }
+    }
+    @keyframes vnCharFlicker {
+        0% { opacity: 1; }
+        5% { opacity: 0.2; }
+        10% { opacity: 1; }
+        15% { opacity: 0.5; }
+        20% { opacity: 1; }
+        80% { opacity: 1; }
+        85% { opacity: 0.3; }
+        90% { opacity: 1; }
     }
     
     /* Range Input Styling */

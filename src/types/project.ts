@@ -5,6 +5,7 @@ import { VNScene } from '../features/scene/types';
 import { VNProjectUI, VNUIScreen } from '../features/ui/types';
 import { VNVariable } from '../features/variables/types';
 import { VNScript } from './scripting';
+import { VNCommonEvent } from './commonEvents';
 import { PluginRegistryEntry, VNPlugin } from './plugins';
 
 export interface VNProjectFont {
@@ -75,6 +76,8 @@ export interface VNProject {
     cgGallery?: CGGalleryConfig;
     /** User-defined scripts */
     scripts?: Record<VNID, VNScript>;
+    /** Common Events — reusable command sequences callable from any scene */
+    commonEvents?: Record<VNID, VNCommonEvent>;
     /** Installed plugins */
     plugins?: Record<string, VNPlugin>;
     /** Plugin registry (enabled state + config per plugin) */

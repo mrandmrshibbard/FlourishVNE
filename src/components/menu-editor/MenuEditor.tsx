@@ -687,6 +687,7 @@ const MenuEditor: React.FC<{
                                 handleSelectElement(element.id, e);
                             }}
                             onUpdate={updates => handleUpdateElement(element.id, updates)}
+                            snapGrid={1}
                         >
                             <SafeUIElementRenderer element={element} project={project} />
                         </ResizableDraggable>

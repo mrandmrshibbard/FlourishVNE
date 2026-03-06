@@ -472,14 +472,6 @@ export const GlobeIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGE
     </svg>
 );
 
-// 📜 Document/Script (for script editor)
-export const CodeBracketIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
-        {title && <title>{title}</title>}
-        <path fillRule="evenodd" d="M6.28 5.22a.75.75 0 0 1 0 1.06L2.56 10l3.72 3.72a.75.75 0 0 1-1.06 1.06L.97 10.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Zm7.44 0a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-    </svg>
-);
-
 // 🧩 Puzzle piece (for plugins)
 export const PuzzlePieceIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
@@ -493,5 +485,21 @@ export const GamepadIcon = ({ className, title, ...props }: React.SVGProps<SVGSV
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
         {title && <title>{title}</title>}
         <path d="M15 7.5V2H9v5.5l3 3 3-3ZM7.5 9H2v6h5.5l3-3-3-3ZM9 16.5V22h6v-5.5l-3-3-3 3ZM16.5 9l-3 3 3 3H22V9h-5.5Z" />
+    </svg>
+);
+
+// 🔁 Common Events icon (arrows in loop — represents reusable command blocks)
+export const CommonEventsIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M4.755 10.059a7.5 7.5 0 0 1 12.548-3.364l1.903 1.903H14.25a.75.75 0 0 0 0 1.5h6a.75.75 0 0 0 .75-.75v-6a.75.75 0 0 0-1.5 0v3.068l-1.658-1.658A9 9 0 0 0 3.341 9.497a.75.75 0 1 0 1.414.562Zm14.49 3.882a7.5 7.5 0 0 1-12.548 3.364l-1.903-1.903H9.75a.75.75 0 0 0 0-1.5h-6a.75.75 0 0 0-.75.75v6a.75.75 0 0 0 1.5 0v-3.068l1.658 1.658A9 9 0 0 0 20.659 14.503a.75.75 0 1 0-1.414-.562Z" clipRule="evenodd" />
+    </svg>
+);
+
+// 📋 Scripting / JSON Editor icon (code brackets)
+export const CodeBracketIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M14.447 3.027a.75.75 0 0 1 .527.92l-4.5 16.5a.75.75 0 0 1-1.448-.394l4.5-16.5a.75.75 0 0 1 .921-.526ZM16.72 6.22a.75.75 0 0 1 1.06 0l5.25 5.25a.75.75 0 0 1 0 1.06l-5.25 5.25a.75.75 0 1 1-1.06-1.06L21.44 12l-4.72-4.72a.75.75 0 0 1 0-1.06Zm-9.44 0a.75.75 0 0 1 0 1.06L2.56 12l4.72 4.72a.75.75 0 0 1-1.06 1.06L.97 12.53a.75.75 0 0 1 0-1.06l5.25-5.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
     </svg>
 );

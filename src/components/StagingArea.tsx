@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { VNID, VNPosition, VNTransition, VNPositionPreset } from '../types';
 import type { VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
 import {
     CommandType, ShowCharacterCommand, DialogueCommand, FlashScreenCommand, ChoiceOption,
     ChoiceCommand, SetBackgroundCommand, ShowTextCommand, ShowImageCommand, VNScene, ShowButtonCommand,
-    PlayMovieCommand
+    PlayMovieCommand, VNCommand
 } from '../features/scene/types';
+import { useProject } from '../contexts/ProjectContext';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { VNFontSettings } from '../features/ui/types';
@@ -14,6 +15,41 @@ import { VNCharacterLayer } from '../features/character/types';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import Panel from './ui/Panel';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
+
+/** Convert hex color + opacity (0-100) to rgba string */
+function hexToRgba(hex: string, opacity: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+}
+
+/** Build CSS background style based on size mode */
+function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: number): React.CSSProperties {
+    switch (sizeMode) {
+        case 'nine-slice': {
+            const s = slicePx ?? 30;
+            return {
+                borderImageSource: `url(${url})`,
+                borderImageSlice: `${s} fill`,
+                borderImageWidth: `${s}px`,
+                borderImageRepeat: 'stretch',
+                borderStyle: 'solid',
+                borderColor: 'transparent',
+                borderWidth: `${s}px`,
+            };
+        }
+        case 'contain':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'cover':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'tile':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'auto', backgroundRepeat: 'repeat' };
+        case 'stretch':
+        default:
+            return { backgroundImage: `url(${url})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+    }
+}
 import { interpolateVariables } from '../utils/variableInterpolation';
 
 interface TextOverlay {
@@ -70,6 +106,7 @@ interface StageCharacterState {
     position: VNPosition;
     imageUrls: string[];
     transition?: VNTransition;
+    sourceCommandId?: string;
 }
 
 interface StageState {
@@ -115,6 +152,7 @@ const StagingArea: React.FC<{
     className?: string;
     style?: React.CSSProperties;
 }> = ({ project, activeSceneId, selectedCommandIndex, className, style }) => {
+    const { dispatch } = useProject();
     const [showCommandIndicators, setShowCommandIndicators] = React.useState(true);
     const [showVariableState, setShowVariableState] = React.useState(false);
     const stageRef = React.useRef<HTMLDivElement>(null);
@@ -239,7 +277,7 @@ const StagingArea: React.FC<{
                                 if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
                             }
                         });
-                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition };
+                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id };
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -370,6 +408,107 @@ const StagingArea: React.FC<{
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
+    // --- Drag-to-Position State ---
+    type DragKind = 'character' | 'text' | 'image' | 'button';
+    const [overlayDrag, setOverlayDrag] = useState<{
+        kind: DragKind;
+        overlayId: string;
+        sourceCommandId: string;
+        startMouseX: number;
+        startMouseY: number;
+        startPosX: number;
+        startPosY: number;
+    } | null>(null);
+    const [overlayDragOffset, setOverlayDragOffset] = useState<{ x: number; y: number } | null>(null);
+
+    const handleCharMouseDown = useCallback((e: React.MouseEvent, char: StageCharacterState) => {
+        if (!char.sourceCommandId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const isCustom = typeof char.position === 'object';
+        const presetToCoords: Record<string, { x: number; y: number }> = {
+            'left': { x: 25, y: 10 }, 'center': { x: 50, y: 10 }, 'right': { x: 75, y: 10 },
+            'off-left': { x: -25, y: 10 }, 'off-right': { x: 125, y: 10 },
+        };
+        const startPos = isCustom
+            ? (char.position as { x: number; y: number })
+            : (presetToCoords[char.position as string] || { x: 50, y: 10 });
+        setOverlayDrag({
+            kind: 'character',
+            overlayId: char.charId,
+            sourceCommandId: char.sourceCommandId,
+            startMouseX: e.clientX,
+            startMouseY: e.clientY,
+            startPosX: startPos.x,
+            startPosY: startPos.y,
+        });
+        setOverlayDragOffset(null);
+    }, []);
+
+    const handleOverlayMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, id: string, x: number, y: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setOverlayDrag({
+            kind,
+            overlayId: id,
+            sourceCommandId: id,
+            startMouseX: e.clientX,
+            startMouseY: e.clientY,
+            startPosX: x,
+            startPosY: y,
+        });
+        setOverlayDragOffset(null);
+    }, []);
+
+    useEffect(() => {
+        if (!overlayDrag) return;
+        const sw = stageSize.width || 1;
+        const sh = stageSize.height || 1;
+        const SNAP = 5;
+        const onMove = (e: MouseEvent) => {
+            const dx = ((e.clientX - overlayDrag.startMouseX) / sw) * 100;
+            const dy = ((e.clientY - overlayDrag.startMouseY) / sh) * 100;
+            let nx = overlayDrag.startPosX + dx;
+            let ny = overlayDrag.startPosY + dy;
+            if (e.shiftKey) {
+                nx = Math.round(nx / SNAP) * SNAP;
+                ny = Math.round(ny / SNAP) * SNAP;
+            }
+            nx = Math.round(nx * 10) / 10;
+            ny = Math.round(ny * 10) / 10;
+            setOverlayDragOffset({ x: nx, y: ny });
+        };
+        const onUp = () => {
+            const drag = overlayDrag;
+            const offset = overlayDragOffset;
+            setOverlayDrag(null);
+            setOverlayDragOffset(null);
+            if (!offset) return;
+            const newX = offset.x;
+            const newY = offset.y;
+            for (const scene of Object.values(project.scenes)) {
+                const idx = scene.commands.findIndex((c: VNCommand) => c.id === drag.sourceCommandId);
+                if (idx < 0) continue;
+                const cmd = scene.commands[idx];
+                if (drag.kind === 'character') {
+                    dispatch({
+                        type: 'UPDATE_COMMAND',
+                        payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, position: { x: newX, y: newY } } },
+                    });
+                } else {
+                    dispatch({
+                        type: 'UPDATE_COMMAND',
+                        payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, x: newX, y: newY } },
+                    });
+                }
+                break;
+            }
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [overlayDrag, overlayDragOffset, project.scenes, dispatch, stageSize]);
+
     const getPositionStyle = (position: VNPosition): React.CSSProperties => {
         if (typeof position === 'object') {
             // Custom coordinates - use exact position without centering transform
@@ -405,6 +544,26 @@ const StagingArea: React.FC<{
     const dialogueBoxBottomMargin = project.ui.dialogueBoxBottomMargin ?? 20;
     const dialogueBoxPadding = project.ui.dialogueBoxPadding ?? 20;
 
+    // New appearance settings
+    const dialogueSizeMode = project.ui.dialogueBoxSizeMode ?? 'stretch';
+    const dialogueSlice = project.ui.dialogueBoxSlice ?? 30;
+    const dialogueColor = project.ui.dialogueBoxColor ?? '#0f172a';
+    const dialogueOpacity = project.ui.dialogueBoxOpacity ?? 90;
+    const dialogueBorderRadius = project.ui.dialogueBoxBorderRadius ?? 8;
+
+    // Namebox settings
+    const nameboxImageUrl = project.ui.nameboxImage
+        ? (project.images[project.ui.nameboxImage.id]?.imageUrl || project.backgrounds[project.ui.nameboxImage.id]?.imageUrl)
+        : null;
+    const nameboxColor = project.ui.nameboxColor ?? '#0f172a';
+    const nameboxOpacity = project.ui.nameboxOpacity ?? 92;
+    const nameboxPadding = project.ui.nameboxPadding ?? 8;
+    const nameboxHPadding = project.ui.nameboxHorizontalPadding ?? 14;
+    const nameboxBorderRadius = project.ui.nameboxBorderRadius ?? 6;
+    const nameboxOffsetX = project.ui.nameboxOffsetX ?? 20;
+    const nameboxOffsetY = project.ui.nameboxOffsetY ?? 0;
+    const nameboxSizeMode = project.ui.nameboxSizeMode ?? 'stretch';
+
     // Resolve choice button image URL
     const choiceButtonImageUrl = project.ui.choiceButtonImage 
         ? (project.images[project.ui.choiceButtonImage.id]?.imageUrl || project.backgrounds[project.ui.choiceButtonImage.id]?.imageUrl)
@@ -421,8 +580,25 @@ const StagingArea: React.FC<{
     const choiceHeight = project.ui.choiceButtonHeight || 0;
     const choicePadding = project.ui.choiceButtonPadding ?? 16;
 
+    // New choice appearance settings
+    const choiceSizeMode = project.ui.choiceButtonSizeMode ?? 'stretch';
+    const choiceSlice = project.ui.choiceButtonSlice ?? 15;
+    const choiceColor = project.ui.choiceButtonColor ?? '#1e293b';
+    const choiceOpacity = project.ui.choiceButtonOpacity ?? 90;
+    const choiceBorderRadius = project.ui.choiceButtonBorderRadius ?? 8;
+
     const hasCustomDialogueImage = dialogueBoxImageUrl || dialogueBorderImageUrl;
     const hasCustomChoiceImage = choiceButtonImageUrl || choiceBorderImageUrl;
+
+    // Build background styles
+    const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
+    const dialogueImageStyle: React.CSSProperties = dialogueBoxImageUrl
+        ? buildImageBackgroundStyle(dialogueBoxImageUrl, dialogueSizeMode, dialogueSlice)
+        : {};
+    const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
+        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: `${nameboxBorderRadius}px` }
+        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: `${nameboxBorderRadius}px` };
+    const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
 
     const renderDialogueBox = (dialogue: NonNullable<StageState['dialogue']>) => {
         const interpolatedText = interpolateVariables(dialogue.text, currentVariables, project);
@@ -438,48 +614,54 @@ const StagingArea: React.FC<{
                      left: `${(100 - dialogueBoxWidth) / 2}%`,
                      right: `${(100 - dialogueBoxWidth) / 2}%`,
                      ...(dialogueBorderImageUrl 
-                         ? { backgroundImage: `url(${dialogueBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px`, borderRadius: '0.5rem' }
+                         ? { ...buildImageBackgroundStyle(dialogueBorderImageUrl, dialogueSizeMode, dialogueSlice), padding: `${dialogueBorderPadding}px`, borderRadius: `${dialogueBorderRadius}px` }
                          : {})
                  }}>
-                {/* Floating namebox tab */}
-                {showNamebox && !hasCustomDialogueImage && (
-                    <div className="absolute z-10"
-                         style={{
-                             top: '-1.6em',
-                             left: `${dialogueBoxPadding}px`,
-                             background: 'linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.88) 100%)',
-                             border: '1px solid rgba(148,163,184,0.35)',
-                             borderBottom: 'none',
-                             borderRadius: '0.375rem 0.375rem 0 0',
-                             padding: '0.2em 0.9em',
-                         }}>
+                {/* Namebox (character name label) */}
+                {showNamebox && (
+                    <div style={{
+                        position: hasCustomDialogueImage ? 'relative' as const : 'absolute' as const,
+                        ...(hasCustomDialogueImage 
+                            ? { marginBottom: `${nameboxOffsetY + 2}px`, marginLeft: `${nameboxOffsetX}px` }
+                            : { top: `${-(nameboxPadding * 2 + (project.ui.dialogueNameFont?.size || 22)) - nameboxOffsetY}px`, left: `${nameboxOffsetX}px` }
+                        ),
+                        display: 'inline-block',
+                        ...nameboxBgStyle,
+                        padding: `${nameboxPadding}px ${nameboxHPadding}px`,
+                        ...(hasCustomDialogueImage || nameboxImageUrl ? {} : {
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            borderBottom: hasCustomDialogueImage ? undefined : 'none',
+                        }),
+                        zIndex: 10,
+                    }}>
                         <span style={{...nameStyle, lineHeight: 1.3}}>
                             <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
                         </span>
                     </div>
                 )}
-                {showNamebox && hasCustomDialogueImage && (
-                    <div style={{ marginBottom: '2px', paddingLeft: `${dialogueBoxPadding}px` }}>
-                        <span style={nameStyle}>
-                            <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                        </span>
-                    </div>
-                )}
-                <div className={`relative ${!hasCustomDialogueImage ? 'rounded-lg' : ''}`}
+                <div className="relative"
                      style={{
+                         borderRadius: `${dialogueBorderRadius}px`,
+                         overflow: 'hidden',
                          ...(hasCustomDialogueImage ? {} : {
-                             background: 'linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.94) 100%)',
+                             backgroundColor: dialogueBgColor,
                              border: '1px solid rgba(148,163,184,0.25)',
-                             borderRadius: '0.5rem',
                              boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
                          }),
                          ...(dialogueBoxImageUrl 
-                             ? { backgroundImage: `url(${dialogueBoxImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), padding: `${dialogueBoxPadding}px` } 
+                             ? { 
+                                 ...dialogueImageStyle,
+                                 backgroundColor: dialogueBgColor,
+                                 ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), 
+                                 ...(dialogueSizeMode !== 'nine-slice' ? { padding: `${dialogueBoxPadding}px` } : {})
+                               } 
                              : { padding: `${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }) })
                      }}>
-                    <p className="leading-relaxed" style={{...fontSettingsToStyle(project.ui.dialogueTextFont), wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
-                        <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
-                    </p>
+                    <div style={{ position: 'relative', zIndex: 1, padding: dialogueSizeMode === 'nine-slice' && dialogueBoxImageUrl ? `${dialogueBoxPadding}px` : undefined }}>
+                        <p className="leading-relaxed" style={{...fontSettingsToStyle(project.ui.dialogueTextFont), wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                            <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
+                        </p>
+                    </div>
                 </div>
             </div>
         );
@@ -493,15 +675,16 @@ const StagingArea: React.FC<{
                     <div key={choice.id}
                          className="mb-3"
                          style={choiceBorderImageUrl 
-                             ? { backgroundImage: `url(${choiceBorderImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: '0.5rem' }
+                             ? { ...buildImageBackgroundStyle(choiceBorderImageUrl, choiceSizeMode, choiceSlice), padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: `${choiceBorderRadius}px` }
                              : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }) }}>
-                        <button className={`relative rounded-lg overflow-hidden w-full transition-all duration-200 ${!hasCustomChoiceImage ? 'hover:scale-[1.03]' : 'hover:brightness-110 hover:scale-[1.03]'}`}
+                        <button className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
                                 style={{
+                                    borderRadius: `${choiceBorderRadius}px`,
                                     ...(choiceButtonImageUrl 
-                                        ? { backgroundImage: `url(${choiceButtonImageUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } 
+                                        ? { ...buildImageBackgroundStyle(choiceButtonImageUrl, choiceSizeMode, choiceSlice), backgroundColor: choiceBgColor } 
                                         : !hasCustomChoiceImage 
                                             ? {
-                                                background: 'linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(51,65,85,0.85) 100%)',
+                                                backgroundColor: choiceBgColor,
                                                 border: '1px solid rgba(148,163,184,0.3)',
                                                 boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
                                               } 
@@ -603,23 +786,44 @@ const StagingArea: React.FC<{
                 )}
 
                 {(Object.values(stageState.characters) as StageCharacterState[]).map((char) => {
-                    const posStyle = getPositionStyle(char.position);
+                    let posStyle = getPositionStyle(char.position);
                     const isCustomPosition = typeof char.position === 'object';
+                    const isDragging = overlayDrag?.kind === 'character' && overlayDrag.overlayId === char.charId;
+                    if (isDragging && overlayDragOffset) {
+                        posStyle = { left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%` };
+                    }
                     // For preset positions, anchor to bottom. For custom positions, respect the exact coordinates
-                    const finalStyle = isCustomPosition 
+                    const finalStyle = isCustomPosition || (isDragging && overlayDragOffset)
                         ? { ...posStyle, height: '90%' }
                         : { ...posStyle, height: '90%', bottom: '0', top: 'auto' };
                     return (
-                        <div key={char.charId} className="absolute w-auto aspect-[3/4]" style={finalStyle}>
+                        <div
+                            key={char.charId}
+                            className="absolute w-auto aspect-[3/4]"
+                            style={{
+                                ...finalStyle,
+                                zIndex: isDragging ? 50 : undefined,
+                                cursor: char.sourceCommandId ? (isDragging ? 'grabbing' : 'grab') : undefined,
+                            }}
+                            onMouseDown={char.sourceCommandId ? (e) => handleCharMouseDown(e, char) : undefined}
+                        >
                             {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
+                            {isDragging && overlayDragOffset && (
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50">
+                                    {overlayDragOffset.x}%, {overlayDragOffset.y}%
+                                </div>
+                            )}
                         </div>
                     );
                 })}
                 {stageState.textOverlays.map(o => {
+                     const isDragging = overlayDrag?.kind === 'text' && overlayDrag.overlayId === o.id;
+                     const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
+                     const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : o.y;
                      const textStyle: React.CSSProperties = {
                         position: 'absolute', 
-                        left: `${o.x}%`, 
-                        top: `${o.y}%`,
+                        left: `${displayX}%`, 
+                        top: `${displayY}%`,
                         width: o.width ? `${pxToPercentWidth(o.width)}%` : 'auto', 
                         height: o.height ? `${pxToPercentHeight(o.height)}%` : 'auto',
                         transform: 'translate(-50%, -50%)', 
@@ -627,6 +831,8 @@ const StagingArea: React.FC<{
                         fontSize: `${scaleFontSize(o.fontSize)}px`,
                         textAlign: o.textAlign,
                         letterSpacing: o.letterSpacing ? `${o.letterSpacing}px` : undefined,
+                        cursor: isDragging ? 'grabbing' : 'grab',
+                        zIndex: isDragging ? 50 : undefined,
                      };
                      if (o.textShadow?.enabled) {
                          textStyle.textShadow = `${o.textShadow.offsetX}px ${o.textShadow.offsetY}px ${o.textShadow.blur}px ${o.textShadow.color}`;
@@ -646,57 +852,103 @@ const StagingArea: React.FC<{
                              backgroundClip: 'text',
                          } as React.CSSProperties;
                      }
-                     return <div key={o.id} style={textStyle}><span style={gradientStyle}>{o.text}</span></div>;
+                     return (
+                         <React.Fragment key={o.id}>
+                             <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}>
+                                 <span style={gradientStyle}>{o.text}</span>
+                             </div>
+                             {isDragging && overlayDragOffset && (
+                                 <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
+                                      style={{ left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%`, transform: 'translate(-50%, -120%)', zIndex: 999 }}>
+                                     {overlayDragOffset.x}%, {overlayDragOffset.y}%
+                                 </div>
+                             )}
+                         </React.Fragment>
+                     );
                 })}
-                 {stageState.imageOverlays.map(o => (
-                     <div key={o.id} style={{
-                         position: 'absolute', 
-                         left: `${o.x}%`, 
-                         top: `${o.y}%`,
-                         width: `${pxToPercentWidth(o.width)}%`, 
-                         height: `${pxToPercentHeight(o.height)}%`,
-                         transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX}, ${o.scaleY})`,
-                         opacity: o.opacity,
-                     }}>
-                        <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />
-                     </div>
-                ))}
+                 {stageState.imageOverlays.map(o => {
+                     const isDragging = overlayDrag?.kind === 'image' && overlayDrag.overlayId === o.id;
+                     const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
+                     const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : o.y;
+                     return (
+                         <React.Fragment key={o.id}>
+                             <div
+                                 style={{
+                                     position: 'absolute', 
+                                     left: `${displayX}%`, 
+                                     top: `${displayY}%`,
+                                     width: `${pxToPercentWidth(o.width)}%`, 
+                                     height: `${pxToPercentHeight(o.height)}%`,
+                                     transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX}, ${o.scaleY})`,
+                                     opacity: o.opacity,
+                                     cursor: isDragging ? 'grabbing' : 'grab',
+                                     zIndex: isDragging ? 50 : undefined,
+                                 }}
+                                 onMouseDown={e => handleOverlayMouseDown(e, 'image', o.id, o.x, o.y)}
+                             >
+                                 <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />
+                             </div>
+                             {isDragging && overlayDragOffset && (
+                                 <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
+                                      style={{ left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%`, transform: 'translate(-50%, -120%)', zIndex: 999 }}>
+                                     {overlayDragOffset.x}%, {overlayDragOffset.y}%
+                                 </div>
+                             )}
+                         </React.Fragment>
+                     );
+                 })}
                 {stageState.buttonOverlays.map(btn => {
                     const scaledBorderRadius = btn.borderRadius * (stageSize.width / REFERENCE_WIDTH);
                     const scaledButtonFontSize = scaleFontSize(btn.fontSize);
+                    const isDragging = overlayDrag?.kind === 'button' && overlayDrag.overlayId === btn.id;
+                    const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : btn.x;
+                    const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : btn.y;
                     
                     return (
-                        <div key={btn.id} style={{
-                            position: 'absolute',
-                            left: `${btn.x}%`,
-                            top: `${btn.y}%`,
-                            width: `${btn.width}%`,
-                            height: `${btn.height}%`,
-                            transform: 'translate(-50%, -50%)',
-                        }}>
-                            {btn.imageUrl ? (
-                                <div className="w-full h-full relative">
-                                    <img src={btn.imageUrl} alt="" className="w-full h-full object-cover" style={{ borderRadius: `${scaledBorderRadius}px` }} />
-                                    <div className="absolute inset-0 flex items-center justify-center" style={{
+                        <React.Fragment key={btn.id}>
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: `${displayX}%`,
+                                    top: `${displayY}%`,
+                                    width: `${btn.width}%`,
+                                    height: `${btn.height}%`,
+                                    transform: 'translate(-50%, -50%)',
+                                    cursor: isDragging ? 'grabbing' : 'grab',
+                                    zIndex: isDragging ? 50 : undefined,
+                                }}
+                                onMouseDown={e => handleOverlayMouseDown(e, 'button', btn.id, btn.x, btn.y)}
+                            >
+                                {btn.imageUrl ? (
+                                    <div className="w-full h-full relative">
+                                        <img src={btn.imageUrl} alt="" className="w-full h-full object-cover" style={{ borderRadius: `${scaledBorderRadius}px` }} />
+                                        <div className="absolute inset-0 flex items-center justify-center" style={{
+                                            color: btn.textColor,
+                                            fontSize: `${scaledButtonFontSize}px`,
+                                            fontWeight: btn.fontWeight,
+                                        }}>
+                                            {btn.text}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center" style={{
+                                        backgroundColor: btn.backgroundColor,
                                         color: btn.textColor,
                                         fontSize: `${scaledButtonFontSize}px`,
                                         fontWeight: btn.fontWeight,
+                                        borderRadius: `${scaledBorderRadius}px`,
                                     }}>
                                         {btn.text}
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center cursor-pointer" style={{
-                                    backgroundColor: btn.backgroundColor,
-                                    color: btn.textColor,
-                                    fontSize: `${scaledButtonFontSize}px`,
-                                    fontWeight: btn.fontWeight,
-                                    borderRadius: `${scaledBorderRadius}px`,
-                                }}>
-                                    {btn.text}
+                                )}
+                            </div>
+                            {isDragging && overlayDragOffset && (
+                                <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
+                                     style={{ left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%`, transform: 'translate(-50%, -120%)', zIndex: 999 }}>
+                                    {overlayDragOffset.x}%, {overlayDragOffset.y}%
                                 </div>
                             )}
-                        </div>
+                        </React.Fragment>
                     );
                 })}
 
@@ -733,7 +985,7 @@ const StagingArea: React.FC<{
                                 ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
                                 : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
                         }`}
-                        title={showCommandIndicators ? 'Hide Command Indicators' : 'Show Command Indicators'}
+                        title={showCommandIndicators ? 'Hide Event Indicators' : 'Show Event Indicators'}
                     >
                         {showCommandIndicators ? <EyeIcon className="w-4 h-4" /> : <EyeSlashIcon className="w-4 h-4" />}
                     </button>

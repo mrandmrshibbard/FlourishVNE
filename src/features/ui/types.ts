@@ -1,6 +1,6 @@
 import { VNID } from '../../types';
 import type { VNScreenOverlayEffect } from '../../types';
-import { VNCondition, VNUIAction, VNTextAlign, VNVAlign } from '../../types/shared';
+import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign } from '../../types/shared';
 
 import { VNTextShadow, VNTextGradient, VNTextBorder } from '../scene/types';
 
@@ -41,17 +41,75 @@ export interface VNProjectUI {
     dialogueBoxHeight?: number; // px explicit height, 0/undefined = auto (default auto)
     dialogueBoxBottomMargin?: number; // px from bottom of screen (default 20)
     dialogueBoxPadding?: number; // px inner content padding (default 20)
+    dialogueBoxSizeMode?: 'stretch' | 'contain' | 'cover' | 'tile' | 'nine-slice'; // how the background image fits (default 'stretch')
+    dialogueBoxSlice?: number; // for 9-slice mode: border-image-slice value in px (default 30)
+    dialogueBoxColor?: string; // background color hex (default '#0f172a')
+    dialogueBoxOpacity?: number; // 0-100, background opacity percentage (default 90)
+    dialogueBoxBorderRadius?: number; // px corner radius (default 8)
+    // Namebox (character name label)
+    nameboxImage?: UIAsset | null; // optional image for the name label background
+    nameboxColor?: string; // background color hex (default '#0f172a')
+    nameboxOpacity?: number; // 0-100 background opacity (default 92)
+    nameboxPadding?: number; // px inner padding (default 8)
+    nameboxHorizontalPadding?: number; // px left/right padding (default 14)
+    nameboxBorderRadius?: number; // px corner radius (default 6)
+    nameboxOffsetX?: number; // px horizontal offset from dialogue box left (default 20)
+    nameboxOffsetY?: number; // px gap above dialogue box, 0 = flush (default 0)
+    nameboxSizeMode?: 'stretch' | 'contain' | 'cover' | 'nine-slice'; // how the namebox image fits (default 'stretch')
     choiceButtonImage: UIAsset | null;
     choiceButtonBorderImage: UIAsset | null;
     choiceBorderPadding?: number; // px of border visible around the background (default 8)
     choiceButtonWidth?: number; // px explicit width, 0/undefined = auto (default auto)
     choiceButtonHeight?: number; // px explicit height, 0/undefined = auto (default auto)
     choiceButtonPadding?: number; // px inner content padding (default 16)
+    choiceButtonSizeMode?: 'stretch' | 'contain' | 'cover' | 'tile' | 'nine-slice'; // how the background image fits (default 'stretch')
+    choiceButtonSlice?: number; // for 9-slice mode (default 15)
+    choiceButtonColor?: string; // background color hex (default '#1e293b')
+    choiceButtonOpacity?: number; // 0-100, background opacity (default 90)
+    choiceButtonBorderRadius?: number; // px corner radius (default 8)
+    choiceHoverImage?: UIAsset | null; // separate image for hover state
+    choiceHoverColor?: string; // background color on hover (default '#334155')
     inputBoxImage: UIAsset | null;
     inputBoxBorderImage: UIAsset | null;
     inputBorderPadding?: number; // px of border visible around the background (default 8)
     inputBoxWidth?: number; // px explicit width, 0/undefined = auto (default auto, max-w-md)
     inputBoxPadding?: number; // px inner content padding (default 24)
+    inputBoxSizeMode?: 'stretch' | 'contain' | 'cover' | 'tile' | 'nine-slice'; // how the background image fits (default 'stretch')
+    inputBoxSlice?: number; // for 9-slice mode (default 20)
+    inputBoxColor?: string; // background color hex (default '#0f172a')
+    inputBoxOpacity?: number; // 0-100 background opacity (default 92)
+    inputBoxBorderRadius?: number; // px corner radius (default 8)
+    // Quick menu (skip/auto/log/back buttons)
+    quickMenuPosition?: 'above-dialogue' | 'top-right' | 'bottom-right' | 'hidden'; // default 'above-dialogue'
+    quickMenuColor?: string; // button background color hex (default '#0f172a')
+    quickMenuOpacity?: number; // 0-100 button opacity (default 75)
+    quickMenuBorderRadius?: number; // px button corner radius (default 4)
+    // ─── Layout positions (percentages of game canvas) ─── //
+    // Dialogue box position/size (percentages)
+    dialogueBoxX?: number; // default: centre based on dialogueBoxWidth
+    dialogueBoxY?: number; // default: bottom of screen minus margin
+    // Namebox position relative & override
+    nameboxX?: number; // percentage, undefined = auto (offset from dialogue)
+    nameboxY?: number; // percentage, undefined = auto (above dialogue)
+    nameboxWidth?: number; // percentage, undefined = auto-fit
+    nameboxHeight?: number; // percentage, undefined = auto-fit
+    // Choice button layout position
+    choiceButtonX?: number; // percentage of canvas, default 50 (centred)
+    choiceButtonY?: number; // percentage of canvas, default 40 (upper middle)
+    // Input box layout position
+    inputBoxX?: number; // percentage, default 50 (centred)
+    inputBoxY?: number; // percentage, default 50 (centred)
+    inputBoxHeight?: number; // px or percentage
+    // Quick menu layout position
+    quickMenuX?: number; // percentage, default derived from quickMenuPosition
+    quickMenuY?: number; // percentage, default derived from quickMenuPosition
+    quickMenuWidth?: number; // percentage
+    quickMenuHeight?: number; // percentage
+    // Text padding inside dialogue box (px, controls where typed text starts)
+    dialogueTextPaddingTop?: number; // default 0
+    dialogueTextPaddingBottom?: number; // default 0
+    dialogueTextPaddingLeft?: number; // default 0
+    dialogueTextPaddingRight?: number; // default 0
     inputPromptFont: VNFontSettings;
     inputFieldFont: VNFontSettings;
     inputSubmitFont: VNFontSettings;
@@ -291,6 +349,7 @@ export type VNUIElement =
 export interface VNUIScreen {
     id: VNID;
     name:string;
+    screenType?: 'standard' | 'hotzone'; // defaults to 'standard'
     background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null };
     music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
@@ -302,4 +361,68 @@ export interface VNUIScreen {
     transitionInDuration?: number; // Duration for transition-in in milliseconds (default 300)
     transitionOutDuration?: number; // Duration for transition-out in milliseconds (default 300)
     showDialogue?: boolean; // Whether to show the dialogue box on this screen
+    // Hot Zone fields (only used when screenType === 'hotzone')
+    hotSpots?: Record<VNID, VNHotSpot>;
+    hotZoneElements?: Record<VNID, VNHotZoneElement>;
+    winCondition?: VNHotZoneWinCondition;
+}
+
+// --- Hot Zone Types ---
+
+export type HotSpotShape = 'rect' | 'circle';
+
+export type HotSpotTrigger = 'click' | 'hover' | 'drag-drop';
+
+export interface VNHotSpot {
+    id: VNID;
+    name: string;
+    shape: HotSpotShape;
+    x: number; // percentage
+    y: number; // percentage
+    width: number; // percentage
+    height: number; // percentage
+    trigger: HotSpotTrigger;
+    acceptedElementIds?: VNID[]; // For drag-drop: which elements can be dropped here
+    actions: VNUIAction[]; // Actions to run when triggered
+    conditions?: VNCondition[]; // Only active when conditions are met
+    highlightColor?: string; // Visual feedback color (debug/hover)
+    visible?: boolean; // Whether to show the spot visually (default false)
+}
+
+export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput';
+
+export interface VNHotZoneElement {
+    id: VNID;
+    name: string;
+    elementType?: HotZoneElementType; // default 'image'
+    imageId: VNID; // Reference to project image asset (for image/button types)
+    videoId?: VNID; // Reference to project video asset (for video type)
+    videoLoop?: boolean; // Loop video playback
+    videoMuted?: boolean; // Mute video audio
+    text?: string; // Display text (for text/button types)
+    font?: VNFontSettings; // Font settings (for text/button/textInput types)
+    placeholder?: string; // Placeholder text (for textInput type)
+    variableId?: VNID; // Variable to bind (for textInput type)
+    backgroundColor?: string; // Background color (for textInput/button types)
+    borderColor?: string; // Border color (for textInput type)
+    maxLength?: number; // Max character length (for textInput type)
+    x: number; // percentage
+    y: number; // percentage
+    width: number; // percentage
+    height: number; // percentage
+    draggable?: boolean;
+    snapBack?: boolean; // Return to original position if not dropped on valid spot
+    snapToHotSpot?: boolean; // Snap to hot spot center when dropped
+    conditions?: VNCondition[]; // Only visible when conditions are met
+    actions?: VNUIAction[]; // Actions on click (when not dragging)
+    clickSoundId?: VNID | null;
+    hoverSoundId?: VNID | null;
+}
+
+export interface VNHotZoneWinCondition {
+    type: 'allPlaced' | 'variable';
+    variableId?: VNID; // For variable-based win condition
+    operator?: VNConditionOperator; // Comparison operator
+    value?: string | number | boolean;
+    actions: VNUIAction[]; // Actions to run when win condition is met
 }

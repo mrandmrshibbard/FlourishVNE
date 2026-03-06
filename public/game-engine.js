@@ -59,6 +59,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["CreditRoll"] = "CreditRoll";
     CommandType2["Group"] = "Group";
     CommandType2["RunScript"] = "RunScript";
+    CommandType2["SpawnParticles"] = "SpawnParticles";
+    CommandType2["StopParticles"] = "StopParticles";
+    CommandType2["CallCommonEvent"] = "CallCommonEvent";
     return CommandType2;
   })(CommandType || {});
   const assetReducer = (state, action) => {
@@ -130,14 +133,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return state;
     }
   };
-  const generateId$4 = () => Math.random().toString(36).substring(2, 9);
+  const generateId$5 = () => Math.random().toString(36).substring(2, 9);
   const characterReducer = (state, action) => {
     var _a;
     switch (action.type) {
       case "ADD_CHARACTER": {
         const { name, color } = action.payload;
-        const newId = `char-${generateId$4()}`;
-        const newExprId = `expr-${generateId$4()}`;
+        const newId = `char-${generateId$5()}`;
+        const newExprId = `expr-${generateId$5()}`;
         const newExpression = { id: newExprId, name: "Default", layerConfiguration: {} };
         const newCharacter = {
           id: newId,
@@ -196,7 +199,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const { characterId, name } = action.payload;
         const character = state.characters[characterId];
         if (!character) return state;
-        const newLayerId = `layer-${generateId$4()}`;
+        const newLayerId = `layer-${generateId$5()}`;
         const newLayer = { id: newLayerId, name, assets: {} };
         const newLayers = { ...character.layers, [newLayerId]: newLayer };
         return { ...state, characters: { ...state.characters, [characterId]: { ...character, layers: newLayers } } };
@@ -224,7 +227,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay } = action.payload;
         const character = state.characters[characterId];
         if (!(character == null ? void 0 : character.layers[layerId])) return state;
-        const newAssetId = `asset-${generateId$4()}`;
+        const newAssetId = `asset-${generateId$5()}`;
         const newAsset = {
           id: newAssetId,
           name,
@@ -256,7 +259,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const { characterId, name } = action.payload;
         const character = state.characters[characterId];
         if (!character) return state;
-        const newExprId = `expr-${generateId$4()}`;
+        const newExprId = `expr-${generateId$5()}`;
         const newExpression = { id: newExprId, name, layerConfiguration: {} };
         Object.keys(character.layers).forEach((layerId) => {
           newExpression.layerConfiguration[layerId] = null;
@@ -308,13 +311,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["CycleLayerAsset"] = "CycleLayerAsset";
     UIActionType2["ToggleScreen"] = "ToggleScreen";
     UIActionType2["OpenURL"] = "OpenURL";
+    UIActionType2["PlayAnimation"] = "PlayAnimation";
+    UIActionType2["ChangeImage"] = "ChangeImage";
     return UIActionType2;
   })(UIActionType || {});
-  const generateId$3 = () => Math.random().toString(36).substring(2, 9);
+  const generateId$4 = () => Math.random().toString(36).substring(2, 9);
   const sceneReducer = (state, action) => {
     switch (action.type) {
       case "ADD_SCENE": {
-        const newId = `scene-${generateId$3()}`;
+        const newId = `scene-${generateId$4()}`;
         const newScene = { id: newId, name: action.payload.name, commands: [] };
         return {
           ...state,
@@ -380,12 +385,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const { sceneId } = action.payload;
         const originalScene = state.scenes[sceneId];
         if (!originalScene) return state;
-        const newId = `scene-${generateId$3()}`;
+        const newId = `scene-${generateId$4()}`;
         const duplicatedScene = {
           ...originalScene,
           id: newId,
           name: `${originalScene.name} (Copy)`,
-          commands: originalScene.commands.map((cmd) => ({ ...cmd, id: `cmd-${generateId$3()}` }))
+          commands: originalScene.commands.map((cmd) => ({ ...cmd, id: `cmd-${generateId$4()}` }))
         };
         return {
           ...state,
@@ -424,7 +429,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       case "ADD_COMMAND": {
         const { sceneId, command } = action.payload;
         const scene = state.scenes[sceneId];
-        const newCommands = [...scene.commands, { ...command, id: `cmd-${generateId$3()}` }];
+        const newCommands = [...scene.commands, { ...command, id: `cmd-${generateId$4()}` }];
         return {
           ...state,
           scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } }
@@ -596,72 +601,72 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["CGGallery"] = "CGGallery";
     return UIElementType2;
   })(UIElementType || {});
-  const generateId$2 = (prefix) => `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
+  const generateId$3 = (prefix) => `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
   const createDefaultUIScreens = () => {
-    const titleScreenId = generateId$2("screen");
-    const saveScreenId = generateId$2("screen");
-    const loadScreenId = generateId$2("screen");
-    const settingsScreenId = generateId$2("screen");
-    const pauseScreenId = generateId$2("screen");
+    const titleScreenId = generateId$3("screen");
+    const saveScreenId = generateId$3("screen");
+    const loadScreenId = generateId$3("screen");
+    const settingsScreenId = generateId$3("screen");
+    const pauseScreenId = generateId$3("screen");
     const defaultFont = { family: "Poppins, sans-serif", size: 24, color: "#f0e6ff", weight: "normal", italic: false };
     const titleFont = { family: "Poppins, sans-serif", size: 64, color: "#f0e6ff", weight: "bold", italic: false };
     const headerFont = { family: "Poppins, sans-serif", size: 48, color: "#f0e6ff", weight: "bold", italic: false };
     const titleScreenElements = {};
-    const titleTextId = generateId$2("el");
+    const titleTextId = generateId$3("el");
     titleScreenElements[titleTextId] = { id: titleTextId, name: "Title Text", type: UIElementType.Text, text: "My Visual Novel", x: 50, y: 30, width: 60, height: 15, anchorX: 0.5, anchorY: 0.5, font: titleFont, textAlign: "center", verticalAlign: "middle" };
-    const newGameBtnId = generateId$2("el");
+    const newGameBtnId = generateId$3("el");
     titleScreenElements[newGameBtnId] = { id: newGameBtnId, name: "New Game Button", type: UIElementType.Button, text: "New Game", x: 50, y: 55, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.StartNewGame }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
-    const loadGameBtnId = generateId$2("el");
+    const loadGameBtnId = generateId$3("el");
     titleScreenElements[loadGameBtnId] = { id: loadGameBtnId, name: "Load Game Button", type: UIElementType.Button, text: "Load Game", x: 50, y: 65, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.GoToScreen, targetScreenId: loadScreenId }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
-    const settingsBtnId = generateId$2("el");
+    const settingsBtnId = generateId$3("el");
     titleScreenElements[settingsBtnId] = { id: settingsBtnId, name: "Settings Button", type: UIElementType.Button, text: "Settings", x: 50, y: 75, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.GoToScreen, targetScreenId: settingsScreenId }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
     const saveScreenElements = {};
-    const saveHeaderId = generateId$2("el");
+    const saveHeaderId = generateId$3("el");
     saveScreenElements[saveHeaderId] = { id: saveHeaderId, name: "Header", type: UIElementType.Text, text: "Save Game", x: 50, y: 10, width: 60, height: 10, anchorX: 0.5, anchorY: 0.5, font: headerFont, textAlign: "center", verticalAlign: "middle" };
-    const saveGridId = generateId$2("el");
+    const saveGridId = generateId$3("el");
     saveScreenElements[saveGridId] = { id: saveGridId, name: "Save Slots", type: UIElementType.SaveSlotGrid, slotCount: 8, font: defaultFont, emptySlotText: "[ Empty Slot ]", x: 50, y: 50, width: 80, height: 65, anchorX: 0.5, anchorY: 0.5 };
-    const saveBackBtnId = generateId$2("el");
+    const saveBackBtnId = generateId$3("el");
     saveScreenElements[saveBackBtnId] = { id: saveBackBtnId, name: "Back Button", type: UIElementType.Button, text: "Back", x: 50, y: 90, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.ReturnToPreviousScreen }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
     const loadScreenElements = {};
-    const loadHeaderId = generateId$2("el");
+    const loadHeaderId = generateId$3("el");
     loadScreenElements[loadHeaderId] = { id: loadHeaderId, name: "Header", type: UIElementType.Text, text: "Load Game", x: 50, y: 10, width: 60, height: 10, anchorX: 0.5, anchorY: 0.5, font: headerFont, textAlign: "center", verticalAlign: "middle" };
-    const loadGridId = generateId$2("el");
+    const loadGridId = generateId$3("el");
     loadScreenElements[loadGridId] = { id: loadGridId, name: "Load Slots", type: UIElementType.SaveSlotGrid, slotCount: 8, font: defaultFont, emptySlotText: "[ Empty Slot ]", x: 50, y: 50, width: 80, height: 65, anchorX: 0.5, anchorY: 0.5 };
-    const loadBackBtnId = generateId$2("el");
+    const loadBackBtnId = generateId$3("el");
     loadScreenElements[loadBackBtnId] = { id: loadBackBtnId, name: "Back Button", type: UIElementType.Button, text: "Back", x: 50, y: 90, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.ReturnToPreviousScreen }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
     const settingsScreenElements = {};
-    const settingsHeaderId = generateId$2("el");
+    const settingsHeaderId = generateId$3("el");
     settingsScreenElements[settingsHeaderId] = { id: settingsHeaderId, name: "Header", type: UIElementType.Text, text: "Settings", x: 50, y: 10, width: 60, height: 10, anchorX: 0.5, anchorY: 0.5, font: headerFont, textAlign: "center", verticalAlign: "middle" };
-    const musicLabelId = generateId$2("el");
+    const musicLabelId = generateId$3("el");
     settingsScreenElements[musicLabelId] = { id: musicLabelId, name: "Music Volume Label", type: UIElementType.Text, text: "Music Volume", x: 35, y: 30, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: "left", verticalAlign: "middle" };
-    const musicSliderId = generateId$2("el");
+    const musicSliderId = generateId$3("el");
     settingsScreenElements[musicSliderId] = { id: musicSliderId, name: "Music Volume Slider", type: UIElementType.SettingsSlider, setting: "musicVolume", x: 65, y: 30, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5 };
-    const sfxLabelId = generateId$2("el");
+    const sfxLabelId = generateId$3("el");
     settingsScreenElements[sfxLabelId] = { id: sfxLabelId, name: "SFX Volume Label", type: UIElementType.Text, text: "Sound FX Volume", x: 35, y: 40, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: "left", verticalAlign: "middle" };
-    const sfxSliderId = generateId$2("el");
+    const sfxSliderId = generateId$3("el");
     settingsScreenElements[sfxSliderId] = { id: sfxSliderId, name: "SFX Volume Slider", type: UIElementType.SettingsSlider, setting: "sfxVolume", x: 65, y: 40, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5 };
-    const ambientLabelId = generateId$2("el");
+    const ambientLabelId = generateId$3("el");
     settingsScreenElements[ambientLabelId] = { id: ambientLabelId, name: "Ambient Volume Label", type: UIElementType.Text, text: "Ambient Volume", x: 35, y: 50, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: "left", verticalAlign: "middle" };
-    const ambientSliderId = generateId$2("el");
+    const ambientSliderId = generateId$3("el");
     settingsScreenElements[ambientSliderId] = { id: ambientSliderId, name: "Ambient Volume Slider", type: UIElementType.SettingsSlider, setting: "ambientVolume", x: 65, y: 50, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5 };
-    const textSpeedLabelId = generateId$2("el");
+    const textSpeedLabelId = generateId$3("el");
     settingsScreenElements[textSpeedLabelId] = { id: textSpeedLabelId, name: "Text Speed Label", type: UIElementType.Text, text: "Text Speed", x: 35, y: 60, width: 20, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont, textAlign: "left", verticalAlign: "middle" };
-    const textSpeedSliderId = generateId$2("el");
+    const textSpeedSliderId = generateId$3("el");
     settingsScreenElements[textSpeedSliderId] = { id: textSpeedSliderId, name: "Text Speed Slider", type: UIElementType.SettingsSlider, setting: "textSpeed", x: 65, y: 60, width: 40, height: 5, anchorX: 0.5, anchorY: 0.5 };
-    const skipToggleId = generateId$2("el");
+    const skipToggleId = generateId$3("el");
     settingsScreenElements[skipToggleId] = { id: skipToggleId, name: "Enable Skip Toggle", type: UIElementType.SettingsToggle, setting: "enableSkip", text: "Enable Skip", x: 50, y: 70, width: 30, height: 5, anchorX: 0.5, anchorY: 0.5, font: defaultFont };
-    const backBtnId = generateId$2("el");
+    const backBtnId = generateId$3("el");
     settingsScreenElements[backBtnId] = { id: backBtnId, name: "Back Button", type: UIElementType.Button, text: "Back", x: 50, y: 85, width: 20, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.ReturnToPreviousScreen }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
     const pauseScreenElements = {};
-    const returnBtnId = generateId$2("el");
+    const returnBtnId = generateId$3("el");
     pauseScreenElements[returnBtnId] = { id: returnBtnId, name: "Return Button", type: UIElementType.Button, text: "Return to Game", x: 50, y: 30, width: 30, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.ReturnToGame }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
-    const pauseSaveBtnId = generateId$2("el");
+    const pauseSaveBtnId = generateId$3("el");
     pauseScreenElements[pauseSaveBtnId] = { id: pauseSaveBtnId, name: "Save Game Button", type: UIElementType.Button, text: "Save Game", x: 50, y: 40, width: 30, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.GoToScreen, targetScreenId: saveScreenId }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
-    const pauseLoadBtnId = generateId$2("el");
+    const pauseLoadBtnId = generateId$3("el");
     pauseScreenElements[pauseLoadBtnId] = { id: pauseLoadBtnId, name: "Load Game Button", type: UIElementType.Button, text: "Load Game", x: 50, y: 50, width: 30, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.GoToScreen, targetScreenId: loadScreenId }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
-    const pauseSettingsBtnId = generateId$2("el");
+    const pauseSettingsBtnId = generateId$3("el");
     pauseScreenElements[pauseSettingsBtnId] = { id: pauseSettingsBtnId, name: "Settings Button", type: UIElementType.Button, text: "Settings", x: 50, y: 60, width: 30, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.GoToScreen, targetScreenId: settingsScreenId }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
-    const pauseQuitBtnId = generateId$2("el");
+    const pauseQuitBtnId = generateId$3("el");
     pauseScreenElements[pauseQuitBtnId] = { id: pauseQuitBtnId, name: "Quit Button", type: UIElementType.Button, text: "Quit to Title", x: 50, y: 70, width: 30, height: 8, anchorX: 0.5, anchorY: 0.5, font: defaultFont, action: { type: UIActionType.QuitToTitle }, image: null, hoverImage: null, clickSoundId: null, hoverSoundId: null };
     const screens = {
       [titleScreenId]: {
@@ -694,7 +699,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const specialIds = { titleScreenId, saveScreenId, loadScreenId, settingsScreenId, pauseScreenId };
     return { screens, specialIds };
   };
-  const generateId$1 = () => Math.random().toString(36).substring(2, 9);
+  const generateId$2 = () => Math.random().toString(36).substring(2, 9);
   const uiReducer = (state, action) => {
     switch (action.type) {
       case "UPDATE_UI": {
@@ -748,8 +753,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
       }
       case "ADD_UI_SCREEN": {
-        const { name, id } = action.payload;
-        const newId = id || `screen-${generateId$1()}`;
+        const { name, id, screenType } = action.payload;
+        const newId = id || `screen-${generateId$2()}`;
         const newScreen = {
           id: newId,
           name,
@@ -757,7 +762,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           music: { audioId: null, policy: "continue", volume: 0.8 },
           ambientNoise: { audioId: null, policy: "continue", volume: 0.8 },
           elements: {},
-          effects: []
+          effects: [],
+          ...screenType === "hotzone" ? { screenType: "hotzone", hotSpots: {}, hotZoneElements: {} } : {}
         };
         return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen } };
       }
@@ -838,13 +844,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           console.error("[DUPLICATE_UI_SCREEN] Screen not found:", screenId);
           return state;
         }
-        const newScreenId = `screen-${generateId$1()}`;
+        const newScreenId = `screen-${generateId$2()}`;
         const newScreen = JSON.parse(JSON.stringify(originalScreen));
         newScreen.id = newScreenId;
         newScreen.name = `Copy of ${originalScreen.name}`;
         const newElements = {};
         for (const element of Object.values(originalScreen.elements)) {
-          const newElementId = `elem-${generateId$1()}`;
+          const newElementId = `elem-${generateId$2()}`;
           newElements[newElementId] = { ...element, id: newElementId };
         }
         newScreen.elements = newElements;
@@ -884,11 +890,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return state;
     }
   };
-  const generateId = () => Math.random().toString(36).substring(2, 9);
+  const generateId$1 = () => Math.random().toString(36).substring(2, 9);
   const variableReducer = (state, action) => {
     switch (action.type) {
       case "ADD_VARIABLE": {
-        const newId = action.payload.id || `var-${generateId()}`;
+        const newId = action.payload.id || `var-${generateId$1()}`;
         const newVar = { id: newId, name: action.payload.name, type: action.payload.type, defaultValue: action.payload.defaultValue };
         return {
           ...state,
@@ -1002,6 +1008,222 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ...state,
           scripts: remaining,
           scenes: newScenes
+        };
+      }
+      default:
+        return state;
+    }
+  };
+  const generateId = () => Math.random().toString(36).substring(2, 9);
+  const commonEventReducer = (state, action) => {
+    switch (action.type) {
+      case "ADD_COMMON_EVENT": {
+        const { commonEvent } = action.payload;
+        return {
+          ...state,
+          commonEvents: {
+            ...state.commonEvents || {},
+            [commonEvent.id]: commonEvent
+          }
+        };
+      }
+      case "UPDATE_COMMON_EVENT": {
+        const { commonEventId, updates } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing) return state;
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              ...updates,
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "DELETE_COMMON_EVENT": {
+        const { commonEventId } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const { [commonEventId]: _, ...remaining } = commonEvents;
+        const newScenes = JSON.parse(JSON.stringify(state.scenes));
+        for (const sceneId in newScenes) {
+          newScenes[sceneId].commands = newScenes[sceneId].commands.map((cmd) => {
+            if (cmd.type === "CallCommonEvent" && cmd.commonEventId === commonEventId) {
+              return { ...cmd, commonEventId: "" };
+            }
+            return cmd;
+          });
+        }
+        return {
+          ...state,
+          commonEvents: remaining,
+          scenes: newScenes
+        };
+      }
+      case "DUPLICATE_COMMON_EVENT": {
+        const { commonEventId } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const original = commonEvents[commonEventId];
+        if (!original) return state;
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        const newId = `ce-${generateId()}`;
+        const duplicate = {
+          ...JSON.parse(JSON.stringify(original)),
+          id: newId,
+          name: `${original.name} (copy)`,
+          createdAt: now,
+          updatedAt: now,
+          // Re-generate command IDs
+          commands: original.commands.map((cmd) => ({
+            ...JSON.parse(JSON.stringify(cmd)),
+            id: `cmd-${generateId()}`
+          }))
+        };
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [newId]: duplicate
+          }
+        };
+      }
+      case "ADD_COMMON_EVENT_COMMAND": {
+        const { commonEventId, command, index } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing) return state;
+        const newCmd = { ...command, id: command.id || `cmd-${generateId()}` };
+        const commands = [...existing.commands];
+        if (index !== void 0 && index >= 0 && index <= commands.length) {
+          commands.splice(index, 0, newCmd);
+        } else {
+          commands.push(newCmd);
+        }
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              commands,
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "UPDATE_COMMON_EVENT_COMMAND": {
+        const { commonEventId, commandIndex, updates } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state;
+        const commands = [...existing.commands];
+        commands[commandIndex] = { ...commands[commandIndex], ...updates };
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              commands,
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "DELETE_COMMON_EVENT_COMMAND": {
+        const { commonEventId, commandIndex } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing || commandIndex < 0 || commandIndex >= existing.commands.length) return state;
+        const commands = [...existing.commands];
+        commands.splice(commandIndex, 1);
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              commands,
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "REORDER_COMMON_EVENT_COMMANDS": {
+        const { commonEventId, fromIndex, toIndex } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing) return state;
+        const commands = [...existing.commands];
+        const [moved] = commands.splice(fromIndex, 1);
+        commands.splice(toIndex, 0, moved);
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              commands,
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "ADD_COMMON_EVENT_PARAMETER": {
+        const { commonEventId, parameter } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing) return state;
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              parameters: [...existing.parameters, parameter],
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "UPDATE_COMMON_EVENT_PARAMETER": {
+        const { commonEventId, parameterId, updates } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing) return state;
+        const parameters = existing.parameters.map(
+          (p) => p.id === parameterId ? { ...p, ...updates } : p
+        );
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              parameters,
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        };
+      }
+      case "DELETE_COMMON_EVENT_PARAMETER": {
+        const { commonEventId, parameterId } = action.payload;
+        const commonEvents = state.commonEvents || {};
+        const existing = commonEvents[commonEventId];
+        if (!existing) return state;
+        return {
+          ...state,
+          commonEvents: {
+            ...commonEvents,
+            [commonEventId]: {
+              ...existing,
+              parameters: existing.parameters.filter((p) => p.id !== parameterId),
+              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
         };
       }
       default:
@@ -1123,6 +1345,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     uiReducer,
     variableReducer,
     scriptReducer,
+    commonEventReducer,
     pluginReducer
   ];
   const rootReducer = (state, action) => {
@@ -2193,6 +2416,630 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
+  const PARTICLE_PRESETS = {
+    fireflies: {
+      shape: "circle",
+      colors: ["#FFFF66", "#CCFF33", "#FFCC00"],
+      emitRate: 8,
+      lifetime: 4,
+      speedMin: 5,
+      speedMax: 20,
+      sizeMin: 2,
+      sizeMax: 5,
+      gravity: -2,
+      wind: 0,
+      directionMin: 0,
+      directionMax: 360,
+      emitterX: 50,
+      emitterY: 50,
+      emitterWidth: 100,
+      emitterHeight: 100,
+      fadeOut: true,
+      shrink: false,
+      rotationSpeed: 0,
+      opacity: 0.9,
+      blendMode: "lighter"
+    },
+    sparks: {
+      shape: "circle",
+      colors: ["#FF6600", "#FFAA00", "#FFCC44", "#FF4400"],
+      emitRate: 30,
+      lifetime: 1.5,
+      speedMin: 50,
+      speedMax: 150,
+      sizeMin: 1,
+      sizeMax: 4,
+      gravity: 40,
+      wind: 0,
+      directionMin: 45,
+      directionMax: 135,
+      emitterX: 50,
+      emitterY: 70,
+      emitterWidth: 60,
+      emitterHeight: 5,
+      fadeOut: true,
+      shrink: true,
+      rotationSpeed: 0,
+      opacity: 1,
+      blendMode: "lighter"
+    },
+    bubbles: {
+      shape: "circle",
+      colors: ["rgba(150,220,255,0.4)", "rgba(200,240,255,0.3)", "rgba(180,230,255,0.5)"],
+      emitRate: 10,
+      lifetime: 5,
+      speedMin: 15,
+      speedMax: 40,
+      sizeMin: 4,
+      sizeMax: 15,
+      gravity: -15,
+      wind: 3,
+      directionMin: 70,
+      directionMax: 110,
+      emitterX: 50,
+      emitterY: 100,
+      emitterWidth: 80,
+      emitterHeight: 5,
+      fadeOut: true,
+      shrink: false,
+      rotationSpeed: 0,
+      opacity: 0.6,
+      blendMode: "source-over"
+    },
+    confetti: {
+      shape: "square",
+      colors: ["#FF3366", "#33CCFF", "#FFCC00", "#66FF66", "#CC66FF", "#FF6633"],
+      emitRate: 40,
+      lifetime: 4,
+      speedMin: 30,
+      speedMax: 100,
+      sizeMin: 4,
+      sizeMax: 10,
+      gravity: 30,
+      wind: 5,
+      directionMin: 45,
+      directionMax: 135,
+      emitterX: 50,
+      emitterY: 0,
+      emitterWidth: 100,
+      emitterHeight: 5,
+      fadeOut: false,
+      shrink: false,
+      rotationSpeed: 180,
+      opacity: 0.9,
+      blendMode: "source-over"
+    },
+    embers: {
+      shape: "circle",
+      colors: ["#FF4400", "#FF6600", "#FF8800", "#FFAA00"],
+      emitRate: 15,
+      lifetime: 3,
+      speedMin: 10,
+      speedMax: 40,
+      sizeMin: 1,
+      sizeMax: 4,
+      gravity: -20,
+      wind: 8,
+      directionMin: 60,
+      directionMax: 120,
+      emitterX: 50,
+      emitterY: 100,
+      emitterWidth: 80,
+      emitterHeight: 10,
+      fadeOut: true,
+      shrink: true,
+      rotationSpeed: 0,
+      opacity: 0.8,
+      blendMode: "lighter"
+    },
+    dust: {
+      shape: "circle",
+      colors: ["rgba(200,180,150,0.4)", "rgba(180,160,130,0.3)", "rgba(220,200,170,0.5)"],
+      emitRate: 12,
+      lifetime: 6,
+      speedMin: 3,
+      speedMax: 12,
+      sizeMin: 1,
+      sizeMax: 4,
+      gravity: 2,
+      wind: 5,
+      directionMin: 0,
+      directionMax: 360,
+      emitterX: 50,
+      emitterY: 50,
+      emitterWidth: 100,
+      emitterHeight: 100,
+      fadeOut: true,
+      shrink: false,
+      rotationSpeed: 0,
+      opacity: 0.5,
+      blendMode: "source-over"
+    },
+    petals: {
+      shape: "heart",
+      colors: ["#FFAABB", "#FF88AA", "#FFCCDD", "#FF99BB"],
+      emitRate: 8,
+      lifetime: 6,
+      speedMin: 10,
+      speedMax: 30,
+      sizeMin: 5,
+      sizeMax: 12,
+      gravity: 10,
+      wind: 15,
+      directionMin: 200,
+      directionMax: 280,
+      emitterX: 50,
+      emitterY: 0,
+      emitterWidth: 100,
+      emitterHeight: 5,
+      fadeOut: true,
+      shrink: false,
+      rotationSpeed: 90,
+      opacity: 0.8,
+      blendMode: "source-over"
+    },
+    magic: {
+      shape: "sparkle",
+      colors: ["#AA66FF", "#6699FF", "#FF66CC", "#66FFCC", "#FFFFFF"],
+      emitRate: 20,
+      lifetime: 2,
+      speedMin: 20,
+      speedMax: 60,
+      sizeMin: 2,
+      sizeMax: 8,
+      gravity: -5,
+      wind: 0,
+      directionMin: 0,
+      directionMax: 360,
+      emitterX: 50,
+      emitterY: 50,
+      emitterWidth: 60,
+      emitterHeight: 60,
+      fadeOut: true,
+      shrink: true,
+      rotationSpeed: 120,
+      opacity: 0.9,
+      blendMode: "lighter"
+    },
+    stars: {
+      shape: "star",
+      colors: ["#FFFFFF", "#FFFFCC", "#CCCCFF", "#FFCCFF"],
+      emitRate: 5,
+      lifetime: 3,
+      speedMin: 5,
+      speedMax: 15,
+      sizeMin: 3,
+      sizeMax: 8,
+      gravity: 0,
+      wind: 0,
+      directionMin: 0,
+      directionMax: 360,
+      emitterX: 50,
+      emitterY: 50,
+      emitterWidth: 100,
+      emitterHeight: 100,
+      fadeOut: true,
+      shrink: false,
+      rotationSpeed: 30,
+      opacity: 0.8,
+      blendMode: "lighter"
+    }
+  };
+  function resolveConfig(config) {
+    let resolved = config;
+    if (config.preset && config.preset !== "none" && PARTICLE_PRESETS[config.preset]) {
+      resolved = { ...PARTICLE_PRESETS[config.preset], ...config };
+    }
+    return {
+      ...resolved,
+      emitRate: resolved.emitRate ?? 10,
+      lifetime: resolved.lifetime ?? 3,
+      speedMin: resolved.speedMin ?? 5,
+      speedMax: resolved.speedMax ?? 30,
+      sizeMin: resolved.sizeMin ?? 2,
+      sizeMax: resolved.sizeMax ?? 8,
+      gravity: resolved.gravity ?? 0,
+      wind: resolved.wind ?? 0,
+      directionMin: resolved.directionMin ?? 0,
+      directionMax: resolved.directionMax ?? 360,
+      emitterX: resolved.emitterX ?? 50,
+      emitterY: resolved.emitterY ?? 50,
+      emitterWidth: resolved.emitterWidth ?? 100,
+      emitterHeight: resolved.emitterHeight ?? 100,
+      opacity: resolved.opacity ?? 1,
+      rotationSpeed: resolved.rotationSpeed ?? 0,
+      fadeOut: resolved.fadeOut ?? true,
+      shrink: resolved.shrink ?? false,
+      shape: resolved.shape || "circle",
+      colors: resolved.colors && resolved.colors.length > 0 ? resolved.colors : ["#FFFFFF"]
+    };
+  }
+  function drawShape(ctx, shape, x, y, size, rotation, color, opacity) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation * Math.PI / 180);
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = color;
+    switch (shape) {
+      case "circle":
+        ctx.beginPath();
+        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case "square":
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+        break;
+      case "star": {
+        const spikes = 5;
+        const outerRadius = size / 2;
+        const innerRadius = size / 4;
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+          const r = i % 2 === 0 ? outerRadius : innerRadius;
+          const angle = i * Math.PI / spikes - Math.PI / 2;
+          if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+          else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case "heart": {
+        const s = size / 2;
+        ctx.beginPath();
+        ctx.moveTo(0, s * 0.4);
+        ctx.bezierCurveTo(-s, -s * 0.3, -s * 0.5, -s, 0, -s * 0.4);
+        ctx.bezierCurveTo(s * 0.5, -s, s, -s * 0.3, 0, s * 0.4);
+        ctx.fill();
+        break;
+      }
+      case "sparkle": {
+        const r = size / 2;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const angle = i * Math.PI / 2;
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+          ctx.lineTo(Math.cos(angle + Math.PI / 4) * r * 0.3, Math.sin(angle + Math.PI / 4) * r * 0.3);
+        }
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      default:
+        ctx.beginPath();
+        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+  }
+  const ParticleSystem = ({
+    effects,
+    width,
+    height,
+    className
+  }) => {
+    const canvasRef = React2.useRef(null);
+    const emittersRef = React2.useRef(/* @__PURE__ */ new Map());
+    const animFrameRef = React2.useRef(0);
+    const debugLoggedRef = React2.useRef(false);
+    const safeWidth = Math.max(0, Math.min(width, 4096));
+    const safeHeight = Math.max(0, Math.min(height, 4096));
+    const effectKeys = React2.useMemo(() => Object.keys(effects).sort().join(","), [effects]);
+    if (!debugLoggedRef.current && safeWidth > 0 && safeHeight > 0) {
+      console.log("[ParticleSystem] Mounted with", Object.keys(effects).length, "effects, dimensions:", safeWidth, "x", safeHeight);
+      debugLoggedRef.current = true;
+    }
+    React2.useEffect(() => {
+      var _a;
+      const currentTags = new Set(Object.keys(effects));
+      const emitters = emittersRef.current;
+      for (const tag of emitters.keys()) {
+        if (!currentTags.has(tag)) {
+          emitters.delete(tag);
+        }
+      }
+      for (const [tag, effect] of Object.entries(effects)) {
+        const existing = emitters.get(tag);
+        if (existing) {
+          existing.config = resolveConfig(effect.config);
+          existing.fadingOut = !!effect.fadingOut;
+          existing.fadeOutDuration = effect.fadeOutDuration || 1;
+        } else {
+          emitters.set(tag, {
+            tag,
+            config: resolveConfig(effect.config),
+            particles: [],
+            accumulatedEmit: 0,
+            fadingOut: !!effect.fadingOut,
+            fadeOpacity: 1,
+            fadeOutDuration: effect.fadeOutDuration || 1
+          });
+          console.log("[ParticleSystem] Added emitter:", tag, "preset:", (_a = effect.config) == null ? void 0 : _a.preset, "emitRate:", resolveConfig(effect.config).emitRate);
+        }
+      }
+    }, [effectKeys, effects]);
+    React2.useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas || safeWidth <= 0 || safeHeight <= 0) {
+        console.log("[ParticleSystem] Animation loop skipped: canvas=", !!canvas, "dimensions:", safeWidth, "x", safeHeight);
+        return;
+      }
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(safeWidth * dpr);
+      canvas.height = Math.floor(safeHeight * dpr);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        console.error("[ParticleSystem] Failed to get 2D context");
+        return;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      let lastTime = performance.now();
+      let frameCount = 0;
+      console.log("[ParticleSystem] Animation loop started. Canvas:", canvas.width, "x", canvas.height, "DPR:", dpr);
+      const loop = (now) => {
+        try {
+          const dt = Math.min((now - lastTime) / 1e3, 0.1);
+          lastTime = now;
+          frameCount++;
+          ctx.clearRect(0, 0, safeWidth, safeHeight);
+          const emitters = emittersRef.current;
+          if (frameCount % 60 === 1) {
+            let totalParticles = 0;
+            for (const em of emitters.values()) {
+              totalParticles += em.particles.length;
+            }
+            if (emitters.size > 0 || totalParticles > 0) {
+              console.log("[ParticleSystem] Frame", frameCount, "| Emitters:", emitters.size, "| Total particles:", totalParticles);
+            }
+          }
+          for (const emitter of emitters.values()) {
+            const config = emitter.config;
+            const blendMode = config.blendMode || "source-over";
+            if (emitter.fadingOut) {
+              emitter.fadeOpacity = Math.max(0, emitter.fadeOpacity - dt / emitter.fadeOutDuration);
+            }
+            if (!emitter.fadingOut) {
+              emitter.accumulatedEmit += (config.emitRate || 10) * dt;
+              while (emitter.accumulatedEmit >= 1) {
+                emitter.accumulatedEmit -= 1;
+                const angle = config.directionMin + Math.random() * (config.directionMax - config.directionMin);
+                const rad = angle * Math.PI / 180;
+                const speed = config.speedMin + Math.random() * (config.speedMax - config.speedMin);
+                const emitX = (config.emitterX - config.emitterWidth / 2 + Math.random() * config.emitterWidth) / 100 * safeWidth;
+                const emitY = (config.emitterY - config.emitterHeight / 2 + Math.random() * config.emitterHeight) / 100 * safeHeight;
+                emitter.particles.push({
+                  x: emitX,
+                  y: emitY,
+                  vx: Math.cos(rad) * speed,
+                  vy: -Math.sin(rad) * speed,
+                  size: config.sizeMin + Math.random() * (config.sizeMax - config.sizeMin),
+                  color: config.colors[Math.floor(Math.random() * config.colors.length)] || "#FFFFFF",
+                  life: config.lifetime,
+                  maxLife: config.lifetime,
+                  rotation: Math.random() * 360,
+                  rotationSpeed: config.rotationSpeed * (Math.random() > 0.5 ? 1 : -1),
+                  shape: config.shape || "circle",
+                  opacity: config.opacity ?? 1
+                });
+              }
+            }
+            ctx.globalCompositeOperation = blendMode;
+            emitter.particles = emitter.particles.filter((p) => {
+              p.life -= dt;
+              if (p.life <= 0) return false;
+              p.vy += (config.gravity || 0) * dt;
+              p.vx += (config.wind || 0) * dt;
+              p.x += p.vx * dt;
+              p.y += p.vy * dt;
+              p.rotation += p.rotationSpeed * dt;
+              const lifeRatio = p.life / p.maxLife;
+              let opacity = p.opacity * emitter.fadeOpacity;
+              let size = p.size;
+              if (config.fadeOut) {
+                opacity *= lifeRatio;
+              }
+              if (config.shrink) {
+                size *= lifeRatio;
+              }
+              if (opacity > 0.01 && size > 0.1) {
+                drawShape(ctx, p.shape, p.x, p.y, size, p.rotation, p.color, opacity);
+              }
+              return true;
+            });
+            ctx.globalCompositeOperation = "source-over";
+          }
+        } catch (err) {
+          console.error("[ParticleSystem] Error in animation loop:", err);
+        }
+        animFrameRef.current = requestAnimationFrame(loop);
+      };
+      animFrameRef.current = requestAnimationFrame(loop);
+      return () => {
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      };
+    }, [safeWidth, safeHeight]);
+    if (safeWidth <= 0 || safeHeight <= 0 || Object.keys(effects).length === 0) return null;
+    return /* @__PURE__ */ jsxRuntime2.jsx(
+      "canvas",
+      {
+        ref: canvasRef,
+        className,
+        style: {
+          position: "absolute",
+          inset: 0,
+          width: safeWidth,
+          height: safeHeight,
+          pointerEvents: "none",
+          zIndex: 6
+          // above characters (z-5), below dialogue (z-20)
+        }
+      }
+    );
+  };
+  const TEXT_EFFECT_KEYFRAMES = `
+@keyframes vnTextShake {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-1px, -1px); }
+    20% { transform: translate(1px, 0); }
+    30% { transform: translate(-1px, 1px); }
+    40% { transform: translate(1px, -1px); }
+    50% { transform: translate(-1px, 0px); }
+    60% { transform: translate(1px, 1px); }
+    70% { transform: translate(0, -1px); }
+    80% { transform: translate(-1px, 1px); }
+    90% { transform: translate(1px, 0); }
+}
+
+@keyframes vnTextWave {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(var(--wave-amplitude, -4px)); }
+}
+
+@keyframes vnTextPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(var(--pulse-scale, 1.15)); opacity: 0.85; }
+}
+
+@keyframes vnTextBounce {
+    0%, 100% { transform: translateY(0); }
+    30% { transform: translateY(var(--bounce-height, -6px)); }
+    50% { transform: translateY(0); }
+    70% { transform: translateY(var(--bounce-height-small, -3px)); }
+}
+
+@keyframes vnTextFadeIn {
+    0% { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes vnTextGlitch {
+    0%, 100% { transform: translate(0, 0) skew(0deg); opacity: 1; }
+    7% { transform: translate(-2px, -1px) skew(-2deg); }
+    10% { transform: translate(2px, 1px) skew(2deg); opacity: 0.8; }
+    15% { transform: translate(-1px, 2px) skew(-1deg); }
+    20% { transform: translate(0, 0) skew(0deg); opacity: 1; }
+}
+
+@keyframes vnTextTypewriterBounce {
+    0% { transform: scale(0.5) translateY(8px); opacity: 0; }
+    60% { transform: scale(1.1) translateY(-2px); opacity: 1; }
+    80% { transform: scale(0.95) translateY(1px); }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+`;
+  let stylesInjected = false;
+  function injectTextEffectStyles() {
+    if (stylesInjected) return;
+    stylesInjected = true;
+    const style = document.createElement("style");
+    style.setAttribute("data-vn-text-effects", "true");
+    style.textContent = TEXT_EFFECT_KEYFRAMES;
+    document.head.appendChild(style);
+  }
+  function getRainbowColor(index, speed) {
+    const hue = (index * 30 + Date.now() * speed * 0.05) % 360;
+    return `hsl(${hue}, 85%, 65%)`;
+  }
+  function getCharacterStyle(effect, charIndex, totalChars) {
+    const speed = effect.speed ?? 1;
+    const intensity = effect.intensity ?? 1;
+    const delay = charIndex * 0.05 / speed;
+    switch (effect.type) {
+      case "shake":
+        return {
+          display: "inline-block",
+          animation: `vnTextShake ${0.3 / speed}s ease-in-out infinite`,
+          animationDelay: `${delay}s`,
+          "--shake-intensity": `${intensity}px`
+        };
+      case "wave":
+        return {
+          display: "inline-block",
+          animation: `vnTextWave ${0.8 / speed}s ease-in-out infinite`,
+          animationDelay: `${delay}s`,
+          "--wave-amplitude": `${-4 * intensity}px`
+        };
+      case "rainbow":
+        return {
+          display: "inline-block",
+          color: getRainbowColor(charIndex, speed),
+          transition: "color 0.1s"
+        };
+      case "glitch":
+        return {
+          display: "inline-block",
+          animation: `vnTextGlitch ${0.5 / speed}s ease-in-out infinite`,
+          animationDelay: `${charIndex * 0.1}s`
+        };
+      case "pulse":
+        return {
+          display: "inline-block",
+          animation: `vnTextPulse ${1 / speed}s ease-in-out infinite`,
+          animationDelay: `${delay}s`,
+          "--pulse-scale": `${1 + 0.15 * intensity}`
+        };
+      case "fade-in":
+        return {
+          display: "inline-block",
+          animation: `vnTextFadeIn ${0.4 / speed}s ease-out forwards`,
+          animationDelay: `${charIndex * 0.03 / speed}s`,
+          opacity: 0
+        };
+      case "bounce":
+        return {
+          display: "inline-block",
+          animation: `vnTextBounce ${0.6 / speed}s ease-in-out infinite`,
+          animationDelay: `${delay}s`,
+          "--bounce-height": `${-6 * intensity}px`,
+          "--bounce-height-small": `${-3 * intensity}px`
+        };
+      case "typewriter-bounce":
+        return {
+          display: "inline-block",
+          animation: `vnTextTypewriterBounce ${0.3 / speed}s ease-out forwards`,
+          animationDelay: `0s`
+        };
+      default:
+        return {};
+    }
+  }
+  const AnimatedDialogueText = ({
+    displayText,
+    textEffect,
+    textStyle,
+    gradientStyle
+  }) => {
+    React2.useMemo(() => {
+      injectTextEffectStyles();
+    }, []);
+    if (!textEffect || textEffect.type === "none") {
+      return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: displayText });
+    }
+    const chars = displayText.split("");
+    return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: chars.map((char, i) => {
+      if (char === " ") {
+        return /* @__PURE__ */ jsxRuntime2.jsx("span", { children: " " }, i);
+      }
+      const charStyle = getCharacterStyle(textEffect, i, chars.length);
+      return /* @__PURE__ */ jsxRuntime2.jsx(
+        "span",
+        {
+          style: {
+            ...charStyle,
+            // Preserve any gradient styling
+            ...gradientStyle ? {
+              WebkitBackgroundClip: void 0,
+              backgroundClip: void 0,
+              WebkitTextFillColor: void 0
+            } : {}
+          },
+          children: char
+        },
+        i
+      );
+    }) });
+  };
   const normalizeSetVariableOperator = (variableType, variableName, operator) => {
     if ((operator === "add" || operator === "subtract") && variableType !== "number") {
       console.warn(
@@ -2282,6 +3129,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   const handleDialogue = (command, context) => {
     const { project } = context;
     const char = command.characterId ? project.characters[command.characterId] : null;
+    const voiceAudioId = command.voiceAudioId || (char == null ? void 0 : char.defaultVoiceId) || null;
+    const textEffect = command.textEffect || (char == null ? void 0 : char.textEffect) || void 0;
+    if (voiceAudioId) {
+      context.playSound(voiceAudioId, context.settings.sfxVolume);
+    }
     return {
       advance: false,
       // Wait for user to click
@@ -2292,7 +3144,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             text: command.text,
             characterName: (char == null ? void 0 : char.name) || "Narrator",
             characterColor: (char == null ? void 0 : char.color) || "#FFFFFF",
-            characterId: command.characterId || null
+            characterId: command.characterId || null,
+            voiceAudioId,
+            textEffect
           }
         }
       }
@@ -2489,6 +3343,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       videoLoop,
       expressionId: command.expressionId,
       layerVariableBindings: finalBindings,
+      sourceCommandId: command.id,
+      visualEffects: (() => {
+        const effects = [];
+        if (command.visualEffects && command.visualEffects.length > 0) {
+          effects.push(...command.visualEffects.filter((e) => e.type !== "none"));
+        } else if (command.visualEffect && command.visualEffect.type !== "none") {
+          effects.push(command.visualEffect);
+        }
+        return effects.length > 0 ? effects : void 0;
+      })(),
       transition: requestedTransition && requestedTransition !== "instant" ? {
         type: requestedTransition,
         duration: command.duration ?? 0.5,
@@ -3469,6 +4333,161 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return commandResult;
   };
+  function handleSpawnParticles(command, context) {
+    var _a, _b;
+    const { playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
+    const tag = command.particleTag || `particles_${command.id}`;
+    const particleEntry = {
+      tag,
+      config: command.config,
+      startTime: Date.now(),
+      duration: command.duration || 0
+    };
+    console.log("[ParticleHandler] SpawnParticles:", { tag, preset: (_a = command.config) == null ? void 0 : _a.preset, emitRate: (_b = command.config) == null ? void 0 : _b.emitRate, duration: command.duration, configKeys: Object.keys(command.config || {}) });
+    if (command.duration > 0) {
+      const timeout = window.setTimeout(() => {
+        setPlayerState((p) => {
+          if (!p) return null;
+          const { [tag]: _, ...remaining } = p.stageState.particleEffects || {};
+          return {
+            ...p,
+            stageState: {
+              ...p.stageState,
+              particleEffects: remaining
+            }
+          };
+        });
+      }, command.duration * 1e3);
+      activeEffectTimeoutsRef.current.push(timeout);
+    }
+    return {
+      advance: true,
+      updates: {
+        stageState: {
+          ...playerState.stageState,
+          particleEffects: {
+            ...playerState.stageState.particleEffects || {},
+            [tag]: particleEntry
+          }
+        }
+      }
+    };
+  }
+  function handleStopParticles(command, context) {
+    const { playerState, setPlayerState, advance: advanceFn } = context;
+    if (command.fadeDuration > 0) {
+      const tag = command.particleTag;
+      const currentEffects2 = { ...playerState.stageState.particleEffects || {} };
+      if (tag) {
+        if (currentEffects2[tag]) {
+          currentEffects2[tag] = {
+            ...currentEffects2[tag],
+            fadingOut: true,
+            fadeOutDuration: command.fadeDuration
+          };
+        }
+      } else {
+        for (const key of Object.keys(currentEffects2)) {
+          currentEffects2[key] = {
+            ...currentEffects2[key],
+            fadingOut: true,
+            fadeOutDuration: command.fadeDuration
+          };
+        }
+      }
+      const timeout = window.setTimeout(() => {
+        setPlayerState((p) => {
+          if (!p) return null;
+          const effects = { ...p.stageState.particleEffects || {} };
+          if (tag) {
+            delete effects[tag];
+          } else {
+            for (const key of Object.keys(effects)) {
+              delete effects[key];
+            }
+          }
+          return {
+            ...p,
+            stageState: { ...p.stageState, particleEffects: effects }
+          };
+        });
+      }, command.fadeDuration * 1e3);
+      context.activeEffectTimeoutsRef.current.push(timeout);
+      return {
+        advance: true,
+        updates: {
+          stageState: {
+            ...playerState.stageState,
+            particleEffects: currentEffects2
+          }
+        }
+      };
+    }
+    const currentEffects = { ...playerState.stageState.particleEffects || {} };
+    if (command.particleTag) {
+      delete currentEffects[command.particleTag];
+    } else {
+      for (const key of Object.keys(currentEffects)) {
+        delete currentEffects[key];
+      }
+    }
+    return {
+      advance: true,
+      updates: {
+        stageState: {
+          ...playerState.stageState,
+          particleEffects: currentEffects
+        }
+      }
+    };
+  }
+  function handleCallCommonEvent(command, context) {
+    const { project, playerState } = context;
+    const commonEvents = project.commonEvents || {};
+    const commonEvent = commonEvents[command.commonEventId];
+    if (!commonEvent) {
+      console.warn(`[CallCommonEvent] Common event not found: ${command.commonEventId}`);
+      return { advance: true };
+    }
+    if (!commonEvent.enabled) {
+      console.warn(`[CallCommonEvent] Common event is disabled: ${commonEvent.name}`);
+      return { advance: true };
+    }
+    if (!commonEvent.commands || commonEvent.commands.length === 0) {
+      console.warn(`[CallCommonEvent] Common event has no commands: ${commonEvent.name}`);
+      return { advance: true };
+    }
+    const variableOverrides = {};
+    if (commonEvent.parameters && command.arguments) {
+      for (const param of commonEvent.parameters) {
+        const argValue = command.arguments[param.id];
+        if (argValue !== void 0) {
+          variableOverrides[param.id] = argValue;
+        } else {
+          variableOverrides[param.id] = param.defaultValue;
+        }
+      }
+    }
+    const newStack = [
+      ...playerState.commandStack,
+      {
+        sceneId: playerState.currentSceneId,
+        commands: playerState.currentCommands,
+        index: playerState.currentIndex + 1
+      }
+    ];
+    return {
+      advance: false,
+      // We handle navigation ourselves
+      updates: {
+        currentCommands: commonEvent.commands,
+        currentIndex: 0,
+        commandStack: newStack,
+        // Merge parameter arguments into variables
+        ...Object.keys(variableOverrides).length > 0 ? { variables: { ...playerState.variables, ...variableOverrides } } : {}
+      }
+    };
+  }
   class CommandScheduler {
     constructor() {
       this.lastProcessed = null;
@@ -3612,6 +4631,22 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return "transition-dissolve";
     }
   };
+  function getHueFromHex(hex) {
+    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return 0;
+    const r = parseInt(match[1], 16) / 255;
+    const g = parseInt(match[2], 16) / 255;
+    const b = parseInt(match[3], 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0;
+    if (max !== min) {
+      const d = max - min;
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+      else if (max === g) h = ((b - r) / d + 2) / 6;
+      else h = ((r - g) / d + 4) / 6;
+    }
+    return Math.round(h * 360);
+  }
   function isRuntimeDebugEnabled() {
     try {
       return window.localStorage.getItem("flourish:runtimeDebug") === "1";
@@ -3882,9 +4917,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return /* @__PURE__ */ jsxRuntime2.jsx(
       "div",
       {
-        style: containerStyle,
+        style: { ...containerStyle, ...hasTransition ? { animationDuration: animDuration } : {} },
         className: `${transitionClass}`,
-        ...hasTransition ? { style: { ...containerStyle, animationDuration: animDuration } } : {},
         children: /* @__PURE__ */ jsxRuntime2.jsx(
           "button",
           {
@@ -3969,7 +5003,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         muted: true,
         loop: overlay.videoLoop,
         playsInline: true,
-        className: "absolute inset-0 w-full h-full object-contain",
+        className: "absolute inset-0 w-full h-full object-contain pointer-events-none",
         style: imageStyle
       }
     ) : /* @__PURE__ */ jsxRuntime2.jsx(
@@ -3977,7 +5011,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       {
         src: overlay.imageUrl,
         alt: "",
-        className: "absolute inset-0 w-full h-full object-contain",
+        className: "absolute inset-0 w-full h-full object-contain pointer-events-none",
         style: imageStyle
       }
     ) });
@@ -4005,16 +5039,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const useStageSize = (ref) => {
     const [size, setSize] = React2.useState({ width: 0, height: 0 });
+    const [element, setElement] = React2.useState(null);
     React2.useEffect(() => {
-      if (!ref.current) return;
-      const el = ref.current;
+      if (ref.current) {
+        setElement(ref.current);
+        return;
+      }
+      const interval = setInterval(() => {
+        if (ref.current) {
+          setElement(ref.current);
+          clearInterval(interval);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    }, [ref]);
+    React2.useEffect(() => {
+      if (!element) return;
       let rafId = null;
       const obs = new ResizeObserver(() => {
         if (rafId !== null) {
           cancelAnimationFrame(rafId);
         }
         rafId = requestAnimationFrame(() => {
-          const r2 = el.getBoundingClientRect();
+          const r2 = element.getBoundingClientRect();
           setSize((prev) => {
             if (prev.width === r2.width && prev.height === r2.height) {
               return prev;
@@ -4023,8 +5070,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           });
         });
       });
-      obs.observe(el);
-      const r = el.getBoundingClientRect();
+      obs.observe(element);
+      const r = element.getBoundingClientRect();
       setSize({ width: r.width, height: r.height });
       return () => {
         obs.disconnect();
@@ -4032,11 +5079,47 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           cancelAnimationFrame(rafId);
         }
       };
-    }, [ref]);
+    }, [element]);
+    React2.useEffect(() => {
+      if (ref.current && ref.current !== element) {
+        setElement(ref.current);
+      }
+    });
     return size;
   };
+  function hexToRgba(hex, opacity) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+  }
+  function buildImageBackgroundStyle(url, sizeMode, slicePx) {
+    switch (sizeMode) {
+      case "nine-slice": {
+        const s = slicePx ?? 30;
+        return {
+          borderImageSource: `url(${url})`,
+          borderImageSlice: `${s} fill`,
+          borderImageWidth: `${s}px`,
+          borderImageRepeat: "stretch",
+          borderStyle: "solid",
+          borderColor: "transparent",
+          borderWidth: `${s}px`
+        };
+      }
+      case "contain":
+        return { backgroundImage: `url(${url})`, backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "center" };
+      case "cover":
+        return { backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundRepeat: "no-repeat", backgroundPosition: "center" };
+      case "tile":
+        return { backgroundImage: `url(${url})`, backgroundSize: "auto", backgroundRepeat: "repeat" };
+      case "stretch":
+      default:
+        return { backgroundImage: `url(${url})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center" };
+    }
+  }
   const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project }) => {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, settings.textSpeed);
@@ -4055,6 +5138,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const dialogueBoxHeight = projectUI.dialogueBoxHeight || 0;
     const dialogueBoxBottomMargin = projectUI.dialogueBoxBottomMargin ?? 20;
     const dialogueBoxPadding = projectUI.dialogueBoxPadding ?? 20;
+    const dialogueSizeMode = projectUI.dialogueBoxSizeMode ?? "stretch";
+    const dialogueSlice = projectUI.dialogueBoxSlice ?? 30;
+    const dialogueColor = projectUI.dialogueBoxColor ?? "#0f172a";
+    const dialogueOpacity = projectUI.dialogueBoxOpacity ?? 90;
+    const dialogueBorderRadius = projectUI.dialogueBoxBorderRadius ?? 8;
+    const nameboxImageUrl = projectUI.nameboxImage ? ((_g = project.images[projectUI.nameboxImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.nameboxImage.id]) == null ? void 0 : _h.imageUrl) : null;
+    const nameboxColor = projectUI.nameboxColor ?? "#0f172a";
+    const nameboxOpacity = projectUI.nameboxOpacity ?? 92;
+    const nameboxPadding = projectUI.nameboxPadding ?? 8;
+    const nameboxHPadding = projectUI.nameboxHorizontalPadding ?? 14;
+    const nameboxBorderRadius = projectUI.nameboxBorderRadius ?? 6;
+    const nameboxOffsetX = projectUI.nameboxOffsetX ?? 20;
+    const nameboxOffsetY = projectUI.nameboxOffsetY ?? 0;
+    const nameboxSizeMode = projectUI.nameboxSizeMode ?? "stretch";
     const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
     const characterFont = character == null ? void 0 : character.fontFamily;
     const characterFontSize = character == null ? void 0 : character.fontSize;
@@ -4073,6 +5170,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ...fontSettingsToStyle(projectUI.dialogueNameFont),
       ...dialogue.characterColor && dialogue.characterColor !== "#FFFFFF" ? { color: dialogue.characterColor } : {}
     };
+    const nameboxBgStyle = nameboxImageUrl ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: `${nameboxBorderRadius}px` } : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: `${nameboxBorderRadius}px` };
+    const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
+    const dialogueImageStyle = dialogueBoxUrl && !isDialogueBoxVideo ? buildImageBackgroundStyle(dialogueBoxUrl, dialogueSizeMode, dialogueSlice) : {};
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "div",
       {
@@ -4082,43 +5182,50 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           left: `${(100 - dialogueBoxWidth) / 2}%`,
           right: `${(100 - dialogueBoxWidth) / 2}%`,
           animation: "vnDialogueIn 0.25s ease-out",
-          ...dialogueBorderUrl ? { backgroundImage: `url(${dialogueBorderUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center", padding: `${dialogueBorderPadding}px`, borderRadius: "0.5rem" } : {}
+          ...dialogueBorderUrl ? { ...buildImageBackgroundStyle(dialogueBorderUrl, dialogueSizeMode, dialogueSlice), padding: `${dialogueBorderPadding}px`, borderRadius: `${dialogueBorderRadius}px` } : {}
         },
         onClick: handleClick,
         children: [
-          showNamebox && !hasCustomImage && /* @__PURE__ */ jsxRuntime2.jsx(
+          showNamebox && /* @__PURE__ */ jsxRuntime2.jsx(
             "div",
             {
-              className: "absolute z-10",
+              className: "z-10",
               style: {
-                top: "-1.6em",
-                left: `${dialogueBoxPadding}px`,
-                background: "linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.88) 100%)",
-                border: "1px solid rgba(148,163,184,0.35)",
-                borderBottom: "none",
-                borderRadius: "0.375rem 0.375rem 0 0",
-                padding: "0.2em 0.9em",
-                backdropFilter: "blur(6px)",
-                WebkitBackdropFilter: "blur(6px)"
+                position: hasCustomImage ? "relative" : "absolute",
+                ...hasCustomImage ? { marginBottom: `${nameboxOffsetY + 2}px`, marginLeft: `${nameboxOffsetX}px` } : { top: `${-(nameboxPadding * 2 + (((_i = projectUI.dialogueNameFont) == null ? void 0 : _i.size) || 22)) - nameboxOffsetY}px`, left: `${nameboxOffsetX}px` },
+                display: "inline-block",
+                ...nameboxBgStyle,
+                padding: `${nameboxPadding}px ${nameboxHPadding}px`,
+                ...hasCustomImage || nameboxImageUrl ? {} : {
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  borderBottom: hasCustomImage ? void 0 : "none",
+                  backdropFilter: "blur(6px)",
+                  WebkitBackdropFilter: "blur(6px)"
+                }
               },
               children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...nameStyle, lineHeight: 1.3 }, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI.dialogueNameFont) || void 0, children: dialogue.characterName }) })
             }
           ),
-          showNamebox && hasCustomImage && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { marginBottom: "2px", paddingLeft: `${dialogueBoxPadding}px` }, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: nameStyle, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI.dialogueNameFont) || void 0, children: dialogue.characterName }) }) }),
           /* @__PURE__ */ jsxRuntime2.jsxs(
             "div",
             {
-              className: `relative ${!hasCustomImage ? "rounded-lg" : ""}`,
+              className: "relative",
               style: {
+                borderRadius: `${dialogueBorderRadius}px`,
+                overflow: "hidden",
                 ...hasCustomImage ? {} : {
-                  background: "linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.94) 100%)",
+                  backgroundColor: dialogueBgColor,
                   border: "1px solid rgba(148,163,184,0.25)",
-                  borderRadius: "0.5rem",
                   boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)",
                   backdropFilter: "blur(8px)",
                   WebkitBackdropFilter: "blur(8px)"
                 },
-                ...dialogueBoxUrl && !isDialogueBoxVideo ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center", ...dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: "120px" }, padding: `${dialogueBoxPadding}px` } : { padding: `${dialogueBoxPadding}px`, ...dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: "120px" } }
+                ...dialogueBoxUrl && !isDialogueBoxVideo ? {
+                  ...dialogueImageStyle,
+                  backgroundColor: dialogueBgColor,
+                  ...dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: "120px" },
+                  ...dialogueSizeMode !== "nine-slice" ? { padding: `${dialogueBoxPadding}px` } : {}
+                } : { padding: `${dialogueBoxPadding}px`, ...dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: "120px" } }
               },
               children: [
                 isDialogueBoxVideo && dialogueBoxUrl && /* @__PURE__ */ jsxRuntime2.jsx(
@@ -4127,33 +5234,42 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     autoPlay: true,
                     loop: true,
                     muted: true,
-                    className: "absolute inset-0 w-full h-full rounded-lg -z-10",
-                    style: { pointerEvents: "none", objectFit: "fill" },
+                    className: "absolute inset-0 w-full h-full -z-10",
+                    style: { pointerEvents: "none", objectFit: "fill", borderRadius: `${dialogueBorderRadius}px` },
                     children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: dialogueBoxUrl })
                   }
                 ),
-                /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "leading-relaxed", style: { ...dialogueTextStyle, wordBreak: "break-word", overflowWrap: "break-word" }, children: [
-                  /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI.dialogueTextFont) || void 0, children: displayText }),
-                  !hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
-                    display: "inline-block",
-                    width: "0.5em",
-                    height: "1em",
-                    marginLeft: "2px",
-                    verticalAlign: "text-bottom",
-                    backgroundColor: dialogueTextStyle.color || ((_g = projectUI.dialogueTextFont) == null ? void 0 : _g.color) || "#FFFFFF",
-                    animation: "vnCursorBlink 0.8s step-end infinite",
-                    opacity: 0.85
-                  } })
-                ] }),
-                hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
-                  position: "absolute",
-                  bottom: "8px",
-                  right: "12px",
-                  animation: "vnAdvanceBounce 1.2s ease-in-out infinite",
-                  opacity: 0.6,
-                  fontSize: "calc(var(--font-scale, 1) * 12px)",
-                  color: "#94a3b8"
-                }, children: "▼" })
+                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", zIndex: 1, padding: dialogueSizeMode === "nine-slice" && dialogueBoxUrl ? `${dialogueBoxPadding}px` : void 0 }, children: [
+                  /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "leading-relaxed", style: { ...dialogueTextStyle, wordBreak: "break-word", overflowWrap: "break-word" }, children: [
+                    /* @__PURE__ */ jsxRuntime2.jsx(
+                      AnimatedDialogueText,
+                      {
+                        displayText,
+                        textEffect: dialogue.textEffect,
+                        gradientStyle: extractTextGradientStyle(projectUI.dialogueTextFont) || void 0
+                      }
+                    ),
+                    !hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: {
+                      display: "inline-block",
+                      width: "0.5em",
+                      height: "1em",
+                      marginLeft: "2px",
+                      verticalAlign: "text-bottom",
+                      backgroundColor: dialogueTextStyle.color || ((_j = projectUI.dialogueTextFont) == null ? void 0 : _j.color) || "#FFFFFF",
+                      animation: "vnCursorBlink 0.8s step-end infinite",
+                      opacity: 0.85
+                    } })
+                  ] }),
+                  hasFinished && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                    position: "absolute",
+                    bottom: "8px",
+                    right: "12px",
+                    animation: "vnAdvanceBounce 1.2s ease-in-out infinite",
+                    opacity: 0.6,
+                    fontSize: "calc(var(--font-scale, 1) * 12px)",
+                    color: "#94a3b8"
+                  }, children: "▼" })
+                ] })
               ]
             }
           ),
@@ -4176,7 +5292,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
   };
   const ChoiceMenu = ({ choices, projectUI, onSelect, variables, project }) => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const [hoveredIndex, setHoveredIndex] = React2.useState(null);
     const choiceButtonUrl = projectUI.choiceButtonImage ? projectUI.choiceButtonImage.type === "video" ? (_a = project.videos[projectUI.choiceButtonImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[projectUI.choiceButtonImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[projectUI.choiceButtonImage.id]) == null ? void 0 : _c.imageUrl) : null;
     const isChoiceButtonVideo = ((_d = projectUI.choiceButtonImage) == null ? void 0 : _d.type) === "video";
     const choiceBorderUrl = projectUI.choiceButtonBorderImage ? ((_e = project.images[projectUI.choiceButtonBorderImage.id]) == null ? void 0 : _e.imageUrl) || ((_f = project.backgrounds[projectUI.choiceButtonBorderImage.id]) == null ? void 0 : _f.imageUrl) : null;
@@ -4184,31 +5301,48 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const choiceWidth = projectUI.choiceButtonWidth || 0;
     const choiceHeight = projectUI.choiceButtonHeight || 0;
     const choicePadding = projectUI.choiceButtonPadding ?? 16;
+    const choiceSizeMode = projectUI.choiceButtonSizeMode ?? "stretch";
+    const choiceSlice = projectUI.choiceButtonSlice ?? 15;
+    const choiceColor = projectUI.choiceButtonColor ?? "#1e293b";
+    const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
+    const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
+    const choiceHoverColor = projectUI.choiceHoverColor ?? "#334155";
+    const choiceHoverUrl = projectUI.choiceHoverImage ? ((_g = project.images[projectUI.choiceHoverImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.choiceHoverImage.id]) == null ? void 0 : _h.imageUrl) : null;
     const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
+    const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
+    const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
     return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 z-30 flex flex-col items-center justify-center p-8", style: { animation: "vnChoiceOverlayIn 0.3s ease-out", background: "radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.25) 100%)" }, children: [
       choices.map((choice, index) => {
         const interpolatedText = interpolateVariables(choice.text, variables, project);
+        const isHovered = hoveredIndex === index;
+        const activeButtonUrl = isHovered && choiceHoverUrl ? choiceHoverUrl : choiceButtonUrl;
         return /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
           {
             className: "mb-3",
             style: {
               animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
-              ...choiceBorderUrl ? { backgroundImage: `url(${choiceBorderUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center", padding: `${choiceBorderPadding}px`, ...choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: "80%", minWidth: "280px" }, borderRadius: "0.5rem" } : { ...choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: "80%", minWidth: "280px" } }
+              ...choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: `${choiceBorderPadding}px`, ...choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: "80%", minWidth: "280px" }, borderRadius: `${choiceBorderRadius}px` } : { ...choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: "80%", minWidth: "280px" } }
             },
             children: /* @__PURE__ */ jsxRuntime2.jsxs(
               "button",
               {
                 onClick: () => onSelect(choice),
-                className: `relative rounded-lg overflow-hidden w-full transition-all duration-200 ${!hasCustomChoiceImage ? "hover:scale-[1.03]" : "hover:brightness-110 hover:scale-[1.03]"}`,
+                onMouseEnter: () => setHoveredIndex(index),
+                onMouseLeave: () => setHoveredIndex(null),
+                className: "relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]",
                 style: {
-                  ...choiceButtonUrl && !isChoiceButtonVideo ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center" } : !hasCustomChoiceImage ? {
-                    background: "linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(51,65,85,0.85) 100%)",
+                  borderRadius: `${choiceBorderRadius}px`,
+                  ...activeButtonUrl && !isChoiceButtonVideo ? {
+                    ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
+                    backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor
+                  } : !hasCustomChoiceImage ? {
+                    backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor,
                     border: "1px solid rgba(148,163,184,0.3)",
                     boxShadow: "0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)",
                     backdropFilter: "blur(6px)",
                     WebkitBackdropFilter: "blur(6px)"
-                  } : {},
+                  } : { backgroundColor: isHovered ? choiceHoverBgColor : "transparent" },
                   padding: `${choicePadding}px ${choicePadding * 2}px`,
                   minWidth: "200px",
                   ...choiceHeight ? { height: `${choiceHeight}px` } : {},
@@ -4225,8 +5359,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       autoPlay: true,
                       loop: true,
                       muted: true,
-                      className: "absolute inset-0 w-full h-full rounded-lg -z-10",
-                      style: { pointerEvents: "none", objectFit: "fill" },
+                      className: "absolute inset-0 w-full h-full -z-10",
+                      style: { pointerEvents: "none", objectFit: "fill", borderRadius: `${choiceBorderRadius}px` },
                       children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: choiceButtonUrl })
                     }
                   ),
@@ -4264,6 +5398,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const inputBorderPadding = (projectUI == null ? void 0 : projectUI.inputBorderPadding) ?? 8;
     const inputBoxWidth = (projectUI == null ? void 0 : projectUI.inputBoxWidth) || 0;
     const inputBoxPadding = (projectUI == null ? void 0 : projectUI.inputBoxPadding) ?? 24;
+    const inputSizeMode = (projectUI == null ? void 0 : projectUI.inputBoxSizeMode) ?? "stretch";
+    const inputSlice = (projectUI == null ? void 0 : projectUI.inputBoxSlice) ?? 20;
+    const inputColor = (projectUI == null ? void 0 : projectUI.inputBoxColor) ?? "#0f172a";
+    const inputOpacity = (projectUI == null ? void 0 : projectUI.inputBoxOpacity) ?? 92;
+    const inputBorderRadius = (projectUI == null ? void 0 : projectUI.inputBoxBorderRadius) ?? 8;
+    const inputBgColor = hexToRgba(inputColor, inputOpacity);
     const hasCustomImage = inputBoxUrl || inputBorderUrl;
     const promptStyle = (projectUI == null ? void 0 : projectUI.inputPromptFont) ? { ...fontSettingsToStyle(projectUI.inputPromptFont), textAlign: projectUI.inputPromptFont.align || "center" } : { color: "#FFFFFF", textAlign: "center" };
     const fieldStyle = (projectUI == null ? void 0 : projectUI.inputFieldFont) ? fontSettingsToStyle(projectUI.inputFieldFont) : { color: "#FFFFFF" };
@@ -4271,26 +5411,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8", children: /* @__PURE__ */ jsxRuntime2.jsx(
       "div",
       {
-        className: `relative ${!hasCustomImage ? "rounded-lg" : ""}`,
+        className: "relative",
         style: {
+          borderRadius: `${inputBorderRadius}px`,
           ...inputBoxWidth ? { width: `${inputBoxWidth}px` } : { maxWidth: "28rem", width: "100%" },
-          ...inputBorderUrl ? { backgroundImage: `url(${inputBorderUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center", padding: `${inputBorderPadding}px`, borderRadius: "0.5rem" } : {},
+          ...inputBorderUrl ? { ...buildImageBackgroundStyle(inputBorderUrl, inputSizeMode, inputSlice), padding: `${inputBorderPadding}px` } : {},
           animation: "vnDialogueIn 0.25s ease-out"
         },
         children: /* @__PURE__ */ jsxRuntime2.jsxs(
           "div",
           {
-            className: `relative ${!hasCustomImage ? "rounded-lg" : ""}`,
+            className: "relative",
             style: {
+              borderRadius: `${inputBorderRadius}px`,
+              overflow: "hidden",
               ...hasCustomImage ? {} : {
-                background: "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.96) 100%)",
+                backgroundColor: inputBgColor,
                 border: "1px solid rgba(148,163,184,0.3)",
-                borderRadius: "0.5rem",
                 boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)",
                 backdropFilter: "blur(8px)",
                 WebkitBackdropFilter: "blur(8px)"
               },
-              ...inputBoxUrl && !isInputBoxVideo ? { backgroundImage: `url(${inputBoxUrl})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat", backgroundPosition: "center", padding: `${inputBoxPadding}px` } : { padding: `${inputBoxPadding}px` }
+              ...inputBoxUrl && !isInputBoxVideo ? { ...buildImageBackgroundStyle(inputBoxUrl, inputSizeMode, inputSlice), backgroundColor: inputBgColor, ...inputSizeMode !== "nine-slice" ? { padding: `${inputBoxPadding}px` } : {} } : { padding: `${inputBoxPadding}px` }
             },
             children: [
               isInputBoxVideo && inputBoxUrl && /* @__PURE__ */ jsxRuntime2.jsx(
@@ -4299,43 +5441,47 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   autoPlay: true,
                   loop: true,
                   muted: true,
-                  className: "absolute inset-0 w-full h-full rounded-lg -z-10",
-                  style: { pointerEvents: "none", objectFit: "fill" },
+                  className: "absolute inset-0 w-full h-full -z-10",
+                  style: { pointerEvents: "none", objectFit: "fill", borderRadius: `${inputBorderRadius}px` },
                   children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: inputBoxUrl })
                 }
               ),
-              /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "mb-4", style: promptStyle, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI == null ? void 0 : projectUI.inputPromptFont) || void 0, children: interpolatedPrompt }) }),
-              /* @__PURE__ */ jsxRuntime2.jsxs("form", { onSubmit: handleSubmit, children: [
-                /* @__PURE__ */ jsxRuntime2.jsx(
-                  "input",
-                  {
-                    type: "text",
-                    value: inputValue,
-                    onChange: (e) => setInputValue(e.target.value),
-                    placeholder: textInput.placeholder,
-                    maxLength: textInput.maxLength,
-                    className: "w-full px-3 py-2 rounded focus:outline-none transition-colors",
-                    style: {
-                      ...fieldStyle,
-                      backgroundColor: "rgba(15,23,42,0.6)",
-                      border: "1px solid rgba(148,163,184,0.3)"
-                    },
-                    autoFocus: true
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntime2.jsx(
-                  "button",
-                  {
-                    type: "submit",
-                    className: "w-full mt-4 px-4 py-2 rounded transition-colors hover:brightness-110",
-                    style: {
-                      ...submitStyle,
-                      backgroundColor: hasCustomImage ? "rgba(255,255,255,0.1)" : "rgba(51,65,85,0.8)",
-                      border: "1px solid rgba(148,163,184,0.2)"
-                    },
-                    children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI == null ? void 0 : projectUI.inputSubmitFont) || void 0, children: "Submit" })
-                  }
-                )
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", zIndex: 1, padding: inputSizeMode === "nine-slice" && inputBoxUrl ? `${inputBoxPadding}px` : void 0 }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "mb-4", style: promptStyle, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI == null ? void 0 : projectUI.inputPromptFont) || void 0, children: interpolatedPrompt }) }),
+                /* @__PURE__ */ jsxRuntime2.jsxs("form", { onSubmit: handleSubmit, children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx(
+                    "input",
+                    {
+                      type: "text",
+                      value: inputValue,
+                      onChange: (e) => setInputValue(e.target.value),
+                      placeholder: textInput.placeholder,
+                      maxLength: textInput.maxLength,
+                      className: "w-full px-3 py-2 focus:outline-none transition-colors",
+                      style: {
+                        ...fieldStyle,
+                        backgroundColor: "rgba(15,23,42,0.6)",
+                        border: "1px solid rgba(148,163,184,0.3)",
+                        borderRadius: `${Math.max(4, inputBorderRadius - 4)}px`
+                      },
+                      autoFocus: true
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntime2.jsx(
+                    "button",
+                    {
+                      type: "submit",
+                      className: "w-full mt-4 px-4 py-2 transition-colors hover:brightness-110",
+                      style: {
+                        ...submitStyle,
+                        backgroundColor: hasCustomImage ? "rgba(255,255,255,0.1)" : "rgba(51,65,85,0.8)",
+                        border: "1px solid rgba(148,163,184,0.2)",
+                        borderRadius: `${Math.max(4, inputBorderRadius - 4)}px`
+                      },
+                      children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: extractTextGradientStyle(projectUI == null ? void 0 : projectUI.inputSubmitFont) || void 0, children: "Submit" })
+                    }
+                  )
+                ] })
               ] })
             ]
           }
@@ -4868,6 +6014,340 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       transition: transitionProp,
       animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`
     };
+  };
+  const HotZoneTextInput = ({ element, variables, onVariableChange, playSound, font }) => {
+    const vid = element.variableId;
+    const currentVal = vid && variables[vid] != null ? String(variables[vid]) : "";
+    const [localValue, setLocalValue] = React2.useState(currentVal);
+    React2.useEffect(() => {
+      setLocalValue(currentVal);
+    }, [currentVal]);
+    const commit = () => {
+      if (vid && onVariableChange) onVariableChange(vid, localValue);
+    };
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full flex items-center gap-0", children: [
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        "input",
+        {
+          type: "text",
+          className: "flex-1 h-full rounded-l px-2 outline-none min-w-0",
+          style: {
+            backgroundColor: element.backgroundColor || "#1e293b",
+            border: `1px solid ${element.borderColor || "#475569"}`,
+            borderRight: "none",
+            color: (font == null ? void 0 : font.color) || "#fff",
+            fontFamily: font == null ? void 0 : font.fontFamily,
+            fontSize: font == null ? void 0 : font.fontSize
+          },
+          placeholder: element.placeholder || "",
+          maxLength: element.maxLength || void 0,
+          value: localValue,
+          onChange: (e) => setLocalValue(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") {
+              commit();
+              try {
+                playSound(element.clickSoundId || null);
+              } catch (_) {
+              }
+            }
+          },
+          onClick: (e) => e.stopPropagation()
+        }
+      ),
+      /* @__PURE__ */ jsxRuntime2.jsx(
+        "button",
+        {
+          type: "button",
+          className: "h-full px-2 rounded-r text-xs font-semibold flex items-center justify-center shrink-0",
+          style: {
+            backgroundColor: element.borderColor || "#475569",
+            color: "#fff",
+            border: `1px solid ${element.borderColor || "#475569"}`
+          },
+          onClick: (e) => {
+            e.stopPropagation();
+            commit();
+            try {
+              playSound(element.clickSoundId || null);
+            } catch (_) {
+            }
+          },
+          title: "Confirm",
+          children: "✓"
+        }
+      )
+    ] });
+  };
+  const HotZoneRuntime = ({ screen, onAction, variables, onVariableChange, evaluateConditions: evaluateConditions2, assetResolver, playSound }) => {
+    const { project } = useProject();
+    const hotSpots = screen.hotSpots || {};
+    const hotZoneElements = screen.hotZoneElements || {};
+    const [elementPositions, setElementPositions] = React2.useState({});
+    const [dragState, setDragState] = React2.useState(null);
+    const [dragOffset, setDragOffset] = React2.useState(null);
+    const containerRef = React2.useRef(null);
+    const [containerSize, setContainerSize] = React2.useState({ width: 1, height: 1 });
+    const [placedElements, setPlacedElements] = React2.useState({});
+    const [imageOverrides, setImageOverrides] = React2.useState({});
+    const [activeAnimations, setActiveAnimations] = React2.useState({});
+    const handleLocalAction = React2.useCallback((action) => {
+      if (action.type === UIActionType.ChangeImage) {
+        const a = action;
+        if (a.targetElementId && a.newImageId) {
+          setImageOverrides((prev) => ({ ...prev, [a.targetElementId]: a.newImageId }));
+        }
+        return;
+      }
+      if (action.type === UIActionType.PlayAnimation) {
+        const a = action;
+        if (a.targetElementId) {
+          const anim = a.animation || "shake";
+          const dur = a.duration || 500;
+          setActiveAnimations((prev) => ({ ...prev, [a.targetElementId]: { animation: anim, duration: dur } }));
+          setTimeout(() => {
+            setActiveAnimations((prev) => {
+              const next = { ...prev };
+              delete next[a.targetElementId];
+              return next;
+            });
+          }, dur);
+        }
+        return;
+      }
+      onAction(action);
+    }, [onAction]);
+    React2.useEffect(() => {
+      if (!containerRef.current) return;
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+        }
+      });
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+    }, []);
+    React2.useEffect(() => {
+      if (!screen.winCondition) return;
+      const wc = screen.winCondition;
+      if (wc.type === "allPlaced") {
+        const draggableElements = Object.values(hotZoneElements).filter((el) => el.draggable);
+        const allPlaced = draggableElements.length > 0 && draggableElements.every((el) => placedElements[el.id]);
+        if (allPlaced) {
+          wc.actions.forEach((action) => handleLocalAction(action));
+        }
+      } else if (wc.type === "variable" && wc.variableId && wc.operator && wc.value !== void 0) {
+        const met = evaluateConditions2([{ variableId: wc.variableId, operator: wc.operator, value: wc.value }], variables);
+        if (met) {
+          wc.actions.forEach((action) => handleLocalAction(action));
+        }
+      }
+    }, [placedElements, variables, screen.winCondition, hotZoneElements, handleLocalAction, evaluateConditions2]);
+    const handleElementMouseDown = React2.useCallback((e, el) => {
+      if (!el.draggable) {
+        try {
+          playSound(el.clickSoundId || null);
+        } catch (e2) {
+        }
+        if (el.actions) el.actions.forEach((a) => handleLocalAction(a));
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        playSound(el.clickSoundId || null);
+      } catch (e2) {
+      }
+      const pos = elementPositions[el.id] || { x: el.x, y: el.y };
+      setDragState({
+        elementId: el.id,
+        startMouseX: e.clientX,
+        startMouseY: e.clientY,
+        startX: pos.x,
+        startY: pos.y
+      });
+      setDragOffset(null);
+      setPlacedElements((prev) => {
+        const next = { ...prev };
+        delete next[el.id];
+        return next;
+      });
+    }, [elementPositions, handleLocalAction, playSound]);
+    React2.useEffect(() => {
+      if (!dragState) return;
+      const sw = containerSize.width || 1;
+      const sh = containerSize.height || 1;
+      const onMove = (e) => {
+        const dx = (e.clientX - dragState.startMouseX) / sw * 100;
+        const dy = (e.clientY - dragState.startMouseY) / sh * 100;
+        let nx = Math.round((dragState.startX + dx) * 10) / 10;
+        let ny = Math.round((dragState.startY + dy) * 10) / 10;
+        setDragOffset({ x: nx, y: ny });
+      };
+      const onUp = () => {
+        if (!dragOffset) {
+          setDragState(null);
+          return;
+        }
+        const el = hotZoneElements[dragState.elementId];
+        if (!el) {
+          setDragState(null);
+          setDragOffset(null);
+          return;
+        }
+        let droppedOnSpot = null;
+        for (const spot of Object.values(hotSpots)) {
+          if (spot.trigger !== "drag-drop") continue;
+          if (spot.acceptedElementIds && !spot.acceptedElementIds.includes(el.id)) continue;
+          const cx = dragOffset.x + el.width / 2;
+          const cy = dragOffset.y + el.height / 2;
+          if (cx >= spot.x && cx <= spot.x + spot.width && cy >= spot.y && cy <= spot.y + spot.height) {
+            droppedOnSpot = spot;
+            break;
+          }
+        }
+        if (droppedOnSpot) {
+          const finalPos = el.snapToHotSpot ? { x: droppedOnSpot.x + (droppedOnSpot.width - el.width) / 2, y: droppedOnSpot.y + (droppedOnSpot.height - el.height) / 2 } : { x: dragOffset.x, y: dragOffset.y };
+          setElementPositions((prev) => ({ ...prev, [el.id]: finalPos }));
+          setPlacedElements((prev) => ({ ...prev, [el.id]: droppedOnSpot.id }));
+          droppedOnSpot.actions.forEach((a) => handleLocalAction(a));
+        } else if (el.snapBack) {
+          setElementPositions((prev) => ({ ...prev, [el.id]: { x: el.x, y: el.y } }));
+        } else {
+          setElementPositions((prev) => ({ ...prev, [el.id]: { x: dragOffset.x, y: dragOffset.y } }));
+        }
+        setDragState(null);
+        setDragOffset(null);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      return () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+    }, [dragState, dragOffset, containerSize, hotZoneElements, hotSpots, handleLocalAction]);
+    const handleSpotClick = React2.useCallback((spot) => {
+      if (spot.trigger === "click") {
+        spot.actions.forEach((a) => handleLocalAction(a));
+      }
+    }, [handleLocalAction]);
+    const handleSpotHover = React2.useCallback((spot) => {
+      if (spot.trigger === "hover") {
+        spot.actions.forEach((a) => handleLocalAction(a));
+      }
+    }, [handleLocalAction]);
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: containerRef, className: "absolute inset-0 w-full h-full", children: [
+      Object.values(hotSpots).map((spot) => {
+        if (spot.conditions && !evaluateConditions2(spot.conditions, variables)) return null;
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            className: "absolute",
+            style: {
+              left: `${spot.x}%`,
+              top: `${spot.y}%`,
+              width: `${spot.width}%`,
+              height: `${spot.height}%`,
+              borderRadius: spot.shape === "circle" ? "50%" : void 0,
+              backgroundColor: spot.visible ? spot.highlightColor || "rgba(59, 130, 246, 0.2)" : "transparent",
+              border: spot.visible ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
+              pointerEvents: spot.trigger === "drag-drop" ? "none" : "auto",
+              cursor: spot.trigger === "click" ? "pointer" : void 0
+            },
+            onClick: () => handleSpotClick(spot),
+            onMouseEnter: () => handleSpotHover(spot)
+          },
+          spot.id
+        );
+      }),
+      Object.values(hotZoneElements).map((el) => {
+        if (el.conditions && !evaluateConditions2(el.conditions, variables)) return null;
+        const isDragging = (dragState == null ? void 0 : dragState.elementId) === el.id;
+        const pos = isDragging && dragOffset ? dragOffset : elementPositions[el.id] || { x: el.x, y: el.y };
+        const effectiveImageId = imageOverrides[el.id] || el.imageId;
+        const imageUrl = assetResolver(effectiveImageId, "image");
+        const anim = activeAnimations[el.id];
+        const animationKeyframes = {
+          shake: "hz-shake",
+          bounce: "hz-bounce",
+          pulse: "hz-pulse",
+          spin: "hz-spin",
+          fadeIn: "hz-fadeIn",
+          fadeOut: "hz-fadeOut",
+          slideIn: "hz-slideIn",
+          glow: "hz-glow"
+        };
+        const elType = el.elementType || "image";
+        const elText = el.text || "";
+        const elFont = el.font;
+        const videoUrl = el.videoId ? assetResolver(el.videoId, "video") : null;
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            className: "absolute",
+            style: {
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+              width: `${el.width}%`,
+              height: `${el.height}%`,
+              cursor: el.draggable ? isDragging ? "grabbing" : "grab" : elType === "textInput" ? "text" : "pointer",
+              zIndex: isDragging ? 50 : 10,
+              pointerEvents: "auto",
+              transition: isDragging ? "none" : "left 0.2s, top 0.2s",
+              animation: anim ? `${animationKeyframes[anim.animation] || "hz-shake"} ${anim.duration}ms ease` : void 0
+            },
+            onMouseDown: (e) => elType !== "textInput" && handleElementMouseDown(e, el),
+            onMouseEnter: () => {
+              try {
+                playSound(el.hoverSoundId || null);
+              } catch (e) {
+              }
+            },
+            children: elType === "text" ? /* @__PURE__ */ jsxRuntime2.jsx(
+              "div",
+              {
+                className: "w-full h-full flex items-center justify-center text-white pointer-events-none",
+                style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? "bold" : "normal", fontStyle: elFont.italic ? "italic" : "normal", color: elFont.color || "#fff" } : {},
+                children: project ? interpolateVariables(elText, variables, project) : elText
+              }
+            ) : elType === "button" ? /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full relative flex items-center justify-center pointer-events-none", children: [
+              imageUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "absolute inset-0 w-full h-full object-fill", draggable: false }),
+              /* @__PURE__ */ jsxRuntime2.jsx(
+                "span",
+                {
+                  className: "relative z-10 text-white text-sm font-semibold",
+                  style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || "#fff" } : {},
+                  children: project ? interpolateVariables(elText, variables, project) : elText
+                }
+              )
+            ] }) : elType === "video" ? videoUrl ? /* @__PURE__ */ jsxRuntime2.jsx(
+              "video",
+              {
+                src: videoUrl,
+                className: "w-full h-full object-contain pointer-events-none",
+                autoPlay: true,
+                loop: el.videoLoop ?? true,
+                muted: el.videoMuted ?? true,
+                playsInline: true
+              }
+            ) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full bg-indigo-500/30 border border-indigo-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: [
+              el.name,
+              " (no video)"
+            ] }) : elType === "textInput" ? /* @__PURE__ */ jsxRuntime2.jsx(
+              HotZoneTextInput,
+              {
+                element: el,
+                variables,
+                onVariableChange,
+                playSound,
+                font: elFont
+              }
+            ) : imageUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "w-full h-full object-contain pointer-events-none", draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full bg-purple-500/30 border border-purple-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: el.name })
+          },
+          el.id
+        );
+      })
+    ] });
   };
   const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables }) => {
     const { project } = useProject();
@@ -5411,7 +6891,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         style: screenTransitionStyle,
         children: [
           getBackgroundElement(),
-          Object.values(screen.elements).map((element) => renderElement(element, variables, project, onCommitVariables))
+          Object.values(screen.elements).map((element) => renderElement(element, variables, project, onCommitVariables)),
+          screen.screenType === "hotzone" && /* @__PURE__ */ jsxRuntime2.jsx(
+            HotZoneRuntime,
+            {
+              screen,
+              onAction,
+              variables,
+              onVariableChange,
+              evaluateConditions: evaluateConditions2,
+              assetResolver,
+              playSound
+            }
+          )
         ]
       },
       `${screenId}-${isClosing ? "closing" : "open"}`
@@ -5840,7 +7332,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       void createSaveRecord();
     };
     const loadGame = (slotNumber) => {
-      stopAndResetMusic();
+      const audio = musicAudioRef.current;
+      if (audioFadeInterval.current) {
+        clearInterval(audioFadeInterval.current);
+        audioFadeInterval.current = null;
+      }
+      if (audio) {
+        audio.pause();
+        audio.volume = 0;
+        audio.src = "";
+      }
+      const ambientAudio = ambientNoiseAudioRef.current;
+      if (ambientFadeInterval.current) {
+        clearInterval(ambientFadeInterval.current);
+        ambientFadeInterval.current = null;
+      }
+      if (ambientAudio) {
+        ambientAudio.pause();
+        ambientAudio.src = "";
+      }
+      menuMusicUrlRef.current = null;
       const doLoad = async () => {
         var _a2;
         const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
@@ -5922,7 +7433,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         currentIndex: 0,
         commandStack: [],
         variables: initialVariables,
-        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
+        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
         history: [],
         savedInputs: {},
         uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -6594,7 +8105,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       panY: 0,
                       transitionDuration: 0.5,
                       overlayEffects: []
-                    }
+                    },
+                    particleEffects: {}
                   },
                   uiState: {
                     dialogue: null,
@@ -6727,7 +8239,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         panY: 0,
                         transitionDuration: 0.5,
                         overlayEffects: []
-                      }
+                      },
+                      particleEffects: {}
                     },
                     uiState: {
                       dialogue: null,
@@ -7223,6 +8736,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.RunScript: {
               const result = handleRunScript(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.SpawnParticles: {
+              const result = handleSpawnParticles(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.StopParticles: {
+              const result = handleStopParticles(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.CallCommonEvent: {
+              const result = handleCallCommonEvent(command, commandContext);
               applyResult(result);
               break;
             }
@@ -7755,7 +9283,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   panY: 0,
                   transitionDuration: 0.5,
                   overlayEffects: []
-                }
+                },
+                particleEffects: {}
               },
               uiState: {
                 dialogue: null,
@@ -7818,7 +9347,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       panY: 0,
                       transitionDuration: 0.5,
                       overlayEffects: []
-                    }
+                    },
+                    particleEffects: {}
                   },
                   // Clear any active UI state (dialogue, choices, etc.)
                   uiState: {
@@ -8383,7 +9913,82 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   }
                   animationDuration = `${char.transition.duration}s`;
                 }
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: `absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`, style: { ...positionStyle, animationDuration, ...slideStyle, zIndex: 5 }, children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+                const effectsList = char.visualEffects || char.visualEffect ? char.visualEffects && char.visualEffects.length > 0 ? char.visualEffects : char.visualEffect && char.visualEffect.type !== "none" ? [char.visualEffect] : [] : [];
+                const transformEffects = [];
+                let combinedFilter = "";
+                let combinedFilterAnimation = "";
+                let flickerAnimation = "";
+                let filterVars = {};
+                for (const eff of effectsList) {
+                  if (!eff || eff.type === "none") continue;
+                  const speed = eff.speed ?? 1;
+                  const intensity = eff.intensity ?? 1;
+                  switch (eff.type) {
+                    case "shake": {
+                      const s = {};
+                      s.animation = `vnCharShake ${0.15 / speed}s ease-in-out infinite`;
+                      s["--char-shake-px"] = `${2 * intensity}px`;
+                      transformEffects.push({ style: s });
+                      break;
+                    }
+                    case "bounce": {
+                      const s = {};
+                      s.animation = `vnCharBounce ${0.6 / speed}s ease-in-out infinite`;
+                      s["--char-bounce-h"] = `${-8 * intensity}px`;
+                      transformEffects.push({ style: s });
+                      break;
+                    }
+                    case "float": {
+                      const s = {};
+                      s.animation = `vnCharFloat ${2 / speed}s ease-in-out infinite`;
+                      s["--char-float-h"] = `${-10 * intensity}px`;
+                      transformEffects.push({ style: s });
+                      break;
+                    }
+                    case "pulse": {
+                      const s = {};
+                      s.animation = `vnCharPulse ${1 / speed}s ease-in-out infinite`;
+                      s["--char-pulse-scale"] = `${1 + 0.05 * intensity}`;
+                      transformEffects.push({ style: s });
+                      break;
+                    }
+                    case "breathing": {
+                      const s = {};
+                      s.animation = `vnCharBreathing ${2 / speed}s ease-in-out infinite`;
+                      s["--char-breathe-scale"] = `${1 + 0.02 * intensity}`;
+                      transformEffects.push({ style: s });
+                      break;
+                    }
+                    case "glow":
+                      combinedFilter += ` drop-shadow(0 0 ${8 * intensity}px ${eff.color || "#FFFFFF"})`;
+                      combinedFilterAnimation = `vnCharGlow ${1.5 / speed}s ease-in-out infinite`;
+                      filterVars["--char-glow-color"] = eff.color || "#FFFFFF";
+                      filterVars["--char-glow-size"] = `${8 * intensity}px`;
+                      filterVars["--char-glow-size-max"] = `${14 * intensity}px`;
+                      break;
+                    case "tint":
+                      if (eff.color) {
+                        const tintOpacity = 0.3 * intensity;
+                        combinedFilter += ` brightness(${1 - tintOpacity * 0.3}) sepia(${tintOpacity}) hue-rotate(${getHueFromHex(eff.color)}deg) saturate(${1 + intensity})`;
+                      }
+                      break;
+                    case "silhouette":
+                      combinedFilter += ` brightness(0)${eff.color ? ` drop-shadow(0 0 2px ${eff.color})` : ""}`;
+                      break;
+                    case "flicker":
+                      flickerAnimation = `vnCharFlicker ${0.1 / speed}s step-end infinite`;
+                      break;
+                  }
+                }
+                const contentEffectStyle = {};
+                if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
+                if (combinedFilterAnimation) contentEffectStyle.animation = combinedFilterAnimation;
+                if (flickerAnimation) {
+                  contentEffectStyle.animation = contentEffectStyle.animation ? `${contentEffectStyle.animation}, ${flickerAnimation}` : flickerAnimation;
+                }
+                Object.assign(contentEffectStyle, filterVars);
+                const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
+                const spriteContent = /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
                   "video",
                   {
                     src: url,
@@ -8404,10 +10009,58 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     style: { zIndex: index }
                   },
                   index
-                )) }, char.charId);
+                )) });
+                let wrappedContent = hasContentEffect ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: contentEffectStyle, children: spriteContent }) : spriteContent;
+                for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
+                  wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: transformEffects[tIdx].style, children: wrappedContent });
+                }
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  "div",
+                  {
+                    className: `absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`,
+                    style: {
+                      ...positionStyle,
+                      animationDuration,
+                      ...slideStyle,
+                      zIndex: 5
+                    },
+                    children: wrappedContent
+                  },
+                  char.charId
+                );
               }),
-              state.textOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(TextOverlayElement, { overlay, stageSize }, overlay.id)),
-              state.imageOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(ImageOverlayElement, { overlay, stageSize }, overlay.id)),
+              (() => {
+                const pEffects = state.particleEffects;
+                const hasParticles = pEffects && Object.keys(pEffects).length > 0;
+                if (hasParticles) {
+                  console.log("[LivePreview] Rendering ParticleSystem:", Object.keys(pEffects), "stageSize:", stageSize.width, "x", stageSize.height);
+                  return /* @__PURE__ */ jsxRuntime2.jsx(
+                    ParticleSystem,
+                    {
+                      effects: pEffects,
+                      width: stageSize.width,
+                      height: stageSize.height
+                    }
+                  );
+                }
+                return null;
+              })(),
+              state.textOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
+                TextOverlayElement,
+                {
+                  overlay,
+                  stageSize
+                },
+                overlay.id
+              )),
+              state.imageOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
+                ImageOverlayElement,
+                {
+                  overlay,
+                  stageSize
+                },
+                overlay.id
+              )),
               state.buttonOverlays.map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
                 ButtonOverlayElement,
                 {
@@ -8433,6 +10086,82 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ]
         }
       );
+    };
+    const CreditScrollContent = ({ command, hasBgs, hasMedia, onFinish }) => {
+      const contentRef = React2.useRef(null);
+      const containerRef = React2.useRef(null);
+      const [animStyle, setAnimStyle] = React2.useState({});
+      const finishedRef = React2.useRef(false);
+      React2.useEffect(() => {
+        finishedRef.current = false;
+        const raf = requestAnimationFrame(() => {
+          const content = contentRef.current;
+          const container = containerRef.current;
+          if (!content || !container) return;
+          const contentHeight = content.scrollHeight;
+          const containerHeight = container.clientHeight;
+          const totalDistance = containerHeight + contentHeight;
+          const speed = command.scrollSpeed || 60;
+          const calcDuration = totalDistance / speed;
+          const maxDuration = command.duration || 300;
+          const finalDuration = Math.min(calcDuration, maxDuration);
+          setAnimStyle({
+            animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
+            // Use CSS custom properties for start and end translate values (in pixels)
+            ["--credit-scroll-start"]: `${containerHeight}px`,
+            ["--credit-scroll-end"]: `-${contentHeight}px`
+          });
+        });
+        return () => cancelAnimationFrame(raf);
+      }, [command]);
+      const handleAnimEnd = React2.useCallback((e) => {
+        if (e.target === e.currentTarget && !finishedRef.current) {
+          finishedRef.current = true;
+          onFinish();
+        }
+      }, [onFinish]);
+      React2.useEffect(() => {
+        command.scrollSpeed || 60;
+        const maxDuration = command.duration || 300;
+        const timeout = window.setTimeout(() => {
+          if (!finishedRef.current) {
+            finishedRef.current = true;
+            onFinish();
+          }
+        }, (maxDuration + 5) * 1e3);
+        return () => clearTimeout(timeout);
+      }, [command, onFinish]);
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: containerRef, className: "absolute inset-0 overflow-hidden z-[2]", children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
+                    @keyframes credit-scroll-dynamic {
+                        from { transform: translateY(var(--credit-scroll-start, 100%)); }
+                        to { transform: translateY(var(--credit-scroll-end, -100%)); }
+                    }
+                ` }),
+        /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            ref: contentRef,
+            className: "text-center px-8 w-full",
+            style: {
+              color: command.textColor || "#FFFFFF",
+              textShadow: hasBgs || hasMedia ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none",
+              willChange: "transform",
+              ...animStyle
+            },
+            onAnimationEnd: handleAnimEnd,
+            children: command.entries.map(
+              (entry, i) => entry.kind === "heading" ? /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-2xl font-bold mt-8 mb-4", style: { color: "#FFD700" }, children: entry.label }, i) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "mb-2", children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-sm opacity-70", children: entry.label }),
+                entry.value && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx("br", {}),
+                  /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-lg", children: entry.value })
+                ] })
+              ] }, i)
+            )
+          }
+        )
+      ] });
     };
     const CreditRollOverlay = ({ command, project: project2, assetResolver: assetResolver2, getAssetMetadata: getAssetMetadata2, onFinish }) => {
       const bgs = command.backgrounds || [];
@@ -8578,31 +10307,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }
               return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", style: mediaStyle }, `credit-media-${idx}`);
             }),
-            /* @__PURE__ */ jsxRuntime2.jsx(
-              "div",
-              {
-                className: "credits-scroll text-center px-8 relative z-[2]",
-                style: {
-                  color: command.textColor || "#FFFFFF",
-                  animationDuration: `${command.duration || 15}s`,
-                  textShadow: hasBgs || hasMedia ? "0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)" : "none"
-                },
-                onAnimationEnd: (e) => {
-                  if (e.target === e.currentTarget) {
-                    onFinish();
-                  }
-                },
-                children: command.entries.map(
-                  (entry, i) => entry.kind === "heading" ? /* @__PURE__ */ jsxRuntime2.jsx("h2", { className: "text-2xl font-bold mt-8 mb-4", style: { color: "#FFD700" }, children: entry.label }, i) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "mb-2", children: [
-                    /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-sm opacity-70", children: entry.label }),
-                    entry.value && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-                      /* @__PURE__ */ jsxRuntime2.jsx("br", {}),
-                      /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-lg", children: entry.value })
-                    ] })
-                  ] }, i)
-                )
-              }
-            ),
+            /* @__PURE__ */ jsxRuntime2.jsx(CreditScrollContent, { command, hasBgs, hasMedia, onFinish }),
             command.allowSkip && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-4 right-4 text-xs opacity-50 z-[3]", style: { color: command.textColor || "#FFFFFF" }, children: "Click to skip" })
           ]
         }
@@ -8741,109 +10446,124 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         ),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntime2.jsx(
-            "div",
-            {
-              className: "absolute z-25 flex items-center justify-center gap-2",
-              style: {
-                bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
-                left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-                right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-                pointerEvents: "none"
-              },
-              children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center gap-1.5", style: { pointerEvents: "auto" }, children: [
-                /* @__PURE__ */ jsxRuntime2.jsxs(
-                  "button",
-                  {
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      handleSkipBackward();
-                    },
-                    disabled: playerState.history.length === 0,
-                    className: "flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all",
-                    style: {
-                      background: playerState.history.length > 0 ? "rgba(15,23,42,0.75)" : "rgba(15,23,42,0.4)",
-                      border: "1px solid rgba(148,163,184,0.2)",
-                      color: playerState.history.length > 0 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.3)",
-                      backdropFilter: "blur(4px)",
-                      cursor: playerState.history.length > 0 ? "pointer" : "default"
-                    },
-                    title: "Skip Backward (Arrow Up)",
-                    children: [
-                      /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M11 19l-7-7 7-7m8 14l-7-7 7-7" }) }),
-                      "Back"
-                    ]
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntime2.jsxs(
-                  "button",
-                  {
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      updatePlayerState((pp) => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null);
-                    },
-                    className: "flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all hover:brightness-125",
-                    style: {
-                      background: "rgba(15,23,42,0.75)",
-                      border: "1px solid rgba(148,163,184,0.2)",
-                      color: "rgba(255,255,255,0.8)",
-                      backdropFilter: "blur(4px)"
-                    },
-                    title: "Text History (H)",
-                    children: [
-                      /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" }) }),
-                      "Log"
-                    ]
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntime2.jsxs(
-                  "button",
-                  {
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      setSettings((s) => ({ ...s, autoAdvance: !s.autoAdvance }));
-                    },
-                    className: "flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all",
-                    style: {
-                      background: settings.autoAdvance ? "rgba(14,165,233,0.3)" : "rgba(15,23,42,0.75)",
-                      border: `1px solid ${settings.autoAdvance ? "rgba(14,165,233,0.5)" : "rgba(148,163,184,0.2)"}`,
-                      color: settings.autoAdvance ? "rgba(125,211,252,0.95)" : "rgba(255,255,255,0.8)",
-                      backdropFilter: "blur(4px)"
-                    },
-                    title: "Auto-Advance",
-                    children: [
-                      /* @__PURE__ */ jsxRuntime2.jsxs("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: [
-                        /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" }),
-                        /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })
-                      ] }),
-                      "Auto"
-                    ]
-                  }
-                ),
-                settings.enableSkip && /* @__PURE__ */ jsxRuntime2.jsxs(
-                  "button",
-                  {
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      updatePlayerState((pp) => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null);
-                    },
-                    className: "flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all",
-                    style: {
-                      background: uiState.isSkipping ? "rgba(239,68,68,0.3)" : "rgba(15,23,42,0.75)",
-                      border: `1px solid ${uiState.isSkipping ? "rgba(239,68,68,0.5)" : "rgba(148,163,184,0.2)"}`,
-                      color: uiState.isSkipping ? "rgba(252,165,165,0.95)" : "rgba(255,255,255,0.8)",
-                      backdropFilter: "blur(4px)"
-                    },
-                    title: "Skip Forward (Ctrl)",
-                    children: [
-                      /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M13 5l7 7-7 7M5 5l7 7-7 7" }) }),
-                      "Skip"
-                    ]
-                  }
-                )
-              ] })
-            }
-          ),
+          (() => {
+            const qmPosition = project.ui.quickMenuPosition ?? "above-dialogue";
+            if (qmPosition === "hidden") return null;
+            const qmColor = project.ui.quickMenuColor ?? "#0f172a";
+            const qmOpacity = project.ui.quickMenuOpacity ?? 75;
+            const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
+            const qmBg = hexToRgba(qmColor, qmOpacity);
+            const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
+            const positionStyle = qmPosition === "top-right" ? { top: "8px", right: "8px", position: "absolute" } : qmPosition === "bottom-right" ? { bottom: "8px", right: "8px", position: "absolute" } : {
+              // above-dialogue
+              bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
+              left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
+              right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
+              position: "absolute"
+            };
+            return /* @__PURE__ */ jsxRuntime2.jsx(
+              "div",
+              {
+                className: "z-25 flex items-center justify-center gap-2",
+                style: { ...positionStyle, pointerEvents: "none" },
+                children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center gap-1.5", style: { pointerEvents: "auto" }, children: [
+                  /* @__PURE__ */ jsxRuntime2.jsxs(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        handleSkipBackward();
+                      },
+                      disabled: playerState.history.length === 0,
+                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all",
+                      style: {
+                        borderRadius: `${qmRadius}px`,
+                        background: playerState.history.length > 0 ? qmBg : qmBgDisabled,
+                        border: "1px solid rgba(148,163,184,0.2)",
+                        color: playerState.history.length > 0 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.3)",
+                        backdropFilter: "blur(4px)",
+                        cursor: playerState.history.length > 0 ? "pointer" : "default"
+                      },
+                      title: "Skip Backward (Arrow Up)",
+                      children: [
+                        /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M11 19l-7-7 7-7m8 14l-7-7 7-7" }) }),
+                        "Back"
+                      ]
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntime2.jsxs(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        updatePlayerState((pp) => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null);
+                      },
+                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all hover:brightness-125",
+                      style: {
+                        borderRadius: `${qmRadius}px`,
+                        background: qmBg,
+                        border: "1px solid rgba(148,163,184,0.2)",
+                        color: "rgba(255,255,255,0.8)",
+                        backdropFilter: "blur(4px)"
+                      },
+                      title: "Text History (H)",
+                      children: [
+                        /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" }) }),
+                        "Log"
+                      ]
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntime2.jsxs(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        setSettings((s) => ({ ...s, autoAdvance: !s.autoAdvance }));
+                      },
+                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all",
+                      style: {
+                        borderRadius: `${qmRadius}px`,
+                        background: settings.autoAdvance ? "rgba(14,165,233,0.3)" : qmBg,
+                        border: `1px solid ${settings.autoAdvance ? "rgba(14,165,233,0.5)" : "rgba(148,163,184,0.2)"}`,
+                        color: settings.autoAdvance ? "rgba(125,211,252,0.95)" : "rgba(255,255,255,0.8)",
+                        backdropFilter: "blur(4px)"
+                      },
+                      title: "Auto-Advance",
+                      children: [
+                        /* @__PURE__ */ jsxRuntime2.jsxs("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: [
+                          /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" }),
+                          /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })
+                        ] }),
+                        "Auto"
+                      ]
+                    }
+                  ),
+                  settings.enableSkip && /* @__PURE__ */ jsxRuntime2.jsxs(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        updatePlayerState((pp) => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null);
+                      },
+                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all",
+                      style: {
+                        borderRadius: `${qmRadius}px`,
+                        background: uiState.isSkipping ? "rgba(239,68,68,0.3)" : qmBg,
+                        border: `1px solid ${uiState.isSkipping ? "rgba(239,68,68,0.5)" : "rgba(148,163,184,0.2)"}`,
+                        color: uiState.isSkipping ? "rgba(252,165,165,0.95)" : "rgba(255,255,255,0.8)",
+                        backdropFilter: "blur(4px)"
+                      },
+                      title: "Skip Forward (Ctrl)",
+                      children: [
+                        /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M13 5l7 7-7 7M5 5l7 7-7 7" }) }),
+                        "Skip"
+                      ]
+                    }
+                  )
+                ] })
+              }
+            );
+          })(),
           /* @__PURE__ */ jsxRuntime2.jsx(DialogueBox, { dialogue: uiState.dialogue, settings, projectUI: project.ui, onFinished: handleDialogueAdvance, variables: playerState.variables, project })
         ] }),
         uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(ChoiceMenu, { choices: uiState.choices, projectUI: project.ui, onSelect: handleChoiceSelect, variables: playerState.variables, project }),
@@ -9384,7 +11104,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "2.3.0",
+    version: "2.2.0",
     /**
      * Check if the engine is ready
      */

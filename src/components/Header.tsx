@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon, GlobeIcon, CodeBracketIcon, PuzzlePieceIcon, GamepadIcon, HelpIcon } from './icons';
+import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon, GlobeIcon, CodeBracketIcon, CommonEventsIcon, PuzzlePieceIcon, GamepadIcon, HelpIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { exportProject } from '../utils/projectPackager';
@@ -37,7 +37,9 @@ const Header: React.FC<{
     onTitleChange: (newTitle: string) => void;
     navigationTabs?: React.ReactNode;
     onShowKeyboardShortcuts?: () => void;
-}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts }) => {
+    onOpenCommonEvents?: () => void;
+    onOpenScripting?: () => void;
+}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts, onOpenCommonEvents, onOpenScripting }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
@@ -332,6 +334,22 @@ const Header: React.FC<{
                                             <CodeBracketIcon className="w-4 h-4" />
                                             Script Editor
                                         </button>
+                                        <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                        <button
+                                            onClick={() => { onOpenCommonEvents?.(); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-amber-400"
+                                        >
+                                            <CommonEventsIcon className="w-4 h-4" />
+                                            Common Events
+                                        </button>
+                                        <button
+                                            onClick={() => { onOpenScripting?.(); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-purple-400"
+                                        >
+                                            <CodeBracketIcon className="w-4 h-4" />
+                                            Scripting (JSON)
+                                        </button>
+                                        <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
                                             onClick={() => { setShowPluginManager(true); setShowToolsMenu(false); }}
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"

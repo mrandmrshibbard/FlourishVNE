@@ -152,6 +152,17 @@ export function handleShowCharacter(
     videoLoop,
     expressionId: command.expressionId,
     layerVariableBindings: finalBindings,
+    sourceCommandId: command.id,
+    visualEffects: (() => {
+        // Support both new visualEffects array and legacy single visualEffect
+        const effects: import('../../../features/scene/types').VNCharacterVisualEffect[] = [];
+        if (command.visualEffects && command.visualEffects.length > 0) {
+            effects.push(...command.visualEffects.filter(e => e.type !== 'none'));
+        } else if (command.visualEffect && command.visualEffect.type !== 'none') {
+            effects.push(command.visualEffect);
+        }
+        return effects.length > 0 ? effects : undefined;
+    })(),
     transition:
       requestedTransition && requestedTransition !== 'instant'
         ? {

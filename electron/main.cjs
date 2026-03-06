@@ -78,6 +78,7 @@ let mainWindow;
 let splashWindow;
 let isHubActive = false;
 let isQuitting = false;
+let updateDownloaded = false;
 /** File path passed via CLI / file-association / second-instance. */
 let pendingOpenFilePath = null;
 
@@ -192,10 +193,11 @@ function createWindow() {
   // Load the built app from dist folder
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
 
-  // Show the main window and close the splash once the app is painted.
+  // Show the main window maximized and close the splash once the app is painted.
   // We use ready-to-show because it fires once the first non-blank frame is
   // ready — at that point the user can see real UI, not a blank window.
   mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
     mainWindow.show();
     if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.close();
@@ -415,9 +417,7 @@ app.whenReady().then(() => {
   // Configure electron-updater: download updates silently in the background.
   // Once downloaded, the renderer is notified and shows a restart prompt.
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  // Don't auto-run after update; let the nsis installer's runAfterFinish
-  // setting handle that.
+  autoUpdater.autoInstallOnAppQuit = false; // Disable so manual "Restart & Update" is the single trigger — prevents double-spawning the installer.
   autoUpdater.autoRunAppAfterInstall = true;
   // Use the logger built into electron-updater (logs to ~/AppData/…/logs/)
   autoUpdater.logger = require('electron-updater').log;
@@ -450,6 +450,7 @@ app.whenReady().then(() => {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    updateDownloaded = true;
     sendUpdateStatus('downloaded', {
       version: info.version,
       releaseDate: info.releaseDate,
@@ -490,12 +491,104 @@ function sendUpdateStatus(status, data = {}) {
   }
 }
 
-// IPC: renderer requests to install a downloaded update and restart
-ipcMain.on('install-update', () => {
-  // Set isQuitting so the mainWindow 'close' handler doesn't block the quit
-  // with a save-before-quit prompt.
+/**
+ * Gracefully quit the app and install the pending update.
+ *
+ * We avoid force-destroying windows or overriding app.quit because that
+ * kills Electron's background processes (GPU, renderer) instantly, and
+ * the NSIS installer races against those lingering file locks.
+ *
+ * Instead we let electron-updater close windows through the normal
+ * lifecycle so all child processes release file handles naturally.
+ * The `isQuitting` flag tells our own 'close' handlers to allow it.
+ */
+function performQuitAndInstall() {
+  // Signal to our window 'close' listeners that closing is allowed.
   isQuitting = true;
+
+  // Remove any custom 'window-all-closed' listener that might interfere
+  // with electron-updater's shutdown sequence.
+  app.removeAllListeners('window-all-closed');
+
+  // Let electron-updater gracefully close the app and run the installer.
+  // isSilent = false → allows the NSIS installer to briefly show its progress
+  //   bar UI, which gives Windows the few milliseconds it needs to fully
+  //   release file locks before the installer overwrites files.  With
+  //   oneClick: true in package.json no wizard/prompts appear — just a
+  //   small progress bar that vanishes automatically.
+  // isForceRunAfter = true → automatically restart the app after installing.
   autoUpdater.quitAndInstall(false, true);
+}
+
+// IPC: renderer requests to install a downloaded update and restart.
+// Uses handle (not on) so the renderer gets a response / error.
+ipcMain.handle('install-update', async () => {
+  console.log('[install-update] Called. updateDownloaded =', updateDownloaded);
+
+  if (updateDownloaded) {
+    // Already downloaded — quit and install immediately.
+    console.log('[install-update] Update already downloaded, performing quit-and-install.');
+    performQuitAndInstall();
+    return { status: 'installing' };
+  }
+
+  // Not yet downloaded. Trigger check + download, then auto-install
+  // once the download completes.
+  console.log('[install-update] Update not yet downloaded, triggering check + download...');
+  sendUpdateStatus('downloading', { percent: 0 });
+
+  return new Promise((resolve) => {
+    // Set a timeout so the user isn't stuck forever
+    const timeout = setTimeout(() => {
+      cleanup();
+      const msg = 'Update timed out. Please try downloading manually from GitHub.';
+      console.error('[install-update]', msg);
+      sendUpdateStatus('error', { message: msg });
+      resolve({ status: 'error', message: msg });
+    }, 120000); // 2 minutes
+
+    function cleanup() {
+      clearTimeout(timeout);
+      autoUpdater.removeListener('update-downloaded', onDownloaded);
+      autoUpdater.removeListener('error', onError);
+      autoUpdater.removeListener('update-not-available', onNotAvailable);
+    }
+
+    const onDownloaded = () => {
+      cleanup();
+      console.log('[install-update] Download completed, performing quit-and-install.');
+      performQuitAndInstall();
+      resolve({ status: 'installing' });
+    };
+
+    const onError = (err) => {
+      cleanup();
+      console.error('install-update: download failed:', err);
+      const msg = err?.message || 'Download failed';
+      sendUpdateStatus('error', { message: msg });
+      resolve({ status: 'error', message: msg });
+    };
+
+    const onNotAvailable = () => {
+      cleanup();
+      const msg = 'No update available to download. You may already be on the latest version.';
+      console.log('[install-update]', msg);
+      sendUpdateStatus('error', { message: msg });
+      resolve({ status: 'error', message: msg });
+    };
+
+    autoUpdater.once('update-downloaded', onDownloaded);
+    autoUpdater.once('error', onError);
+    autoUpdater.once('update-not-available', onNotAvailable);
+
+    autoUpdater.checkForUpdates().catch((err) => {
+      cleanup();
+      console.error('[install-update] checkForUpdates failed:', err);
+      const msg = err?.message || 'Failed to check for updates';
+      sendUpdateStatus('error', { message: msg });
+      resolve({ status: 'error', message: msg });
+    });
+  });
 });
 
 // IPC: renderer requests a manual update check
@@ -544,6 +637,10 @@ app.on('will-quit', () => {
     if (!win.isDestroyed()) win.destroy();
   });
   managerWindows.clear();
+
+  // If we're installing an update, do NOT force-exit — let the installer
+  // take over gracefully.
+  if (updateDownloaded) return;
 
   // Force-exit after a brief grace period in case something keeps the
   // event loop alive (GPU process, open handles, etc.).

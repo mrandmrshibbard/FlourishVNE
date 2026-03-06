@@ -42,6 +42,9 @@ export const ChangelogModal: React.FC<{
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [installState, setInstallState] = useState<'idle' | 'downloading' | 'installing' | 'error'>('idle');
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
@@ -51,6 +54,30 @@ export const ChangelogModal: React.FC<{
       (window as any).electronAPI.getAppVersion().then((v: string) => setCurrentVersion(v));
     }
   }, [isElectron]);
+
+  // Listen for update-status events so we can show download progress inside
+  // the modal after the user clicks "Restart & Update".
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.onUpdateStatus) return;
+
+    const handler = (event: { status: string; percent?: number; message?: string }) => {
+      if (installState === 'idle') return; // not triggered by us
+      if (event.status === 'downloading') {
+        setInstallState('downloading');
+        if (typeof event.percent === 'number') setDownloadPercent(event.percent);
+      } else if (event.status === 'downloaded') {
+        setInstallState('installing');
+      } else if (event.status === 'error') {
+        setInstallState('error');
+        setInstallError(event.message || 'Unknown error');
+      }
+    };
+
+    api.onUpdateStatus(handler);
+    // Note: electron IPC .on doesn't return a cleanup; listener persists for
+    // the component lifetime which is fine since the modal unmounts on close.
+  }, [installState]);
 
   useEffect(() => {
     if (visible) {
@@ -157,20 +184,53 @@ export const ChangelogModal: React.FC<{
             {release.html_url && (
               <div className="mt-4 flex items-center gap-3 flex-wrap">
                 {hasUpdate && isElectron ? (
-                  <button
-                    onClick={() => {
-                      const api = (window as any).electronAPI;
-                      if (api?.installUpdate) {
-                        api.installUpdate();
-                      } else if (api?.checkForUpdates) {
-                        api.checkForUpdates();
-                        onClose();
-                      }
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-pink)]/25 text-white rounded-lg text-sm font-medium transition-all"
-                  >
-                    🔄 Restart &amp; Update
-                  </button>
+                  <>
+                    <button
+                      disabled={installState !== 'idle' && installState !== 'error'}
+                      onClick={() => {
+                        const api = (window as any).electronAPI;
+                        if (api?.installUpdate) {
+                          setInstallState('downloading');
+                          setDownloadPercent(0);
+                          setInstallError(null);
+                          api.installUpdate().then((res: any) => {
+                            if (res?.status === 'error') {
+                              setInstallState('error');
+                              setInstallError(res.message || 'Update failed');
+                            }
+                          }).catch(() => {
+                            setInstallState('error');
+                            setInstallError('Failed to communicate with updater');
+                          });
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-pink)]/25 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {installState === 'downloading' ? (
+                        <>⏳ Downloading… {downloadPercent}%</>
+                      ) : installState === 'installing' ? (
+                        <>✨ Installing…</>
+                      ) : installState === 'error' ? (
+                        <>🔄 Retry Update</>
+                      ) : (
+                        <>🔄 Restart &amp; Update</>
+                      )}
+                    </button>
+                    {installState === 'downloading' && (
+                      <div className="w-full mt-2 h-1.5 bg-[var(--bg-primary)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${downloadPercent}%`,
+                            background: 'linear-gradient(90deg, var(--accent-pink), var(--accent-purple))',
+                          }}
+                        />
+                      </div>
+                    )}
+                    {installState === 'error' && installError && (
+                      <p className="text-xs text-red-400 mt-1">{installError}</p>
+                    )}
+                  </>
                 ) : (
                   <a
                     href={release.html_url}

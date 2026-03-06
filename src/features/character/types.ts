@@ -1,4 +1,5 @@
 import { VNID } from '../../types';
+import type { VNDialogueTextEffect } from '../scene/types';
 
 export interface VNLayerAsset {
     id: VNID;
@@ -34,4 +35,8 @@ export interface VNCharacter {
     baseVideoLoop?: boolean;
     layers: Record<VNID, VNCharacterLayer>;
     expressions: Record<VNID, VNCharacterExpression>;
+    /** Default text effect for this character's dialogue */
+    textEffect?: VNDialogueTextEffect;
+    /** Default voice audio clip ID for this character (can be overridden per-line) */
+    defaultVoiceId?: VNID | null;
 }

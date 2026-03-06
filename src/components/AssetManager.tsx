@@ -1018,7 +1018,7 @@ const EmptyState: React.FC<{
                 isDragOver ? 'border-sky-400 bg-sky-500/10 scale-105' : onDrop ? 'border-[var(--border-default)] hover:border-[var(--border-default)]' : 'border-transparent'
             }`}>
                 <div className={`flex justify-center mb-4 ${isDragOver ? 'text-sky-400' : 'text-slate-600'}`}>
-                    {React.cloneElement(icon as React.ReactElement, { className: 'w-16 h-16' })}
+                    {React.cloneElement(icon as React.ReactElement, { className: 'w-16 h-16' } as any)}
                 </div>
                 <h3 className="text-lg font-bold text-white mb-1">{title}</h3>
                 <p className="text-[var(--text-secondary)] text-sm">{description}</p>

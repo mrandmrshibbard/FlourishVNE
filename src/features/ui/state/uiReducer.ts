@@ -15,7 +15,7 @@ export type UIAction =
           property: keyof VNFontSettings;
           value: string | number | boolean;
       } }
-    | { type: 'ADD_UI_SCREEN', payload: { name: string; id?: VNID } }
+    | { type: 'ADD_UI_SCREEN', payload: { name: string; id?: VNID; screenType?: 'standard' | 'hotzone' } }
     | { type: 'UPDATE_UI_SCREEN', payload: { screenId: VNID, updates: Partial<VNUIScreen> } }
     | { type: 'DELETE_UI_SCREEN', payload: { screenId: VNID } }
     | { type: 'DUPLICATE_UI_SCREEN', payload: { screenId: VNID } }
@@ -82,7 +82,7 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
     }
 
     case 'ADD_UI_SCREEN': {
-        const { name, id } = action.payload;
+        const { name, id, screenType } = action.payload;
         const newId = id || `screen-${generateId()}`;
         const newScreen: VNUIScreen = { 
             id: newId, 
@@ -92,6 +92,7 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
             ambientNoise: { audioId: null, policy: 'continue', volume: 0.8 },
             elements: {},
             effects: [],
+            ...(screenType === 'hotzone' ? { screenType: 'hotzone' as const, hotSpots: {}, hotZoneElements: {} } : {}),
         };
         return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen }};
     }

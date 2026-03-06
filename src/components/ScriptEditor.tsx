@@ -264,7 +264,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                         onChange={e => handleUpdateTrigger(e.target.value as VNScript['trigger'])}
                                         className="text-xs bg-slate-800 text-white px-2 py-1 rounded border border-slate-600"
                                     >
-                                        <option value="command">Trigger: Command</option>
+                                        <option value="command">Trigger: Event</option>
                                         <option value="onSceneEnter">Trigger: Scene Enter</option>
                                         <option value="onSceneExit">Trigger: Scene Exit</option>
                                         <option value="global">Trigger: Global (Utility)</option>

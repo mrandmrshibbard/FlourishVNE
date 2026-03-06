@@ -88,6 +88,8 @@ export const ProjectHub: React.FC<{
     const [showChangelog, setShowChangelog] = useState(false);
     const [updateAvailable, setUpdateAvailable] = useState<{ version: string; isNew: boolean; downloadUrl: string } | null>(null);
     const [bannerDismissed, setBannerDismissed] = useState(false);
+    const [autoUpdateStatus, setAutoUpdateStatus] = useState<string | null>(null);
+    const [autoUpdateError, setAutoUpdateError] = useState<string | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
     const [savedProjectFiles, setSavedProjectFiles] = useState<SavedProjectFile[]>([]);
@@ -201,6 +203,45 @@ export const ProjectHub: React.FC<{
 
         checkForUpdates();
     }, [isElectron, toast]);
+
+    // Listen for auto-update status events from electron-updater
+    useEffect(() => {
+        const api = (window as any).electronAPI;
+        if (!api?.onUpdateStatus) return;
+        api.onUpdateStatus((event: any) => {
+            setAutoUpdateStatus(event.status);
+            if (event.status === 'error') {
+                setAutoUpdateError(event.message || 'Update failed');
+            } else {
+                setAutoUpdateError(null);
+            }
+            if (event.status === 'downloaded') {
+                toast.success('Update downloaded! Click "Restart & Update" to install.');
+            }
+        });
+    }, [toast]);
+
+    const handleRestartAndUpdate = async () => {
+        const api = (window as any).electronAPI;
+        if (!api?.installUpdate) {
+            toast.error('Auto-update is not available in this environment.');
+            return;
+        }
+        setAutoUpdateStatus('installing');
+        setAutoUpdateError(null);
+        try {
+            const result = await api.installUpdate();
+            if (result?.status === 'error') {
+                setAutoUpdateStatus('error');
+                setAutoUpdateError(result.message || 'Update failed');
+                toast.error(result.message || 'Update failed — try downloading manually.');
+            }
+        } catch (err: any) {
+            setAutoUpdateStatus('error');
+            setAutoUpdateError(err?.message || 'Update failed');
+            toast.error('Update failed — try downloading manually from GitHub.');
+        }
+    };
 
     const handleDownloadNewVersion = () => {
         const url = updateAvailable?.downloadUrl || 'https://github.com/mrandmrshibbard/FlourishVNE-releases/releases/latest';
@@ -421,7 +462,7 @@ export const ProjectHub: React.FC<{
     };
 
     return (
-        <div className="h-screen w-screen text-[var(--text-primary)] flex items-center justify-center p-4 overflow-hidden"
+        <div className="h-screen w-screen text-[var(--text-primary)] flex items-center justify-center p-4 overflow-y-auto"
             style={{
                 background: `
                     radial-gradient(ellipse at 20% 30%, rgba(255, 126, 179, 0.12) 0%, transparent 50%),
@@ -465,10 +506,29 @@ export const ProjectHub: React.FC<{
                             }
                         </span>
                         
-                        {/* Download from GitHub */}
+                        {/* Restart & Update via electron-updater */}
+                        {isElectron && (
+                            <button
+                                onClick={handleRestartAndUpdate}
+                                disabled={autoUpdateStatus === 'installing'}
+                                className="ml-2 px-4 py-1.5 bg-white/30 hover:bg-white/45 rounded-full font-bold text-sm transition-all flex items-center gap-1.5 hover:scale-105 disabled:opacity-50 disabled:cursor-wait border border-white/40"
+                            >
+                                {autoUpdateStatus === 'installing' ? '⏳ Installing...' 
+                                    : autoUpdateStatus === 'downloading' ? '⏳ Downloading...'
+                                    : '🔄 Restart & Update'}
+                            </button>
+                        )}
+
+                        {autoUpdateError && (
+                            <span className="text-xs text-red-200 bg-red-500/30 px-2 py-1 rounded">
+                                ⚠️ {autoUpdateError}
+                            </span>
+                        )}
+
+                        {/* Download from GitHub (fallback) */}
                         <button
                             onClick={handleDownloadNewVersion}
-                            className="ml-2 px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
+                            className="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
                         >
                             📥 Download from GitHub
                         </button>
@@ -562,8 +622,8 @@ export const ProjectHub: React.FC<{
                 </div>
             )}
 
-            <div className="w-full max-w-5xl p-8 relative z-10">
-                <header className="text-center mb-14">
+            <div className="w-full max-w-5xl p-8 relative z-10 my-auto">
+                <header className="text-center mb-8">
                     {/* Logo/Icon */}
                     <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6 animate-float"
                         style={{
@@ -723,7 +783,7 @@ export const ProjectHub: React.FC<{
                 
                 {/* Recent Projects Section */}
                 {recentProjects.length > 0 && (
-                    <section className="mt-14">
+                    <section className="mt-8">
                         <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-5 flex items-center gap-3 uppercase tracking-widest">
                             <span className="w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-lavender)]" />
                             <ClockIcon className="w-4 h-4 text-[var(--accent-lavender)]" />
@@ -795,7 +855,7 @@ export const ProjectHub: React.FC<{
 
                 {/* Saved Projects on Disk (Electron only) */}
                 {isElectron && savedProjectFiles.length > 0 && (
-                    <section className="mt-10">
+                    <section className="mt-6">
                         <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-5 flex items-center gap-3 uppercase tracking-widest">
                             <span className="w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-cyan)]" />
                             <span className="text-base">📂</span>
@@ -827,7 +887,7 @@ export const ProjectHub: React.FC<{
                     </section>
                 )}
                 
-                 <footer className="text-center mt-14 text-[var(--text-muted)] text-sm">
+                 <footer className="text-center mt-8 pb-4 text-[var(--text-muted)] text-sm">
                     {isElectron ? (
                         <>
                             <p className="opacity-70">Projects are saved to your <strong>Documents/Flourish VNE/Projects</strong> folder.</p>
@@ -861,6 +921,7 @@ export const ProjectHub: React.FC<{
                             </button>
                         </>
                     )}
+                    <p className="mt-4 text-xs opacity-50 font-mono">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}</p>
                 </footer>
             </div>
             <ChangelogModal visible={showChangelog} onClose={() => setShowChangelog(false)} />

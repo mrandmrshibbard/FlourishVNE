@@ -11,7 +11,8 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, GameSetting, GameToggleSetting, UIElementType
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, GameSetting, GameToggleSetting, UIElementType,
+    VNHotSpot, VNHotZoneElement
 } from '../features/ui/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
@@ -19,17 +20,39 @@ import {
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
-    CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand
+    CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
+    SpawnParticlesCommand, StopParticlesCommand,
+    CallCommonEventCommand
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
 import { ScreenOverlayEffects } from './live-preview/ScreenOverlayEffects';
+import { ParticleSystem } from './live-preview/ParticleSystem';
+import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
 import { 
     normalizeSetVariableOperator as normalizeOperator,
     calculateVariableValue 
 } from '../utils/variableUtils';
+
+/** Convert hex color to approximate hue rotation degrees for CSS filter */
+function getHueFromHex(hex: string): number {
+    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return 0;
+    const r = parseInt(match[1], 16) / 255;
+    const g = parseInt(match[2], 16) / 255;
+    const b = parseInt(match[3], 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0;
+    if (max !== min) {
+        const d = max - min;
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        else if (max === g) h = ((b - r) / d + 2) / 6;
+        else h = ((r - g) / d + 4) / 6;
+    }
+    return Math.round(h * 360);
+}
 
 function isRuntimeDebugEnabled(): boolean {
     try {
@@ -147,6 +170,9 @@ import {
     handleTextInput,
     handleCreditRoll,
     handleRunScript,
+    handleSpawnParticles,
+    handleStopParticles,
+    handleCallCommonEvent,
 } from './live-preview/command-handlers';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
@@ -460,9 +486,8 @@ const ButtonOverlayElement: React.FC<{
     return (
         <div
             key={overlay.id}
-            style={containerStyle}
+            style={{...containerStyle, ...(hasTransition ? { animationDuration: animDuration } : {})}}
             className={`${transitionClass}`}
-            {...(hasTransition ? { style: { ...containerStyle, animationDuration: animDuration } } : {})}
         >
             <button
                 onClick={handleClick}
@@ -562,14 +587,14 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
                     muted 
                     loop={overlay.videoLoop} 
                     playsInline
-                    className="absolute inset-0 w-full h-full object-contain" 
+                    className="absolute inset-0 w-full h-full object-contain pointer-events-none" 
                     style={imageStyle} 
                 />
             ) : (
                 <img 
                     src={overlay.imageUrl} 
                     alt="" 
-                    className="absolute inset-0 w-full h-full object-contain" 
+                    className="absolute inset-0 w-full h-full object-contain pointer-events-none" 
                     style={imageStyle} 
                 />
             )}
@@ -623,9 +648,28 @@ const useTypewriter = (text: string, speed: number) => {
 // --- Stage size & measurement hook ---
 const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
     const [size, setSize] = useState<StageSize>({ width: 0, height: 0 });
+    // Track ref.current becoming available (e.g. after conditional render)
+    const [element, setElement] = useState<HTMLElement | null>(null);
+
+    // Poll for ref.current to handle conditionally-rendered elements
     useEffect(() => {
-        if (!ref.current) return;
-        const el = ref.current;
+        if (ref.current) {
+            setElement(ref.current);
+            return;
+        }
+        // ref.current is null — poll until the element mounts
+        const interval = setInterval(() => {
+            if (ref.current) {
+                setElement(ref.current);
+                clearInterval(interval);
+            }
+        }, 100);
+        return () => clearInterval(interval);
+    }, [ref]);
+
+    // Observe the actual element once available
+    useEffect(() => {
+        if (!element) return;
         let rafId: number | null = null;
         
         const obs = new ResizeObserver(() => {
@@ -634,7 +678,7 @@ const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
                 cancelAnimationFrame(rafId);
             }
             rafId = requestAnimationFrame(() => {
-                const r = el.getBoundingClientRect();
+                const r = element.getBoundingClientRect();
                 setSize(prev => {
                     // Only update if size actually changed
                     if (prev.width === r.width && prev.height === r.height) {
@@ -644,9 +688,9 @@ const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
                 });
             });
         });
-        obs.observe(el);
+        obs.observe(element);
         // initial measure
-        const r = el.getBoundingClientRect();
+        const r = element.getBoundingClientRect();
         setSize({ width: r.width, height: r.height });
         return () => {
             obs.disconnect();
@@ -654,8 +698,53 @@ const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
                 cancelAnimationFrame(rafId);
             }
         };
-    }, [ref]);
+    }, [element]);
+
+    // Sync if ref changes to a different element (e.g. remount)
+    useEffect(() => {
+        if (ref.current && ref.current !== element) {
+            setElement(ref.current);
+        }
+    });
+
     return size;
+}
+
+// --- UI Rendering Helpers ---
+
+/** Convert hex color + opacity (0-100) to rgba string */
+function hexToRgba(hex: string, opacity: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+}
+
+/** Build CSS background style based on size mode */
+function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: number): React.CSSProperties {
+    switch (sizeMode) {
+        case 'nine-slice': {
+            const s = slicePx ?? 30;
+            return {
+                borderImageSource: `url(${url})`,
+                borderImageSlice: `${s} fill`,
+                borderImageWidth: `${s}px`,
+                borderImageRepeat: 'stretch',
+                borderStyle: 'solid',
+                borderColor: 'transparent',
+                borderWidth: `${s}px`,
+            };
+        }
+        case 'contain':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'cover':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'tile':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'auto', backgroundRepeat: 'repeat' };
+        case 'stretch':
+        default:
+            return { backgroundImage: `url(${url})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+    }
 }
 
 // --- Player UI Components ---
@@ -693,6 +782,26 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const dialogueBoxBottomMargin = projectUI.dialogueBoxBottomMargin ?? 20;
     const dialogueBoxPadding = projectUI.dialogueBoxPadding ?? 20;
 
+    // New appearance settings
+    const dialogueSizeMode = projectUI.dialogueBoxSizeMode ?? 'stretch';
+    const dialogueSlice = projectUI.dialogueBoxSlice ?? 30;
+    const dialogueColor = projectUI.dialogueBoxColor ?? '#0f172a';
+    const dialogueOpacity = projectUI.dialogueBoxOpacity ?? 90;
+    const dialogueBorderRadius = projectUI.dialogueBoxBorderRadius ?? 8;
+
+    // Namebox settings
+    const nameboxImageUrl = projectUI.nameboxImage
+        ? (project.images[projectUI.nameboxImage.id]?.imageUrl || project.backgrounds[projectUI.nameboxImage.id]?.imageUrl)
+        : null;
+    const nameboxColor = projectUI.nameboxColor ?? '#0f172a';
+    const nameboxOpacity = projectUI.nameboxOpacity ?? 92;
+    const nameboxPadding = projectUI.nameboxPadding ?? 8;
+    const nameboxHPadding = projectUI.nameboxHorizontalPadding ?? 14;
+    const nameboxBorderRadius = projectUI.nameboxBorderRadius ?? 6;
+    const nameboxOffsetX = projectUI.nameboxOffsetX ?? 20;
+    const nameboxOffsetY = projectUI.nameboxOffsetY ?? 0;
+    const nameboxSizeMode = projectUI.nameboxSizeMode ?? 'stretch';
+
     // Get character-specific font if available
     const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
     const characterFont = character?.fontFamily;
@@ -717,6 +826,19 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
     };
 
+    // Build namebox background style
+    const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
+        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: `${nameboxBorderRadius}px` }
+        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: `${nameboxBorderRadius}px` };
+
+    // Build dialogue box background color (used when no image, or behind transparent images)
+    const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
+
+    // Build image style for the dialogue box
+    const dialogueImageStyle: React.CSSProperties = (dialogueBoxUrl && !isDialogueBoxVideo)
+        ? buildImageBackgroundStyle(dialogueBoxUrl, dialogueSizeMode, dialogueSlice)
+        : {};
+
     return (
         <div 
             className="absolute z-20 cursor-pointer"
@@ -726,25 +848,30 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                 right: `${(100 - dialogueBoxWidth) / 2}%`,
                 animation: 'vnDialogueIn 0.25s ease-out',
                 ...(dialogueBorderUrl 
-                    ? { backgroundImage: `url(${dialogueBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${dialogueBorderPadding}px`, borderRadius: '0.5rem' }
+                    ? { ...buildImageBackgroundStyle(dialogueBorderUrl, dialogueSizeMode, dialogueSlice), padding: `${dialogueBorderPadding}px`, borderRadius: `${dialogueBorderRadius}px` }
                     : {})
             }}
             onClick={handleClick}
         >
-            {/* Floating namebox tab — positioned above the dialogue box */}
-            {showNamebox && !hasCustomImage && (
+            {/* Namebox (character name label) */}
+            {showNamebox && (
                 <div 
-                    className="absolute z-10"
+                    className="z-10"
                     style={{
-                        top: '-1.6em',
-                        left: `${dialogueBoxPadding}px`,
-                        background: 'linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(30,41,59,0.88) 100%)',
-                        border: '1px solid rgba(148,163,184,0.35)',
-                        borderBottom: 'none',
-                        borderRadius: '0.375rem 0.375rem 0 0',
-                        padding: '0.2em 0.9em',
-                        backdropFilter: 'blur(6px)',
-                        WebkitBackdropFilter: 'blur(6px)',
+                        position: hasCustomImage ? 'relative' : 'absolute',
+                        ...(hasCustomImage 
+                            ? { marginBottom: `${nameboxOffsetY + 2}px`, marginLeft: `${nameboxOffsetX}px` }
+                            : { top: `${-(nameboxPadding * 2 + (projectUI.dialogueNameFont?.size || 22)) - nameboxOffsetY}px`, left: `${nameboxOffsetX}px` }
+                        ),
+                        display: 'inline-block',
+                        ...nameboxBgStyle,
+                        padding: `${nameboxPadding}px ${nameboxHPadding}px`,
+                        ...(hasCustomImage || nameboxImageUrl ? {} : {
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            borderBottom: hasCustomImage ? undefined : 'none',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                        }),
                     }}
                 >
                     <span style={{...nameStyle, lineHeight: 1.3}}>
@@ -752,27 +879,25 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                     </span>
                 </div>
             )}
-            {/* Floating namebox tab — when custom images are used, render inline above content */}
-            {showNamebox && hasCustomImage && (
-                <div style={{ marginBottom: '2px', paddingLeft: `${dialogueBoxPadding}px` }}>
-                    <span style={nameStyle}>
-                        <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
-                    </span>
-                </div>
-            )}
             <div 
-                className={`relative ${!hasCustomImage ? 'rounded-lg' : ''}`}
+                className="relative"
                 style={{
+                    borderRadius: `${dialogueBorderRadius}px`,
+                    overflow: 'hidden',
                     ...(hasCustomImage ? {} : {
-                        background: 'linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.94) 100%)',
+                        backgroundColor: dialogueBgColor,
                         border: '1px solid rgba(148,163,184,0.25)',
-                        borderRadius: '0.5rem',
                         boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
                         backdropFilter: 'blur(8px)',
                         WebkitBackdropFilter: 'blur(8px)',
                     }),
                     ...(dialogueBoxUrl && !isDialogueBoxVideo 
-                        ? { backgroundImage: `url(${dialogueBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), padding: `${dialogueBoxPadding}px` } 
+                        ? { 
+                            ...dialogueImageStyle,
+                            backgroundColor: dialogueBgColor,
+                            ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }), 
+                            ...(dialogueSizeMode !== 'nine-slice' ? { padding: `${dialogueBoxPadding}px` } : {})
+                          } 
                         : { padding: `${dialogueBoxPadding}px`, ...(dialogueBoxHeight ? { height: `${dialogueBoxHeight}px` } : { minHeight: '120px' }) })
                 }}
             >
@@ -781,41 +906,47 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         autoPlay 
                         loop 
                         muted 
-                        className="absolute inset-0 w-full h-full rounded-lg -z-10"
-                        style={{ pointerEvents: 'none', objectFit: 'fill' }}
+                        className="absolute inset-0 w-full h-full -z-10"
+                        style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: `${dialogueBorderRadius}px` }}
                     >
                         <source src={dialogueBoxUrl} />
                     </video>
                 )}
-                <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
-                    <span style={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}>{displayText}</span>
-                    {!hasFinished && (
-                        <span style={{ 
-                            display: 'inline-block', 
-                            width: '0.5em', 
-                            height: '1em', 
-                            marginLeft: '2px', 
-                            verticalAlign: 'text-bottom',
-                            backgroundColor: dialogueTextStyle.color || projectUI.dialogueTextFont?.color || '#FFFFFF',
-                            animation: 'vnCursorBlink 0.8s step-end infinite',
-                            opacity: 0.85
-                        }} />
+                <div style={{ position: 'relative', zIndex: 1, padding: dialogueSizeMode === 'nine-slice' && dialogueBoxUrl ? `${dialogueBoxPadding}px` : undefined }}>
+                    <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                        <AnimatedDialogueText 
+                            displayText={displayText}
+                            textEffect={dialogue.textEffect}
+                            gradientStyle={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}
+                        />
+                        {!hasFinished && (
+                            <span style={{ 
+                                display: 'inline-block', 
+                                width: '0.5em', 
+                                height: '1em', 
+                                marginLeft: '2px', 
+                                verticalAlign: 'text-bottom',
+                                backgroundColor: dialogueTextStyle.color || projectUI.dialogueTextFont?.color || '#FFFFFF',
+                                animation: 'vnCursorBlink 0.8s step-end infinite',
+                                opacity: 0.85
+                            }} />
+                        )}
+                    </p>
+                    {/* Click-to-advance indicator */}
+                    {hasFinished && (
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            right: '12px',
+                            animation: 'vnAdvanceBounce 1.2s ease-in-out infinite',
+                            opacity: 0.6,
+                            fontSize: 'calc(var(--font-scale, 1) * 12px)',
+                            color: '#94a3b8',
+                        }}>
+                            ▼
+                        </div>
                     )}
-                </p>
-                {/* Click-to-advance indicator */}
-                {hasFinished && (
-                    <div style={{
-                        position: 'absolute',
-                        bottom: '8px',
-                        right: '12px',
-                        animation: 'vnAdvanceBounce 1.2s ease-in-out infinite',
-                        opacity: 0.6,
-                        fontSize: 'calc(var(--font-scale, 1) * 12px)',
-                        color: '#94a3b8',
-                    }}>
-                        ▼
-                    </div>
-                )}
+                </div>
             </div>
             {/* Inject keyframe animations */}
             <style>{`
@@ -837,6 +968,8 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
 };
 
 const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject }> = ({ choices, projectUI, onSelect, variables, project }) => {
+    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+    
     // Resolve choice button image/video URL
     const choiceButtonUrl = projectUI.choiceButtonImage 
         ? (projectUI.choiceButtonImage.type === 'video' 
@@ -857,12 +990,31 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     const choiceHeight = projectUI.choiceButtonHeight || 0;
     const choicePadding = projectUI.choiceButtonPadding ?? 16;
 
+    // New appearance settings
+    const choiceSizeMode = projectUI.choiceButtonSizeMode ?? 'stretch';
+    const choiceSlice = projectUI.choiceButtonSlice ?? 15;
+    const choiceColor = projectUI.choiceButtonColor ?? '#1e293b';
+    const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
+    const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
+    const choiceHoverColor = projectUI.choiceHoverColor ?? '#334155';
+
+    // Resolve hover image
+    const choiceHoverUrl = projectUI.choiceHoverImage
+        ? (project.images[projectUI.choiceHoverImage.id]?.imageUrl || project.backgrounds[projectUI.choiceHoverImage.id]?.imageUrl)
+        : null;
+
     const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
+    const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
+    const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
 
     return (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8" style={{ animation: 'vnChoiceOverlayIn 0.3s ease-out', background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.25) 100%)' }}>
             {choices.map((choice, index) => {
                 const interpolatedText = interpolateVariables(choice.text, variables, project);
+                const isHovered = hoveredIndex === index;
+                // Determine which image url to use (hover image takes priority when hovered)
+                const activeButtonUrl = (isHovered && choiceHoverUrl) ? choiceHoverUrl : choiceButtonUrl;
+                
                 return (
                     <div
                         key={index}
@@ -870,25 +1022,31 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                         style={{
                             animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
                             ...(choiceBorderUrl 
-                                ? { backgroundImage: `url(${choiceBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: '0.5rem' }
+                                ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: `${choiceBorderPadding}px`, ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }), borderRadius: `${choiceBorderRadius}px` }
                                 : { ...(choiceWidth ? { width: `${choiceWidth}px` } : { maxWidth: '80%', minWidth: '280px' }) })
                         }}
                     >
                         <button 
                             onClick={() => onSelect(choice)}
-                            className={`relative rounded-lg overflow-hidden w-full transition-all duration-200 ${!hasCustomChoiceImage ? 'hover:scale-[1.03]' : 'hover:brightness-110 hover:scale-[1.03]'}`}
+                            onMouseEnter={() => setHoveredIndex(index)}
+                            onMouseLeave={() => setHoveredIndex(null)}
+                            className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
                             style={{
-                                ...(choiceButtonUrl && !isChoiceButtonVideo 
-                                    ? { backgroundImage: `url(${choiceButtonUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } 
+                                borderRadius: `${choiceBorderRadius}px`,
+                                ...(activeButtonUrl && !isChoiceButtonVideo 
+                                    ? { 
+                                        ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
+                                        backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor,
+                                      } 
                                     : !hasCustomChoiceImage 
                                         ? { 
-                                            background: 'linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(51,65,85,0.85) 100%)',
+                                            backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor,
                                             border: '1px solid rgba(148,163,184,0.3)',
                                             boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
                                             backdropFilter: 'blur(6px)',
                                             WebkitBackdropFilter: 'blur(6px)',
                                           } 
-                                        : {}),
+                                        : { backgroundColor: isHovered ? choiceHoverBgColor : 'transparent' }),
                                 padding: `${choicePadding}px ${choicePadding * 2}px`, 
                                 minWidth: '200px', 
                                 ...(choiceHeight ? { height: `${choiceHeight}px` } : {}), 
@@ -904,8 +1062,8 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                                     autoPlay 
                                     loop 
                                     muted 
-                                    className="absolute inset-0 w-full h-full rounded-lg -z-10"
-                                    style={{ pointerEvents: 'none', objectFit: 'fill' }}
+                                    className="absolute inset-0 w-full h-full -z-10"
+                                    style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: `${choiceBorderRadius}px` }}
                                 >
                                     <source src={choiceButtonUrl} />
                                 </video>
@@ -957,6 +1115,14 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
     const inputBoxWidth = projectUI?.inputBoxWidth || 0;
     const inputBoxPadding = projectUI?.inputBoxPadding ?? 24;
 
+    // New appearance settings
+    const inputSizeMode = projectUI?.inputBoxSizeMode ?? 'stretch';
+    const inputSlice = projectUI?.inputBoxSlice ?? 20;
+    const inputColor = projectUI?.inputBoxColor ?? '#0f172a';
+    const inputOpacity = projectUI?.inputBoxOpacity ?? 92;
+    const inputBorderRadius = projectUI?.inputBoxBorderRadius ?? 8;
+    const inputBgColor = hexToRgba(inputColor, inputOpacity);
+
     const hasCustomImage = inputBoxUrl || inputBorderUrl;
 
     // Font styles
@@ -973,28 +1139,30 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
     return (
         <div className="absolute inset-0 bg-black/30 z-30 flex flex-col items-center justify-center p-8">
             <div
-                className={`relative ${!hasCustomImage ? 'rounded-lg' : ''}`}
+                className="relative"
                 style={{
+                    borderRadius: `${inputBorderRadius}px`,
                     ...(inputBoxWidth ? { width: `${inputBoxWidth}px` } : { maxWidth: '28rem', width: '100%' }),
                     ...(inputBorderUrl
-                        ? { backgroundImage: `url(${inputBorderUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${inputBorderPadding}px`, borderRadius: '0.5rem' }
+                        ? { ...buildImageBackgroundStyle(inputBorderUrl, inputSizeMode, inputSlice), padding: `${inputBorderPadding}px` }
                         : {}),
                     animation: 'vnDialogueIn 0.25s ease-out',
                 }}
             >
                 <div
-                    className={`relative ${!hasCustomImage ? 'rounded-lg' : ''}`}
+                    className="relative"
                     style={{
+                        borderRadius: `${inputBorderRadius}px`,
+                        overflow: 'hidden',
                         ...(hasCustomImage ? {} : {
-                            background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.96) 100%)',
+                            backgroundColor: inputBgColor,
                             border: '1px solid rgba(148,163,184,0.3)',
-                            borderRadius: '0.5rem',
                             boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
                             backdropFilter: 'blur(8px)',
                             WebkitBackdropFilter: 'blur(8px)',
                         }),
                         ...(inputBoxUrl && !isInputBoxVideo
-                            ? { backgroundImage: `url(${inputBoxUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', padding: `${inputBoxPadding}px` }
+                            ? { ...buildImageBackgroundStyle(inputBoxUrl, inputSizeMode, inputSlice), backgroundColor: inputBgColor, ...(inputSizeMode !== 'nine-slice' ? { padding: `${inputBoxPadding}px` } : {}) }
                             : { padding: `${inputBoxPadding}px` })
                     }}
                 >
@@ -1003,42 +1171,46 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                             autoPlay
                             loop
                             muted
-                            className="absolute inset-0 w-full h-full rounded-lg -z-10"
-                            style={{ pointerEvents: 'none', objectFit: 'fill' }}
+                            className="absolute inset-0 w-full h-full -z-10"
+                            style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: `${inputBorderRadius}px` }}
                         >
                             <source src={inputBoxUrl} />
                         </video>
                     )}
-                    <p className="mb-4" style={promptStyle}>
-                        <span style={extractTextGradientStyle(projectUI?.inputPromptFont) || undefined}>{interpolatedPrompt}</span>
-                    </p>
-                    <form onSubmit={handleSubmit}>
-                        <input
-                            type="text"
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            placeholder={textInput.placeholder}
-                            maxLength={textInput.maxLength}
-                            className="w-full px-3 py-2 rounded focus:outline-none transition-colors"
-                            style={{
-                                ...fieldStyle,
-                                backgroundColor: 'rgba(15,23,42,0.6)',
-                                border: '1px solid rgba(148,163,184,0.3)',
-                            }}
-                            autoFocus
-                        />
-                        <button
-                            type="submit"
-                            className="w-full mt-4 px-4 py-2 rounded transition-colors hover:brightness-110"
-                            style={{
-                                ...submitStyle,
-                                backgroundColor: hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)',
-                                border: '1px solid rgba(148,163,184,0.2)',
-                            }}
-                        >
-                            <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>Submit</span>
-                        </button>
-                    </form>
+                    <div style={{ position: 'relative', zIndex: 1, padding: inputSizeMode === 'nine-slice' && inputBoxUrl ? `${inputBoxPadding}px` : undefined }}>
+                        <p className="mb-4" style={promptStyle}>
+                            <span style={extractTextGradientStyle(projectUI?.inputPromptFont) || undefined}>{interpolatedPrompt}</span>
+                        </p>
+                        <form onSubmit={handleSubmit}>
+                            <input
+                                type="text"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                placeholder={textInput.placeholder}
+                                maxLength={textInput.maxLength}
+                                className="w-full px-3 py-2 focus:outline-none transition-colors"
+                                style={{
+                                    ...fieldStyle,
+                                    backgroundColor: 'rgba(15,23,42,0.6)',
+                                    border: '1px solid rgba(148,163,184,0.3)',
+                                    borderRadius: `${Math.max(4, inputBorderRadius - 4)}px`,
+                                }}
+                                autoFocus
+                            />
+                            <button
+                                type="submit"
+                                className="w-full mt-4 px-4 py-2 transition-colors hover:brightness-110"
+                                style={{
+                                    ...submitStyle,
+                                    backgroundColor: hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)',
+                                    border: '1px solid rgba(148,163,184,0.2)',
+                                    borderRadius: `${Math.max(4, inputBorderRadius - 4)}px`,
+                                }}
+                            >
+                                <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>Submit</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1681,6 +1853,358 @@ const getTransitionStyle = (
     };
 };
 
+// --- Hot Zone Text Input (commits on Enter / confirm button) ---
+const HotZoneTextInput: React.FC<{
+    element: VNHotZoneElement;
+    variables: Record<VNID, string | number | boolean>;
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
+    playSound: (soundId: VNID | null) => void;
+    font?: any;
+}> = ({ element, variables, onVariableChange, playSound, font }) => {
+    const vid = (element as any).variableId;
+    const currentVal = (vid && variables[vid] != null) ? String(variables[vid]) : '';
+    const [localValue, setLocalValue] = useState(currentVal);
+    // Sync when external variable changes (e.g. reset)
+    useEffect(() => { setLocalValue(currentVal); }, [currentVal]);
+    const commit = () => {
+        if (vid && onVariableChange) onVariableChange(vid, localValue);
+    };
+    return (
+        <div className="w-full h-full flex items-center gap-0">
+            <input
+                type="text"
+                className="flex-1 h-full rounded-l px-2 outline-none min-w-0"
+                style={{
+                    backgroundColor: (element as any).backgroundColor || '#1e293b',
+                    border: `1px solid ${(element as any).borderColor || '#475569'}`,
+                    borderRight: 'none',
+                    color: font?.color || '#fff',
+                    fontFamily: font?.fontFamily,
+                    fontSize: font?.fontSize,
+                }}
+                placeholder={(element as any).placeholder || ''}
+                maxLength={(element as any).maxLength || undefined}
+                value={localValue}
+                onChange={e => setLocalValue(e.target.value)}
+                onKeyDown={e => {
+                    if (e.key === 'Enter') { commit(); try { playSound((element as any).clickSoundId || null); } catch(_) {} }
+                }}
+                onClick={e => e.stopPropagation()}
+            />
+            <button
+                type="button"
+                className="h-full px-2 rounded-r text-xs font-semibold flex items-center justify-center shrink-0"
+                style={{
+                    backgroundColor: (element as any).borderColor || '#475569',
+                    color: '#fff',
+                    border: `1px solid ${(element as any).borderColor || '#475569'}`,
+                }}
+                onClick={e => {
+                    e.stopPropagation();
+                    commit();
+                    try { playSound((element as any).clickSoundId || null); } catch(_) {}
+                }}
+                title="Confirm"
+            >
+                ✓
+            </button>
+        </div>
+    );
+};
+
+// --- Hot Zone Runtime Renderer ---
+const HotZoneRuntime: React.FC<{
+    screen: VNUIScreen;
+    onAction: (action: VNUIAction) => void;
+    variables: Record<VNID, string | number | boolean>;
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
+    evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    playSound: (soundId: VNID | null) => void;
+}> = ({ screen, onAction, variables, onVariableChange, evaluateConditions, assetResolver, playSound }) => {
+    const { project } = useProject();
+    const hotSpots = screen.hotSpots || {};
+    const hotZoneElements = screen.hotZoneElements || {};
+
+    // Track element positions during drag (runtime-only state)
+    const [elementPositions, setElementPositions] = useState<Record<VNID, { x: number; y: number }>>({});
+    const [dragState, setDragState] = useState<{
+        elementId: VNID;
+        startMouseX: number;
+        startMouseY: number;
+        startX: number;
+        startY: number;
+    } | null>(null);
+    const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerSize, setContainerSize] = useState({ width: 1, height: 1 });
+    // Track which elements have been placed on hot spots
+    const [placedElements, setPlacedElements] = useState<Record<VNID, VNID>>({}); // elementId -> hotSpotId
+    // Track image overrides from ChangeImage actions
+    const [imageOverrides, setImageOverrides] = useState<Record<VNID, VNID>>({});
+    // Track active animations
+    const [activeAnimations, setActiveAnimations] = useState<Record<VNID, { animation: string; duration: number }>>({});
+
+    // Handle ChangeImage / PlayAnimation locally, delegate everything else
+    const handleLocalAction = useCallback((action: VNUIAction) => {
+        if (action.type === UIActionType.ChangeImage) {
+            const a = action as any;
+            if (a.targetElementId && a.newImageId) {
+                setImageOverrides(prev => ({ ...prev, [a.targetElementId]: a.newImageId }));
+            }
+            return;
+        }
+        if (action.type === UIActionType.PlayAnimation) {
+            const a = action as any;
+            if (a.targetElementId) {
+                const anim = a.animation || 'shake';
+                const dur = a.duration || 500;
+                setActiveAnimations(prev => ({ ...prev, [a.targetElementId]: { animation: anim, duration: dur } }));
+                setTimeout(() => {
+                    setActiveAnimations(prev => {
+                        const next = { ...prev };
+                        delete next[a.targetElementId];
+                        return next;
+                    });
+                }, dur);
+            }
+            return;
+        }
+        onAction(action);
+    }, [onAction]);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const observer = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+            }
+        });
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    // Check win condition
+    useEffect(() => {
+        if (!screen.winCondition) return;
+        const wc = screen.winCondition;
+        if (wc.type === 'allPlaced') {
+            const draggableElements = (Object.values(hotZoneElements) as VNHotZoneElement[]).filter(el => el.draggable);
+            const allPlaced = draggableElements.length > 0 && draggableElements.every(el => placedElements[el.id]);
+            if (allPlaced) {
+                wc.actions.forEach(action => handleLocalAction(action));
+            }
+        } else if (wc.type === 'variable' && wc.variableId && wc.operator && wc.value !== undefined) {
+            const met = evaluateConditions([{ variableId: wc.variableId, operator: wc.operator, value: wc.value }], variables);
+            if (met) {
+                wc.actions.forEach(action => handleLocalAction(action));
+            }
+        }
+    }, [placedElements, variables, screen.winCondition, hotZoneElements, handleLocalAction, evaluateConditions]);
+
+    // Drag handlers
+    const handleElementMouseDown = useCallback((e: React.MouseEvent, el: VNHotZoneElement) => {
+        if (!el.draggable) {
+            // Click sound + Click actions
+            try { playSound((el as any).clickSoundId || null); } catch(e) {}
+            if (el.actions) el.actions.forEach(a => handleLocalAction(a));
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        try { playSound((el as any).clickSoundId || null); } catch(e) {}
+        const pos = elementPositions[el.id] || { x: el.x, y: el.y };
+        setDragState({
+            elementId: el.id,
+            startMouseX: e.clientX,
+            startMouseY: e.clientY,
+            startX: pos.x,
+            startY: pos.y,
+        });
+        setDragOffset(null);
+        // Remove from placed if re-dragging
+        setPlacedElements(prev => {
+            const next = { ...prev };
+            delete next[el.id];
+            return next;
+        });
+    }, [elementPositions, handleLocalAction, playSound]);
+
+    useEffect(() => {
+        if (!dragState) return;
+        const sw = containerSize.width || 1;
+        const sh = containerSize.height || 1;
+        const onMove = (e: MouseEvent) => {
+            const dx = ((e.clientX - dragState.startMouseX) / sw) * 100;
+            const dy = ((e.clientY - dragState.startMouseY) / sh) * 100;
+            let nx = Math.round((dragState.startX + dx) * 10) / 10;
+            let ny = Math.round((dragState.startY + dy) * 10) / 10;
+            setDragOffset({ x: nx, y: ny });
+        };
+        const onUp = () => {
+            if (!dragOffset) { setDragState(null); return; }
+            const el = hotZoneElements[dragState.elementId] as VNHotZoneElement | undefined;
+            if (!el) { setDragState(null); setDragOffset(null); return; }
+
+            // Check if dropped on a valid hot spot
+            let droppedOnSpot: VNHotSpot | null = null;
+            for (const spot of Object.values(hotSpots) as VNHotSpot[]) {
+                if (spot.trigger !== 'drag-drop') continue;
+                if (spot.acceptedElementIds && !spot.acceptedElementIds.includes(el.id)) continue;
+                // Check overlap: element center inside spot
+                const cx = dragOffset.x + el.width / 2;
+                const cy = dragOffset.y + el.height / 2;
+                if (cx >= spot.x && cx <= spot.x + spot.width && cy >= spot.y && cy <= spot.y + spot.height) {
+                    droppedOnSpot = spot;
+                    break;
+                }
+            }
+
+            if (droppedOnSpot) {
+                // Snap to hot spot center if configured
+                const finalPos = el.snapToHotSpot
+                    ? { x: droppedOnSpot.x + (droppedOnSpot.width - el.width) / 2, y: droppedOnSpot.y + (droppedOnSpot.height - el.height) / 2 }
+                    : { x: dragOffset.x, y: dragOffset.y };
+                setElementPositions(prev => ({ ...prev, [el.id]: finalPos }));
+                setPlacedElements(prev => ({ ...prev, [el.id]: droppedOnSpot!.id }));
+                // Fire hot spot actions
+                droppedOnSpot.actions.forEach(a => handleLocalAction(a));
+            } else if (el.snapBack) {
+                // Snap back to original position
+                setElementPositions(prev => ({ ...prev, [el.id]: { x: el.x, y: el.y } }));
+            } else {
+                setElementPositions(prev => ({ ...prev, [el.id]: { x: dragOffset.x, y: dragOffset.y } }));
+            }
+
+            setDragState(null);
+            setDragOffset(null);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [dragState, dragOffset, containerSize, hotZoneElements, hotSpots, handleLocalAction]);
+
+    // Handle hot spot click/hover triggers
+    const handleSpotClick = useCallback((spot: VNHotSpot) => {
+        if (spot.trigger === 'click') {
+            spot.actions.forEach(a => handleLocalAction(a));
+        }
+    }, [handleLocalAction]);
+
+    const handleSpotHover = useCallback((spot: VNHotSpot) => {
+        if (spot.trigger === 'hover') {
+            spot.actions.forEach(a => handleLocalAction(a));
+        }
+    }, [handleLocalAction]);
+
+    return (
+        <div ref={containerRef} className="absolute inset-0 w-full h-full">
+            {/* Hot Spots */}
+            {(Object.values(hotSpots) as VNHotSpot[]).map(spot => {
+                if (spot.conditions && !evaluateConditions(spot.conditions, variables)) return null;
+                return (
+                    <div
+                        key={spot.id}
+                        className="absolute"
+                        style={{
+                            left: `${spot.x}%`, top: `${spot.y}%`,
+                            width: `${spot.width}%`, height: `${spot.height}%`,
+                            borderRadius: spot.shape === 'circle' ? '50%' : undefined,
+                            backgroundColor: spot.visible ? (spot.highlightColor || 'rgba(59, 130, 246, 0.2)') : 'transparent',
+                            border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
+                            pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
+                            cursor: spot.trigger === 'click' ? 'pointer' : undefined,
+                        }}
+                        onClick={() => handleSpotClick(spot)}
+                        onMouseEnter={() => handleSpotHover(spot)}
+                    />
+                );
+            })}
+            {/* Hot Zone Elements */}
+            {(Object.values(hotZoneElements) as VNHotZoneElement[]).map(el => {
+                if (el.conditions && !evaluateConditions(el.conditions, variables)) return null;
+                const isDragging = dragState?.elementId === el.id;
+                const pos = isDragging && dragOffset
+                    ? dragOffset
+                    : (elementPositions[el.id] || { x: el.x, y: el.y });
+                // Use image override if ChangeImage was triggered
+                const effectiveImageId = imageOverrides[el.id] || el.imageId;
+                const imageUrl = assetResolver(effectiveImageId, 'image');
+                const anim = activeAnimations[el.id];
+                const animationKeyframes: Record<string, string> = {
+                    shake: 'hz-shake', bounce: 'hz-bounce', pulse: 'hz-pulse', spin: 'hz-spin',
+                    fadeIn: 'hz-fadeIn', fadeOut: 'hz-fadeOut', slideIn: 'hz-slideIn', glow: 'hz-glow',
+                };
+                const elType = (el as any).elementType || 'image';
+                const elText = (el as any).text || '';
+                const elFont = (el as any).font;
+                const videoUrl = (el as any).videoId ? assetResolver((el as any).videoId, 'video') : null;
+                return (
+                    <div
+                        key={el.id}
+                        className="absolute"
+                        style={{
+                            left: `${pos.x}%`, top: `${pos.y}%`,
+                            width: `${el.width}%`, height: `${el.height}%`,
+                            cursor: el.draggable ? (isDragging ? 'grabbing' : 'grab') : (elType === 'textInput' ? 'text' : 'pointer'),
+                            zIndex: isDragging ? 50 : 10,
+                            pointerEvents: 'auto',
+                            transition: isDragging ? 'none' : 'left 0.2s, top 0.2s',
+                            animation: anim ? `${animationKeyframes[anim.animation] || 'hz-shake'} ${anim.duration}ms ease` : undefined,
+                        }}
+                        onMouseDown={e => elType !== 'textInput' && handleElementMouseDown(e, el)}
+                        onMouseEnter={() => { try { playSound((el as any).hoverSoundId || null); } catch(e) {} }}
+                    >
+                        {elType === 'text' ? (
+                            <div className="w-full h-full flex items-center justify-center text-white pointer-events-none"
+                                style={elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? 'bold' : 'normal', fontStyle: elFont.italic ? 'italic' : 'normal', color: elFont.color || '#fff' } : {}}>
+                                {project ? interpolateVariables(elText, variables, project) : elText}
+                            </div>
+                        ) : elType === 'button' ? (
+                            <div className="w-full h-full relative flex items-center justify-center pointer-events-none">
+                                {imageUrl && <img src={imageUrl} alt={el.name} className="absolute inset-0 w-full h-full object-fill" draggable={false} />}
+                                <span className="relative z-10 text-white text-sm font-semibold"
+                                    style={elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || '#fff' } : {}}>
+                                    {project ? interpolateVariables(elText, variables, project) : elText}
+                                </span>
+                            </div>
+                        ) : elType === 'video' ? (
+                            videoUrl ? (
+                                <video
+                                    src={videoUrl}
+                                    className="w-full h-full object-contain pointer-events-none"
+                                    autoPlay
+                                    loop={(el as any).videoLoop ?? true}
+                                    muted={(el as any).videoMuted ?? true}
+                                    playsInline
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-indigo-500/30 border border-indigo-400 rounded flex items-center justify-center text-xs text-white pointer-events-none">
+                                    {el.name} (no video)
+                                </div>
+                            )
+                        ) : elType === 'textInput' ? (
+                            <HotZoneTextInput
+                                element={el}
+                                variables={variables}
+                                onVariableChange={onVariableChange}
+                                playSound={playSound}
+                                font={elFont}
+                            />
+                        ) : imageUrl ? (
+                            <img src={imageUrl} alt={el.name} className="w-full h-full object-contain pointer-events-none" draggable={false} />
+                        ) : (
+                            <div className="w-full h-full bg-purple-500/30 border border-purple-400 rounded flex items-center justify-center text-xs text-white pointer-events-none">
+                                {el.name}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // --- UI Screen Renderer (for menus) ---
 const UIScreenRenderer: React.FC<{
     screenId: VNID;
@@ -2316,6 +2840,17 @@ const UIScreenRenderer: React.FC<{
         >
             {getBackgroundElement()}
             {Object.values(screen.elements).map(element => renderElement(element as VNUIElement, variables, project, onCommitVariables))}
+            {screen.screenType === 'hotzone' && (
+                <HotZoneRuntime
+                    screen={screen}
+                    onAction={onAction}
+                    variables={variables}
+                    onVariableChange={onVariableChange}
+                    evaluateConditions={evaluateConditions}
+                    assetResolver={assetResolver}
+                    playSound={playSound}
+                />
+            )}
         </div>
     );
 });
@@ -2828,7 +3363,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
 
     const loadGame = (slotNumber: number) => {
-        stopAndResetMusic();
+        // Immediately stop music without fade to avoid race condition where
+        // old fade callback clears audio.src after the new track is loaded
+        const audio = musicAudioRef.current;
+        if (audioFadeInterval.current) { clearInterval(audioFadeInterval.current); audioFadeInterval.current = null; }
+        if (audio) { audio.pause(); audio.volume = 0; audio.src = ''; }
+        const ambientAudio = ambientNoiseAudioRef.current;
+        if (ambientFadeInterval.current) { clearInterval(ambientFadeInterval.current); ambientFadeInterval.current = null; }
+        if (ambientAudio) { ambientAudio.pause(); ambientAudio.src = ''; }
+        menuMusicUrlRef.current = null;
         const doLoad = async () => {
             const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
             const saveData = saves[slotNumber];
@@ -2916,7 +3459,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentIndex: 0,
             commandStack: [],
             variables: initialVariables,
-            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] } },
+            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
             history: [],
             savedInputs: {},
             uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -3699,7 +4242,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         panY: 0,
                                         transitionDuration: 0.5,
                                         overlayEffects: []
-                                    }
+                                    },
+                                    particleEffects: {}
                                 },
                                 uiState: {
                                     dialogue: null,
@@ -3860,7 +4404,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             panY: 0,
                                             transitionDuration: 0.5,
                                             overlayEffects: []
-                                        }
+                                        },
+                                        particleEffects: {}
                                     },
                                     uiState: {
                                         dialogue: null,
@@ -4415,6 +4960,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.RunScript: {
                     const result = handleRunScript(command as RunScriptCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.SpawnParticles: {
+                    const result = handleSpawnParticles(command as SpawnParticlesCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.StopParticles: {
+                    const result = handleStopParticles(command as StopParticlesCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.CallCommonEvent: {
+                    const result = handleCallCommonEvent(command as CallCommonEventCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -5061,7 +5621,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 panY: 0, 
                                 transitionDuration: 0.5,
                                 overlayEffects: []
-                            } 
+                            },
+                            particleEffects: {}
                         },
                         uiState: {
                             dialogue: null,
@@ -5132,7 +5693,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         panY: 0, 
                                         transitionDuration: 0.5,
                                         overlayEffects: []
-                                    } 
+                                    },
+                                    particleEffects: {}
                                 },
                                 // Clear any active UI state (dialogue, choices, etc.)
                                 uiState: {
@@ -5603,7 +6165,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }
     }, [playerState?.uiState.isSkipping, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, settings.enableSkip, handleDialogueAdvance]);
 
-
     // --- Stage Rendering ---
     const renderStage = () => {
         if (!playerState) return null;
@@ -5804,8 +6365,105 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 }
                                 animationDuration = `${char.transition.duration}s`;
                             }
-                            return (
-                                <div key={char.charId} className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`} style={{...positionStyle, animationDuration, ...slideStyle, zIndex: 5}}>
+                            
+                            // Compute per-character visual effect styles — supports multiple stacked effects
+                            // Each transform-based effect gets its own nested wrapper div to avoid transform conflicts
+                            // with the position centering transform on the outer div
+                            const effectsList = char.visualEffects || (char as any).visualEffect ? 
+                                (char.visualEffects && char.visualEffects.length > 0 
+                                    ? char.visualEffects 
+                                    : (char as any).visualEffect && (char as any).visualEffect.type !== 'none' 
+                                        ? [(char as any).visualEffect] 
+                                        : []) 
+                                : [];
+                            
+                            // Separate effects into categories:
+                            // - Transform-based: shake, bounce, float, pulse, breathing (each needs own wrapper)
+                            // - Filter-based: glow, tint, silhouette (combine into one filter string)
+                            // - Opacity-based: flicker (separate animation)
+                            const transformEffects: Array<{style: React.CSSProperties}> = [];
+                            let combinedFilter = '';
+                            let combinedFilterAnimation = '';
+                            let flickerAnimation = '';
+                            let filterVars: Record<string, string> = {};
+                            
+                            for (const eff of effectsList) {
+                                if (!eff || eff.type === 'none') continue;
+                                const speed = eff.speed ?? 1;
+                                const intensity = eff.intensity ?? 1;
+                                switch (eff.type) {
+                                    case 'shake': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharShake ${0.15 / speed}s ease-in-out infinite`;
+                                        s['--char-shake-px'] = `${2 * intensity}px`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'bounce': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharBounce ${0.6 / speed}s ease-in-out infinite`;
+                                        s['--char-bounce-h'] = `${-8 * intensity}px`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'float': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharFloat ${2 / speed}s ease-in-out infinite`;
+                                        s['--char-float-h'] = `${-10 * intensity}px`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'pulse': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharPulse ${1 / speed}s ease-in-out infinite`;
+                                        s['--char-pulse-scale'] = `${1 + 0.05 * intensity}`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'breathing': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharBreathing ${2 / speed}s ease-in-out infinite`;
+                                        s['--char-breathe-scale'] = `${1 + 0.02 * intensity}`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'glow':
+                                        combinedFilter += ` drop-shadow(0 0 ${8 * intensity}px ${eff.color || '#FFFFFF'})`;
+                                        combinedFilterAnimation = `vnCharGlow ${1.5 / speed}s ease-in-out infinite`;
+                                        filterVars['--char-glow-color'] = eff.color || '#FFFFFF';
+                                        filterVars['--char-glow-size'] = `${8 * intensity}px`;
+                                        filterVars['--char-glow-size-max'] = `${14 * intensity}px`;
+                                        break;
+                                    case 'tint':
+                                        if (eff.color) {
+                                            const tintOpacity = 0.3 * intensity;
+                                            combinedFilter += ` brightness(${1 - tintOpacity * 0.3}) sepia(${tintOpacity}) hue-rotate(${getHueFromHex(eff.color)}deg) saturate(${1 + intensity})`;
+                                        }
+                                        break;
+                                    case 'silhouette':
+                                        combinedFilter += ` brightness(0)${eff.color ? ` drop-shadow(0 0 2px ${eff.color})` : ''}`;
+                                        break;
+                                    case 'flicker':
+                                        flickerAnimation = `vnCharFlicker ${0.1 / speed}s step-end infinite`;
+                                        break;
+                                }
+                            }
+
+                            // Build the filter/flicker style for the innermost content wrapper
+                            const contentEffectStyle: React.CSSProperties & Record<string, any> = {};
+                            if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
+                            if (combinedFilterAnimation) contentEffectStyle.animation = combinedFilterAnimation;
+                            if (flickerAnimation) {
+                                contentEffectStyle.animation = contentEffectStyle.animation 
+                                    ? `${contentEffectStyle.animation}, ${flickerAnimation}` 
+                                    : flickerAnimation;
+                            }
+                            Object.assign(contentEffectStyle, filterVars);
+                            const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
+                            
+                            // Build nested wrappers: position div > transform effect divs > filter/content div > sprites
+                            const spriteContent = (
+                                <>
                                     {char.isVideo && char.videoUrls ? (
                                         char.videoUrls.map((url, index) => (
                                             <video 
@@ -5830,18 +6488,69 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             />
                                         ))
                                     )}
+                                </>
+                            );
+
+                            // Wrap with filter/flicker effects
+                            let wrappedContent = hasContentEffect
+                                ? <div className="w-full h-full relative" style={contentEffectStyle}>{spriteContent}</div>
+                                : spriteContent;
+
+                            // Wrap with transform-based effects (each in its own div to avoid conflicts)
+                            // Reverse so the first listed effect is outermost
+                            for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
+                                wrappedContent = (
+                                    <div className="w-full h-full relative" style={transformEffects[tIdx].style}>
+                                        {wrappedContent}
+                                    </div>
+                                );
+                            }
+                            
+                            return (
+                                <div
+                                    key={char.charId}
+                                    className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
+                                    style={{
+                                        ...positionStyle, animationDuration, ...slideStyle, zIndex: 5,
+                                    }}
+                                >
+                                    {wrappedContent}
                                 </div>
                             );
                         })}
+                        {/* Particle System - above characters (z-5), below overlays */}
+                        {(() => {
+                            const pEffects = state.particleEffects;
+                            const hasParticles = pEffects && Object.keys(pEffects).length > 0;
+                            if (hasParticles) {
+                                console.log('[LivePreview] Rendering ParticleSystem:', Object.keys(pEffects), 'stageSize:', stageSize.width, 'x', stageSize.height);
+                                return (
+                                    <ParticleSystem
+                                        effects={pEffects}
+                                        width={stageSize.width}
+                                        height={stageSize.height}
+                                    />
+                                );
+                            }
+                            return null;
+                        })()}
                         {state.textOverlays.map((overlay: TextOverlay) => (
-                            <TextOverlayElement key={overlay.id} overlay={overlay} stageSize={stageSize} />
+                            <TextOverlayElement
+                                key={overlay.id}
+                                overlay={overlay}
+                                stageSize={stageSize}
+                            />
                         ))}
                         {state.imageOverlays.map((overlay: ImageOverlay) => (
-                            <ImageOverlayElement key={overlay.id} overlay={overlay} stageSize={stageSize} />
+                            <ImageOverlayElement
+                                key={overlay.id}
+                                overlay={overlay}
+                                stageSize={stageSize}
+                            />
                         ))}
                         {state.buttonOverlays.map((overlay: ButtonOverlay) => (
                             <ButtonOverlayElement 
-                                key={overlay.id} 
+                                key={overlay.id}
                                 overlay={overlay} 
                                 onAction={handleUIAction} 
                                 playSound={playSound} 
@@ -5861,6 +6570,101 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     </div>
                 </div>
                 <div className="absolute inset-0 pointer-events-none" style={tintStyle}></div>
+            </div>
+        );
+    };
+
+    // Credit scroll content — measures its own height to compute proper scroll distance
+    const CreditScrollContent: React.FC<{
+        command: CreditRollCommand;
+        hasBgs: boolean;
+        hasMedia: boolean;
+        onFinish: () => void;
+    }> = ({ command, hasBgs, hasMedia, onFinish }) => {
+        const contentRef = useRef<HTMLDivElement>(null);
+        const containerRef = useRef<HTMLDivElement>(null);
+        const [animStyle, setAnimStyle] = useState<React.CSSProperties>({});
+        const finishedRef = useRef(false);
+
+        useEffect(() => {
+            finishedRef.current = false;
+            // Wait a frame for layout so we can measure content height
+            const raf = requestAnimationFrame(() => {
+                const content = contentRef.current;
+                const container = containerRef.current;
+                if (!content || !container) return;
+
+                const contentHeight = content.scrollHeight;
+                const containerHeight = container.clientHeight;
+                // Total distance: start below viewport (containerHeight) + scroll through all content past top
+                const totalDistance = containerHeight + contentHeight;
+                const speed = (command as any).scrollSpeed || 60; // px/sec
+                // Calculate duration from speed, but cap at the max duration
+                const calcDuration = totalDistance / speed;
+                const maxDuration = command.duration || 300;
+                const finalDuration = Math.min(calcDuration, maxDuration);
+
+                setAnimStyle({
+                    animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
+                    // Use CSS custom properties for start and end translate values (in pixels)
+                    ['--credit-scroll-start' as any]: `${containerHeight}px`,
+                    ['--credit-scroll-end' as any]: `-${contentHeight}px`,
+                });
+            });
+            return () => cancelAnimationFrame(raf);
+        }, [command]);
+
+        const handleAnimEnd = useCallback((e: React.AnimationEvent) => {
+            if (e.target === e.currentTarget && !finishedRef.current) {
+                finishedRef.current = true;
+                onFinish();
+            }
+        }, [onFinish]);
+
+        // Fallback timer in case animationend doesn't fire
+        useEffect(() => {
+            const speed = (command as any).scrollSpeed || 60;
+            const maxDuration = command.duration || 300;
+            // Give a generous timeout (maxDuration + 5s buffer)
+            const timeout = window.setTimeout(() => {
+                if (!finishedRef.current) {
+                    finishedRef.current = true;
+                    onFinish();
+                }
+            }, (maxDuration + 5) * 1000);
+            return () => clearTimeout(timeout);
+        }, [command, onFinish]);
+
+        return (
+            <div ref={containerRef} className="absolute inset-0 overflow-hidden z-[2]">
+                <style>{`
+                    @keyframes credit-scroll-dynamic {
+                        from { transform: translateY(var(--credit-scroll-start, 100%)); }
+                        to { transform: translateY(var(--credit-scroll-end, -100%)); }
+                    }
+                `}</style>
+                <div
+                    ref={contentRef}
+                    className="text-center px-8 w-full"
+                    style={{
+                        color: command.textColor || '#FFFFFF',
+                        textShadow: (hasBgs || hasMedia) ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
+                        willChange: 'transform',
+                        ...animStyle,
+                    }}
+                    onAnimationEnd={handleAnimEnd}
+                >
+                    {command.entries.map((entry, i) =>
+                        entry.kind === 'heading' ? (
+                            <h2 key={i} className="text-2xl font-bold mt-8 mb-4" style={{ color: '#FFD700' }}>{entry.label}</h2>
+                        ) : (
+                            <div key={i} className="mb-2">
+                                <span className="text-sm opacity-70">{entry.label}</span>
+                                {entry.value && <><br /><span className="text-lg">{entry.value}</span></>}
+                            </div>
+                        )
+                    )}
+                </div>
             </div>
         );
     };
@@ -6030,31 +6834,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     return <img key={`credit-media-${idx}`} src={url} alt="" style={mediaStyle} />;
                 })}
 
-                {/* Credits scroll */}
-                <div
-                    className="credits-scroll text-center px-8 relative z-[2]"
-                    style={{
-                        color: command.textColor || '#FFFFFF',
-                        animationDuration: `${command.duration || 15}s`,
-                        textShadow: (hasBgs || hasMedia) ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
-                    }}
-                    onAnimationEnd={(e) => {
-                        if (e.target === e.currentTarget) {
-                            onFinish();
-                        }
-                    }}
-                >
-                    {command.entries.map((entry, i) =>
-                        entry.kind === 'heading' ? (
-                            <h2 key={i} className="text-2xl font-bold mt-8 mb-4" style={{ color: '#FFD700' }}>{entry.label}</h2>
-                        ) : (
-                            <div key={i} className="mb-2">
-                                <span className="text-sm opacity-70">{entry.label}</span>
-                                {entry.value && <><br /><span className="text-lg">{entry.value}</span></>}
-                            </div>
-                        )
-                    )}
-                </div>
+                {/* Credits scroll - uses dynamic measurement for proper full scroll */}
+                <CreditScrollContent command={command} hasBgs={hasBgs} hasMedia={hasMedia} onFinish={onFinish} />
 
                 {/* Skip hint */}
                 {command.allowSkip && (
@@ -6237,94 +7018,116 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {/* Show dialogue if: 1) dialogue exists, AND 2) either no HUD screen or HUD screen has showDialogue enabled */}
             {uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && (
                 <>
-                    {/* Skip controls bar — positioned above dialogue box */}
-                    <div className="absolute z-25 flex items-center justify-center gap-2" 
-                        style={{ 
-                            bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
-                            left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-                            right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-                            pointerEvents: 'none',
-                        }}
-                    >
-                        <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
-                            {/* Skip Backward button */}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); handleSkipBackward(); }}
-                                disabled={playerState.history.length === 0}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all"
-                                style={{
-                                    background: playerState.history.length > 0 ? 'rgba(15,23,42,0.75)' : 'rgba(15,23,42,0.4)',
-                                    border: '1px solid rgba(148,163,184,0.2)',
-                                    color: playerState.history.length > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)',
-                                    backdropFilter: 'blur(4px)',
-                                    cursor: playerState.history.length > 0 ? 'pointer' : 'default',
-                                }}
-                                title="Skip Backward (Arrow Up)"
+                    {/* Quick menu buttons — Skip/Back/Auto/Log */}
+                    {(() => {
+                        const qmPosition = project.ui.quickMenuPosition ?? 'above-dialogue';
+                        if (qmPosition === 'hidden') return null;
+                        const qmColor = project.ui.quickMenuColor ?? '#0f172a';
+                        const qmOpacity = project.ui.quickMenuOpacity ?? 75;
+                        const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
+                        const qmBg = hexToRgba(qmColor, qmOpacity);
+                        const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
+
+                        const positionStyle: React.CSSProperties = qmPosition === 'top-right'
+                            ? { top: '8px', right: '8px', position: 'absolute' as const }
+                            : qmPosition === 'bottom-right'
+                            ? { bottom: '8px', right: '8px', position: 'absolute' as const }
+                            : { // above-dialogue
+                                bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
+                                left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
+                                right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
+                                position: 'absolute' as const,
+                              };
+
+                        return (
+                            <div className="z-25 flex items-center justify-center gap-2" 
+                                style={{ ...positionStyle, pointerEvents: 'none' }}
                             >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                                </svg>
-                                Back
-                            </button>
-                            
-                            {/* History button */}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all hover:brightness-125"
-                                style={{
-                                    background: 'rgba(15,23,42,0.75)',
-                                    border: '1px solid rgba(148,163,184,0.2)',
-                                    color: 'rgba(255,255,255,0.8)',
-                                    backdropFilter: 'blur(4px)',
-                                }}
-                                title="Text History (H)"
-                            >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Log
-                            </button>
-                            
-                            {/* Auto-advance toggle */}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all"
-                                style={{
-                                    background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : 'rgba(15,23,42,0.75)',
-                                    border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`,
-                                    color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)',
-                                    backdropFilter: 'blur(4px)',
-                                }}
-                                title="Auto-Advance"
-                            >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Auto
-                            </button>
-                            
-                            {/* Skip Forward button */}
-                            {settings.enableSkip && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); }}
-                                    className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-all"
-                                    style={{
-                                        background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : 'rgba(15,23,42,0.75)',
-                                        border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`,
-                                        color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)',
-                                        backdropFilter: 'blur(4px)',
-                                    }}
-                                    title="Skip Forward (Ctrl)"
-                                >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                                    </svg>
-                                    Skip
-                                </button>
-                            )}
-                        </div>
-                    </div>
+                                <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
+                                    {/* Skip Backward button */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleSkipBackward(); }}
+                                        disabled={playerState.history.length === 0}
+                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all"
+                                        style={{
+                                            borderRadius: `${qmRadius}px`,
+                                            background: playerState.history.length > 0 ? qmBg : qmBgDisabled,
+                                            border: '1px solid rgba(148,163,184,0.2)',
+                                            color: playerState.history.length > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)',
+                                            backdropFilter: 'blur(4px)',
+                                            cursor: playerState.history.length > 0 ? 'pointer' : 'default',
+                                        }}
+                                        title="Skip Backward (Arrow Up)"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                        </svg>
+                                        Back
+                                    </button>
+                                    
+                                    {/* History button */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); }}
+                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all hover:brightness-125"
+                                        style={{
+                                            borderRadius: `${qmRadius}px`,
+                                            background: qmBg,
+                                            border: '1px solid rgba(148,163,184,0.2)',
+                                            color: 'rgba(255,255,255,0.8)',
+                                            backdropFilter: 'blur(4px)',
+                                        }}
+                                        title="Text History (H)"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Log
+                                    </button>
+                                    
+                                    {/* Auto-advance toggle */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); }}
+                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all"
+                                        style={{
+                                            borderRadius: `${qmRadius}px`,
+                                            background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : qmBg,
+                                            border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`,
+                                            color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)',
+                                            backdropFilter: 'blur(4px)',
+                                        }}
+                                        title="Auto-Advance"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Auto
+                                    </button>
+                                    
+                                    {/* Skip Forward button */}
+                                    {settings.enableSkip && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); }}
+                                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all"
+                                            style={{
+                                                borderRadius: `${qmRadius}px`,
+                                                background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : qmBg,
+                                                border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`,
+                                                color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)',
+                                                backdropFilter: 'blur(4px)',
+                                            }}
+                                            title="Skip Forward (Ctrl)"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                            </svg>
+                                            Skip
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
                     <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />
                 </>
             )}

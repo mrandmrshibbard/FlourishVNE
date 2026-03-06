@@ -73,6 +73,9 @@ export enum CommandType {
     CreditRoll = 'CreditRoll',
     Group = 'Group', // Visual grouping only, no execution
     RunScript = 'RunScript', // Execute a user-defined script
+    SpawnParticles = 'SpawnParticles', // Spawn a particle effect on stage
+    StopParticles = 'StopParticles', // Stop/clear particle effects
+    CallCommonEvent = 'CallCommonEvent', // Invoke a reusable Common Event
 }
 
 interface BaseCommand {
@@ -82,10 +85,28 @@ interface BaseCommand {
     modifiers?: CommandModifiers;
 }
 
+/**
+ * Text effect types for per-character animated dialogue text
+ */
+export type VNTextEffectType = 'none' | 'shake' | 'wave' | 'rainbow' | 'glitch' | 'pulse' | 'fade-in' | 'bounce' | 'typewriter-bounce';
+
+export interface VNDialogueTextEffect {
+    /** The effect type to apply */
+    type: VNTextEffectType;
+    /** Effect speed multiplier (0.1-5, default 1) */
+    speed?: number;
+    /** Effect intensity/amplitude (0.1-3, default 1) */
+    intensity?: number;
+}
+
 export interface DialogueCommand extends BaseCommand {
     type: CommandType.Dialogue;
     characterId: VNID | null;
     text: string;
+    /** Optional voice audio clip to play with this dialogue line */
+    voiceAudioId?: VNID | null;
+    /** Per-line text effect override (if not set, uses character default) */
+    textEffect?: VNDialogueTextEffect;
 }
 
 export interface SetBackgroundCommand extends BaseCommand {
@@ -93,6 +114,22 @@ export interface SetBackgroundCommand extends BaseCommand {
     backgroundId: VNID;
     transition: VNTransition;
     duration: number; // in seconds
+}
+
+/**
+ * Per-character visual effect types
+ */
+export type VNCharacterVisualEffectType = 'none' | 'shake' | 'bounce' | 'float' | 'pulse' | 'glow' | 'tint' | 'silhouette' | 'breathing' | 'flicker';
+
+export interface VNCharacterVisualEffect {
+    /** The visual effect to apply to the character on stage */
+    type: VNCharacterVisualEffectType;
+    /** Effect speed multiplier (0.1-5, default 1) */
+    speed?: number;
+    /** Effect intensity/amplitude (0.1-3, default 1) */
+    intensity?: number;
+    /** Optional color for tint/glow/silhouette effects */
+    color?: string;
 }
 
 export interface ShowCharacterCommand extends BaseCommand {
@@ -104,6 +141,12 @@ export interface ShowCharacterCommand extends BaseCommand {
     duration: number; // in seconds
     startPosition?: VNPosition; // for slide transitions
     endPosition?: VNPosition; // for slide transitions
+    /** Scale multiplier (1 = 100%). Controls character sprite size on stage. */
+    scale?: number;
+    /** Optional visual effects applied to the character while on stage (multiple can stack) */
+    visualEffects?: VNCharacterVisualEffect[];
+    /** @deprecated Use visualEffects instead — kept for backward compatibility */
+    visualEffect?: VNCharacterVisualEffect;
 }
 
 export interface HideCharacterCommand extends BaseCommand {
@@ -404,8 +447,10 @@ export interface CreditRollCommand extends BaseCommand {
     type: CommandType.CreditRoll;
     /** Structured credit entries */
     entries: CreditEntry[];
-    /** Total scroll duration in seconds */
+    /** Total scroll duration in seconds (used as fallback if scrollSpeed is not set) */
     duration: number;
+    /** Scroll speed in pixels per second (overrides duration-based calculation) */
+    scrollSpeed?: number;
     /** Background color behind credits (hex with alpha) */
     backgroundColor: string;
     /** Text color (hex) */
@@ -478,13 +523,99 @@ export interface RunScriptCommand extends BaseCommand {
     waitForCompletion: boolean;
 }
 
+/**
+ * Particle shape presets for the particle system
+ */
+export type VNParticleShape = 'circle' | 'square' | 'star' | 'heart' | 'sparkle' | 'custom';
+
+/**
+ * Particle emitter configuration
+ */
+export interface VNParticleConfig {
+    /** Display name for this particle effect */
+    name?: string;
+    /** Particle preset: built-in configurations for common effects */
+    preset?: 'none' | 'fireflies' | 'sparks' | 'bubbles' | 'confetti' | 'embers' | 'dust' | 'petals' | 'magic' | 'stars';
+    /** Particle shape */
+    shape: VNParticleShape;
+    /** Particle color(s) - multiple for random selection */
+    colors: string[];
+    /** Particles emitted per second */
+    emitRate: number;
+    /** Particle lifetime in seconds */
+    lifetime: number;
+    /** Min starting speed (pixels/sec) */
+    speedMin: number;
+    /** Max starting speed (pixels/sec) */
+    speedMax: number;
+    /** Min particle size in pixels */
+    sizeMin: number;
+    /** Max particle size in pixels */
+    sizeMax: number;
+    /** Gravity force (positive = down, negative = up) */
+    gravity: number;
+    /** Horizontal wind force */
+    wind: number;
+    /** Emission direction in degrees (0 = right, 90 = up, 180 = left, 270 = down) */
+    directionMin: number;
+    /** Emission direction max (particles spawn with direction uniformly in [min, max]) */
+    directionMax: number;
+    /** Emitter X position as % of stage width (0-100) */
+    emitterX: number;
+    /** Emitter Y position as % of stage height (0-100) */
+    emitterY: number;
+    /** Emitter width spread as % of stage width (0-100, 0 = point source) */
+    emitterWidth: number;
+    /** Emitter height spread as % of stage height (0-100, 0 = point source) */
+    emitterHeight: number;
+    /** Whether particles fade out over lifetime */
+    fadeOut: boolean;
+    /** Whether particles shrink over lifetime */
+    shrink: boolean;
+    /** Rotation speed in degrees/sec (0 = no rotation) */
+    rotationSpeed: number;
+    /** Opacity of particles (0-1) */
+    opacity: number;
+    /** Blend mode for particle rendering */
+    blendMode?: 'source-over' | 'screen' | 'lighter' | 'overlay';
+    /** Optional image asset ID for custom particle shape */
+    customImageId?: VNID | null;
+}
+
+export interface SpawnParticlesCommand extends BaseCommand {
+    type: CommandType.SpawnParticles;
+    /** Unique tag to identify this particle effect (for stopping later) */
+    particleTag: string;
+    /** Particle emitter configuration */
+    config: VNParticleConfig;
+    /** Duration before auto-stop (0 = persistent until StopParticles) */
+    duration: number;
+}
+
+export interface StopParticlesCommand extends BaseCommand {
+    type: CommandType.StopParticles;
+    /** Tag of particle effect to stop (empty = stop all) */
+    particleTag: string;
+    /** Fade out duration in seconds (0 = instant) */
+    fadeDuration: number;
+}
+
+export interface CallCommonEventCommand extends BaseCommand {
+    type: CommandType.CallCommonEvent;
+    /** ID of the Common Event to invoke */
+    commonEventId: VNID;
+    /** Argument values keyed by parameter ID (for parameterised events) */
+    arguments?: Record<VNID, string | number | boolean>;
+}
+
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
-  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand;
+  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand
+  | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand;
 
 export interface VNScene {
     id: VNID;

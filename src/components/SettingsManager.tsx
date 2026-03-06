@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
 import { VNProjectUI, VNFontSettings } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
-import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, MusicalNoteIcon, TrashIcon, SparklesIcon, ClockIcon, LockClosedIcon, ChevronDownIcon } from './icons';
+import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, TrashIcon, SparklesIcon, ClockIcon, LockClosedIcon, ChevronDownIcon, UIScreensIcon } from './icons';
 import { VNID } from '../types';
 import { AccessibilityManager, A11yPreferences } from '../features/accessibility/AccessibilityManager';
 import { WorkflowTracker, WorkflowStats } from '../features/analytics/WorkflowTracker';
@@ -27,7 +27,7 @@ interface SettingsManagerProps {
 
 const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
-    const [activeSection, setActiveSection] = useState<'general' | 'ui' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery'>('general');
+    const [activeSection, setActiveSection] = useState<'general' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
         editorDebugLog('[SettingsManager] updateUI called with:', updates);
@@ -41,9 +41,8 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
 
     const sections = [
         { id: 'general' as const, name: 'General', icon: Cog6ToothIcon },
-        { id: 'ui' as const, name: 'UI Assets', icon: PhotoIcon },
         { id: 'fonts' as const, name: 'Fonts', icon: BookOpenIcon },
-        { id: 'screens' as const, name: 'Screens', icon: MusicalNoteIcon },
+        { id: 'screens' as const, name: 'Screens', icon: UIScreensIcon },
         { id: 'cg-gallery' as const, name: 'CG Gallery', icon: PhotoIcon },
         { id: 'accessibility' as const, name: 'Accessibility', icon: SparklesIcon },
         { id: 'analytics' as const, name: 'Analytics', icon: ClockIcon },
@@ -83,9 +82,6 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                 {activeSection === 'general' && (
                     <GeneralSettings project={project} onUpdate={updateProject} onUpdateUI={updateUI} />
                 )}
-                {activeSection === 'ui' && (
-                    <UIAssetsSettings project={project} onUpdate={updateUI} />
-                )}
                 {activeSection === 'fonts' && (
                     <FontSettings project={project} onUpdate={updateUI} />
                 )}
@@ -113,6 +109,23 @@ interface GeneralSettingsProps {
 }
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, onUpdateUI }) => {
+    // Helper to update a single game-settings field without re-spreading every default manually
+    const updateGameSetting = (patch: Partial<import('../features/ui/types').VNDefaultGameSettings>) => {
+        const current = project.ui?.defaultGameSettings;
+        onUpdateUI({
+            defaultGameSettings: {
+                textSpeed: current?.textSpeed ?? 50,
+                musicVolume: current?.musicVolume ?? 0.8,
+                sfxVolume: current?.sfxVolume ?? 0.8,
+                ambientVolume: current?.ambientVolume ?? 0.8,
+                enableSkip: current?.enableSkip ?? true,
+                autoAdvance: current?.autoAdvance ?? false,
+                autoAdvanceDelay: current?.autoAdvanceDelay ?? 3,
+                ...patch,
+            },
+        });
+    };
+
     return (
         <div className="p-6">
             <h3 className="text-xl font-bold text-white mb-6">General Settings</h3>
@@ -275,12 +288,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 min="1"
                                 max="100"
                                 value={project.ui?.defaultGameSettings?.textSpeed ?? 50}
-                                onChange={(e) => {
-                                    const val = parseInt(e.target.value);
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: val, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
-                                }}
+                                onChange={(e) => updateGameSetting({ textSpeed: parseInt(e.target.value) })}
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
+                            <div className="flex justify-between text-xs text-[var(--text-secondary)] mt-1">
+                                <span>Slow</span><span>Fast</span>
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Music Volume: {Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}%</label>
@@ -289,10 +302,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}
-                                onChange={(e) => {
-                                    const val = parseInt(e.target.value) / 100;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: val, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
-                                }}
+                                onChange={(e) => updateGameSetting({ musicVolume: parseInt(e.target.value) / 100 })}
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
                         </div>
@@ -303,10 +313,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}
-                                onChange={(e) => {
-                                    const val = parseInt(e.target.value) / 100;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: val, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
-                                }}
+                                onChange={(e) => updateGameSetting({ sfxVolume: parseInt(e.target.value) / 100 })}
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
                         </div>
@@ -317,10 +324,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100)}
-                                onChange={(e) => {
-                                    const val = parseInt(e.target.value) / 100;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: val, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
-                                }}
+                                onChange={(e) => updateGameSetting({ ambientVolume: parseInt(e.target.value) / 100 })}
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
                         </div>
@@ -332,20 +336,20 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 max="10"
                                 step="0.5"
                                 value={project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3}
-                                onChange={(e) => {
-                                    const val = parseFloat(e.target.value);
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: val } });
-                                }}
+                                onChange={(e) => updateGameSetting({ autoAdvanceDelay: parseFloat(e.target.value) })}
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
+                            <div className="flex justify-between text-xs text-[var(--text-secondary)] mt-1">
+                                <span>1s</span><span>10s</span>
+                            </div>
                         </div>
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-[var(--text-primary)]">Enable Skip</label>
+                            <div>
+                                <label className="text-sm font-medium text-[var(--text-primary)]">Enable Skip</label>
+                                <p className="text-xs text-[var(--text-secondary)]">Allow players to skip through text quickly</p>
+                            </div>
                             <button
-                                onClick={() => {
-                                    const current = project.ui?.defaultGameSettings?.enableSkip ?? true;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: !current, autoAdvance: project.ui?.defaultGameSettings?.autoAdvance ?? false, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
-                                }}
+                                onClick={() => updateGameSetting({ enableSkip: !(project.ui?.defaultGameSettings?.enableSkip ?? true) })}
                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                     (project.ui?.defaultGameSettings?.enableSkip ?? true) ? 'bg-sky-500' : 'bg-[var(--bg-tertiary)]'
                                 }`}
@@ -356,12 +360,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             </button>
                         </div>
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-[var(--text-primary)]">Auto-Advance</label>
+                            <div>
+                                <label className="text-sm font-medium text-[var(--text-primary)]">Auto-Advance</label>
+                                <p className="text-xs text-[var(--text-secondary)]">Automatically proceed to next dialogue line</p>
+                            </div>
                             <button
-                                onClick={() => {
-                                    const current = project.ui?.defaultGameSettings?.autoAdvance ?? false;
-                                    onUpdateUI({ defaultGameSettings: { ...project.ui?.defaultGameSettings, textSpeed: project.ui?.defaultGameSettings?.textSpeed ?? 50, musicVolume: project.ui?.defaultGameSettings?.musicVolume ?? 0.8, sfxVolume: project.ui?.defaultGameSettings?.sfxVolume ?? 0.8, ambientVolume: project.ui?.defaultGameSettings?.ambientVolume ?? 0.8, enableSkip: project.ui?.defaultGameSettings?.enableSkip ?? true, autoAdvance: !current, autoAdvanceDelay: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 } });
-                                }}
+                                onClick={() => updateGameSetting({ autoAdvance: !(project.ui?.defaultGameSettings?.autoAdvance ?? false) })}
                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                     (project.ui?.defaultGameSettings?.autoAdvance ?? false) ? 'bg-sky-500' : 'bg-[var(--bg-tertiary)]'
                                 }`}
@@ -374,26 +378,28 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-[var(--border-subtle)]">
-                    <div>
-                        <span className="text-[var(--text-secondary)]">Project ID:</span>
-                        <span className="text-white ml-2 font-mono text-xs">{project.id}</span>
+                <div className="pt-4 border-t border-[var(--border-subtle)]">
+                    <h4 className="text-lg font-semibold text-white mb-4">Project Summary</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                        {[
+                            { label: 'Scenes', value: Object.keys(project.scenes || {}).length },
+                            { label: 'Characters', value: Object.keys(project.characters || {}).length },
+                            { label: 'Variables', value: Object.keys(project.variables || {}).length },
+                            { label: 'Backgrounds', value: Object.keys(project.backgrounds || {}).length },
+                            { label: 'Images', value: Object.keys(project.images || {}).length },
+                            { label: 'Audio Files', value: Object.keys(project.audio || {}).length },
+                            { label: 'UI Screens', value: Object.keys(project.uiScreens || {}).length },
+                            { label: 'Total Events', value: Object.values(project.scenes || {}).reduce((sum: number, s: any) => sum + (s.commands?.length || 0), 0) },
+                        ].map(item => (
+                            <div key={item.label} className="p-3 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
+                                <span className="block text-xs text-[var(--text-secondary)]">{item.label}</span>
+                                <span className="text-lg font-bold text-white">{item.value}</span>
+                            </div>
+                        ))}
                     </div>
-                    <div>
-                        <span className="text-[var(--text-secondary)]">Scenes:</span>
-                        <span className="text-white ml-2">{Object.keys(project.scenes || {}).length}</span>
-                    </div>
-                    <div>
-                        <span className="text-[var(--text-secondary)]">Characters:</span>
-                        <span className="text-white ml-2">{Object.keys(project.characters || {}).length}</span>
-                    </div>
-                    <div>
-                        <span className="text-[var(--text-secondary)]">Variables:</span>
-                        <span className="text-white ml-2">{Object.keys(project.variables || {}).length}</span>
-                    </div>
-                    <div>
-                        <span className="text-[var(--text-secondary)]">Engine Version:</span>
-                        <span className="text-white ml-2 font-mono text-xs">{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}</span>
+                    <div className="mt-3 flex items-center gap-4 text-xs text-[var(--text-secondary)]">
+                        <span>ID: <span className="font-mono">{project.id}</span></span>
+                        <span>Engine: <span className="font-mono">{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}</span></span>
                     </div>
                 </div>
             </div>
@@ -408,16 +414,8 @@ interface UIAssetsSettingsProps {
 
 const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }) => {
     const allImages = Object.values(project.images || {}) as any[];
-    const allVideos = Object.values(project.videos || {}) as any[];
 
-    editorDebugLog('[UIAssetsSettings] Rendering with images:', allImages.length, allImages.map(i => i.name));
-
-    const getAssetName = (assetId: string | null, type: 'image' | 'video') => {
-        if (!assetId) return 'None';
-        const assets = type === 'image' ? allImages : Object.values(project.videos || {});
-        const asset = assets.find(a => a.id === assetId);
-        return asset ? asset.name : 'Unknown';
-    };
+    editorDebugLog('[UIAssetsSettings] Rendering with images:', allImages.length, allImages.map((i: any) => i.name));
 
     const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -430,17 +428,47 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
             dialogueBoxHeight: 0,
             dialogueBoxBottomMargin: 20,
             dialogueBoxPadding: 20,
+            dialogueBoxSizeMode: 'stretch',
+            dialogueBoxSlice: 30,
+            dialogueBoxColor: '#0f172a',
+            dialogueBoxOpacity: 90,
+            dialogueBoxBorderRadius: 8,
+            nameboxImage: null,
+            nameboxColor: '#0f172a',
+            nameboxOpacity: 92,
+            nameboxPadding: 8,
+            nameboxHorizontalPadding: 14,
+            nameboxBorderRadius: 6,
+            nameboxOffsetX: 20,
+            nameboxOffsetY: 0,
+            nameboxSizeMode: 'stretch',
             choiceButtonImage: null,
             choiceButtonBorderImage: null,
             choiceBorderPadding: 8,
             choiceButtonWidth: 0,
             choiceButtonHeight: 0,
             choiceButtonPadding: 16,
+            choiceButtonSizeMode: 'stretch',
+            choiceButtonSlice: 15,
+            choiceButtonColor: '#1e293b',
+            choiceButtonOpacity: 90,
+            choiceButtonBorderRadius: 8,
+            choiceHoverImage: null,
+            choiceHoverColor: '#334155',
             inputBoxImage: null,
             inputBoxBorderImage: null,
             inputBorderPadding: 8,
             inputBoxWidth: 0,
             inputBoxPadding: 24,
+            inputBoxSizeMode: 'stretch',
+            inputBoxSlice: 20,
+            inputBoxColor: '#0f172a',
+            inputBoxOpacity: 92,
+            inputBoxBorderRadius: 8,
+            quickMenuPosition: 'above-dialogue',
+            quickMenuColor: '#0f172a',
+            quickMenuOpacity: 75,
+            quickMenuBorderRadius: 4,
             inputPromptFont: { family: 'Poppins, sans-serif', size: 18, color: '#FFFFFF', weight: 'normal', italic: false },
             inputFieldFont: { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal', italic: false },
             inputSubmitFont: { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal', italic: false },
@@ -450,6 +478,65 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
         });
         setShowResetConfirm(false);
     };
+
+    // Helper: Image fit mode selector
+    const ImageFitModeSelect: React.FC<{ value: string; onChange: (v: string) => void; label?: string }> = ({ value, onChange, label }) => (
+        <div>
+            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{label || 'Image Fit Mode'}</label>
+            <select
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+            >
+                <option value="stretch">Stretch (fill box)</option>
+                <option value="contain">Contain (fit inside)</option>
+                <option value="cover">Cover (fill &amp; crop)</option>
+                <option value="tile">Tile (repeat)</option>
+                <option value="nine-slice">9-Slice (preserve corners)</option>
+            </select>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {value === 'stretch' && 'Stretches image to fill the entire box. May distort if aspect ratios differ.'}
+                {value === 'contain' && 'Fits the image inside without cropping. May show background color in gaps.'}
+                {value === 'cover' && 'Fills the box completely, cropping edges if needed.'}
+                {value === 'tile' && 'Repeats the image as tiles to fill the box.'}
+                {value === 'nine-slice' && 'Preserves corners and edges while stretching only the center. Ideal for ornamental frames.'}
+            </p>
+        </div>
+    );
+
+    // Helper: Color + opacity control
+    const ColorOpacityControl: React.FC<{ colorValue: string; opacityValue: number; onColorChange: (v: string) => void; onOpacityChange: (v: number) => void; label: string }> = ({ colorValue, opacityValue, onColorChange, onOpacityChange, label }) => (
+        <div>
+            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{label}</label>
+            <div className="flex items-center gap-3">
+                <input
+                    type="color"
+                    value={colorValue}
+                    onChange={(e) => onColorChange(e.target.value)}
+                    className="w-12 h-10 rounded cursor-pointer border border-[var(--border-default)]"
+                    style={{ padding: '2px' }}
+                />
+                <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-[var(--text-secondary)]">Opacity</span>
+                        <span className="text-xs text-[var(--text-secondary)]">{opacityValue}%</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={opacityValue}
+                        onChange={(e) => onOpacityChange(parseInt(e.target.value))}
+                        className="w-full accent-[var(--accent-lavender)]"
+                    />
+                </div>
+            </div>
+            <div className="mt-1 h-4 rounded border border-[var(--border-default)]"
+                 style={{ backgroundColor: colorValue, opacity: opacityValue / 100 }}
+                 title="Color preview at current opacity"
+            />
+        </div>
+    );
 
     return (
         <div className="p-6">
@@ -617,6 +704,159 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                     </div>
                 </div>
 
+                {/* ─── Dialogue Box Appearance ─── */}
+                <div className="border-t border-[var(--border-subtle)] pt-4">
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Dialogue Box Appearance</h4>
+                    <div className="space-y-4">
+                        {project.ui.dialogueBoxImage && (
+                            <ImageFitModeSelect
+                                value={project.ui.dialogueBoxSizeMode ?? 'stretch'}
+                                onChange={(v) => onUpdate({ dialogueBoxSizeMode: v as any })}
+                            />
+                        )}
+                        {project.ui.dialogueBoxImage && (project.ui.dialogueBoxSizeMode ?? 'stretch') === 'nine-slice' && (
+                            <div>
+                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">9-Slice Border Size ({project.ui.dialogueBoxSlice ?? 30}px)</label>
+                                <input
+                                    type="range"
+                                    min="5"
+                                    max="100"
+                                    value={project.ui.dialogueBoxSlice ?? 30}
+                                    onChange={(e) => onUpdate({ dialogueBoxSlice: parseInt(e.target.value) })}
+                                    className="w-full accent-[var(--accent-lavender)]"
+                                />
+                                <p className="mt-1 text-xs text-[var(--text-secondary)]">How many pixels from each edge to preserve as corners/borders. Increase if corners look distorted.</p>
+                            </div>
+                        )}
+                        <ColorOpacityControl
+                            colorValue={project.ui.dialogueBoxColor ?? '#0f172a'}
+                            opacityValue={project.ui.dialogueBoxOpacity ?? 90}
+                            onColorChange={(v) => onUpdate({ dialogueBoxColor: v })}
+                            onOpacityChange={(v) => onUpdate({ dialogueBoxOpacity: v })}
+                            label="Background Color (shown behind/instead of image)"
+                        />
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.dialogueBoxBorderRadius ?? 8}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="30"
+                                value={project.ui.dialogueBoxBorderRadius ?? 8}
+                                onChange={(e) => onUpdate({ dialogueBoxBorderRadius: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* ─── Namebox (Character Name Label) ─── */}
+                <div className="border-t border-[var(--border-subtle)] pt-4">
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Namebox (Character Name)</h4>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Namebox Image</label>
+                            <select
+                                value={project.ui.nameboxImage?.id || ''}
+                                onChange={(e) => {
+                                    const assetId = e.target.value;
+                                    const asset = assetId ? allImages.find(img => img.id === assetId) : null;
+                                    onUpdate({
+                                        nameboxImage: asset ? { type: 'image', id: asset.id } : null
+                                    });
+                                }}
+                                className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                            >
+                                <option value="">None (use color)</option>
+                                {allImages.map(image => (
+                                    <option key={image.id} value={image.id}>
+                                        {image.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {project.ui.nameboxImage?.id && (() => {
+                                const img = allImages.find(i => i.id === project.ui.nameboxImage?.id);
+                                const url = img?.imageUrl;
+                                return url ? (
+                                    <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '50px' }}>
+                                        <img src={url} alt="Namebox preview" className="w-full h-full object-contain" style={{ maxHeight: '50px' }} />
+                                    </div>
+                                ) : (
+                                    <p className="mt-1 text-xs text-amber-400">⚠ Selected image not found in project assets</p>
+                                );
+                            })()}
+                        </div>
+                        {project.ui.nameboxImage && (
+                            <ImageFitModeSelect
+                                value={project.ui.nameboxSizeMode ?? 'stretch'}
+                                onChange={(v) => onUpdate({ nameboxSizeMode: v as any })}
+                                label="Namebox Image Fit Mode"
+                            />
+                        )}
+                        <ColorOpacityControl
+                            colorValue={project.ui.nameboxColor ?? '#0f172a'}
+                            opacityValue={project.ui.nameboxOpacity ?? 92}
+                            onColorChange={(v) => onUpdate({ nameboxColor: v })}
+                            onOpacityChange={(v) => onUpdate({ nameboxOpacity: v })}
+                            label="Namebox Background Color"
+                        />
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Vertical Padding ({project.ui.nameboxPadding ?? 8}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="30"
+                                value={project.ui.nameboxPadding ?? 8}
+                                onChange={(e) => onUpdate({ nameboxPadding: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Horizontal Padding ({project.ui.nameboxHorizontalPadding ?? 14}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="40"
+                                value={project.ui.nameboxHorizontalPadding ?? 14}
+                                onChange={(e) => onUpdate({ nameboxHorizontalPadding: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.nameboxBorderRadius ?? 6}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="20"
+                                value={project.ui.nameboxBorderRadius ?? 6}
+                                onChange={(e) => onUpdate({ nameboxBorderRadius: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Horizontal Offset ({project.ui.nameboxOffsetX ?? 20}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="200"
+                                value={project.ui.nameboxOffsetX ?? 20}
+                                onChange={(e) => onUpdate({ nameboxOffsetX: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Gap Above Dialogue Box ({project.ui.nameboxOffsetY ?? 0}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="30"
+                                value={project.ui.nameboxOffsetY ?? 0}
+                                onChange={(e) => onUpdate({ nameboxOffsetY: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Choice Button Image</label>
                     <select
@@ -738,6 +978,90 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                     </div>
                 </div>
 
+                {/* ─── Choice Button Appearance ─── */}
+                <div className="border-t border-[var(--border-subtle)] pt-4">
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Choice Button Appearance</h4>
+                    <div className="space-y-4">
+                        {project.ui.choiceButtonImage && (
+                            <ImageFitModeSelect
+                                value={project.ui.choiceButtonSizeMode ?? 'stretch'}
+                                onChange={(v) => onUpdate({ choiceButtonSizeMode: v as any })}
+                            />
+                        )}
+                        {project.ui.choiceButtonImage && (project.ui.choiceButtonSizeMode ?? 'stretch') === 'nine-slice' && (
+                            <div>
+                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">9-Slice Border Size ({project.ui.choiceButtonSlice ?? 15}px)</label>
+                                <input
+                                    type="range"
+                                    min="2"
+                                    max="60"
+                                    value={project.ui.choiceButtonSlice ?? 15}
+                                    onChange={(e) => onUpdate({ choiceButtonSlice: parseInt(e.target.value) })}
+                                    className="w-full accent-[var(--accent-lavender)]"
+                                />
+                            </div>
+                        )}
+                        <ColorOpacityControl
+                            colorValue={project.ui.choiceButtonColor ?? '#1e293b'}
+                            opacityValue={project.ui.choiceButtonOpacity ?? 90}
+                            onColorChange={(v) => onUpdate({ choiceButtonColor: v })}
+                            onOpacityChange={(v) => onUpdate({ choiceButtonOpacity: v })}
+                            label="Button Background Color"
+                        />
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.choiceButtonBorderRadius ?? 8}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="30"
+                                value={project.ui.choiceButtonBorderRadius ?? 8}
+                                onChange={(e) => onUpdate({ choiceButtonBorderRadius: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Hover Image (optional)</label>
+                            <select
+                                value={project.ui.choiceHoverImage?.id || ''}
+                                onChange={(e) => {
+                                    const assetId = e.target.value;
+                                    const asset = assetId ? allImages.find(img => img.id === assetId) : null;
+                                    onUpdate({
+                                        choiceHoverImage: asset ? { type: 'image', id: asset.id } : null
+                                    });
+                                }}
+                                className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                            >
+                                <option value="">None (use brightness effect)</option>
+                                {allImages.map(image => (
+                                    <option key={image.id} value={image.id}>
+                                        {image.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {project.ui.choiceHoverImage?.id && (() => {
+                                const img = allImages.find(i => i.id === project.ui.choiceHoverImage?.id);
+                                const url = img?.imageUrl;
+                                return url ? (
+                                    <div className="mt-2 rounded-md overflow-hidden border border-[var(--border-default)]" style={{ maxHeight: '50px' }}>
+                                        <img src={url} alt="Choice hover preview" className="w-full h-full object-contain" style={{ maxHeight: '50px' }} />
+                                    </div>
+                                ) : null;
+                            })()}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Hover Background Color</label>
+                            <input
+                                type="color"
+                                value={project.ui.choiceHoverColor ?? '#334155'}
+                                onChange={(e) => onUpdate({ choiceHoverColor: e.target.value })}
+                                className="w-12 h-10 rounded cursor-pointer border border-[var(--border-default)]"
+                                style={{ padding: '2px' }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 {/* ─── Text Input Box Customization ─── */}
                 <div className="border-t border-[var(--border-subtle)] pt-4">
                     <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Text Input Box</h4>
@@ -837,6 +1161,93 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                     </div>
                 </div>
+
+                {/* ─── Input Box Appearance ─── */}
+                <div className="border-t border-[var(--border-subtle)] pt-4">
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Input Box Appearance</h4>
+                    <div className="space-y-4">
+                        {project.ui.inputBoxImage && (
+                            <ImageFitModeSelect
+                                value={project.ui.inputBoxSizeMode ?? 'stretch'}
+                                onChange={(v) => onUpdate({ inputBoxSizeMode: v as any })}
+                            />
+                        )}
+                        {project.ui.inputBoxImage && (project.ui.inputBoxSizeMode ?? 'stretch') === 'nine-slice' && (
+                            <div>
+                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">9-Slice Border Size ({project.ui.inputBoxSlice ?? 20}px)</label>
+                                <input
+                                    type="range"
+                                    min="2"
+                                    max="60"
+                                    value={project.ui.inputBoxSlice ?? 20}
+                                    onChange={(e) => onUpdate({ inputBoxSlice: parseInt(e.target.value) })}
+                                    className="w-full accent-[var(--accent-lavender)]"
+                                />
+                            </div>
+                        )}
+                        <ColorOpacityControl
+                            colorValue={project.ui.inputBoxColor ?? '#0f172a'}
+                            opacityValue={project.ui.inputBoxOpacity ?? 92}
+                            onColorChange={(v) => onUpdate({ inputBoxColor: v })}
+                            onOpacityChange={(v) => onUpdate({ inputBoxOpacity: v })}
+                            label="Input Box Background Color"
+                        />
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.inputBoxBorderRadius ?? 8}px)</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="30"
+                                value={project.ui.inputBoxBorderRadius ?? 8}
+                                onChange={(e) => onUpdate({ inputBoxBorderRadius: parseInt(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* ─── Quick Menu (Skip/Auto/Log/Back) ─── */}
+                <div className="border-t border-[var(--border-subtle)] pt-4">
+                    <h4 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">Quick Menu Buttons</h4>
+                    <p className="text-xs text-[var(--text-secondary)] mb-3">Style the Skip, Auto, Log, and Back buttons shown during gameplay.</p>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Position</label>
+                            <select
+                                value={project.ui.quickMenuPosition ?? 'above-dialogue'}
+                                onChange={(e) => onUpdate({ quickMenuPosition: e.target.value as any })}
+                                className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                            >
+                                <option value="above-dialogue">Above Dialogue Box</option>
+                                <option value="top-right">Top Right</option>
+                                <option value="bottom-right">Bottom Right</option>
+                                <option value="hidden">Hidden</option>
+                            </select>
+                        </div>
+                        {(project.ui.quickMenuPosition ?? 'above-dialogue') !== 'hidden' && (
+                            <>
+                                <ColorOpacityControl
+                                    colorValue={project.ui.quickMenuColor ?? '#0f172a'}
+                                    opacityValue={project.ui.quickMenuOpacity ?? 75}
+                                    onColorChange={(v) => onUpdate({ quickMenuColor: v })}
+                                    onOpacityChange={(v) => onUpdate({ quickMenuOpacity: v })}
+                                    label="Button Background Color"
+                                />
+                                <div>
+                                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Button Corner Radius ({project.ui.quickMenuBorderRadius ?? 4}px)</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="16"
+                                        value={project.ui.quickMenuBorderRadius ?? 4}
+                                        onChange={(e) => onUpdate({ quickMenuBorderRadius: parseInt(e.target.value) })}
+                                        className="w-full accent-[var(--accent-lavender)]"
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -854,6 +1265,117 @@ const fileToBase64 = (file: File): Promise<string> =>
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
+
+/** Extracted as a top-level component to prevent focus loss on parent re-render */
+const FontEditorCard: React.FC<{
+    label: string;
+    fontKey: keyof VNProjectUI;
+    project: VNProject;
+    fontOptions: string[];
+    updateFont: (fontKey: keyof VNProjectUI, updates: Partial<VNFontSettings>) => void;
+}> = React.memo(({ label, fontKey, project, fontOptions, updateFont }) => {
+    const font = (project.ui[fontKey] as VNFontSettings) ?? { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal' as const, italic: false };
+
+    return (
+        <div className="border border-[var(--border-subtle)] rounded-lg p-4">
+            <h4 className="text-lg font-semibold text-white mb-4">{label}</h4>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Family</label>
+                    <select
+                        value={font.family}
+                        onChange={(e) => updateFont(fontKey, { family: e.target.value })}
+                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                    >
+                        {fontOptions.map(f => (
+                            <option key={f} value={f}>{f.split(',')[0]}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Size</label>
+                    <input
+                        type="number"
+                        value={font.size}
+                        onChange={(e) => updateFont(fontKey, { size: parseInt(e.target.value) })}
+                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Color</label>
+                    <input
+                        type="color"
+                        value={font.color}
+                        onChange={(e) => updateFont(fontKey, { color: e.target.value })}
+                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Weight</label>
+                    <select
+                        value={font.weight}
+                        onChange={(e) => updateFont(fontKey, { weight: e.target.value as 'normal' | 'bold' })}
+                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                    >
+                        <option value="normal">Normal</option>
+                        <option value="bold">Bold</option>
+                    </select>
+                </div>
+
+                <div className="col-span-2">
+                    <label className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={font.italic}
+                            onChange={(e) => updateFont(fontKey, { italic: e.target.checked })}
+                            className="rounded border-[var(--border-default)] text-sky-500 focus:ring-[var(--accent-lavender)]"
+                        />
+                        <span className="text-sm font-medium text-[var(--text-primary)]">Italic</span>
+                    </label>
+                </div>
+
+                <div className="col-span-2">
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Alignment</label>
+                    <div className="flex gap-1">
+                        {(['left', 'center', 'right'] as const).map(a => (
+                            <button
+                                key={a}
+                                onClick={() => updateFont(fontKey, { align: a })}
+                                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                                    (font.align || 'left') === a
+                                        ? 'bg-sky-500 text-white'
+                                        : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+                                }`}
+                            >
+                                {a === 'left' ? '\u2190 Left' : a === 'center' ? '\u2194 Center' : 'Right \u2192'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-[var(--bg-primary)] rounded border border-[var(--border-default)]">
+                <p
+                    className="text-sm"
+                    style={{
+                        fontFamily: font.family,
+                        fontSize: `${font.size}px`,
+                        color: font.color,
+                        fontWeight: font.weight,
+                        fontStyle: font.italic ? 'italic' : 'normal',
+                        textAlign: font.align || 'left',
+                    }}
+                >
+                    Sample text with current font settings
+                </p>
+            </div>
+        </div>
+    );
+});
 
 const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
     const { dispatch } = useProject();
@@ -878,26 +1400,27 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
         'Caveat, cursive',
     ];
     
-    // Build font options including project fonts
-    const getFontOptions = (currentFamily: string) => {
+    // Build a single stable list of all font options (project fonts + popular)
+    const allFontOptions = useMemo(() => {
         const options = [...popularFonts];
-        // Add project fonts at the top
         for (const f of projectFontsArray) {
             if (f?.fontFamily && !options.includes(f.fontFamily)) {
                 options.unshift(f.fontFamily);
             }
         }
-        // Ensure current value is in list
-        if (currentFamily && !options.includes(currentFamily)) {
-            options.unshift(currentFamily);
+        // Also include current selections so they always appear
+        const fontKeys: (keyof VNProjectUI)[] = ['dialogueNameFont', 'dialogueTextFont', 'choiceTextFont', 'inputPromptFont', 'inputFieldFont', 'inputSubmitFont'];
+        for (const k of fontKeys) {
+            const cur = (project.ui[k] as VNFontSettings | undefined)?.family;
+            if (cur && !options.includes(cur)) options.unshift(cur);
         }
         return options;
-    };
+    }, [projectFontsArray, popularFonts, project.ui]);
     
-    const updateFont = (fontKey: keyof VNProjectUI, updates: Partial<VNFontSettings>) => {
+    const updateFont = useCallback((fontKey: keyof VNProjectUI, updates: Partial<VNFontSettings>) => {
         const currentFont = (project.ui[fontKey] as VNFontSettings) ?? { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal' as const, italic: false };
         onUpdate({ [fontKey]: { ...currentFont, ...updates } });
-    };
+    }, [project.ui, onUpdate]);
     
     const addProjectFont = async () => {
         const input = document.createElement('input');
@@ -955,111 +1478,6 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
         dispatch({ type: 'UPDATE_PROJECT', payload: { fonts: fontsById } as any });
     };
 
-    const FontEditor = ({ label, fontKey }: { label: string; fontKey: keyof VNProjectUI }) => {
-        const font = (project.ui[fontKey] as VNFontSettings) ?? { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal' as const, italic: false };
-        const fontOptions = getFontOptions(font.family);
-
-        return (
-            <div className="border border-[var(--border-subtle)] rounded-lg p-4">
-                <h4 className="text-lg font-semibold text-white mb-4">{label}</h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Family</label>
-                        <select
-                            value={font.family}
-                            onChange={(e) => updateFont(fontKey, { family: e.target.value })}
-                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        >
-                            {fontOptions.map(f => (
-                                <option key={f} value={f}>{f.split(',')[0]}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Size</label>
-                        <input
-                            type="number"
-                            value={font.size}
-                            onChange={(e) => updateFont(fontKey, { size: parseInt(e.target.value) })}
-                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Color</label>
-                        <input
-                            type="color"
-                            value={font.color}
-                            onChange={(e) => updateFont(fontKey, { color: e.target.value })}
-                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Weight</label>
-                        <select
-                            value={font.weight}
-                            onChange={(e) => updateFont(fontKey, { weight: e.target.value as 'normal' | 'bold' })}
-                            className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        >
-                            <option value="normal">Normal</option>
-                            <option value="bold">Bold</option>
-                        </select>
-                    </div>
-
-                    <div className="col-span-2">
-                        <label className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={font.italic}
-                                onChange={(e) => updateFont(fontKey, { italic: e.target.checked })}
-                                className="rounded border-[var(--border-default)] text-sky-500 focus:ring-[var(--accent-lavender)]"
-                            />
-                            <span className="text-sm font-medium text-[var(--text-primary)]">Italic</span>
-                        </label>
-                    </div>
-
-                    <div className="col-span-2">
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Alignment</label>
-                        <div className="flex gap-1">
-                            {(['left', 'center', 'right'] as const).map(a => (
-                                <button
-                                    key={a}
-                                    onClick={() => updateFont(fontKey, { align: a })}
-                                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-                                        (font.align || 'left') === a
-                                            ? 'bg-sky-500 text-white'
-                                            : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
-                                    }`}
-                                >
-                                    {a === 'left' ? '← Left' : a === 'center' ? '↔ Center' : 'Right →'}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-4 p-3 bg-[var(--bg-primary)] rounded border border-[var(--border-default)]">
-                    <p
-                        className="text-sm"
-                        style={{
-                            fontFamily: font.family,
-                            fontSize: `${font.size}px`,
-                            color: font.color,
-                            fontWeight: font.weight,
-                            fontStyle: font.italic ? 'italic' : 'normal',
-                            textAlign: font.align || 'left',
-                        }}
-                    >
-                        Sample text with current font settings
-                    </p>
-                </div>
-            </div>
-        );
-    };
-
     return (
         <div className="p-6">
             <h3 className="text-xl font-bold text-white mb-6">Font Settings</h3>
@@ -1104,12 +1522,12 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
             </div>
 
             <div className="space-y-6">
-                <FontEditor label="Dialogue Name Font" fontKey="dialogueNameFont" />
-                <FontEditor label="Dialogue Text Font" fontKey="dialogueTextFont" />
-                <FontEditor label="Choice Text Font" fontKey="choiceTextFont" />
-                <FontEditor label="Input Prompt Font" fontKey="inputPromptFont" />
-                <FontEditor label="Input Field Font" fontKey="inputFieldFont" />
-                <FontEditor label="Input Submit Button Font" fontKey="inputSubmitFont" />
+                <FontEditorCard label="Dialogue Name Font" fontKey="dialogueNameFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
+                <FontEditorCard label="Dialogue Text Font" fontKey="dialogueTextFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
+                <FontEditorCard label="Choice Text Font" fontKey="choiceTextFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
+                <FontEditorCard label="Input Prompt Font" fontKey="inputPromptFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
+                <FontEditorCard label="Input Field Font" fontKey="inputFieldFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
+                <FontEditorCard label="Input Submit Button Font" fontKey="inputSubmitFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
             </div>
         </div>
     );
@@ -1123,112 +1541,53 @@ interface ScreenSettingsProps {
 const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) => {
     const allScreens = Object.values(project.uiScreens || {}) as any[];
 
-    const getScreenName = (screenId: string | null) => {
-        if (!screenId) return 'None';
-        const screen = allScreens.find(s => s.id === screenId);
-        return screen ? screen.name : 'Unknown';
-    };
+    const screenSlots: { key: keyof VNProjectUI; label: string; description: string }[] = [
+        { key: 'titleScreenId', label: 'Title Screen', description: 'Shown when the game first launches. Typically contains New Game, Continue, Settings, and Quit buttons.' },
+        { key: 'settingsScreenId', label: 'Settings Screen', description: 'In-game settings menu where players adjust text speed, volume, and other preferences.' },
+        { key: 'saveScreenId', label: 'Save Screen', description: 'Screen shown when the player saves their progress. Displays available save slots.' },
+        { key: 'loadScreenId', label: 'Load Screen', description: 'Screen shown when the player loads a previous save. Can share a layout with the Save Screen.' },
+        { key: 'pauseScreenId', label: 'Pause Screen', description: 'Shown when the player presses Escape during gameplay. Usually offers Resume, Save, Load, Settings, and Quit.' },
+        { key: 'gameHudScreenId', label: 'Game HUD Screen', description: 'Persistent overlay displayed on top of gameplay, e.g. custom button bars, status indicators, or affection meters.' },
+    ];
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-6">Special Screens</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Special Screens</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+                Assign UI screens you've built in the Menu Editor to serve as your game's system menus. Each slot controls when and where a screen appears during gameplay.
+            </p>
 
-            <div className="space-y-6 max-w-md">
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Title Screen</label>
-                    <select
-                        value={project.ui.titleScreenId || ''}
-                        onChange={(e) => onUpdate({ titleScreenId: e.target.value || null })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="">None</option>
-                        {allScreens.map(screen => (
-                            <option key={screen.id} value={screen.id}>
-                                {screen.name}
-                            </option>
-                        ))}
-                    </select>
+            {allScreens.length === 0 && (
+                <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-sm text-amber-300 font-medium mb-1">No UI Screens Created Yet</p>
+                    <p className="text-xs text-amber-300/70">
+                        Create screens in the Menu Editor tab first, then return here to assign them. The Menu Editor lets you visually design title screens, settings menus, save/load screens, and more.
+                    </p>
                 </div>
+            )}
 
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Settings Screen</label>
-                    <select
-                        value={project.ui.settingsScreenId || ''}
-                        onChange={(e) => onUpdate({ settingsScreenId: e.target.value || null })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="">None</option>
-                        {allScreens.map(screen => (
-                            <option key={screen.id} value={screen.id}>
-                                {screen.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Save Screen</label>
-                    <select
-                        value={project.ui.saveScreenId || ''}
-                        onChange={(e) => onUpdate({ saveScreenId: e.target.value || null })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="">None</option>
-                        {allScreens.map(screen => (
-                            <option key={screen.id} value={screen.id}>
-                                {screen.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Load Screen</label>
-                    <select
-                        value={project.ui.loadScreenId || ''}
-                        onChange={(e) => onUpdate({ loadScreenId: e.target.value || null })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="">None</option>
-                        {allScreens.map(screen => (
-                            <option key={screen.id} value={screen.id}>
-                                {screen.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Pause Screen</label>
-                    <select
-                        value={project.ui.pauseScreenId || ''}
-                        onChange={(e) => onUpdate({ pauseScreenId: e.target.value || null })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="">None</option>
-                        {allScreens.map(screen => (
-                            <option key={screen.id} value={screen.id}>
-                                {screen.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Game HUD Screen</label>
-                    <select
-                        value={project.ui.gameHudScreenId || ''}
-                        onChange={(e) => onUpdate({ gameHudScreenId: e.target.value || null })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="">None</option>
-                        {allScreens.map(screen => (
-                            <option key={screen.id} value={screen.id}>
-                                {screen.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+            <div className="space-y-5 max-w-md">
+                {screenSlots.map(({ key, label, description }) => (
+                    <div key={key} className="p-4 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-subtle)]">
+                        <label className="block text-sm font-medium text-white mb-1">{label}</label>
+                        <p className="text-xs text-[var(--text-secondary)] mb-2">{description}</p>
+                        <select
+                            value={(project.ui[key] as string) || ''}
+                            onChange={(e) => onUpdate({ [key]: e.target.value || null })}
+                            className="w-full bg-[var(--bg-secondary)] text-white p-2.5 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)] text-sm"
+                        >
+                            <option value="">None</option>
+                            {allScreens.map((screen: any) => (
+                                <option key={screen.id} value={screen.id}>
+                                    {screen.name}
+                                </option>
+                            ))}
+                        </select>
+                        {(project.ui[key] as string) && !allScreens.find((s: any) => s.id === project.ui[key]) && (
+                            <p className="mt-1 text-xs text-amber-400">⚠ Assigned screen no longer exists</p>
+                        )}
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -1546,32 +1905,39 @@ const AccessibilitySettings: React.FC = () => {
     };
 
     const toggleItems: { key: keyof A11yPreferences; label: string; description: string }[] = [
-        { key: 'highContrast', label: 'High Contrast Mode', description: 'Increases contrast for better visibility' },
-        { key: 'reducedMotion', label: 'Reduced Motion', description: 'Reduces animations for motion sensitivity' },
-        { key: 'largeText', label: 'Large Text', description: 'Increases text size throughout the editor' },
-        { key: 'keyboardOnly', label: 'Keyboard Navigation', description: 'Optimized for keyboard-only use' },
-        { key: 'screenReaderMode', label: 'Screen Reader Mode', description: 'Enhanced compatibility with screen readers' },
+        { key: 'highContrast', label: 'High Contrast Mode', description: 'Increases border thickness and contrast throughout the editor UI for better visibility.' },
+        { key: 'reducedMotion', label: 'Reduced Motion', description: 'Disables all CSS animations and transitions. Recommended for motion-sensitive users.' },
+        { key: 'largeText', label: 'Large Text', description: 'Scales up all editor text by 20% for improved readability on high-DPI screens.' },
+        { key: 'keyboardOnly', label: 'Force Keyboard Focus Rings', description: 'Always shows prominent focus outlines on interactive elements. Automatically activates when Tab is pressed.' },
+        { key: 'screenReaderMode', label: 'Screen Reader Mode', description: 'Adds ARIA landmarks and labels for better screen reader navigation. Enable if using NVDA, JAWS, or VoiceOver.' },
     ];
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-6">Accessibility Settings</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Accessibility Settings</h3>
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+                These settings affect the <strong className="text-[var(--text-primary)]">editor</strong> interface only, not your exported game. Settings are saved to your browser and persist across sessions.
+            </p>
 
-            <div className="space-y-4 max-w-md">
+            <div className="space-y-3 max-w-md">
                 {toggleItems.map(({ key, label, description }) => (
                     <div
                         key={key}
-                        className="flex items-center justify-between p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]"
+                        className={`flex items-start justify-between gap-4 p-4 rounded-md border transition-colors ${
+                            preferences[key]
+                                ? 'bg-sky-500/10 border-sky-500/30'
+                                : 'bg-[var(--bg-primary)] border-[var(--border-subtle)]'
+                        }`}
                     >
-                        <div>
+                        <div className="flex-1">
                             <label className="block text-sm font-medium text-white">{label}</label>
-                            <span className="text-xs text-[var(--text-secondary)]">{description}</span>
+                            <span className="text-xs text-[var(--text-secondary)] leading-relaxed">{description}</span>
                         </div>
                         <button
                             role="switch"
                             aria-checked={preferences[key]}
                             onClick={() => handleToggle(key)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-lavender)] focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-lavender)] focus:ring-offset-2 focus:ring-offset-slate-900 ${
                                 preferences[key] ? 'bg-sky-500' : 'bg-[var(--bg-tertiary)]'
                             }`}
                         >
@@ -1584,25 +1950,41 @@ const AccessibilitySettings: React.FC = () => {
                     </div>
                 ))}
             </div>
+
+            <div className="mt-6 p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] max-w-md">
+                <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2">Keyboard Shortcuts</h4>
+                <div className="space-y-1 text-xs text-[var(--text-secondary)]">
+                    <div className="flex justify-between"><span>Undo</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+Z</kbd></div>
+                    <div className="flex justify-between"><span>Redo</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+Y</kbd></div>
+                    <div className="flex justify-between"><span>Save Project</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+S</kbd></div>
+                    <div className="flex justify-between"><span>Command Palette</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+K</kbd></div>
+                </div>
+            </div>
         </div>
     );
 };
 
 const AnalyticsSettings: React.FC = () => {
-    const [stats, setStats] = useState<WorkflowStats>(WorkflowTracker.getInstance().getStatistics());
+    const tracker = WorkflowTracker.getInstance();
+    const [stats, setStats] = useState<WorkflowStats>(tracker.getStatistics());
+    const [sessionElapsed, setSessionElapsed] = useState(0);
+    const sessionStart = React.useRef(Date.now());
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-    const refreshStats = () => {
-        setStats(WorkflowTracker.getInstance().getStatistics());
-    };
+    // Live-updating session timer & stats refresh every second
+    React.useEffect(() => {
+        const timer = setInterval(() => {
+            setSessionElapsed(Date.now() - sessionStart.current);
+            setStats(tracker.getStatistics());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [tracker]);
 
     const formatDuration = (ms: number): string => {
         if (ms < 1000) return `${Math.round(ms)}ms`;
         if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
         return `${(ms / 60000).toFixed(1)}m`;
     };
-
-    const sessionStart = React.useRef(Date.now());
-    const sessionDuration = Date.now() - sessionStart.current;
 
     const formatSessionDuration = (ms: number): string => {
         const seconds = Math.floor(ms / 1000);
@@ -1613,56 +1995,181 @@ const AnalyticsSettings: React.FC = () => {
         return `${seconds}s`;
     };
 
+    // Make raw dispatch action names human-readable
+    const humanizeAction = (raw: string): string => {
+        const map: Record<string, string> = {
+            'UPDATE_PROJECT': 'Update Project',
+            'UPDATE_UI': 'Update UI Settings',
+            'ADD_COMMAND': 'Add Command',
+            'UPDATE_COMMAND': 'Edit Command',
+            'DELETE_COMMAND': 'Delete Command',
+            'REORDER_COMMANDS': 'Reorder Commands',
+            'ADD_SCENE': 'Create Scene',
+            'UPDATE_SCENE': 'Edit Scene',
+            'DELETE_SCENE': 'Delete Scene',
+            'ADD_CHARACTER': 'Create Character',
+            'UPDATE_CHARACTER': 'Edit Character',
+            'DELETE_CHARACTER': 'Delete Character',
+            'ADD_VARIABLE': 'Create Variable',
+            'UPDATE_VARIABLE': 'Edit Variable',
+            'DELETE_VARIABLE': 'Delete Variable',
+            'ADD_BACKGROUND': 'Add Background',
+            'DELETE_BACKGROUND': 'Remove Background',
+            'ADD_IMAGE': 'Add Image',
+            'DELETE_IMAGE': 'Remove Image',
+            'ADD_AUDIO': 'Add Audio',
+            'DELETE_AUDIO': 'Remove Audio',
+            'ADD_VIDEO': 'Add Video',
+            'DELETE_VIDEO': 'Remove Video',
+            'UNDO': 'Undo',
+            'REDO': 'Redo',
+            'SET_PROJECT': 'Load Project',
+            'ADD_UI_SCREEN': 'Create UI Screen',
+            'UPDATE_UI_SCREEN': 'Edit UI Screen',
+            'DELETE_UI_SCREEN': 'Delete UI Screen',
+        };
+        return map[raw] || raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/^\w/, c => c.toUpperCase());
+    };
+
+    const suggestions = tracker.getOptimizationSuggestions();
+
+    const handleClear = () => {
+        tracker.clearData();
+        setStats(tracker.getStatistics());
+        setShowClearConfirm(false);
+    };
+
+    // Compute actions-per-minute rate
+    const apm = sessionElapsed > 60000 ? ((stats.totalActions / sessionElapsed) * 60000).toFixed(1) : '—';
+
     return (
         <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Analytics</h3>
-                <button
-                    onClick={refreshStats}
-                    className="px-3 py-1.5 text-sm bg-sky-500/20 text-sky-300 rounded-md border border-sky-500/50 hover:bg-sky-500/30 transition-colors"
-                >
-                    Refresh
-                </button>
-            </div>
-
-            <div className="space-y-6 max-w-md">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Total Actions</span>
-                        <span className="text-2xl font-bold text-white">{stats.totalActions}</span>
-                    </div>
-                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Avg Action Time</span>
-                        <span className="text-2xl font-bold text-white">{formatDuration(stats.averageActionTime)}</span>
-                    </div>
-                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Session Duration</span>
-                        <span className="text-2xl font-bold text-white">{formatSessionDuration(sessionDuration)}</span>
-                    </div>
-                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Efficiency Score</span>
-                        <span className="text-2xl font-bold text-white">{stats.efficiencyScore}%</span>
-                    </div>
-                </div>
-
-                <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                    <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">Most Common Actions (Top 5)</h4>
-                    {stats.mostCommonActions.length === 0 ? (
-                        <p className="text-xs text-[var(--text-secondary)]">No actions tracked yet. Start editing to see analytics.</p>
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xl font-bold text-white">Session Analytics</h3>
+                <div className="flex items-center gap-2">
+                    {!showClearConfirm ? (
+                        <button
+                            onClick={() => setShowClearConfirm(true)}
+                            className="px-3 py-1.5 text-xs rounded-md border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-500/50 transition-colors"
+                        >
+                            Clear Data
+                        </button>
                     ) : (
-                        <div className="space-y-2">
-                            {stats.mostCommonActions.map((item, index) => (
-                                <div key={item.action} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-[var(--text-muted)] w-4">{index + 1}.</span>
-                                        <span className="text-sm text-white font-mono">{item.action}</span>
-                                    </div>
-                                    <span className="text-xs text-[var(--text-secondary)]">{item.count}x</span>
-                                </div>
-                            ))}
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={handleClear}
+                                className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors"
+                            >
+                                Confirm
+                            </button>
+                            <button
+                                onClick={() => setShowClearConfirm(false)}
+                                className="px-2 py-1 text-xs rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+                            >
+                                Cancel
+                            </button>
                         </div>
                     )}
                 </div>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)] mb-6">
+                Tracks your editing activity during this session. Data is stored in memory and resets when you close the editor.
+            </p>
+
+            <div className="space-y-6 max-w-lg">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] text-center">
+                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Session Time</span>
+                        <span className="text-xl font-bold text-white">{formatSessionDuration(sessionElapsed)}</span>
+                    </div>
+                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] text-center">
+                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Total Actions</span>
+                        <span className="text-xl font-bold text-white">{stats.totalActions}</span>
+                    </div>
+                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] text-center">
+                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Actions/min</span>
+                        <span className="text-xl font-bold text-white">{apm}</span>
+                    </div>
+                </div>
+
+                {/* Most Common Actions — bar chart style */}
+                <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
+                    <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">Most Used Actions</h4>
+                    {stats.mostCommonActions.length === 0 ? (
+                        <p className="text-xs text-[var(--text-secondary)]">No actions tracked yet. Start editing your project to see analytics here.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {stats.mostCommonActions.map((item, index) => {
+                                const maxCount = stats.mostCommonActions[0]?.count || 1;
+                                const pct = Math.round((item.count / maxCount) * 100);
+                                return (
+                                    <div key={item.action}>
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className="text-xs text-white">{humanizeAction(item.action)}</span>
+                                            <span className="text-xs text-[var(--text-secondary)] tabular-nums">{item.count}x</span>
+                                        </div>
+                                        <div className="h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full transition-all"
+                                                style={{
+                                                    width: `${pct}%`,
+                                                    backgroundColor: index === 0 ? '#38bdf8' : index === 1 ? '#818cf8' : '#64748b',
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* Workflow Patterns */}
+                {stats.commonPatterns.length > 0 && (
+                    <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
+                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">Repeated Patterns</h4>
+                        <p className="text-xs text-[var(--text-secondary)] mb-2">Action sequences you perform frequently — consider templates or shortcuts for these.</p>
+                        <div className="space-y-2">
+                            {stats.commonPatterns.slice(0, 3).map((pattern) => (
+                                <div key={pattern.id} className="p-2 bg-[var(--bg-secondary)] rounded border border-[var(--border-subtle)]">
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                        {pattern.actions.map((a, i) => (
+                                            <React.Fragment key={i}>
+                                                <span className="text-xs bg-[var(--bg-tertiary)] text-[var(--text-primary)] px-1.5 py-0.5 rounded">{humanizeAction(a)}</span>
+                                                {i < pattern.actions.length - 1 && <span className="text-[var(--text-muted)] text-xs">&rarr;</span>}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                    <span className="text-xs text-[var(--text-secondary)] mt-1 block">{pattern.frequency}x repeated</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Optimization Suggestions */}
+                {suggestions.length > 0 && (
+                    <div className="p-4 bg-amber-500/10 rounded-md border border-amber-500/30">
+                        <h4 className="text-sm font-medium text-amber-300 mb-2">Optimization Suggestions</h4>
+                        <ul className="space-y-1">
+                            {suggestions.map((s, i) => (
+                                <li key={i} className="text-xs text-amber-200/80 flex items-start gap-2">
+                                    <span className="mt-0.5 flex-shrink-0">💡</span>
+                                    <span>{s}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {/* Avg Action Time */}
+                {stats.totalActions > 0 && (
+                    <div className="text-xs text-[var(--text-secondary)] flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
+                        <span>Average time between actions: {formatDuration(stats.averageActionTime)}</span>
+                        <span>Data resets on reload</span>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -46,7 +46,7 @@ const COMMAND_DOCS: CommandDoc[] = [
   { name: 'PanZoomScreen', category: 'Effects', description: 'Pan and zoom the camera to focus on a specific area.', params: ['zoom', 'panX', 'panY', 'duration'], example: 'Zoom in 2x on the left side of the screen over 1 second.' },
   { name: 'ResetScreenEffects', category: 'Effects', description: 'Reset all active screen effects (tint, zoom, etc.) back to normal.', params: ['duration'], example: 'Reset all screen effects smoothly over 0.5 seconds.' },
   { name: 'SetScreenOverlayEffect', category: 'Effects', description: 'Apply a persistent overlay effect like rain, snow, or particles.', params: ['effectType', 'intensity', 'variant', 'color'], example: 'Add a gentle snowfall effect at 50% intensity.' },
-  { name: 'Group', category: 'Organization', description: 'Group multiple commands together for visual organization in the editor.', params: ['name', 'commandIds'], example: 'Group the "enter classroom" commands (background, characters, music) together.' },
+  { name: 'Group', category: 'Organization', description: 'Group multiple events together for visual organization in the editor.', params: ['name', 'commandIds'], example: 'Group the "enter classroom" events (background, characters, music) together.' },
 ];
 
 const CATEGORIES = ['Story', 'Visual', 'Audio', 'Logic', 'Flow', 'Effects', 'Organization'];
@@ -73,10 +73,10 @@ const KEYBOARD_SHORTCUTS = [
   { keys: 'Ctrl + Y', action: 'Redo last action' },
   { keys: 'Ctrl + Shift + Z', action: 'Redo last action (alternative)' },
   { keys: 'Ctrl + S', action: 'Export / Save project' },
-  { keys: 'Delete', action: 'Delete selected command' },
-  { keys: 'Ctrl + D', action: 'Duplicate selected command' },
-  { keys: 'Ctrl + C', action: 'Copy selected command' },
-  { keys: 'Ctrl + V', action: 'Paste command' },
+  { keys: 'Delete', action: 'Delete selected event' },
+  { keys: 'Ctrl + D', action: 'Duplicate selected event' },
+  { keys: 'Ctrl + C', action: 'Copy selected event' },
+  { keys: 'Ctrl + V', action: 'Paste event' },
   { keys: 'Space', action: 'Play / Preview scene' },
   { keys: 'Escape', action: 'Close panel or cancel action' },
 ];
@@ -206,7 +206,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
             </svg>
             <input
               type="text"
-              placeholder="Search commands, shortcuts, tips..."
+              placeholder="Search events, shortcuts, tips..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-[var(--bg-primary)] text-white text-sm pl-9 pr-3 py-2 rounded-lg border border-[var(--border-default)] focus:border-cyan-500 focus:outline-none placeholder-slate-500"
@@ -269,9 +269,9 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
               >
                 <div className="flex items-center gap-2">
                   <ChevronIcon isOpen={sections.commands} />
-                  <span className="text-cyan-400 font-medium text-sm">Commands Reference</span>
+                  <span className="text-cyan-400 font-medium text-sm">Events Reference</span>
                 </div>
-                <span className="text-[var(--text-muted)] text-xs">{filteredCommands.length} commands</span>
+                <span className="text-[var(--text-muted)] text-xs">{filteredCommands.length} events</span>
               </button>
               {sections.commands && (
                 <div className="px-4 pb-4 space-y-4">

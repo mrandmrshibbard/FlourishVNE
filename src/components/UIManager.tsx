@@ -4,9 +4,13 @@ import { VNProject } from '../types/project';
 import { VNUIScreen } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
-import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon } from './icons';
+import InGameUIEditor from './InGameUIEditor';
+import HotZoneEditor from './HotZoneEditor';
+import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon, ChatBubbleIcon } from './icons';
 import ConfirmationModal from './ui/ConfirmationModal';
 import UIScreenThemeSelector from './UIScreenThemeSelector';
+
+type UIEditorMode = 'screens' | 'ingame';
 
 interface UIManagerProps {
     project: VNProject;
@@ -14,6 +18,7 @@ interface UIManagerProps {
     setActiveMenuScreenId: (id: VNID | null) => void;
     selectedUIElementIds: VNID[];
     setSelectedUIElementIds: (ids: VNID[]) => void;
+    onEditorModeChange?: (mode: UIEditorMode) => void;
 }
 
 const UIManager: React.FC<UIManagerProps> = ({
@@ -21,9 +26,14 @@ const UIManager: React.FC<UIManagerProps> = ({
     activeMenuScreenId,
     setActiveMenuScreenId,
     selectedUIElementIds,
-    setSelectedUIElementIds
+    setSelectedUIElementIds,
+    onEditorModeChange
 }) => {
     const { dispatch } = useProject();
+    const [editorMode, setEditorModeLocal] = useState<UIEditorMode>('screens');
+    // Keep parent in sync when component mounts/remounts
+    useEffect(() => { onEditorModeChange?.(editorMode); }, []);
+    const setEditorMode = (mode: UIEditorMode) => { setEditorModeLocal(mode); onEditorModeChange?.(mode); };
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
     const [pendingRestore, setPendingRestore] = useState(false);
     const [restoreModalOpen, setRestoreModalOpen] = useState(false);
@@ -47,9 +57,10 @@ const UIManager: React.FC<UIManagerProps> = ({
         ]
     );
 
-    const addUIScreen = () => {
-        const name = `New Screen ${Object.keys(project.uiScreens).length + 1}`;
-        dispatch({ type: 'ADD_UI_SCREEN', payload: { name } });
+    const addUIScreen = (screenType?: 'standard' | 'hotzone') => {
+        const prefix = screenType === 'hotzone' ? 'Hot Zone' : 'New Screen';
+        const name = `${prefix} ${Object.keys(project.uiScreens).length + 1}`;
+        dispatch({ type: 'ADD_UI_SCREEN', payload: { name, screenType } });
     };
 
     const handleDeleteUIScreen = (screenId: VNID) => {
@@ -96,81 +107,127 @@ const UIManager: React.FC<UIManagerProps> = ({
     }, [pendingRestore, project.ui.titleScreenId, project.uiScreens, setActiveMenuScreenId, setSelectedUIElementIds]);
 
     return (
-        <div className="flex h-full">
-            {/* UI Screen List Sidebar */}
-            <div className="bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
-                <div className="p-4 border-b border-[var(--border-subtle)]">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <BookmarkSquareIcon className="w-5 h-5" />
-                        UI Screens
-                    </h2>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                    {uiScreensArray.map(screen => {
-                        const isSpecial = specialScreenIds.includes(screen.id);
-                        return (
-                            <UIScreenItem
-                                key={screen.id}
-                                screen={screen}
-                                isSelected={activeMenuScreenId === screen.id}
-                                isSpecial={isSpecial}
-                                isRenaming={renamingId === screen.id}
-                                onSelect={() => setActiveMenuScreenId(screen.id)}
-                                onStartRenaming={() => setRenamingId(screen.id)}
-                                onCommitRename={(name) => handleRenameUIScreen(screen.id, name)}
-                                onDelete={() => handleDeleteUIScreen(screen.id)}
-                                onDuplicate={() => handleDuplicateUIScreen(screen.id)}
-                            />
-                        );
-                    })}
-                </div>
-
-                <div className="p-2 border-t border-[var(--border-subtle)] space-y-2">
-                    <button
-                        onClick={addUIScreen}
-                        className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
-                    >
-                        <PlusIcon className="w-4 h-4" />
-                        Add UI Screen
-                    </button>
-                    <UIScreenThemeSelector label="Apply Theme to All" className="w-full [&>button]:w-full [&>button]:justify-center" />
-                    <button
-                        onClick={openRestoreModal}
-                        className="w-full bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
-                    >
-                        Restore Default Screens
-                    </button>
-                </div>
+        <div className="flex flex-col h-full">
+            {/* Mode toggle bar */}
+            <div className="flex items-center gap-1 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] px-3 py-1.5 flex-shrink-0">
+                <button
+                    onClick={() => { setEditorMode('screens'); }}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                        editorMode === 'screens'
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50'
+                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white'
+                    }`}
+                >
+                    <BookmarkSquareIcon className="w-4 h-4" />
+                    UI Screens
+                </button>
+                <button
+                    onClick={() => { setEditorMode('ingame'); }}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                        editorMode === 'ingame'
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50'
+                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white'
+                    }`}
+                >
+                    <ChatBubbleIcon className="w-4 h-4" />
+                    In-Game UI
+                </button>
             </div>
 
-            {/* UI Editor */}
-            <div className="flex-1 flex flex-col min-w-0">
-                {activeMenuScreenId ? (
-                    <MenuEditor
-                        activeScreenId={activeMenuScreenId}
-                        selectedElementIds={selectedUIElementIds}
-                        setSelectedElementIds={setSelectedUIElementIds}
-                    />
+            {/* Panel content */}
+            <div className="flex-1 min-h-0">
+                {editorMode === 'ingame' ? (
+                    <InGameUIEditor project={project} />
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
-                        <div className="text-center">
-                            <BookmarkSquareIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                            <p className="text-lg">Select a UI screen to edit</p>
+                    <div className="flex h-full">
+                        {/* UI Screen List Sidebar */}
+                        <div className="bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
+                            <div className="p-4 border-b border-[var(--border-subtle)]">
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <BookmarkSquareIcon className="w-5 h-5" />
+                                    UI Screens
+                                </h2>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {uiScreensArray.map(screen => {
+                                    const isSpecial = specialScreenIds.includes(screen.id);
+                                    return (
+                                        <UIScreenItem
+                                            key={screen.id}
+                                            screen={screen}
+                                            isSelected={activeMenuScreenId === screen.id}
+                                            isSpecial={isSpecial}
+                                            isRenaming={renamingId === screen.id}
+                                            onSelect={() => setActiveMenuScreenId(screen.id)}
+                                            onStartRenaming={() => setRenamingId(screen.id)}
+                                            onCommitRename={(name) => handleRenameUIScreen(screen.id, name)}
+                                            onDelete={() => handleDeleteUIScreen(screen.id)}
+                                            onDuplicate={() => handleDuplicateUIScreen(screen.id)}
+                                        />
+                                    );
+                                })}
+                            </div>
+
+                            <div className="p-2 border-t border-[var(--border-subtle)] space-y-2">
+                                <button
+                                    onClick={() => addUIScreen()}
+                                    className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
+                                >
+                                    <PlusIcon className="w-4 h-4" />
+                                    Add UI Screen
+                                </button>
+                                <button
+                                    onClick={() => addUIScreen('hotzone')}
+                                    className="w-full bg-purple-500 hover:bg-purple-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
+                                >
+                                    <PlusIcon className="w-4 h-4" />
+                                    Add Hot Zone Screen
+                                </button>
+                                <UIScreenThemeSelector label="Apply Theme to All" className="w-full [&>button]:w-full [&>button]:justify-center" />
+                                <button
+                                    onClick={openRestoreModal}
+                                    className="w-full bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
+                                >
+                                    Restore Default Screens
+                                </button>
+                            </div>
                         </div>
+
+                        {/* UI Editor */}
+                        <div className="flex-1 flex flex-col min-w-0">
+                            {activeMenuScreenId ? (
+                                project.uiScreens[activeMenuScreenId]?.screenType === 'hotzone' ? (
+                                    <HotZoneEditor screenId={activeMenuScreenId} />
+                                ) : (
+                                    <MenuEditor
+                                        activeScreenId={activeMenuScreenId}
+                                        selectedElementIds={selectedUIElementIds}
+                                        setSelectedElementIds={setSelectedUIElementIds}
+                                    />
+                                )
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
+                                    <div className="text-center">
+                                        <BookmarkSquareIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                                        <p className="text-lg">Select a UI screen to edit</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <ConfirmationModal
+                            isOpen={restoreModalOpen}
+                            onClose={() => setRestoreModalOpen(false)}
+                            onConfirm={handleConfirmRestore}
+                            title="Restore Default Screens"
+                            confirmLabel="Restore"
+                        >
+                            Restoring defaults will add brand-new versions of the title, pause, save, load, and settings screens. Your existing custom screens will remain untouched, but the new defaults will become the active selections. Continue?
+                        </ConfirmationModal>
                     </div>
                 )}
             </div>
-
-            <ConfirmationModal
-                isOpen={restoreModalOpen}
-                onClose={() => setRestoreModalOpen(false)}
-                onConfirm={handleConfirmRestore}
-                title="Restore Default Screens"
-                confirmLabel="Restore"
-            >
-                Restoring defaults will add brand-new versions of the title, pause, save, load, and settings screens. Your existing custom screens will remain untouched, but the new defaults will become the active selections. Continue?
-            </ConfirmationModal>
         </div>
     );
 };
@@ -238,7 +295,12 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                         autoFocus
                     />
                 ) : (
-                    <span className="text-sm">{screen.name}</span>
+                    <span className="text-sm flex items-center gap-1">
+                        {screen.name}
+                        {screen.screenType === 'hotzone' && (
+                            <span className="text-[10px] bg-purple-500/30 text-purple-300 px-1 rounded">HZ</span>
+                        )}
+                    </span>
                 )}
             </div>
 

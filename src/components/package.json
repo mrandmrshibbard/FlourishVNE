@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.3.0",
+  "version": "release.1.0.0",
   "description": "Flourish VNE",
   "author": "Your Name",
   "type": "module",
