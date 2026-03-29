@@ -22,11 +22,13 @@ export interface ResizableDraggableProps {
     label?: string;
     /** If true, element cannot be dragged or resized */
     locked?: boolean;
+    /** If true, children can receive pointer events (for nested interactive content) */
+    allowChildInteraction?: boolean;
 }
 
 const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     x, y, width, height, anchorX, anchorY, parentSize, isSelected, onSelect, onUpdate, children,
-    snapGrid = 1, showSnapGuides, label, locked,
+    snapGrid = 1, showSnapGuides, label, locked, allowChildInteraction,
 }) => {
 
     const ref = useRef<HTMLDivElement>(null);
@@ -47,6 +49,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     const handleMouseDown = useCallback((e: React.MouseEvent, action: 'drag' | string) => {
         if (locked) return;
         e.preventDefault();
+        e.stopPropagation();
         onSelect(e);
         setShiftHeld(e.shiftKey);
         
@@ -150,7 +153,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     return (
         <div ref={ref} style={style} onMouseDown={(e) => handleMouseDown(e, 'drag')}>
             <div className={`relative w-full h-full ${isSelected ? 'outline outline-2 outline-sky-400 outline-offset-2' : ''}`}>
-                <div style={{ pointerEvents: 'none', width: '100%', height: '100%' }}>
+                <div style={{ pointerEvents: allowChildInteraction ? 'auto' : 'none', width: '100%', height: '100%' }}>
                     {children}
                 </div>
                 {/* Position / size label */}

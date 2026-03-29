@@ -82,4 +82,6 @@ export interface VNProject {
     plugins?: Record<string, VNPlugin>;
     /** Plugin registry (enabled state + config per plugin) */
     pluginRegistry?: Record<string, PluginRegistryEntry>;
+    /** When true, characters sharing the same preset position are automatically spread apart */
+    autoArrangeCharacters?: boolean;
 }

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useInlineRename } from '../hooks/useInlineRename';
 import { VNProject } from '../types/project';
 import { VNBackground, VNImage, VNAudio, VNVideo } from '../features/assets/types';
 import { useProject } from '../contexts/ProjectContext';
@@ -808,15 +809,8 @@ const AssetCard: React.FC<{
     onDragEnd: () => void;
     showPath?: boolean;
 }> = React.memo(({ asset, assetType, viewMode, isSelected, isRenaming, onSelect, onStartRenaming, onCommitRename, onDelete, onReplace, onMove, onDragStart, onDragEnd, showPath = false }) => {
-    const [renameValue, setRenameValue] = useState(asset.name);
+    const { inputProps: renameInputProps } = useInlineRename(asset.name, onCommitRename);
     const size = estimateDataUrlSize(getAssetUrl(asset));
-
-    useEffect(() => { setRenameValue(asset.name); }, [asset.name]);
-
-    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') onCommitRename(renameValue);
-        else if (e.key === 'Escape') { setRenameValue(asset.name); onCommitRename(asset.name); }
-    };
 
     const thumbnail = useMemo(() => {
         if (asset.imageUrl) return <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover" loading="lazy" />;
@@ -856,10 +850,8 @@ const AssetCard: React.FC<{
 
                 <div className="p-2">
                     {isRenaming ? (
-                        <input type="text" value={renameValue} onChange={e => setRenameValue(e.target.value)}
-                            onBlur={() => onCommitRename(renameValue)} onKeyDown={handleRenameKeyDown}
-                            className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-xs outline-none ring-2 ring-sky-500"
-                            onClick={e => e.stopPropagation()} autoFocus />
+                        <input type="text" {...renameInputProps}
+                            className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-xs outline-none ring-2 ring-sky-500" />
                     ) : (
                         <>
                             <div className="text-xs text-white truncate font-medium" title={asset.name}>{asset.name}</div>
@@ -904,10 +896,8 @@ const AssetCard: React.FC<{
 
             <div className="flex-1 min-w-0">
                 {isRenaming ? (
-                    <input type="text" value={renameValue} onChange={e => setRenameValue(e.target.value)}
-                        onBlur={() => onCommitRename(renameValue)} onKeyDown={handleRenameKeyDown}
-                        className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-sm outline-none ring-2 ring-sky-500"
-                        onClick={e => e.stopPropagation()} autoFocus />
+                    <input type="text" {...renameInputProps}
+                        className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-sm outline-none ring-2 ring-sky-500" />
                 ) : (
                     <>
                         <div className="text-sm text-white truncate font-medium">{asset.name}</div>

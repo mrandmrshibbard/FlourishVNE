@@ -44,6 +44,7 @@ const ActionEditor: React.FC<{
                     <Select value={UIActionType.None} onChange={e => onActionChange({ type: e.target.value as UIActionType })}>
                         <option value={UIActionType.None}>None</option>
                         <option value={UIActionType.StartNewGame}>Start New Game</option>
+                        <option value={UIActionType.ContinueGame}>Continue Game</option>
                         <option value={UIActionType.GoToScreen}>Go To Screen</option>
                         <option value={UIActionType.LoadGame}>Load Game</option>
                         <option value={UIActionType.SaveGame}>Save Game</option>
@@ -369,6 +370,7 @@ const ActionEditor: React.FC<{
                 <Select value={action.type} onChange={e => handleTypeChange(e.target.value as UIActionType)}>
                     <option value={UIActionType.None}>None</option>
                     <option value={UIActionType.StartNewGame}>Start New Game</option>
+                    <option value={UIActionType.ContinueGame}>Continue Game</option>
                     <option value={UIActionType.GoToScreen}>Go To Screen</option>
                     <option value={UIActionType.LoadGame}>Load Game</option>
                     <option value={UIActionType.SaveGame}>Save Game</option>

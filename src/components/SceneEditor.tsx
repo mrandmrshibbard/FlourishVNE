@@ -169,6 +169,11 @@ const CommandItem: React.FC<{
                 const tag = (command as any).particleTag;
                 return `Stop Particles${tag ? `: ${tag}` : ' (all)'}`;
             }
+            case CommandType.TweenElement: {
+                const tweenCmd = command as any;
+                const props = [tweenCmd.x !== undefined && 'x', tweenCmd.y !== undefined && 'y', tweenCmd.opacity !== undefined && 'opacity', tweenCmd.scale !== undefined && 'scale', tweenCmd.zoom !== undefined && 'zoom'].filter(Boolean);
+                return `Tween ${tweenCmd.targetType}: ${tweenCmd.targetId || '?'} (${props.length > 0 ? props.join(', ') : 'no props'}, ${tweenCmd.duration}s)`;
+            }
             default: return (command as any).type;
         }
     };

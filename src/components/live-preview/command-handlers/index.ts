@@ -18,3 +18,4 @@ export * from './creditRollHandler';
 export * from './scriptHandler';
 export * from './particleHandler';
 export * from './commonEventHandler';
+export * from './tweenHandler';

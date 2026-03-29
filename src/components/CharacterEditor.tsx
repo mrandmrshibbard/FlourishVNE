@@ -6,6 +6,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useInlineRename } from '../hooks/useInlineRename';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
@@ -13,28 +14,12 @@ import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset } fr
 import { fileToBase64 } from '../utils/file';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
 import { FormField, TextInput, Select, ColorInput } from './ui/Form';
+import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
 
 type EditorTab = 'expressions' | 'layers' | 'style';
 
-// Popular fonts for visual novels
-const popularFonts = [
-    'Default (Use Project Settings)',
-    'Poppins, sans-serif',
-    'Arial, sans-serif',
-    'Helvetica, sans-serif',
-    'Verdana, sans-serif',
-    'Times New Roman, serif',
-    'Georgia, serif',
-    'Courier New, monospace',
-    'Pacifico, cursive',
-    'Lato, sans-serif',
-    'Merriweather, serif',
-    'Oswald, sans-serif',
-    'Playfair Display, serif',
-    'Roboto, sans-serif',
-    'Caveat, cursive',
-];
+const popularFonts = ['Default (Use Project Settings)', ..._sharedFonts];
 
 /* ───── Sub-components ───── */
 
@@ -48,18 +33,10 @@ const ExpressionListItem: React.FC<{
     onCommitRename: (name: string) => void;
     onDeleteRequest: () => void;
 }> = ({ expr, isSelected, isRenaming, layers, onSelect, onStartRename, onCommitRename, onDeleteRequest }) => {
-    const [name, setName] = useState(expr.name);
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => { setName(expr.name); }, [expr.name]);
-    useEffect(() => {
-        if (isRenaming) { inputRef.current?.focus(); inputRef.current?.select(); }
-    }, [isRenaming]);
-
-    const handleBlur = () => {
-        if (name.trim()) onCommitRename(name.trim());
-        else { setName(expr.name); onCommitRename(expr.name); }
-    };
+    const { inputProps: renameInputProps } = useInlineRename(expr.name, (newName) => {
+        const trimmed = newName.trim();
+        onCommitRename(trimmed || expr.name);
+    });
 
     // Count configured layers for this expression
     const configuredCount = Object.values(expr.layerConfiguration).filter(Boolean).length;
@@ -84,12 +61,8 @@ const ExpressionListItem: React.FC<{
             <div className="flex-1 min-w-0">
                 {isRenaming ? (
                     <input
-                        ref={inputRef}
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        onBlur={handleBlur}
-                        onKeyDown={e => { if (e.key === 'Enter') inputRef.current?.blur(); if (e.key === 'Escape') { setName(expr.name); onCommitRename(expr.name); } }}
-                        onClick={e => e.stopPropagation()}
+                        {...renameInputProps}
+                        onFocus={e => e.target.select()}
                         className="w-full bg-slate-900 text-white px-2 py-0.5 rounded text-sm outline-none ring-1 ring-[var(--accent-cyan)]"
                     />
                 ) : (
@@ -122,16 +95,15 @@ const LayerCard: React.FC<{
 }> = ({ characterId, layer }) => {
     const { dispatch } = useProject();
     const [isRenaming, setIsRenaming] = useState(false);
-    const [name, setName] = useState(layer.name);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleRenameCommit = () => {
-        if (name.trim()) {
-            dispatch({ type: 'UPDATE_CHARACTER_LAYER', payload: { characterId, layerId: layer.id, name: name.trim() } });
+    const { inputProps: layerRenameInputProps } = useInlineRename(layer.name, (newName) => {
+        if (newName.trim()) {
+            dispatch({ type: 'UPDATE_CHARACTER_LAYER', payload: { characterId, layerId: layer.id, name: newName.trim() } });
         }
         setIsRenaming(false);
-    };
+    });
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -174,13 +146,8 @@ const LayerCard: React.FC<{
                 <span className={`text-[10px] transition-transform ${isCollapsed ? '' : 'rotate-90'}`} style={{ color: 'var(--text-muted)' }}>▶</span>
                 {isRenaming ? (
                     <input
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        onBlur={handleRenameCommit}
-                        onKeyDown={e => { if (e.key === 'Enter') handleRenameCommit(); }}
-                        onClick={e => e.stopPropagation()}
+                        {...layerRenameInputProps}
                         className="bg-slate-900 text-white px-2 py-0.5 rounded text-sm outline-none ring-1 ring-sky-500 flex-1"
-                        autoFocus
                     />
                 ) : (
                     <span className="text-sm font-semibold flex-1" style={{ color: 'var(--text-primary)' }}>{layer.name}</span>
@@ -742,6 +709,29 @@ const CharacterEditor: React.FC<{
                         />
                         Italic
                     </label>
+                </div>
+
+                <hr style={{ borderColor: 'var(--border-subtle)' }} />
+
+                {/* Default Voice */}
+                <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
+                        Default Voice
+                    </h3>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
+                        Audio clip to play automatically with every dialogue line for this character (can be overridden per-line).
+                    </p>
+                    <FormField label="Voice Clip">
+                        <Select
+                            value={character.defaultVoiceId || ''}
+                            onChange={e => updateCharacter({ defaultVoiceId: e.target.value || null })}
+                        >
+                            <option value="">None</option>
+                            {Object.values(project.audio || {}).map((a: any) => (
+                                <option key={a.id} value={a.id}>{a.name || a.id}</option>
+                            ))}
+                        </Select>
+                    </FormField>
                 </div>
             </div>
         );

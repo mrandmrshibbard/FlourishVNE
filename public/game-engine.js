@@ -62,6 +62,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["SpawnParticles"] = "SpawnParticles";
     CommandType2["StopParticles"] = "StopParticles";
     CommandType2["CallCommonEvent"] = "CallCommonEvent";
+    CommandType2["ShowImageMap"] = "ShowImageMap";
+    CommandType2["HideImageMap"] = "HideImageMap";
+    CommandType2["TweenElement"] = "TweenElement";
     return CommandType2;
   })(CommandType || {});
   const assetReducer = (state, action) => {
@@ -313,6 +316,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["OpenURL"] = "OpenURL";
     UIActionType2["PlayAnimation"] = "PlayAnimation";
     UIActionType2["ChangeImage"] = "ChangeImage";
+    UIActionType2["ContinueGame"] = "ContinueGame";
     return UIActionType2;
   })(UIActionType || {});
   const generateId$4 = () => Math.random().toString(36).substring(2, 9);
@@ -2001,13 +2005,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const permutation = Array.from({ length: 256 }, () => Math.floor(Math.random() * 256));
     const p = [...permutation, ...permutation];
     const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
-    const lerp = (a, b, t) => a + t * (b - a);
+    const lerp2 = (a, b, t) => a + t * (b - a);
     const grad = (hash, x) => hash & 1 ? x : -x;
     return (x) => {
       const X = Math.floor(x) & 255;
       x -= Math.floor(x);
       const u = fade(x);
-      return lerp(grad(p[X], x), grad(p[X + 1], x - 1), u);
+      return lerp2(grad(p[X], x), grad(p[X + 1], x - 1), u);
     };
   }
   const ScreenOverlayEffects = ({
@@ -3126,13 +3130,52 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return coerceValueToType(changeValue, variableType, currentValue);
     }
   };
+  const PRESET_X = {
+    "left": 25,
+    "center": 50,
+    "right": 75,
+    "off-left": -25,
+    "off-right": 125
+  };
+  const SPREAD = 15;
+  const MIN_X = 5;
+  const MAX_X = 95;
+  function computeArrangedPositions(characters) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const char of characters) {
+      if (typeof char.position === "string") {
+        const preset = char.position;
+        if (preset === "off-left" || preset === "off-right") continue;
+        let arr = groups.get(preset);
+        if (!arr) {
+          arr = [];
+          groups.set(preset, arr);
+        }
+        arr.push(char.id);
+      }
+    }
+    const result = /* @__PURE__ */ new Map();
+    for (const [preset, ids] of groups) {
+      if (ids.length <= 1) continue;
+      const baseX = PRESET_X[preset];
+      const count = ids.length;
+      const totalWidth = (count - 1) * SPREAD;
+      const startX = baseX - totalWidth / 2;
+      for (let i = 0; i < count; i++) {
+        const rawX = startX + i * SPREAD;
+        const clampedX = Math.max(MIN_X, Math.min(MAX_X, rawX));
+        result.set(ids[i], clampedX);
+      }
+    }
+    return result;
+  }
   const handleDialogue = (command, context) => {
     const { project } = context;
     const char = command.characterId ? project.characters[command.characterId] : null;
     const voiceAudioId = command.voiceAudioId || (char == null ? void 0 : char.defaultVoiceId) || null;
     const textEffect = command.textEffect || (char == null ? void 0 : char.textEffect) || void 0;
     if (voiceAudioId) {
-      context.playSound(voiceAudioId, context.settings.sfxVolume);
+      context.playSound(voiceAudioId, context.settings.voiceVolume ?? context.settings.sfxVolume);
     }
     return {
       advance: false,
@@ -3238,6 +3281,295 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
   }
+  const easingFunctions = {
+    linear: (t) => t,
+    // Quadratic
+    easeInQuad: (t) => t * t,
+    easeOutQuad: (t) => t * (2 - t),
+    easeInOutQuad: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+    // Cubic
+    easeInCubic: (t) => t * t * t,
+    easeOutCubic: (t) => {
+      const t1 = t - 1;
+      return t1 * t1 * t1 + 1;
+    },
+    easeInOutCubic: (t) => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1,
+    // Quartic
+    easeInQuart: (t) => t * t * t * t,
+    easeOutQuart: (t) => {
+      const t1 = t - 1;
+      return 1 - t1 * t1 * t1 * t1;
+    },
+    easeInOutQuart: (t) => t < 0.5 ? 8 * t * t * t * t : 1 - 8 * --t * t * t * t,
+    // Quintic
+    easeInQuint: (t) => t * t * t * t * t,
+    easeOutQuint: (t) => {
+      const t1 = t - 1;
+      return 1 + t1 * t1 * t1 * t1 * t1;
+    },
+    easeInOutQuint: (t) => t < 0.5 ? 16 * t * t * t * t * t : 1 + 16 * --t * t * t * t * t,
+    // Sinusoidal
+    easeInSine: (t) => 1 - Math.cos(t * Math.PI / 2),
+    easeOutSine: (t) => Math.sin(t * Math.PI / 2),
+    easeInOutSine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+    // Exponential
+    easeInExpo: (t) => t === 0 ? 0 : Math.pow(2, 10 * t - 10),
+    easeOutExpo: (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+    easeInOutExpo: (t) => {
+      if (t === 0) return 0;
+      if (t === 1) return 1;
+      return t < 0.5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2;
+    },
+    // Circular
+    easeInCirc: (t) => 1 - Math.sqrt(1 - t * t),
+    easeOutCirc: (t) => Math.sqrt(1 - (t - 1) * (t - 1)),
+    easeInOutCirc: (t) => t < 0.5 ? (1 - Math.sqrt(1 - 4 * t * t)) / 2 : (Math.sqrt(1 - (-2 * t + 2) * (-2 * t + 2)) + 1) / 2,
+    // Back (overshoot)
+    easeInBack: (t) => {
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      return c3 * t * t * t - c1 * t * t;
+    },
+    easeOutBack: (t) => {
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      const t1 = t - 1;
+      return 1 + c3 * t1 * t1 * t1 + c1 * t1 * t1;
+    },
+    easeInOutBack: (t) => {
+      const c1 = 1.70158;
+      const c2 = c1 * 1.525;
+      return t < 0.5 ? 2 * t * (2 * t) * ((c2 + 1) * 2 * t - c2) / 2 : ((2 * t - 2) * (2 * t - 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2;
+    },
+    // Elastic
+    easeInElastic: (t) => {
+      if (t === 0) return 0;
+      if (t === 1) return 1;
+      return -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * (2 * Math.PI / 3));
+    },
+    easeOutElastic: (t) => {
+      if (t === 0) return 0;
+      if (t === 1) return 1;
+      return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * (2 * Math.PI / 3)) + 1;
+    },
+    easeInOutElastic: (t) => {
+      if (t === 0) return 0;
+      if (t === 1) return 1;
+      const c5 = 2 * Math.PI / 4.5;
+      return t < 0.5 ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2 : Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5) / 2 + 1;
+    },
+    // Bounce
+    easeOutBounce: (t) => {
+      const n1 = 7.5625;
+      const d1 = 2.75;
+      if (t < 1 / d1) return n1 * t * t;
+      if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+      if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+      return n1 * (t -= 2.625 / d1) * t + 0.984375;
+    },
+    easeInBounce: (t) => 1 - easingFunctions.easeOutBounce(1 - t),
+    easeInOutBounce: (t) => t < 0.5 ? (1 - easingFunctions.easeOutBounce(1 - 2 * t)) / 2 : (1 + easingFunctions.easeOutBounce(2 * t - 1)) / 2
+  };
+  function applyEasing(t, easing = "linear") {
+    const fn = easingFunctions[easing] || easingFunctions.linear;
+    return fn(Math.max(0, Math.min(1, t)));
+  }
+  function lerp(from, to, t) {
+    return from + (to - from) * t;
+  }
+  function lerpColor(from, to, t) {
+    const fromRgb = hexToRgb(from);
+    const toRgb = hexToRgb(to);
+    if (!fromRgb || !toRgb) return to;
+    const r = Math.round(lerp(fromRgb.r, toRgb.r, t));
+    const g = Math.round(lerp(fromRgb.g, toRgb.g, t));
+    const b = Math.round(lerp(fromRgb.b, toRgb.b, t));
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  }
+  function hexToRgb(hex) {
+    const match = hex.replace("#", "").match(/^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return null;
+    return { r: parseInt(match[1], 16), g: parseInt(match[2], 16), b: parseInt(match[3], 16) };
+  }
+  let nextTweenId = 0;
+  class TweenManagerImpl {
+    constructor() {
+      this.tweens = /* @__PURE__ */ new Map();
+      this.restingValues = /* @__PURE__ */ new Map();
+      this.rafId = null;
+      this.listeners = /* @__PURE__ */ new Set();
+      this.lastFrameTime = 0;
+      this.tick = () => {
+        var _a;
+        this.rafId = requestAnimationFrame(this.tick);
+        const now = performance.now();
+        this.lastFrameTime = now;
+        let hasChanges = false;
+        const completed = [];
+        for (const [id, tween] of this.tweens) {
+          const elapsed = now - tween.startTime;
+          const rawProgress = Math.min(elapsed / tween.duration, 1);
+          const easedProgress = applyEasing(rawProgress, tween.easing);
+          const newCurrent = {};
+          for (const key of Object.keys(tween.to)) {
+            const fromVal = tween.from[key];
+            const toVal = tween.to[key];
+            if (fromVal === void 0 || toVal === void 0) continue;
+            if (typeof fromVal === "number" && typeof toVal === "number") {
+              newCurrent[key] = lerp(fromVal, toVal, easedProgress);
+            } else if (typeof fromVal === "string" && typeof toVal === "string") {
+              newCurrent[key] = lerpColor(fromVal, toVal, easedProgress);
+            }
+          }
+          tween.current = newCurrent;
+          hasChanges = true;
+          if (rawProgress >= 1) {
+            tween.finished = true;
+            this.restingValues.set(
+              TweenManagerImpl.restingKey(tween.targetId, tween.targetType),
+              { ...tween.to }
+            );
+            completed.push(tween);
+            this.tweens.delete(id);
+          }
+        }
+        if (hasChanges) {
+          this.notifyListeners();
+        }
+        for (const tween of completed) {
+          (_a = tween.onComplete) == null ? void 0 : _a.call(tween);
+        }
+        if (this.tweens.size === 0) {
+          this.stop();
+        }
+      };
+    }
+    static restingKey(targetId, targetType) {
+      return `${targetType}:${targetId}`;
+    }
+    /**
+     * Start a new tween. Replaces any existing tween on the same target+property set.
+     */
+    start(config) {
+      const id = `tween_${++nextTweenId}`;
+      const rkey = TweenManagerImpl.restingKey(config.targetId, config.targetType);
+      for (const [existingId, existing] of this.tweens) {
+        if (existing.targetId === config.targetId && existing.targetType === config.targetType) {
+          existing.finished = true;
+          this.tweens.delete(existingId);
+        }
+      }
+      this.restingValues.delete(rkey);
+      const tween = {
+        id,
+        targetId: config.targetId,
+        targetType: config.targetType,
+        from: { ...config.from },
+        to: { ...config.to },
+        easing: config.easing || "easeInOutCubic",
+        duration: config.duration * 1e3,
+        startTime: performance.now(),
+        current: { ...config.from },
+        onComplete: config.onComplete,
+        finished: false
+      };
+      this.tweens.set(id, tween);
+      this.ensureRunning();
+      return id;
+    }
+    /**
+     * Cancel a tween by ID.
+     */
+    cancel(tweenId) {
+      this.tweens.delete(tweenId);
+      if (this.tweens.size === 0) this.stop();
+    }
+    /**
+     * Cancel all tweens for a specific target.
+     */
+    cancelForTarget(targetId, targetType) {
+      for (const [id, tween] of this.tweens) {
+        if (tween.targetId === targetId && (!targetType || tween.targetType === targetType)) {
+          this.tweens.delete(id);
+        }
+      }
+      if (targetType) {
+        this.restingValues.delete(TweenManagerImpl.restingKey(targetId, targetType));
+      } else {
+        for (const key of this.restingValues.keys()) {
+          if (key.endsWith(`:${targetId}`)) this.restingValues.delete(key);
+        }
+      }
+      if (this.tweens.size === 0) this.stop();
+    }
+    /**
+     * Cancel all active tweens.
+     */
+    cancelAll() {
+      this.tweens.clear();
+      this.restingValues.clear();
+      this.stop();
+    }
+    /**
+     * Get the current interpolated values for a target, or null if no tween is active.
+     */
+    getCurrentValues(targetId, targetType) {
+      for (const tween of this.tweens.values()) {
+        if (tween.targetId === targetId && tween.targetType === targetType && !tween.finished) {
+          return tween.current;
+        }
+      }
+      return this.restingValues.get(TweenManagerImpl.restingKey(targetId, targetType)) ?? null;
+    }
+    /**
+     * Get resting (post-tween) values for a target, ignoring active tweens.
+     * Used by captureCurrentValues to chain tweens correctly.
+     */
+    getRestingValues(targetId, targetType) {
+      return this.restingValues.get(TweenManagerImpl.restingKey(targetId, targetType)) ?? null;
+    }
+    /**
+     * Check if a target has an active tween.
+     */
+    hasTween(targetId, targetType) {
+      for (const tween of this.tweens.values()) {
+        if (tween.targetId === targetId && (!targetType || tween.targetType === targetType) && !tween.finished) {
+          return true;
+        }
+      }
+      return false;
+    }
+    /**
+     * Subscribe to tween updates (called every frame while tweens are active).
+     */
+    subscribe(callback) {
+      this.listeners.add(callback);
+      return () => this.listeners.delete(callback);
+    }
+    /**
+     * Get count of active tweens.
+     */
+    get activeCount() {
+      return this.tweens.size;
+    }
+    ensureRunning() {
+      if (this.rafId !== null) return;
+      this.lastFrameTime = performance.now();
+      this.tick();
+    }
+    stop() {
+      if (this.rafId !== null) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+      }
+    }
+    notifyListeners() {
+      for (const listener of this.listeners) {
+        listener(this.tweens);
+      }
+    }
+  }
+  const TweenManager = new TweenManagerImpl();
   function handleShowCharacter(command, context) {
     const { project, playerState, activeEffectTimeoutsRef, advance } = context;
     const charData = project.characters[command.characterId];
@@ -3245,6 +3577,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!charData || !exprData) {
       return { advance: true };
     }
+    TweenManager.cancelForTarget(command.characterId, "character");
     const imageUrls = [];
     const videoUrls = [];
     let hasVideo = false;
@@ -3399,6 +3732,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!existingChar) {
       return { advance: true };
     }
+    TweenManager.cancelForTarget(command.characterId, "character");
     if (hideTransitionType && hideTransitionType !== "instant") {
       const finalPosition = existingChar.position;
       const startPosition = void 0;
@@ -3710,6 +4044,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   function handleShowText(command, context) {
     const { playerState, project } = context;
+    TweenManager.cancelForTarget(command.id, "text");
     const interpolatedText = interpolateVariables(command.text, playerState.variables, project);
     const overlay = {
       id: command.id,
@@ -3754,6 +4089,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!target) {
       return { advance: true };
     }
+    TweenManager.cancelForTarget(command.targetCommandId, "text");
     if (command.transition && command.transition !== "instant") {
       const updated = overlays.map(
         (o) => o.id === command.targetCommandId ? { ...o, transition: command.transition, duration: command.duration, action: "hide" } : o
@@ -3803,6 +4139,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       console.warn(`Image not found: ${command.imageId}`);
       return { advance: true };
     }
+    TweenManager.cancelForTarget(command.id, "image");
     const overlay = {
       id: command.id,
       imageUrl: !isVideo ? imageUrl : void 0,
@@ -3842,6 +4179,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!target) {
       return { advance: true };
     }
+    TweenManager.cancelForTarget(command.targetCommandId, "image");
     if (command.transition && command.transition !== "instant") {
       const updated = overlays.map(
         (o) => o.id === command.targetCommandId ? { ...o, transition: command.transition, duration: command.duration, action: "hide" } : o
@@ -3885,6 +4223,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   function handleShowButton(command, context) {
     const { playerState, assetResolver, setPlayerState, evaluateConditions: evaluateConditions2 } = context;
+    TweenManager.cancelForTarget(command.id, "button");
     if (command.showConditions && command.showConditions.length > 0) {
       const conditionsMet = evaluateConditions2(command.showConditions, playerState.variables);
       if (!conditionsMet) {
@@ -3961,6 +4300,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!target) {
       return { advance: true };
     }
+    TweenManager.cancelForTarget(command.targetCommandId, "button");
     if (command.transition && command.transition !== "instant") {
       const updated = overlays.map(
         (o) => o.id === command.targetCommandId ? {
@@ -4002,6 +4342,127 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           stageState: {
             ...playerState.stageState,
             buttonOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
+          }
+        }
+      };
+    }
+  }
+  function handleShowImageMap(command, context) {
+    const { assetResolver, playerState, setPlayerState, evaluateConditions: evaluateConditions2 } = context;
+    const imageUrl = assetResolver(command.imageId, "image");
+    if (!imageUrl) {
+      console.warn(`Image map image not found: ${command.imageId}`);
+      return { advance: true };
+    }
+    const hoverImageUrl = command.hoverImageId ? assetResolver(command.hoverImageId, "image") : void 0;
+    TweenManager.cancelForTarget(command.id, "imageMap");
+    const overlay = {
+      id: command.id,
+      imageUrl,
+      hoverImageUrl: hoverImageUrl || void 0,
+      regions: command.regions.map((r) => ({
+        id: r.id,
+        name: r.name,
+        shape: r.shape,
+        coords: r.coords,
+        actions: r.actions,
+        tooltip: r.tooltip,
+        cursor: r.cursor,
+        highlightColor: r.highlightColor,
+        conditions: r.conditions
+      })),
+      x: command.x,
+      y: command.y,
+      width: command.width,
+      height: command.height,
+      opacity: command.opacity,
+      waitForClick: command.waitForClick,
+      transition: command.transition !== "instant" ? command.transition : void 0,
+      duration: command.duration,
+      action: "show"
+    };
+    const hasTransition = command.transition && command.transition !== "instant";
+    const waitForClick = command.waitForClick;
+    let shouldAdvance = true;
+    let delay = 0;
+    let callback;
+    if (hasTransition && waitForClick) {
+      shouldAdvance = false;
+      delay = 0;
+      callback = () => {
+        setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
+      };
+    } else if (hasTransition) {
+      shouldAdvance = false;
+      delay = (command.duration ?? 0.5) * 1e3 + 100;
+      callback = context.advance;
+    } else if (waitForClick) {
+      shouldAdvance = false;
+      callback = () => {
+        setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
+      };
+    }
+    return {
+      advance: shouldAdvance,
+      updates: {
+        stageState: {
+          ...playerState.stageState,
+          imageMapOverlays: [...playerState.stageState.imageMapOverlays || [], overlay]
+        }
+      },
+      delay,
+      callback
+    };
+  }
+  function handleHideImageMap(command, context) {
+    const { playerState, setPlayerState, advance } = context;
+    const overlays = playerState.stageState.imageMapOverlays || [];
+    const target = overlays.find((o) => o.id === command.targetCommandId);
+    if (!target) {
+      return { advance: true };
+    }
+    TweenManager.cancelForTarget(command.targetCommandId, "imageMap");
+    if (command.transition && command.transition !== "instant") {
+      const updated = overlays.map(
+        (o) => o.id === command.targetCommandId ? {
+          ...o,
+          transition: command.transition,
+          duration: command.duration || 0.5,
+          action: "hide"
+        } : o
+      );
+      const duration = (command.duration ?? 0.5) * 1e3 + 100;
+      return {
+        advance: false,
+        updates: {
+          stageState: {
+            ...playerState.stageState,
+            imageMapOverlays: updated
+          }
+        },
+        delay: duration,
+        callback: () => {
+          setPlayerState(
+            (inner) => inner ? {
+              ...inner,
+              stageState: {
+                ...inner.stageState,
+                imageMapOverlays: (inner.stageState.imageMapOverlays || []).filter(
+                  (o) => o.id !== command.targetCommandId
+                )
+              }
+            } : null
+          );
+          advance();
+        }
+      };
+    } else {
+      return {
+        advance: true,
+        updates: {
+          stageState: {
+            ...playerState.stageState,
+            imageMapOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
           }
         }
       };
@@ -4488,6 +4949,127 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
   }
+  const PRESET_COORDS = {
+    "left": { x: 25, y: 10 },
+    "center": { x: 50, y: 10 },
+    "right": { x: 75, y: 10 },
+    "off-left": { x: -25, y: 10 },
+    "off-right": { x: 125, y: 10 }
+  };
+  function captureCurrentValues(command, context) {
+    const effectiveId = command.targetType === "screen" ? "__screen__" : command.targetId;
+    const resting = TweenManager.getRestingValues(effectiveId, command.targetType);
+    const state = context.playerState.stageState;
+    const current = {};
+    switch (command.targetType) {
+      case "character": {
+        const char = state.characters[command.targetId];
+        if (!char) break;
+        const pos = typeof char.position === "object" ? char.position : PRESET_COORDS[char.position] ?? { x: 50, y: 10 };
+        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? pos.x;
+        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? pos.y;
+        if (command.scale !== void 0) current.scale = (resting == null ? void 0 : resting.scale) ?? char.scale ?? 1;
+        if (command.opacity !== void 0) current.opacity = (resting == null ? void 0 : resting.opacity) ?? 1;
+        break;
+      }
+      case "image": {
+        const img = state.imageOverlays.find((o) => o.id === command.targetId);
+        if (!img) break;
+        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? img.x;
+        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? img.y;
+        if (command.width !== void 0) current.width = (resting == null ? void 0 : resting.width) ?? img.width;
+        if (command.height !== void 0) current.height = (resting == null ? void 0 : resting.height) ?? img.height;
+        if (command.opacity !== void 0) current.opacity = (resting == null ? void 0 : resting.opacity) ?? img.opacity;
+        if (command.rotation !== void 0) current.rotation = (resting == null ? void 0 : resting.rotation) ?? img.rotation;
+        if (command.scaleX !== void 0) current.scaleX = (resting == null ? void 0 : resting.scaleX) ?? img.scaleX;
+        if (command.scaleY !== void 0) current.scaleY = (resting == null ? void 0 : resting.scaleY) ?? img.scaleY;
+        break;
+      }
+      case "text": {
+        const txt = state.textOverlays.find((o) => o.id === command.targetId);
+        if (!txt) break;
+        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? txt.x;
+        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? txt.y;
+        if (command.fontSize !== void 0) current.fontSize = (resting == null ? void 0 : resting.fontSize) ?? txt.fontSize;
+        if (command.width !== void 0) current.width = (resting == null ? void 0 : resting.width) ?? txt.width ?? 0;
+        if (command.height !== void 0) current.height = (resting == null ? void 0 : resting.height) ?? txt.height ?? 0;
+        if (command.color !== void 0) current.color = (resting == null ? void 0 : resting.color) ?? txt.color;
+        break;
+      }
+      case "button": {
+        const btn = state.buttonOverlays.find((o) => o.id === command.targetId);
+        if (!btn) break;
+        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? btn.x;
+        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? btn.y;
+        if (command.width !== void 0) current.width = (resting == null ? void 0 : resting.width) ?? btn.width;
+        if (command.height !== void 0) current.height = (resting == null ? void 0 : resting.height) ?? btn.height;
+        if (command.opacity !== void 0) current.opacity = (resting == null ? void 0 : resting.opacity) ?? btn.opacity;
+        if (command.fontSize !== void 0) current.fontSize = (resting == null ? void 0 : resting.fontSize) ?? btn.fontSize;
+        if (command.borderRadius !== void 0) current.borderRadius = (resting == null ? void 0 : resting.borderRadius) ?? btn.borderRadius;
+        if (command.backgroundColor !== void 0) current.backgroundColor = (resting == null ? void 0 : resting.backgroundColor) ?? btn.backgroundColor;
+        break;
+      }
+      case "imageMap": {
+        const map = (state.imageMapOverlays || []).find((o) => o.id === command.targetId);
+        if (!map) break;
+        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? map.x;
+        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? map.y;
+        if (command.width !== void 0) current.width = (resting == null ? void 0 : resting.width) ?? map.width;
+        if (command.height !== void 0) current.height = (resting == null ? void 0 : resting.height) ?? map.height;
+        if (command.opacity !== void 0) current.opacity = (resting == null ? void 0 : resting.opacity) ?? map.opacity;
+        break;
+      }
+      case "screen": {
+        if (command.zoom !== void 0) current.scaleX = (resting == null ? void 0 : resting.scaleX) ?? state.screen.zoom;
+        if (command.panX !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? state.screen.panX;
+        if (command.panY !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? state.screen.panY;
+        break;
+      }
+    }
+    return current;
+  }
+  function buildTargetValues(command) {
+    const to = {};
+    if (command.x !== void 0) to.x = command.x;
+    if (command.y !== void 0) to.y = command.y;
+    if (command.width !== void 0) to.width = command.width;
+    if (command.height !== void 0) to.height = command.height;
+    if (command.opacity !== void 0) to.opacity = command.opacity;
+    if (command.rotation !== void 0) to.rotation = command.rotation;
+    if (command.scaleX !== void 0) to.scaleX = command.scaleX;
+    if (command.scaleY !== void 0) to.scaleY = command.scaleY;
+    if (command.scale !== void 0) to.scale = command.scale;
+    if (command.fontSize !== void 0) to.fontSize = command.fontSize;
+    if (command.borderRadius !== void 0) to.borderRadius = command.borderRadius;
+    if (command.color !== void 0) to.color = command.color;
+    if (command.backgroundColor !== void 0) to.backgroundColor = command.backgroundColor;
+    if (command.zoom !== void 0) to.scaleX = command.zoom;
+    if (command.panX !== void 0 && command.targetType === "screen") to.x = command.panX;
+    if (command.panY !== void 0 && command.targetType === "screen") to.y = command.panY;
+    return to;
+  }
+  function handleTweenElement(command, context) {
+    const { advance } = context;
+    const effectiveId = command.targetType === "screen" ? "__screen__" : command.targetId;
+    const from = captureCurrentValues(command, context);
+    const to = buildTargetValues(command);
+    if (Object.keys(to).length === 0) {
+      return { advance: true };
+    }
+    const waitForCompletion = command.waitForCompletion !== false;
+    TweenManager.start({
+      targetId: effectiveId,
+      targetType: command.targetType,
+      from,
+      to,
+      easing: command.easing || "easeInOutCubic",
+      duration: command.duration,
+      onComplete: waitForCompletion ? () => advance() : void 0
+    });
+    return {
+      advance: !waitForCompletion
+    };
+  }
   class CommandScheduler {
     constructor() {
       this.lastProcessed = null;
@@ -4631,6 +5213,37 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return "transition-dissolve";
     }
   };
+  function useTween(targetId, targetType) {
+    const [values, setValues] = React2.useState(
+      () => TweenManager.getCurrentValues(targetId, targetType)
+    );
+    const targetIdRef = React2.useRef(targetId);
+    const targetTypeRef = React2.useRef(targetType);
+    targetIdRef.current = targetId;
+    targetTypeRef.current = targetType;
+    React2.useEffect(() => {
+      const unsubscribe = TweenManager.subscribe((tweens) => {
+        let found = null;
+        for (const tween of tweens.values()) {
+          if (tween.targetId === targetIdRef.current && tween.targetType === targetTypeRef.current && !tween.finished) {
+            found = tween.current;
+            break;
+          }
+        }
+        setValues((prev) => {
+          if (found === null && prev === null) return prev;
+          return found;
+        });
+      });
+      return unsubscribe;
+    }, []);
+    React2.useEffect(() => {
+      if (!TweenManager.hasTween(targetId, targetType)) {
+        setValues(null);
+      }
+    }, [targetId, targetType]);
+    return values;
+  }
   function getHueFromHex(hex) {
     const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
     if (!match) return 0;
@@ -4713,6 +5326,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
+    voiceVolume: 0.8,
     ambientVolume: 0.8,
     enableSkip: true,
     autoAdvance: false,
@@ -4738,6 +5352,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   };
   const TextOverlayElement = ({ overlay, stageSize }) => {
     var _a, _b, _c;
+    const tweenValues = useTween(overlay.id, "text");
     const hasTransition = overlay.transition && overlay.transition !== "instant";
     const [playTransition, setPlayTransition] = React2.useState(overlay.action === "hide" && !!hasTransition);
     const timeoutRef = React2.useRef(null);
@@ -4776,18 +5391,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const animDuration = `${overlay.duration ?? 0.5}s`;
     const isSlideTransition = overlay.transition === "slide";
     const slideStyle = isSlideTransition ? buildSlideStyle(overlay.x, overlay.y ?? 0, overlay.action, stageSize) : {};
+    const tx = (tweenValues == null ? void 0 : tweenValues.x) ?? overlay.x;
+    const ty = (tweenValues == null ? void 0 : tweenValues.y) ?? overlay.y;
+    const tFontSize = (tweenValues == null ? void 0 : tweenValues.fontSize) ?? overlay.fontSize;
+    const tColor = (tweenValues == null ? void 0 : tweenValues.color) ?? overlay.color;
+    const tWidth = (tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width;
+    const tHeight = (tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height;
     const baseStyle = {
-      left: `${overlay.x}%`,
-      top: `${overlay.y}%`,
+      left: `${tx}%`,
+      top: `${ty}%`,
       ...isSlideTransition ? {} : { transform: "translate(-50%, -50%)" },
-      fontSize: `calc(var(--font-scale, 1) * ${overlay.fontSize}px)`,
+      fontSize: `calc(var(--font-scale, 1) * ${tFontSize}px)`,
       fontFamily: overlay.fontFamily,
-      color: overlay.color,
+      color: tColor,
       fontWeight: overlay.fontWeight || "normal",
       fontStyle: overlay.fontStyle || "normal",
       letterSpacing: overlay.letterSpacing ? `calc(var(--font-scale, 1) * ${overlay.letterSpacing}px)` : void 0,
-      width: overlay.width ? `calc(var(--font-scale, 1) * ${overlay.width}px)` : "auto",
-      height: overlay.height ? `calc(var(--font-scale, 1) * ${overlay.height}px)` : "auto",
+      width: tWidth ? `calc(var(--font-scale, 1) * ${tWidth}px)` : "auto",
+      height: tHeight ? `calc(var(--font-scale, 1) * ${tHeight}px)` : "auto",
       textAlign: overlay.textAlign || "left",
       display: "flex",
       alignItems: overlay.verticalAlign === "top" ? "flex-start" : overlay.verticalAlign === "bottom" ? "flex-end" : "center",
@@ -4823,6 +5444,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { className, style, children: overlay.text });
   };
   const ButtonOverlayElement = ({ overlay, onAction, playSound, onAdvance, onCommitVariables }) => {
+    const tweenValues = useTween(overlay.id, "button");
     const [isHovered, setIsHovered] = React2.useState(false);
     const hasTransition = overlay.transition && overlay.transition !== "instant";
     const [playTransition, setPlayTransition] = React2.useState(overlay.action === "hide" && !!hasTransition);
@@ -4883,12 +5505,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const applyTransition = playTransition && overlay.transition && overlay.transition !== "instant";
     const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === "hide") : "";
     const animDuration = `${overlay.duration ?? 0.3}s`;
+    const bx = (tweenValues == null ? void 0 : tweenValues.x) ?? overlay.x;
+    const by = (tweenValues == null ? void 0 : tweenValues.y) ?? overlay.y;
+    const bw = (tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width;
+    const bh = (tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height;
+    const bOpacity = (tweenValues == null ? void 0 : tweenValues.opacity) ?? overlay.opacity;
+    const bFontSize = (tweenValues == null ? void 0 : tweenValues.fontSize) ?? overlay.fontSize;
+    const bBorderRadius = (tweenValues == null ? void 0 : tweenValues.borderRadius) ?? overlay.borderRadius;
+    const bBgColor = (tweenValues == null ? void 0 : tweenValues.backgroundColor) ?? overlay.backgroundColor;
     const containerStyle = {
       position: "absolute",
-      left: `${overlay.x}%`,
-      top: `${overlay.y}%`,
-      width: `${overlay.width}%`,
-      height: `${overlay.height}%`,
+      left: `${bx}%`,
+      top: `${by}%`,
+      width: `${bw}%`,
+      height: `${bh}%`,
       transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%)`,
       pointerEvents: "auto"
     };
@@ -4898,11 +5528,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const buttonStyle = {
       width: "100%",
       height: "100%",
-      backgroundColor: overlay.backgroundColor,
+      backgroundColor: bBgColor,
       color: overlay.textColor,
-      fontSize: `calc(var(--font-scale, 1) * ${overlay.fontSize}px)`,
+      fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
       fontWeight: overlay.fontWeight,
-      borderRadius: `${overlay.borderRadius}px`,
+      borderRadius: `${bBorderRadius}px`,
       border: "none",
       cursor: "pointer",
       display: "flex",
@@ -4911,7 +5541,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       transition: "transform 0.1s, box-shadow 0.1s",
       boxShadow: isHovered ? "0 4px 12px rgba(0,0,0,0.3)" : "0 2px 4px rgba(0,0,0,0.2)",
       transform: isHovered ? "translateY(-2px)" : "none",
-      opacity: overlay.opacity ?? 1
+      opacity: bOpacity ?? 1
     };
     const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
     return /* @__PURE__ */ jsxRuntime2.jsx(
@@ -4934,6 +5564,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
   };
   const ImageOverlayElement = ({ overlay, stageSize }) => {
+    const tweenValues = useTween(overlay.id, "image");
     const hasTransition = overlay.transition && overlay.transition !== "instant";
     const [playTransition, setPlayTransition] = React2.useState(overlay.action === "hide" && !!hasTransition);
     const timeoutRef = React2.useRef(null);
@@ -4972,11 +5603,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const animDuration = `${overlay.duration ?? 0.5}s`;
     const isSlideTransition = overlay.transition === "slide";
     const slideStyle = isSlideTransition ? buildSlideStyle(overlay.x, overlay.y ?? 0, overlay.action, stageSize) : {};
+    const ix = (tweenValues == null ? void 0 : tweenValues.x) ?? overlay.x;
+    const iy = (tweenValues == null ? void 0 : tweenValues.y) ?? overlay.y;
+    const iw = (tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width;
+    const ih = (tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height;
+    const iOpacity = (tweenValues == null ? void 0 : tweenValues.opacity) ?? overlay.opacity;
+    const iRotation = (tweenValues == null ? void 0 : tweenValues.rotation) ?? overlay.rotation;
+    const iScaleX = (tweenValues == null ? void 0 : tweenValues.scaleX) ?? overlay.scaleX;
+    const iScaleY = (tweenValues == null ? void 0 : tweenValues.scaleY) ?? overlay.scaleY;
     const containerStyle = {
-      left: `${overlay.x}%`,
-      top: `${overlay.y}%`,
-      width: `${overlay.width}px`,
-      height: `${overlay.height}px`,
+      left: `${ix}%`,
+      top: `${iy}%`,
+      width: `${iw}px`,
+      height: `${ih}px`,
       ...isSlideTransition ? {} : { transform: "translate(-50%, -50%)" }
     };
     if (overlay.action === "show" && hasTransition && !playTransition) {
@@ -4985,9 +5624,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const imageStyle = {
       width: "100%",
       height: "100%",
-      transform: `rotate(${overlay.rotation}deg) scale(${overlay.scaleX}, ${overlay.scaleY})`,
+      transform: `rotate(${iRotation}deg) scale(${iScaleX}, ${iScaleY})`,
       transformOrigin: "center center",
-      opacity: overlay.opacity
+      opacity: iOpacity
     };
     const className = `absolute${applyTransition ? ` ${transitionClass} transition-base` : ""}`;
     const style = {
@@ -5015,6 +5654,233 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         style: imageStyle
       }
     ) });
+  };
+  const ImageMapRegionElement = ({ region, containerWidth, containerHeight, hasHoverImage, onAction, onAdvance, onCommitVariables, evaluateConditions: evaluateConditions2, variables, onRegionHover, onRegionLeave }) => {
+    const [isHovered, setIsHovered] = React2.useState(false);
+    if (region.conditions && region.conditions.length > 0) {
+      if (!evaluateConditions2(region.conditions, variables)) return null;
+    }
+    const handleClick = () => {
+      const setVarActions = region.actions.filter((a) => a.type === UIActionType.SetVariable);
+      const otherActions = region.actions.filter((a) => a.type !== UIActionType.SetVariable);
+      setVarActions.forEach((a) => onAction(a));
+      if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+      otherActions.forEach((a) => onAction(a));
+      if (onAdvance) onAdvance();
+    };
+    const highlightColor = region.highlightColor || "rgba(100, 149, 237, 0.3)";
+    const cursor = region.cursor || "pointer";
+    const handleMouseEnter = () => {
+      setIsHovered(true);
+      if (onRegionHover) onRegionHover(region.id);
+    };
+    const handleMouseLeave = () => {
+      setIsHovered(false);
+      if (onRegionLeave) onRegionLeave();
+    };
+    if (region.shape === "rect" && region.coords.length >= 4) {
+      const [x, y, w, h] = region.coords;
+      return /* @__PURE__ */ jsxRuntime2.jsx(
+        "div",
+        {
+          style: {
+            position: "absolute",
+            left: `${x}%`,
+            top: `${y}%`,
+            width: `${w}%`,
+            height: `${h}%`,
+            cursor,
+            backgroundColor: isHovered && !hasHoverImage ? highlightColor : "transparent",
+            transition: "background-color 0.15s",
+            pointerEvents: "auto",
+            borderRadius: 2,
+            zIndex: 2
+          },
+          title: region.tooltip,
+          onClick: handleClick,
+          onMouseEnter: handleMouseEnter,
+          onMouseLeave: handleMouseLeave
+        }
+      );
+    }
+    if (region.shape === "circle" && region.coords.length >= 3) {
+      const [cx, cy, r] = region.coords;
+      return /* @__PURE__ */ jsxRuntime2.jsx(
+        "div",
+        {
+          style: {
+            position: "absolute",
+            left: `${cx - r}%`,
+            top: `${cy - r}%`,
+            width: `${r * 2}%`,
+            height: `${r * 2}%`,
+            borderRadius: "50%",
+            cursor,
+            backgroundColor: isHovered && !hasHoverImage ? highlightColor : "transparent",
+            transition: "background-color 0.15s",
+            pointerEvents: "auto",
+            zIndex: 2
+          },
+          title: region.tooltip,
+          onClick: handleClick,
+          onMouseEnter: handleMouseEnter,
+          onMouseLeave: handleMouseLeave
+        }
+      );
+    }
+    if (region.shape === "poly" && region.coords.length >= 6) {
+      const points = [];
+      for (let i = 0; i < region.coords.length; i += 2) {
+        points.push(`${region.coords[i] / 100 * containerWidth},${region.coords[i + 1] / 100 * containerHeight}`);
+      }
+      return /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 2 }, children: /* @__PURE__ */ jsxRuntime2.jsx(
+        "polygon",
+        {
+          points: points.join(" "),
+          fill: isHovered && !hasHoverImage ? highlightColor : "transparent",
+          style: { cursor, pointerEvents: "auto", transition: "fill 0.15s" },
+          onClick: handleClick,
+          onMouseEnter: handleMouseEnter,
+          onMouseLeave: handleMouseLeave,
+          children: region.tooltip && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: region.tooltip })
+        }
+      ) });
+    }
+    return null;
+  };
+  const getRegionClipPath = (region) => {
+    if (region.shape === "rect" && region.coords.length >= 4) {
+      const [x, y, w, h] = region.coords;
+      return `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
+    }
+    if (region.shape === "circle" && region.coords.length >= 3) {
+      const [cx, cy, r] = region.coords;
+      return `circle(${r}% at ${cx}% ${cy}%)`;
+    }
+    if (region.shape === "poly" && region.coords.length >= 6) {
+      const points = [];
+      for (let i = 0; i < region.coords.length; i += 2) {
+        points.push(`${region.coords[i]}% ${region.coords[i + 1]}%`);
+      }
+      return `polygon(${points.join(", ")})`;
+    }
+    return void 0;
+  };
+  const ImageMapOverlayElement = ({ overlay, onAction, onAdvance, onCommitVariables, evaluateConditions: evaluateConditions2, variables }) => {
+    const tweenValues = useTween(overlay.id, "imageMap");
+    const containerRef = React2.useRef(null);
+    const [containerSize, setContainerSize] = React2.useState({ width: 0, height: 0 });
+    const [hoveredRegionId, setHoveredRegionId] = React2.useState(null);
+    const hasTransition = overlay.transition && overlay.transition !== "instant";
+    const [playTransition, setPlayTransition] = React2.useState(overlay.action === "hide" && !!hasTransition);
+    const timeoutRef = React2.useRef(null);
+    React2.useEffect(() => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (!overlay.transition || overlay.transition === "instant") {
+        setPlayTransition(false);
+        return;
+      }
+      if (overlay.action === "show") {
+        setPlayTransition(false);
+        timeoutRef.current = window.setTimeout(() => {
+          setPlayTransition(true);
+          timeoutRef.current = null;
+        }, 0);
+        return () => {
+          if (timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+        };
+      }
+      setPlayTransition(true);
+      return () => {
+        if (timeoutRef.current !== null) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+      };
+    }, [overlay.id, overlay.transition, overlay.action]);
+    React2.useEffect(() => {
+      if (!containerRef.current) return;
+      const obs = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+        }
+      });
+      obs.observe(containerRef.current);
+      return () => obs.disconnect();
+    }, []);
+    const applyTransition = playTransition && overlay.transition && overlay.transition !== "instant";
+    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === "hide") : "";
+    const animDuration = `${overlay.duration ?? 0.5}s`;
+    const containerStyle = {
+      position: "absolute",
+      left: `${(tweenValues == null ? void 0 : tweenValues.x) ?? overlay.x}%`,
+      top: `${(tweenValues == null ? void 0 : tweenValues.y) ?? overlay.y}%`,
+      width: `${(tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width}%`,
+      height: `${(tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height}%`,
+      opacity: (tweenValues == null ? void 0 : tweenValues.opacity) ?? overlay.opacity,
+      pointerEvents: "auto"
+    };
+    if (overlay.action === "show" && hasTransition && !playTransition) {
+      containerStyle.opacity = 0;
+    }
+    return /* @__PURE__ */ jsxRuntime2.jsxs(
+      "div",
+      {
+        ref: containerRef,
+        className: applyTransition ? transitionClass : "",
+        style: { ...containerStyle, ...applyTransition ? { animationDuration: animDuration } : {} },
+        children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("img", { src: overlay.imageUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" } }),
+          overlay.hoverImageUrl && hoveredRegionId && (() => {
+            const hoveredRegion = overlay.regions.find((r) => r.id === hoveredRegionId);
+            if (!hoveredRegion) return null;
+            const clipPath = getRegionClipPath(hoveredRegion);
+            if (!clipPath) return null;
+            return /* @__PURE__ */ jsxRuntime2.jsx(
+              "img",
+              {
+                src: overlay.hoverImageUrl,
+                alt: "",
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  pointerEvents: "none",
+                  clipPath,
+                  zIndex: 1
+                }
+              }
+            );
+          })(),
+          overlay.regions.map((region) => /* @__PURE__ */ jsxRuntime2.jsx(
+            ImageMapRegionElement,
+            {
+              region,
+              containerWidth: containerSize.width,
+              containerHeight: containerSize.height,
+              hasHoverImage: !!overlay.hoverImageUrl,
+              onAction,
+              onAdvance,
+              onCommitVariables,
+              evaluateConditions: evaluateConditions2,
+              variables,
+              onRegionHover: setHoveredRegionId,
+              onRegionLeave: () => setHoveredRegionId(null)
+            },
+            region.id
+          ))
+        ]
+      }
+    );
   };
   const useTypewriter = (text, speed) => {
     const [displayText, setDisplayText] = React2.useState("");
@@ -5120,7 +5986,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   const scalePx = (n) => `calc(var(--font-scale,1) * ${n}px)`;
   const DialogueBox = ({ dialogue, settings, projectUI, onFinished, variables, project }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, settings.textSpeed);
@@ -5206,6 +6072,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             height: "100%",
             display: "flex",
             alignItems: "center",
+            justifyContent: ((_k = projectUI.dialogueNameFont) == null ? void 0 : _k.align) === "center" ? "center" : ((_l = projectUI.dialogueNameFont) == null ? void 0 : _l.align) === "right" ? "flex-end" : "flex-start",
             ...nameboxBgStyle,
             padding: `${scalePx(nameboxPadding)} ${scalePx(nameboxHPadding)}`,
             ...hasCustomImage || nameboxImageUrl ? {} : {
@@ -5288,7 +6155,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         height: "1em",
                         marginLeft: "2px",
                         verticalAlign: "text-bottom",
-                        backgroundColor: dialogueTextStyle.color || ((_k = projectUI.dialogueTextFont) == null ? void 0 : _k.color) || "#FFFFFF",
+                        backgroundColor: dialogueTextStyle.color || ((_m = projectUI.dialogueTextFont) == null ? void 0 : _m.color) || "#FFFFFF",
                         animation: "vnCursorBlink 0.8s step-end infinite",
                         opacity: 0.85
                       } })
@@ -5364,6 +6231,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         },
         children: [
           choices.map((choice, index) => {
+            var _a2;
             const interpolatedText = interpolateVariables(choice.text, variables, project);
             const isHovered = hoveredIndex === index;
             const activeButtonUrl = isHovered && choiceHoverUrl ? choiceHoverUrl : choiceButtonUrl;
@@ -5398,7 +6266,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
                       ...choiceHeight ? { height: scalePx(choiceHeight) } : {},
                       ...fontSettingsToStyle(projectUI.choiceTextFont),
-                      textAlign: "center",
+                      textAlign: ((_a2 = projectUI.choiceTextFont) == null ? void 0 : _a2.align) || "center",
                       wordBreak: "break-word",
                       overflowWrap: "break-word",
                       cursor: "pointer"
@@ -5659,6 +6527,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     ] });
   };
   const ButtonElement = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project, onCommitVariables }) => {
+    var _a;
     const [isHovered, setIsHovered] = React2.useState(false);
     const bgUrl = getElementAssetUrl(element.image);
     const hoverUrl = getElementAssetUrl(element.hoverImage);
@@ -5692,7 +6561,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       "button",
       {
         style: { ...style, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" },
-        className: "transition-transform transform hover:scale-105 relative flex items-center justify-center",
+        className: `transition-transform transform hover:scale-105 relative flex items-center ${{ left: "justify-start", center: "justify-center", right: "justify-end" }[((_a = element.font) == null ? void 0 : _a.align) || "center"]}`,
         onMouseEnter: () => {
           try {
             playSound(element.hoverSoundId);
@@ -6150,6 +7019,91 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
+  const HotZoneImageMapRenderer = ({ el, imageUrl, assetResolver, evaluateConditions: evaluateConditions2, variables, playSound, handleLocalAction }) => {
+    const [hoveredRegionId, setHoveredRegionId] = React2.useState(null);
+    const hoverImageUrl = el.hoverImageId ? assetResolver(el.hoverImageId, "image") : null;
+    const regions = el.imageMapRegions || [];
+    const hoveredRegion = hoveredRegionId ? regions.find((r) => r.id === hoveredRegionId) : null;
+    let hoverClipPath;
+    if (hoveredRegion) {
+      if (hoveredRegion.shape === "rect" && hoveredRegion.coords.length >= 4) {
+        const [x, y, w, h] = hoveredRegion.coords;
+        hoverClipPath = `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
+      } else if (hoveredRegion.shape === "circle" && hoveredRegion.coords.length >= 3) {
+        const [cx, cy, r] = hoveredRegion.coords;
+        hoverClipPath = `circle(${r}% at ${cx}% ${cy}%)`;
+      } else if (hoveredRegion.shape === "poly" && hoveredRegion.coords.length >= 6) {
+        const points = [];
+        for (let i = 0; i < hoveredRegion.coords.length; i += 2) {
+          points.push(`${hoveredRegion.coords[i]}% ${hoveredRegion.coords[i + 1]}%`);
+        }
+        hoverClipPath = `polygon(${points.join(", ")})`;
+      }
+    }
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full relative pointer-events-none", children: [
+      imageUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "w-full h-full object-contain", draggable: false }),
+      hoverImageUrl && hoverClipPath && /* @__PURE__ */ jsxRuntime2.jsx(
+        "img",
+        {
+          src: hoverImageUrl,
+          alt: "",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            pointerEvents: "none",
+            clipPath: hoverClipPath,
+            zIndex: 1
+          },
+          draggable: false
+        }
+      ),
+      regions.map((region) => {
+        if (region.conditions && region.conditions.length > 0 && !evaluateConditions2(region.conditions, variables)) return null;
+        const regionStyle = {
+          position: "absolute",
+          cursor: region.cursor || "pointer",
+          pointerEvents: "auto",
+          zIndex: 2
+        };
+        if (region.shape === "rect") {
+          regionStyle.left = `${region.coords[0]}%`;
+          regionStyle.top = `${region.coords[1]}%`;
+          regionStyle.width = `${region.coords[2]}%`;
+          regionStyle.height = `${region.coords[3]}%`;
+        } else if (region.shape === "circle") {
+          const r = region.coords[2];
+          regionStyle.left = `${region.coords[0] - r}%`;
+          regionStyle.top = `${region.coords[1] - r}%`;
+          regionStyle.width = `${r * 2}%`;
+          regionStyle.height = `${r * 2}%`;
+          regionStyle.borderRadius = "50%";
+        }
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            style: regionStyle,
+            title: region.tooltip || region.name,
+            className: !hoverImageUrl ? "hover:bg-white/10 transition-colors" : "transition-colors",
+            onClick: (e) => {
+              e.stopPropagation();
+              try {
+                playSound(el.clickSoundId || null);
+              } catch {
+              }
+              (region.actions || []).forEach((action) => handleLocalAction(action));
+            },
+            onMouseEnter: () => setHoveredRegionId(region.id),
+            onMouseLeave: () => setHoveredRegionId(null)
+          },
+          region.id
+        );
+      })
+    ] });
+  };
   const HotZoneRuntime = ({ screen, onAction, variables, onVariableChange, evaluateConditions: evaluateConditions2, assetResolver, playSound }) => {
     const { project } = useProject();
     const hotSpots = screen.hotSpots || {};
@@ -6413,6 +7367,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 playSound,
                 font: elFont
               }
+            ) : elType === "imageMap" ? /* @__PURE__ */ jsxRuntime2.jsx(
+              HotZoneImageMapRenderer,
+              {
+                el,
+                imageUrl,
+                assetResolver,
+                evaluateConditions: evaluateConditions2,
+                variables,
+                playSound,
+                handleLocalAction
+              }
             ) : imageUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "w-full h-full object-contain pointer-events-none", draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full bg-purple-500/30 border border-purple-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: el.name })
           },
           el.id
@@ -6456,7 +7421,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return null;
     };
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
@@ -6489,7 +7454,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.Text: {
           const el = element;
-          const hAlignClass = { left: "justify-start", center: "justify-center", right: "justify-end" }[el.textAlign || "center"];
+          const effectiveAlign = el.textAlign || ((_a = el.font) == null ? void 0 : _a.align) || "center";
+          const hAlignClass = { left: "justify-start", center: "justify-center", right: "justify-end" }[effectiveAlign];
           const vAlignClass = { top: "items-start", middle: "items-center", bottom: "items-end" }[el.verticalAlign || "middle"];
           const interpolatedText = interpolateVariables(el.text, variables2, project2);
           const textStyle = {
@@ -6507,8 +7473,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.Image: {
           const el = element;
-          const bgType = ((_a = el.background) == null ? void 0 : _a.type) || "image";
-          const bgValue = ((_b = el.background) == null ? void 0 : _b.type) === "color" ? el.background.value : ((_c = el.background) == null ? void 0 : _c.type) ? el.background.assetId : ((_d = el.image) == null ? void 0 : _d.id) || null;
+          const bgType = ((_b = el.background) == null ? void 0 : _b.type) || "image";
+          const bgValue = ((_c = el.background) == null ? void 0 : _c.type) === "color" ? el.background.value : ((_d = el.background) == null ? void 0 : _d.type) ? el.background.assetId : ((_e = el.image) == null ? void 0 : _e.id) || null;
           const containerStyle = {
             ...style,
             overflow: "hidden"
@@ -6516,7 +7482,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (bgType === "color" && typeof bgValue === "string") {
             return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...containerStyle, backgroundColor: bgValue } }, el.id);
           }
-          const url = bgValue ? bgType === "video" ? (_e = project2.videos[bgValue]) == null ? void 0 : _e.videoUrl : assetResolver(bgValue, "image") : null;
+          const url = bgValue ? bgType === "video" ? (_f = project2.videos[bgValue]) == null ? void 0 : _f.videoUrl : assetResolver(bgValue, "image") : null;
           if (!url || url === "" || url === "http://localhost:3000/") {
             return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: containerStyle, className: "bg-slate-800/50" }, el.id);
           }
@@ -6803,11 +7769,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   className: "w-full h-full outline-none",
                   style: {
                     backgroundColor: el.backgroundColor || "#1e293b",
-                    color: ((_f = el.font) == null ? void 0 : _f.color) || "#f1f5f9",
-                    fontSize: `calc(var(--font-scale, 1) * ${((_g = el.font) == null ? void 0 : _g.size) || 16}px)`,
-                    fontFamily: ((_h = el.font) == null ? void 0 : _h.family) || "Inter, system-ui, sans-serif",
-                    fontWeight: ((_i = el.font) == null ? void 0 : _i.weight) || "normal",
-                    fontStyle: ((_j = el.font) == null ? void 0 : _j.italic) ? "italic" : "normal",
+                    color: ((_g = el.font) == null ? void 0 : _g.color) || "#f1f5f9",
+                    fontSize: `calc(var(--font-scale, 1) * ${((_h = el.font) == null ? void 0 : _h.size) || 16}px)`,
+                    fontFamily: ((_i = el.font) == null ? void 0 : _i.family) || "Inter, system-ui, sans-serif",
+                    fontWeight: ((_j = el.font) == null ? void 0 : _j.weight) || "normal",
+                    fontStyle: ((_k = el.font) == null ? void 0 : _k.italic) ? "italic" : "normal",
                     border: `2px solid ${el.borderColor || "#475569"}`,
                     borderRadius: "4px",
                     padding: "8px 12px"
@@ -6828,7 +7794,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               children: /* @__PURE__ */ jsxRuntime2.jsx(
                 "select",
                 {
-                  value: String(currentValue ?? ((_k = el.options[0]) == null ? void 0 : _k.value) ?? ""),
+                  value: String(currentValue ?? ((_l = el.options[0]) == null ? void 0 : _l.value) ?? ""),
                   onChange: (e) => {
                     const selectedOption = el.options.find((opt) => String(opt.value) === e.target.value);
                     if (selectedOption) {
@@ -6841,11 +7807,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   className: "w-full h-full outline-none cursor-pointer",
                   style: {
                     backgroundColor: el.backgroundColor || "#1e293b",
-                    color: ((_l = el.font) == null ? void 0 : _l.color) || "#f1f5f9",
-                    fontSize: `calc(var(--font-scale, 1) * ${((_m = el.font) == null ? void 0 : _m.size) || 16}px)`,
-                    fontFamily: ((_n = el.font) == null ? void 0 : _n.family) || "Inter, system-ui, sans-serif",
-                    fontWeight: ((_o = el.font) == null ? void 0 : _o.weight) || "normal",
-                    fontStyle: ((_p = el.font) == null ? void 0 : _p.italic) ? "italic" : "normal",
+                    color: ((_m = el.font) == null ? void 0 : _m.color) || "#f1f5f9",
+                    fontSize: `calc(var(--font-scale, 1) * ${((_n = el.font) == null ? void 0 : _n.size) || 16}px)`,
+                    fontFamily: ((_o = el.font) == null ? void 0 : _o.family) || "Inter, system-ui, sans-serif",
+                    fontWeight: ((_p = el.font) == null ? void 0 : _p.weight) || "normal",
+                    fontStyle: ((_q = el.font) == null ? void 0 : _q.italic) ? "italic" : "normal",
                     border: `2px solid ${el.borderColor || "#475569"}`,
                     borderRadius: "4px",
                     padding: "8px 12px"
@@ -6900,10 +7866,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   {
                     style: {
                       color: el.labelColor || "#f1f5f9",
-                      fontSize: `calc(var(--font-scale, 1) * ${((_q = el.font) == null ? void 0 : _q.size) || 16}px)`,
-                      fontFamily: ((_r = el.font) == null ? void 0 : _r.family) || "Inter, system-ui, sans-serif",
-                      fontWeight: ((_s = el.font) == null ? void 0 : _s.weight) || "normal",
-                      fontStyle: ((_t = el.font) == null ? void 0 : _t.italic) ? "italic" : "normal",
+                      fontSize: `calc(var(--font-scale, 1) * ${((_r = el.font) == null ? void 0 : _r.size) || 16}px)`,
+                      fontFamily: ((_s = el.font) == null ? void 0 : _s.family) || "Inter, system-ui, sans-serif",
+                      fontWeight: ((_t = el.font) == null ? void 0 : _t.weight) || "normal",
+                      fontStyle: ((_u = el.font) == null ? void 0 : _u.italic) ? "italic" : "normal",
                       cursor: "pointer",
                       userSelect: "none"
                     },
@@ -6931,7 +7897,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.CGGallery: {
           const el = element;
-          const galleryEntries = Object.values(((_u = project2.cgGallery) == null ? void 0 : _u.entries) || {});
+          const galleryEntries = Object.values(((_v = project2.cgGallery) == null ? void 0 : _v.entries) || {});
           const filteredEntries = el.categoryFilter ? galleryEntries.filter((e) => e.category === el.categoryFilter) : galleryEntries;
           filteredEntries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
           return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: /* @__PURE__ */ jsxRuntime2.jsx(
@@ -6980,6 +7946,169 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       `${screenId}-${isClosing ? "closing" : "open"}`
     );
   });
+  const InGameConfirmDialog = ({ type, settings: s, assetResolver, onConfirm, onCancel }) => {
+    const isQuit = type === "quit";
+    const title = isQuit ? (s == null ? void 0 : s.quitTitle) || "Quit Game" : (s == null ? void 0 : s.newGameTitle) || "Start New Game";
+    const message = isQuit ? (s == null ? void 0 : s.quitMessage) || "Are you sure you want to quit?" : (s == null ? void 0 : s.newGameMessage) || "Any unsaved progress will be lost. Are you sure?";
+    const confirmLabel = isQuit ? (s == null ? void 0 : s.quitConfirmLabel) || "Quit" : (s == null ? void 0 : s.newGameConfirmLabel) || "New Game";
+    const cancelLabel = isQuit ? (s == null ? void 0 : s.quitCancelLabel) || "Cancel" : (s == null ? void 0 : s.newGameCancelLabel) || "Cancel";
+    const bgColor = (s == null ? void 0 : s.backgroundColor) || "#0f172a";
+    const bgOpacity = ((s == null ? void 0 : s.backgroundOpacity) ?? 92) / 100;
+    const borderRadius = (s == null ? void 0 : s.borderRadius) ?? 12;
+    const overlayColor = (s == null ? void 0 : s.overlayColor) || "rgba(0,0,0,0.75)";
+    const confirmBtnColor = (s == null ? void 0 : s.confirmButtonColor) || "";
+    const cancelBtnColor = (s == null ? void 0 : s.cancelButtonColor) || "#1e293b";
+    const confirmHoverColor = (s == null ? void 0 : s.confirmHoverColor) || "";
+    const cancelHoverColor = (s == null ? void 0 : s.cancelHoverColor) || "#334155";
+    const btnBorderRadius = (s == null ? void 0 : s.buttonBorderRadius) ?? Math.max(borderRadius - 4, 4);
+    const btnPad = (s == null ? void 0 : s.buttonPadding) ?? 8;
+    const dialogPad = (s == null ? void 0 : s.dialogPadding) ?? 32;
+    const titleStyle = (s == null ? void 0 : s.titleFont) ? fontSettingsToStyle(s.titleFont) : { fontSize: "1.25rem", fontWeight: 600, color: "#fff" };
+    const messageStyle = (s == null ? void 0 : s.messageFont) ? fontSettingsToStyle(s.messageFont) : { fontSize: "0.95rem", color: "#cbd5e1" };
+    const buttonStyle = (s == null ? void 0 : s.buttonFont) ? fontSettingsToStyle(s.buttonFont) : { fontSize: "0.95rem", fontWeight: 500, color: "#fff" };
+    const resolveAsset = (asset) => (asset == null ? void 0 : asset.id) ? assetResolver(asset.id, "image") : null;
+    const bgImageUrl = resolveAsset(s == null ? void 0 : s.backgroundImage);
+    const borderImageUrl = resolveAsset(s == null ? void 0 : s.borderImage);
+    const confirmBtnImgUrl = resolveAsset(s == null ? void 0 : s.confirmButtonImage);
+    const cancelBtnImgUrl = resolveAsset(s == null ? void 0 : s.cancelButtonImage);
+    const confirmHoverImgUrl = resolveAsset(s == null ? void 0 : s.confirmHoverImage);
+    const cancelHoverImgUrl = resolveAsset(s == null ? void 0 : s.cancelHoverImage);
+    const sizeMode = (s == null ? void 0 : s.backgroundSizeMode) || "stretch";
+    const bgImageStyle = bgImageUrl ? {
+      backgroundImage: `url(${bgImageUrl})`,
+      backgroundSize: sizeMode === "nine-slice" ? void 0 : sizeMode === "stretch" ? "100% 100%" : sizeMode,
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+      ...sizeMode === "nine-slice" ? {
+        borderImage: `url(${bgImageUrl}) ${(s == null ? void 0 : s.backgroundSlice) ?? 20} fill`,
+        borderImageWidth: `${(s == null ? void 0 : s.backgroundSlice) ?? 20}px`
+      } : {}
+    } : {};
+    const makeBtnImageStyle = (imgUrl) => {
+      if (!imgUrl) return {};
+      const bsm = (s == null ? void 0 : s.buttonSizeMode) || "stretch";
+      return {
+        backgroundImage: `url(${imgUrl})`,
+        backgroundSize: bsm === "nine-slice" ? void 0 : bsm === "stretch" ? "100% 100%" : bsm,
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundColor: "transparent",
+        ...bsm === "nine-slice" ? { borderImage: `url(${imgUrl}) ${(s == null ? void 0 : s.buttonSlice) ?? 10} fill`, borderImageWidth: `${(s == null ? void 0 : s.buttonSlice) ?? 10}px` } : {}
+      };
+    };
+    const borderPad = (s == null ? void 0 : s.borderPadding) ?? 12;
+    return /* @__PURE__ */ jsxRuntime2.jsx(
+      "div",
+      {
+        className: "absolute inset-0 flex items-center justify-center",
+        style: { backgroundColor: overlayColor, zIndex: 9998, animation: "fade-in 0.2s ease-out" },
+        onClick: (e) => {
+          if (e.target === e.currentTarget) onCancel();
+        },
+        children: /* @__PURE__ */ jsxRuntime2.jsx("div", { style: borderImageUrl ? {
+          backgroundImage: `url(${borderImageUrl})`,
+          backgroundSize: "100% 100%",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          padding: borderPad,
+          borderRadius
+        } : {}, children: /* @__PURE__ */ jsxRuntime2.jsxs(
+          "div",
+          {
+            style: {
+              backgroundColor: bgImageUrl ? "transparent" : bgColor,
+              opacity: bgImageUrl ? 1 : void 0,
+              borderRadius,
+              padding: dialogPad,
+              ...(s == null ? void 0 : s.dialogWidth) ? { width: s.dialogWidth } : { minWidth: 320, maxWidth: 440 },
+              textAlign: "center",
+              boxShadow: borderImageUrl ? "none" : "0 12px 40px rgba(0,0,0,0.5)",
+              ...bgImageStyle,
+              ...bgImageUrl ? {} : { background: `${bgColor}${Math.round(bgOpacity * 255).toString(16).padStart(2, "0")}` }
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...titleStyle, marginBottom: "0.75rem" }, children: title }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...messageStyle, marginBottom: "1.5rem" }, children: message }),
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: "0.75rem", justifyContent: "center" }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx(
+                  "button",
+                  {
+                    onClick: onCancel,
+                    style: {
+                      ...buttonStyle,
+                      padding: `${btnPad}px ${btnPad * 3}px`,
+                      borderRadius: btnBorderRadius,
+                      backgroundColor: cancelBtnImgUrl ? "transparent" : cancelBtnColor,
+                      border: cancelBtnImgUrl ? "none" : "1px solid rgba(255,255,255,0.1)",
+                      cursor: "pointer",
+                      transition: "background-color 0.15s",
+                      ...makeBtnImageStyle(cancelBtnImgUrl)
+                    },
+                    onMouseEnter: (e) => {
+                      if (cancelHoverImgUrl) {
+                        e.currentTarget.style.backgroundImage = `url(${cancelHoverImgUrl})`;
+                      } else {
+                        e.currentTarget.style.backgroundColor = cancelHoverColor;
+                      }
+                    },
+                    onMouseLeave: (e) => {
+                      if (cancelBtnImgUrl) {
+                        e.currentTarget.style.backgroundImage = `url(${cancelBtnImgUrl})`;
+                      } else if (cancelHoverImgUrl) {
+                        e.currentTarget.style.backgroundImage = "none";
+                        e.currentTarget.style.backgroundColor = cancelBtnColor;
+                      } else {
+                        e.currentTarget.style.backgroundColor = cancelBtnColor;
+                      }
+                    },
+                    children: cancelLabel
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntime2.jsx(
+                  "button",
+                  {
+                    onClick: onConfirm,
+                    style: {
+                      ...buttonStyle,
+                      padding: `${btnPad}px ${btnPad * 3}px`,
+                      borderRadius: btnBorderRadius,
+                      background: confirmBtnImgUrl ? "transparent" : confirmBtnColor || "linear-gradient(to right, #ec4899, #a855f7)",
+                      border: "none",
+                      cursor: "pointer",
+                      transition: "background-color 0.15s, box-shadow 0.15s",
+                      ...makeBtnImageStyle(confirmBtnImgUrl)
+                    },
+                    onMouseEnter: (e) => {
+                      if (confirmHoverImgUrl) {
+                        e.currentTarget.style.backgroundImage = `url(${confirmHoverImgUrl})`;
+                      } else if (confirmHoverColor) {
+                        e.currentTarget.style.background = confirmHoverColor;
+                      } else {
+                        e.currentTarget.style.boxShadow = "0 4px 16px rgba(236,72,153,0.3)";
+                      }
+                    },
+                    onMouseLeave: (e) => {
+                      if (confirmBtnImgUrl) {
+                        e.currentTarget.style.backgroundImage = `url(${confirmBtnImgUrl})`;
+                      } else if (confirmHoverImgUrl) {
+                        e.currentTarget.style.backgroundImage = "none";
+                        e.currentTarget.style.background = confirmBtnColor || "linear-gradient(to right, #ec4899, #a855f7)";
+                      } else if (confirmHoverColor) {
+                        e.currentTarget.style.background = confirmBtnColor || "linear-gradient(to right, #ec4899, #a855f7)";
+                      } else {
+                        e.currentTarget.style.boxShadow = "none";
+                      }
+                    },
+                    children: confirmLabel
+                  }
+                )
+              ] })
+            ]
+          }
+        ) })
+      }
+    );
+  };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false }) => {
     var _a, _b, _c, _d;
     const { project } = useProject();
@@ -6997,6 +8126,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [screenStack, setScreenStack] = React2.useState(titleScreenId ? [titleScreenId] : []);
     const [hudStack, setHudStack] = React2.useState([]);
     const [closingScreens, setClosingScreens] = React2.useState(/* @__PURE__ */ new Set());
+    const [confirmDialog, setConfirmDialog] = React2.useState(null);
     const [sceneTransitionFading, setSceneTransitionFading] = React2.useState(false);
     const [sceneTransitionType, setSceneTransitionType] = React2.useState("fade");
     const [sceneTransitionDuration, setSceneTransitionDuration] = React2.useState(0.5);
@@ -7010,6 +8140,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     });
     const [playerState, setPlayerState] = React2.useState(null);
     const playerStateRef = React2.useRef(null);
+    const [, setTweenTick] = React2.useState(0);
+    React2.useEffect(() => {
+      const unsub = TweenManager.subscribe(() => {
+        setTweenTick((t) => t + 1);
+      });
+      return unsub;
+    }, []);
     const updatePlayerState = React2.useCallback((updater) => {
       setPlayerState((prev) => {
         const next = typeof updater === "function" ? updater(prev) : updater;
@@ -7504,7 +8641,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         currentIndex: 0,
         commandStack: [],
         variables: initialVariables,
-        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
+        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], imageMapOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
         history: [],
         savedInputs: {},
         uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -8167,6 +9304,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     textOverlays: [],
                     imageOverlays: [],
                     buttonOverlays: [],
+                    imageMapOverlays: [],
                     movieOverlays: [],
                     screen: {
                       shake: { active: false, intensity: 0 },
@@ -8301,6 +9439,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       textOverlays: [],
                       imageOverlays: [],
                       buttonOverlays: [],
+                      imageMapOverlays: [],
                       movieOverlays: [],
                       screen: {
                         shake: { active: false, intensity: 0 },
@@ -8798,6 +9937,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               applyResult(result);
               break;
             }
+            case CommandType.ShowImageMap: {
+              const result = handleShowImageMap(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.HideImageMap: {
+              const result = handleHideImageMap(command, commandContext);
+              applyResult(result);
+              break;
+            }
             case CommandType.CreditRoll: {
               const cmd = command;
               setActiveCreditRoll(cmd);
@@ -8822,6 +9971,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.CallCommonEvent: {
               const result = handleCallCommonEvent(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.TweenElement: {
+              const result = handleTweenElement(command, commandContext);
               applyResult(result);
               break;
             }
@@ -8972,6 +10126,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               newState.stageState = {
                 ...newState.stageState,
                 buttonOverlays: [],
+                imageMapOverlays: [],
                 imageOverlays: [],
                 textOverlays: []
               };
@@ -9089,10 +10244,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       });
     }, [project.scenes]);
     const handleUIAction = (action) => {
-      var _a2, _b2;
       runtimeDebugLog("handleUIAction called with:", action.type, action);
+      if (action.type === UIActionType.QuitToTitle && playerState) {
+        setConfirmDialog({ type: "quit", pendingAction: action });
+        return;
+      }
+      if (action.type === UIActionType.StartNewGame && (playerState || gameSaves[0])) {
+        setConfirmDialog({ type: "newGame", pendingAction: action });
+        return;
+      }
+      executeUIAction(action);
+    };
+    const executeUIAction = (action) => {
+      var _a2, _b2;
       if (!playerState && action.type === UIActionType.StartNewGame) {
         startNewGame();
+      } else if (!playerState && action.type === UIActionType.ContinueGame) {
+        const doLoad = async () => {
+          const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+          if (saves[0]) {
+            loadGame(0);
+          } else {
+            runtimeDebugLog("[ContinueGame] No auto-save found, starting new game instead");
+            startNewGame();
+          }
+        };
+        void doLoad();
       } else if ((playerState == null ? void 0 : playerState.mode) === "paused" && action.type === UIActionType.ReturnToGame) {
         updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
         setScreenStack([]);
@@ -9214,6 +10391,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         stageState: {
                           ...p.stageState,
                           buttonOverlays: [],
+                          imageMapOverlays: [],
                           imageOverlays: []
                         }
                       };
@@ -9243,6 +10421,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         stageState: {
                           ...p.stageState,
                           buttonOverlays: [],
+                          imageMapOverlays: [],
                           imageOverlays: []
                         }
                       };
@@ -9277,6 +10456,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         }
       } else if (action.type === UIActionType.QuitToTitle) {
+        if (playerState) {
+          saveGame(0);
+        }
         const audio = musicAudioRef.current;
         if (audio) {
           audio.pause();
@@ -9293,6 +10475,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("[CLEAR] Dirty set cleared after QuitToTitle");
         uiDirtyVariableIdsRef.current.clear();
         if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+      } else if (action.type === UIActionType.ContinueGame) {
+        const doLoad = async () => {
+          const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+          if (saves[0]) {
+            loadGame(0);
+          } else {
+            runtimeDebugLog("[ContinueGame] No auto-save found, starting new game instead");
+            startNewGame();
+          }
+        };
+        void doLoad();
       } else if (action.type === UIActionType.SaveGame) {
         saveGame(action.slotNumber);
       } else if (action.type === UIActionType.LoadGame) {
@@ -9345,6 +10538,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 textOverlays: [],
                 imageOverlays: [],
                 buttonOverlays: [],
+                imageMapOverlays: [],
                 movieOverlays: [],
                 screen: {
                   shake: { active: false, intensity: 0 },
@@ -9409,6 +10603,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     textOverlays: [],
                     imageOverlays: [],
                     buttonOverlays: [],
+                    imageMapOverlays: [],
                     movieOverlays: [],
                     screen: {
                       shake: { active: false, intensity: 0 },
@@ -9624,6 +10819,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               stageState: {
                 ...p.stageState,
                 buttonOverlays: [],
+                imageMapOverlays: [],
                 imageOverlays: [],
                 textOverlays: []
               },
@@ -9828,7 +11024,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
       const shakeClass = activeShakeRef.current ? "shake" : "";
       const intensityPx = activeShakeRef.current ? activeShakeRef.current.intensity * 1.5 : 0;
-      const panZoomStyle = { transform: `scale(${state.screen.zoom}) translate(${state.screen.panX}%, ${state.screen.panY}%)`, transition: `transform ${state.screen.transitionDuration}s ease-in-out`, width: "100%", height: "100%" };
+      const screenTween = TweenManager.getCurrentValues("__screen__", "screen");
+      const tweenedZoom = (screenTween == null ? void 0 : screenTween.scaleX) ?? state.screen.zoom;
+      const tweenedPanX = (screenTween == null ? void 0 : screenTween.x) ?? state.screen.panX;
+      const tweenedPanY = (screenTween == null ? void 0 : screenTween.y) ?? state.screen.panY;
+      const panZoomStyle = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? "none" : `transform ${state.screen.transitionDuration}s ease-in-out`, width: "100%", height: "100%" };
       const shakeIntensityStyle = activeShakeRef.current ? { "--shake-intensity-x": `${intensityPx}px`, "--shake-intensity-y": `${intensityPx * 0.7}px` } : {};
       const tintStyle = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out` };
       const handleStageClick = () => {
@@ -9906,200 +11106,219 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   `movie-overlay-${idx}-${movie.url}`
                 );
               }),
-              Object.values(state.characters).map((char) => {
-                var _a2;
-                let transitionClass = "";
-                let animationDuration = "1s";
-                let slideStyle = {};
-                let positionStyle = getPositionStyle2(char.position);
-                const isCustomPosition = typeof char.position === "object";
-                if (!char.transition || char.transition.type !== "slide") {
-                  if (!isCustomPosition) {
-                    positionStyle = { ...positionStyle, transform: "translate3d(-50%, 0, 0)" };
+              (() => {
+                const allChars = Object.values(state.characters);
+                const arranged = project.autoArrangeCharacters ? computeArrangedPositions(allChars.map((c) => ({ id: c.charId, position: c.position }))) : null;
+                return allChars.map((char) => {
+                  var _a2;
+                  let transitionClass = "";
+                  let animationDuration = "1s";
+                  let slideStyle = {};
+                  const arrangedX = arranged == null ? void 0 : arranged.get(char.charId);
+                  let positionStyle = arrangedX !== void 0 ? { top: "10%", left: `${arrangedX}%` } : getPositionStyle2(char.position);
+                  const charTween = TweenManager.getCurrentValues(char.charId, "character");
+                  const hasTweenPosition = charTween && (charTween.x !== void 0 || charTween.y !== void 0);
+                  if (hasTweenPosition) {
+                    const basePos = typeof char.position === "object" ? char.position : { x: arrangedX ?? (char.position === "left" ? 25 : char.position === "right" ? 75 : char.position === "center" ? 50 : char.position === "off-left" ? -25 : 125), y: 10 };
+                    positionStyle = {
+                      left: `${charTween.x ?? basePos.x}%`,
+                      top: `${charTween.y ?? basePos.y}%`,
+                      transform: "translate(-50%, 0)"
+                    };
                   }
-                }
-                if (char.transition) {
-                  const isHideTransition = char.transition.action === "hide";
-                  switch (char.transition.type) {
-                    case "fade":
-                      transitionClass = isHideTransition ? "transition-fade-out" : "transition-dissolve";
-                      break;
-                    case "dissolve":
-                      transitionClass = isHideTransition ? "transition-dissolve-out" : "transition-dissolve";
-                      break;
-                    case "slide":
-                      transitionClass = "transition-slide";
-                      const startPos = char.transition.startPosition || char.position;
-                      const endPos = char.transition.endPosition || char.position;
-                      let startOffsetX = 0;
-                      let startOffsetY = 0;
-                      if (typeof startPos === "object" && typeof endPos === "object") {
-                        startOffsetX = startPos.x - endPos.x;
-                        startOffsetY = startPos.y - endPos.y;
-                      } else {
-                        const startPreset = typeof startPos === "string" ? startPos : "center";
-                        const endPreset = typeof endPos === "string" ? endPos : "center";
-                        const presetCoords = {
-                          "left": { x: 25, y: 10 },
-                          "center": { x: 50, y: 10 },
-                          "right": { x: 75, y: 10 },
-                          "off-left": { x: -25, y: 10 },
-                          "off-right": { x: 125, y: 10 }
-                        };
-                        const startCoords = presetCoords[startPreset];
-                        const endCoords = presetCoords[endPreset];
-                        startOffsetX = startCoords.x - endCoords.x;
-                        startOffsetY = startCoords.y - endCoords.y;
-                      }
-                      if (startOffsetX === 0 && ((_a2 = char.transition) == null ? void 0 : _a2.action) === "show") {
-                        let endX = 50;
-                        if (typeof endPos === "object") endX = endPos.x;
-                        else if (typeof endPos === "string") {
-                          const presetMap = { left: 25, center: 50, right: 75, "off-left": -25, "off-right": 125 };
-                          endX = presetMap[endPos] ?? 50;
+                  const isCustomPosition = typeof char.position === "object" || hasTweenPosition;
+                  if (!char.transition || char.transition.type !== "slide") {
+                    if (!isCustomPosition) {
+                      positionStyle = { ...positionStyle, transform: "translate3d(-50%, 0, 0)" };
+                    }
+                  }
+                  if (char.transition) {
+                    const isHideTransition = char.transition.action === "hide";
+                    switch (char.transition.type) {
+                      case "fade":
+                        transitionClass = isHideTransition ? "transition-fade-out" : "transition-dissolve";
+                        break;
+                      case "dissolve":
+                        transitionClass = isHideTransition ? "transition-dissolve-out" : "transition-dissolve";
+                        break;
+                      case "slide":
+                        transitionClass = "transition-slide";
+                        const startPos = char.transition.startPosition || char.position;
+                        const endPos = char.transition.endPosition || char.position;
+                        let startOffsetX = 0;
+                        let startOffsetY = 0;
+                        if (typeof startPos === "object" && typeof endPos === "object") {
+                          startOffsetX = startPos.x - endPos.x;
+                          startOffsetY = startPos.y - endPos.y;
+                        } else {
+                          const startPreset = typeof startPos === "string" ? startPos : "center";
+                          const endPreset = typeof endPos === "string" ? endPos : "center";
+                          const presetCoords = {
+                            "left": { x: 25, y: 10 },
+                            "center": { x: 50, y: 10 },
+                            "right": { x: 75, y: 10 },
+                            "off-left": { x: -25, y: 10 },
+                            "off-right": { x: 125, y: 10 }
+                          };
+                          const startCoords = presetCoords[startPreset];
+                          const endCoords = presetCoords[endPreset];
+                          startOffsetX = startCoords.x - endCoords.x;
+                          startOffsetY = startCoords.y - endCoords.y;
                         }
-                        startOffsetX = endX <= 50 ? -60 : 60;
-                      }
-                      slideStyle = {
-                        "--slide-start-x": `${startOffsetX}%`,
-                        "--slide-start-y": `${startOffsetY}%`,
-                        "--slide-end-x": `0%`,
-                        "--slide-end-y": `0%`
-                      };
-                      if (stageSize && stageSize.width > 0) {
-                        const pxStartX = startOffsetX / 100 * stageSize.width;
-                        const pxStartY = startOffsetY / 100 * stageSize.height;
-                        slideStyle["--slide-start-px"] = `${pxStartX}px`;
-                        slideStyle["--slide-end-px"] = `0px`;
-                        slideStyle["--slide-start-py"] = `${pxStartY}px`;
-                        slideStyle["--slide-end-py"] = `0px`;
-                      }
-                      break;
-                    case "iris-in":
-                      transitionClass = isHideTransition ? "transition-iris-out" : "transition-iris-in";
-                      break;
-                    case "wipe-right":
-                      transitionClass = isHideTransition ? "transition-wipe-out-right" : "transition-wipe-right";
-                      break;
+                        if (startOffsetX === 0 && ((_a2 = char.transition) == null ? void 0 : _a2.action) === "show") {
+                          let endX = 50;
+                          if (typeof endPos === "object") endX = endPos.x;
+                          else if (typeof endPos === "string") {
+                            const presetMap = { left: 25, center: 50, right: 75, "off-left": -25, "off-right": 125 };
+                            endX = presetMap[endPos] ?? 50;
+                          }
+                          startOffsetX = endX <= 50 ? -60 : 60;
+                        }
+                        slideStyle = {
+                          "--slide-start-x": `${startOffsetX}%`,
+                          "--slide-start-y": `${startOffsetY}%`,
+                          "--slide-end-x": `0%`,
+                          "--slide-end-y": `0%`
+                        };
+                        if (stageSize && stageSize.width > 0) {
+                          const pxStartX = startOffsetX / 100 * stageSize.width;
+                          const pxStartY = startOffsetY / 100 * stageSize.height;
+                          slideStyle["--slide-start-px"] = `${pxStartX}px`;
+                          slideStyle["--slide-end-px"] = `0px`;
+                          slideStyle["--slide-start-py"] = `${pxStartY}px`;
+                          slideStyle["--slide-end-py"] = `0px`;
+                        }
+                        break;
+                      case "iris-in":
+                        transitionClass = isHideTransition ? "transition-iris-out" : "transition-iris-in";
+                        break;
+                      case "wipe-right":
+                        transitionClass = isHideTransition ? "transition-wipe-out-right" : "transition-wipe-right";
+                        break;
+                    }
+                    animationDuration = `${char.transition.duration}s`;
                   }
-                  animationDuration = `${char.transition.duration}s`;
-                }
-                const effectsList = char.visualEffects || char.visualEffect ? char.visualEffects && char.visualEffects.length > 0 ? char.visualEffects : char.visualEffect && char.visualEffect.type !== "none" ? [char.visualEffect] : [] : [];
-                const transformEffects = [];
-                let combinedFilter = "";
-                let combinedFilterAnimation = "";
-                let flickerAnimation = "";
-                let filterVars = {};
-                for (const eff of effectsList) {
-                  if (!eff || eff.type === "none") continue;
-                  const speed = eff.speed ?? 1;
-                  const intensity = eff.intensity ?? 1;
-                  switch (eff.type) {
-                    case "shake": {
-                      const s = {};
-                      s.animation = `vnCharShake ${0.15 / speed}s ease-in-out infinite`;
-                      s["--char-shake-px"] = `${2 * intensity}px`;
-                      transformEffects.push({ style: s });
-                      break;
-                    }
-                    case "bounce": {
-                      const s = {};
-                      s.animation = `vnCharBounce ${0.6 / speed}s ease-in-out infinite`;
-                      s["--char-bounce-h"] = `${-8 * intensity}px`;
-                      transformEffects.push({ style: s });
-                      break;
-                    }
-                    case "float": {
-                      const s = {};
-                      s.animation = `vnCharFloat ${2 / speed}s ease-in-out infinite`;
-                      s["--char-float-h"] = `${-10 * intensity}px`;
-                      transformEffects.push({ style: s });
-                      break;
-                    }
-                    case "pulse": {
-                      const s = {};
-                      s.animation = `vnCharPulse ${1 / speed}s ease-in-out infinite`;
-                      s["--char-pulse-scale"] = `${1 + 0.05 * intensity}`;
-                      transformEffects.push({ style: s });
-                      break;
-                    }
-                    case "breathing": {
-                      const s = {};
-                      s.animation = `vnCharBreathing ${2 / speed}s ease-in-out infinite`;
-                      s["--char-breathe-scale"] = `${1 + 0.02 * intensity}`;
-                      transformEffects.push({ style: s });
-                      break;
-                    }
-                    case "glow":
-                      combinedFilter += ` drop-shadow(0 0 ${8 * intensity}px ${eff.color || "#FFFFFF"})`;
-                      combinedFilterAnimation = `vnCharGlow ${1.5 / speed}s ease-in-out infinite`;
-                      filterVars["--char-glow-color"] = eff.color || "#FFFFFF";
-                      filterVars["--char-glow-size"] = `${8 * intensity}px`;
-                      filterVars["--char-glow-size-max"] = `${14 * intensity}px`;
-                      break;
-                    case "tint":
-                      if (eff.color) {
-                        const tintOpacity = 0.3 * intensity;
-                        combinedFilter += ` brightness(${1 - tintOpacity * 0.3}) sepia(${tintOpacity}) hue-rotate(${getHueFromHex(eff.color)}deg) saturate(${1 + intensity})`;
+                  const effectsList = char.visualEffects || char.visualEffect ? char.visualEffects && char.visualEffects.length > 0 ? char.visualEffects : char.visualEffect && char.visualEffect.type !== "none" ? [char.visualEffect] : [] : [];
+                  const transformEffects = [];
+                  let combinedFilter = "";
+                  let combinedFilterAnimation = "";
+                  let flickerAnimation = "";
+                  let filterVars = {};
+                  for (const eff of effectsList) {
+                    if (!eff || eff.type === "none") continue;
+                    const speed = eff.speed ?? 1;
+                    const intensity = eff.intensity ?? 1;
+                    switch (eff.type) {
+                      case "shake": {
+                        const s = {};
+                        s.animation = `vnCharShake ${0.15 / speed}s ease-in-out infinite`;
+                        s["--char-shake-px"] = `${2 * intensity}px`;
+                        transformEffects.push({ style: s });
+                        break;
                       }
-                      break;
-                    case "silhouette":
-                      combinedFilter += ` brightness(0)${eff.color ? ` drop-shadow(0 0 2px ${eff.color})` : ""}`;
-                      break;
-                    case "flicker":
-                      flickerAnimation = `vnCharFlicker ${0.1 / speed}s step-end infinite`;
-                      break;
+                      case "bounce": {
+                        const s = {};
+                        s.animation = `vnCharBounce ${0.6 / speed}s ease-in-out infinite`;
+                        s["--char-bounce-h"] = `${-8 * intensity}px`;
+                        transformEffects.push({ style: s });
+                        break;
+                      }
+                      case "float": {
+                        const s = {};
+                        s.animation = `vnCharFloat ${2 / speed}s ease-in-out infinite`;
+                        s["--char-float-h"] = `${-10 * intensity}px`;
+                        transformEffects.push({ style: s });
+                        break;
+                      }
+                      case "pulse": {
+                        const s = {};
+                        s.animation = `vnCharPulse ${1 / speed}s ease-in-out infinite`;
+                        s["--char-pulse-scale"] = `${1 + 0.05 * intensity}`;
+                        transformEffects.push({ style: s });
+                        break;
+                      }
+                      case "breathing": {
+                        const s = {};
+                        s.animation = `vnCharBreathing ${2 / speed}s ease-in-out infinite`;
+                        s["--char-breathe-scale"] = `${1 + 0.02 * intensity}`;
+                        transformEffects.push({ style: s });
+                        break;
+                      }
+                      case "glow":
+                        combinedFilter += ` drop-shadow(0 0 ${8 * intensity}px ${eff.color || "#FFFFFF"})`;
+                        combinedFilterAnimation = `vnCharGlow ${1.5 / speed}s ease-in-out infinite`;
+                        filterVars["--char-glow-color"] = eff.color || "#FFFFFF";
+                        filterVars["--char-glow-size"] = `${8 * intensity}px`;
+                        filterVars["--char-glow-size-max"] = `${14 * intensity}px`;
+                        break;
+                      case "tint":
+                        if (eff.color) {
+                          const tintOpacity = 0.3 * intensity;
+                          combinedFilter += ` brightness(${1 - tintOpacity * 0.3}) sepia(${tintOpacity}) hue-rotate(${getHueFromHex(eff.color)}deg) saturate(${1 + intensity})`;
+                        }
+                        break;
+                      case "silhouette":
+                        combinedFilter += ` brightness(0)${eff.color ? ` drop-shadow(0 0 2px ${eff.color})` : ""}`;
+                        break;
+                      case "flicker":
+                        flickerAnimation = `vnCharFlicker ${0.1 / speed}s step-end infinite`;
+                        break;
+                    }
                   }
-                }
-                const contentEffectStyle = {};
-                if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
-                if (combinedFilterAnimation) contentEffectStyle.animation = combinedFilterAnimation;
-                if (flickerAnimation) {
-                  contentEffectStyle.animation = contentEffectStyle.animation ? `${contentEffectStyle.animation}, ${flickerAnimation}` : flickerAnimation;
-                }
-                Object.assign(contentEffectStyle, filterVars);
-                const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
-                const spriteContent = /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
-                  "video",
-                  {
-                    src: url,
-                    autoPlay: true,
-                    muted: true,
-                    loop: char.videoLoop,
-                    playsInline: true,
-                    className: "absolute top-0 left-0 w-full h-full object-contain",
-                    style: { zIndex: index }
-                  },
-                  index
-                )) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
-                  "img",
-                  {
-                    src: url,
-                    alt: "",
-                    className: "absolute top-0 left-0 w-full h-full object-contain",
-                    style: { zIndex: index }
-                  },
-                  index
-                )) });
-                let wrappedContent = hasContentEffect ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: contentEffectStyle, children: spriteContent }) : spriteContent;
-                for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
-                  wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: transformEffects[tIdx].style, children: wrappedContent });
-                }
-                return /* @__PURE__ */ jsxRuntime2.jsx(
-                  "div",
-                  {
-                    className: `absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`,
-                    style: {
-                      ...positionStyle,
-                      animationDuration,
-                      ...slideStyle,
-                      zIndex: 5
+                  const contentEffectStyle = {};
+                  if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
+                  if (combinedFilterAnimation) contentEffectStyle.animation = combinedFilterAnimation;
+                  if (flickerAnimation) {
+                    contentEffectStyle.animation = contentEffectStyle.animation ? `${contentEffectStyle.animation}, ${flickerAnimation}` : flickerAnimation;
+                  }
+                  Object.assign(contentEffectStyle, filterVars);
+                  const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
+                  const spriteContent = /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: char.isVideo && char.videoUrls ? char.videoUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+                    "video",
+                    {
+                      src: url,
+                      autoPlay: true,
+                      muted: true,
+                      loop: char.videoLoop,
+                      playsInline: true,
+                      className: "absolute top-0 left-0 w-full h-full object-contain",
+                      style: { zIndex: index }
                     },
-                    children: wrappedContent
-                  },
-                  char.charId
-                );
-              }),
+                    index
+                  )) : char.imageUrls.map((url, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+                    "img",
+                    {
+                      src: url,
+                      alt: "",
+                      className: "absolute top-0 left-0 w-full h-full object-contain",
+                      style: { zIndex: index }
+                    },
+                    index
+                  )) });
+                  let wrappedContent = hasContentEffect ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: contentEffectStyle, children: spriteContent }) : spriteContent;
+                  for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
+                    wrappedContent = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full relative", style: transformEffects[tIdx].style, children: wrappedContent });
+                  }
+                  const charScale = (charTween == null ? void 0 : charTween.scale) ?? char.scale ?? 1;
+                  const charOpacity = charTween == null ? void 0 : charTween.opacity;
+                  return /* @__PURE__ */ jsxRuntime2.jsx(
+                    "div",
+                    {
+                      className: `absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`,
+                      style: {
+                        ...positionStyle,
+                        animationDuration,
+                        ...slideStyle,
+                        zIndex: 5,
+                        ...charScale !== 1 ? { transform: `${positionStyle.transform || ""} scale(${charScale})`.trim(), transformOrigin: "center bottom" } : {},
+                        ...charOpacity !== void 0 ? { opacity: charOpacity } : {}
+                      },
+                      children: wrappedContent
+                    },
+                    char.charId
+                  );
+                });
+              })(),
               (() => {
                 const pEffects = state.particleEffects;
                 const hasParticles = pEffects && Object.keys(pEffects).length > 0;
@@ -10139,6 +11358,27 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   onAction: handleUIAction,
                   playSound,
                   onCommitVariables: commitUiVariablesToPlayerState,
+                  onAdvance: overlay.waitForClick ? () => {
+                    updatePlayerState((p) => {
+                      if (!p) return null;
+                      return {
+                        ...p,
+                        currentIndex: p.currentIndex + 1,
+                        uiState: { ...p.uiState, isWaitingForInput: false }
+                      };
+                    });
+                  } : void 0
+                },
+                overlay.id
+              )),
+              (state.imageMapOverlays || []).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
+                ImageMapOverlayElement,
+                {
+                  overlay,
+                  onAction: handleUIAction,
+                  onCommitVariables: commitUiVariablesToPlayerState,
+                  evaluateConditions: evaluateConditions2,
+                  variables: (playerState == null ? void 0 : playerState.variables) || {},
                   onAdvance: overlay.waitForClick ? () => {
                     updatePlayerState((p) => {
                       if (!p) return null;
@@ -10391,12 +11631,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
       }, []);
-      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 bg-black/92 z-50 flex flex-col", style: { backdropFilter: "blur(4px)" }, children: [
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 bg-black z-50 flex flex-col", children: [
         /* @__PURE__ */ jsxRuntime2.jsxs(
           "div",
           {
             className: "flex items-center justify-between px-6 py-4 border-b border-slate-700/60",
-            style: { background: "linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.8) 100%)" },
+            style: { background: "linear-gradient(180deg, rgb(15,23,42) 0%, rgb(15,23,42) 100%)" },
             children: [
               /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center gap-3", children: [
                 /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: "w-5 h-5 text-sky-400", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" }) }),
@@ -10424,7 +11664,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ] }) : history.map((entry, index) => /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
           {
-            className: `group p-3 rounded-lg transition-colors ${entry.type === "choice" ? "bg-blue-900/20 border-l-3 border-blue-500/60 hover:bg-blue-900/30" : entry.type === "textInput" ? "bg-emerald-900/20 border-l-3 border-emerald-500/60 hover:bg-emerald-900/30" : "bg-slate-800/30 hover:bg-slate-800/50"}`,
+            className: `group p-3 rounded-lg transition-colors ${entry.type === "choice" ? "bg-blue-900/40 border-l-3 border-blue-500/60 hover:bg-blue-900/50" : entry.type === "textInput" ? "bg-emerald-900/40 border-l-3 border-emerald-500/60 hover:bg-emerald-900/50" : "bg-slate-800/50 hover:bg-slate-800/60"}`,
             style: { cursor: onJumpTo ? "pointer" : "default" },
             onClick: () => onJumpTo == null ? void 0 : onJumpTo(index),
             children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -10518,6 +11758,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ),
         uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
           (() => {
+            var _a2, _b2;
             const qmPosition = project.ui.quickMenuPosition ?? "above-dialogue";
             if (qmPosition === "hidden") return null;
             const qmColor = project.ui.quickMenuColor ?? "#0f172a";
@@ -10525,18 +11766,35 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
             const qmBg = hexToRgba(qmColor, qmOpacity);
             const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
-            const positionStyle = qmPosition === "top-right" ? { top: "8px", right: "8px", position: "absolute" } : qmPosition === "bottom-right" ? { bottom: "8px", right: "8px", position: "absolute" } : {
-              // above-dialogue
-              bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
-              left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-              right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-              position: "absolute"
+            ((_a2 = project.gameResolution) == null ? void 0 : _a2.width) || 1920;
+            const lpGameH = ((_b2 = project.gameResolution) == null ? void 0 : _b2.height) || 1080;
+            const dlgW = project.ui.dialogueBoxWidth ?? 100;
+            const dlgH = project.ui.dialogueBoxHeight ? project.ui.dialogueBoxHeight * 100 / lpGameH : 20;
+            const dlgX = project.ui.dialogueBoxX ?? (100 - dlgW) / 2;
+            const dlgBm = (project.ui.dialogueBoxBottomMargin ?? 20) * 100 / lpGameH;
+            const dlgY = project.ui.dialogueBoxY ?? 100 - dlgH - dlgBm;
+            const qmWPct = project.ui.quickMenuWidth ?? 40;
+            const qmHPct = project.ui.quickMenuHeight ?? 4;
+            const getDefaultPos = () => {
+              if (qmPosition === "top-right") return { x: 100 - qmWPct - 1, y: 1 };
+              if (qmPosition === "bottom-right") return { x: 100 - qmWPct - 1, y: 100 - qmHPct - 1 };
+              return { x: dlgX, y: dlgY - qmHPct - 1 };
             };
+            const defPos = getDefaultPos();
+            const qmX = project.ui.quickMenuX ?? defPos.x;
+            const qmY = project.ui.quickMenuY ?? defPos.y;
             return /* @__PURE__ */ jsxRuntime2.jsx(
               "div",
               {
                 className: "z-25 flex items-center justify-center gap-2",
-                style: { ...positionStyle, pointerEvents: "none" },
+                style: {
+                  position: "absolute",
+                  left: `${qmX}%`,
+                  top: `${qmY}%`,
+                  width: `${qmWPct}%`,
+                  height: `${qmHPct}%`,
+                  pointerEvents: "none"
+                },
                 children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center gap-1.5", style: { pointerEvents: "auto" }, children: [
                   /* @__PURE__ */ jsxRuntime2.jsxs(
                     "button",
@@ -10546,9 +11804,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         handleSkipBackward();
                       },
                       disabled: playerState.history.length === 0,
-                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all",
+                      className: "flex items-center gap-1 font-medium transition-all",
                       style: {
-                        borderRadius: `${qmRadius}px`,
+                        borderRadius: scalePx(qmRadius),
+                        padding: `${scalePx(4)} ${scalePx(10)}`,
+                        fontSize: scalePx(12),
                         background: playerState.history.length > 0 ? qmBg : qmBgDisabled,
                         border: "1px solid rgba(148,163,184,0.2)",
                         color: playerState.history.length > 0 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.3)",
@@ -10569,9 +11829,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         e.stopPropagation();
                         updatePlayerState((pp) => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null);
                       },
-                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all hover:brightness-125",
+                      className: "flex items-center gap-1 font-medium transition-all hover:brightness-125",
                       style: {
-                        borderRadius: `${qmRadius}px`,
+                        borderRadius: scalePx(qmRadius),
+                        padding: `${scalePx(4)} ${scalePx(10)}`,
+                        fontSize: scalePx(12),
                         background: qmBg,
                         border: "1px solid rgba(148,163,184,0.2)",
                         color: "rgba(255,255,255,0.8)",
@@ -10591,9 +11853,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         e.stopPropagation();
                         setSettings((s) => ({ ...s, autoAdvance: !s.autoAdvance }));
                       },
-                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all",
+                      className: "flex items-center gap-1 font-medium transition-all",
                       style: {
-                        borderRadius: `${qmRadius}px`,
+                        borderRadius: scalePx(qmRadius),
+                        padding: `${scalePx(4)} ${scalePx(10)}`,
+                        fontSize: scalePx(12),
                         background: settings.autoAdvance ? "rgba(14,165,233,0.3)" : qmBg,
                         border: `1px solid ${settings.autoAdvance ? "rgba(14,165,233,0.5)" : "rgba(148,163,184,0.2)"}`,
                         color: settings.autoAdvance ? "rgba(125,211,252,0.95)" : "rgba(255,255,255,0.8)",
@@ -10616,9 +11880,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         e.stopPropagation();
                         updatePlayerState((pp) => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null);
                       },
-                      className: "flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all",
+                      className: "flex items-center gap-1 font-medium transition-all",
                       style: {
-                        borderRadius: `${qmRadius}px`,
+                        borderRadius: scalePx(qmRadius),
+                        padding: `${scalePx(4)} ${scalePx(10)}`,
+                        fontSize: scalePx(12),
                         background: uiState.isSkipping ? "rgba(239,68,68,0.3)" : qmBg,
                         border: `1px solid ${uiState.isSkipping ? "rgba(239,68,68,0.5)" : "rgba(148,163,184,0.2)"}`,
                         color: uiState.isSkipping ? "rgba(252,165,165,0.95)" : "rgba(255,255,255,0.8)",
@@ -10728,6 +11994,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         });
         activeEffectTimeoutsRef.current = [];
+        TweenManager.cancelAll();
         const allVideos = document.querySelectorAll("video");
         allVideos.forEach((video) => {
           video.pause();
@@ -11034,6 +12301,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         )
       ] }),
+      confirmDialog && /* @__PURE__ */ jsxRuntime2.jsx(
+        InGameConfirmDialog,
+        {
+          type: confirmDialog.type,
+          settings: project.ui.confirmDialogs,
+          assetResolver,
+          onConfirm: () => {
+            const action = confirmDialog.pendingAction;
+            setConfirmDialog(null);
+            executeUIAction(action);
+          },
+          onCancel: () => setConfirmDialog(null)
+        }
+      ),
       !hideCloseButton && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: handleClose, className: "absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50", children: /* @__PURE__ */ jsxRuntime2.jsx(XMarkIcon, { className: "w-8 h-8" }) })
     ] });
   };
@@ -11175,7 +12456,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "2.3.0",
+    version: "2.4.3",
     /**
      * Check if the engine is ready
      */

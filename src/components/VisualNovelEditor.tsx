@@ -438,7 +438,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 '3': 'ui',
                 '4': 'assets',
                 '5': 'variables',
-                '6': 'settings'
+                '6': 'commonEvents',
+                '7': 'settings'
             };
 
             const newTab = tabMap[e.key];
@@ -485,10 +486,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         uiScreenCount={uiScreenCount}
                         assetCount={assetCount}
                         variableCount={variableCount}
+                        commonEventCount={commonEventCount}
                     />
                 }
                 onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
-                onOpenCommonEvents={() => handleTabChange('commonEvents')}
             />
             <main className="flex-grow flex overflow-hidden">
                 {/* Main Content Area - Full Width Managers */}

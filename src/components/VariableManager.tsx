@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useInlineRename } from '../hooks/useInlineRename';
 import { VNProject } from '../types/project';
 import { VNVariable, VNVariableScope } from '../features/variables/types';
 import { useProject } from '../contexts/ProjectContext';
@@ -362,20 +363,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
     onCommitRename,
     onDelete
 }) => {
-    const [renameValue, setRenameValue] = useState(variable.name);
-
-    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            onCommitRename(renameValue);
-        } else if (e.key === 'Escape') {
-            setRenameValue(variable.name);
-            onStartRenaming();
-        }
-    };
-
-    const handleRenameBlur = () => {
-        onCommitRename(renameValue);
-    };
+    const { inputProps: renameInputProps } = useInlineRename(variable.name, onCommitRename);
 
     const getTypeIcon = (type: string) => {
         switch (type) {
@@ -412,13 +400,8 @@ const VariableItem: React.FC<VariableItemProps> = ({
                 {isRenaming ? (
                     <input
                         type="text"
-                        value={renameValue}
-                        onChange={e => setRenameValue(e.target.value)}
-                        onBlur={handleRenameBlur}
-                        onKeyDown={handleRenameKeyDown}
+                        {...renameInputProps}
                         className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
-                        onClick={e => e.stopPropagation()}
-                        autoFocus
                     />
                 ) : (
                     <span className="text-sm">{variable.name}</span>

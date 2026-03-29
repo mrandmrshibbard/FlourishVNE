@@ -5,7 +5,7 @@ import { VNProject } from '../types/project';
 import {
     CommandType, ShowCharacterCommand, DialogueCommand, FlashScreenCommand, ChoiceOption,
     ChoiceCommand, SetBackgroundCommand, ShowTextCommand, ShowImageCommand, VNScene, ShowButtonCommand,
-    PlayMovieCommand, VNCommand
+    PlayMovieCommand, VNCommand, TextInputCommand
 } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
@@ -13,6 +13,7 @@ import { VNCondition } from '../types/shared';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
+import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 
@@ -142,6 +143,7 @@ interface StageState {
     } | null;
     flash: { color: string } | null;
     choices: ChoiceOption[] | null;
+    textInput: { prompt: string; placeholder?: string } | null;
     commandIndicator: { type: string; details: string } | null;
     variables: Record<string, string | number | boolean>;
 }
@@ -157,6 +159,7 @@ const StagingArea: React.FC<{
     const [showCommandIndicators, setShowCommandIndicators] = React.useState(true);
     const [showVariableState, setShowVariableState] = React.useState(false);
     const stageRef = React.useRef<HTMLDivElement>(null);
+    const containerRef = React.useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = React.useState({ width: 1280, height: 720 }); // Default 16:9 at 720p
     const [stageState, setStageState] = React.useState<StageState>({
         backgroundUrl: null,
@@ -176,24 +179,37 @@ const StagingArea: React.FC<{
         movie: null,
         flash: null,
         choices: null,
+        textInput: null,
         commandIndicator: null,
         variables: {},
     });
 
-    // Track stage size for proper scaling
+    // Track stage size for proper scaling — measure the parent container and compute
+    // the largest stage that fits while preserving the game's aspect ratio.
     React.useEffect(() => {
-        if (!stageRef.current) return;
+        const el = containerRef.current;
+        if (!el) return;
         
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const { width, height } = entry.contentRect;
-                setStageSize({ width, height });
+        const observer = new ResizeObserver(() => {
+            const pw = el.clientWidth - 16; // p-2 = 8px each side
+            const ph = el.clientHeight - 16;
+            const arW = project.gameResolution?.width || 1920;
+            const arH = project.gameResolution?.height || 1080;
+            const ar = arW / arH;
+            let w = pw;
+            let h = w / ar;
+            if (h > ph) {
+                h = ph;
+                w = h * ar;
+            }
+            if (w > 0 && h > 0) {
+                setStageSize({ width: Math.round(w), height: Math.round(h) });
             }
         });
         
-        observer.observe(stageRef.current);
+        observer.observe(el);
         return () => observer.disconnect();
-    }, []);
+    }, [project.gameResolution]);
 
     React.useEffect(() => {
         const scene = project.scenes[activeSceneId];
@@ -201,7 +217,7 @@ const StagingArea: React.FC<{
             setStageState({
                 backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [],
                 screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, overlayEffects: [] },
-                dialogue: null, movie: null, flash: null, choices: null, commandIndicator: null, variables: {},
+                dialogue: null, movie: null, flash: null, choices: null, textInput: null, commandIndicator: null, variables: {},
             });
             return;
         }
@@ -240,6 +256,7 @@ const StagingArea: React.FC<{
         let movie: StageState['movie'] = null;
         let flash: StageState['flash'] = null;
         let choices: StageState['choices'] = null;
+        let textInput: StageState['textInput'] = null;
         let commandIndicator: StageState['commandIndicator'] = null;
         let currentVariables: StageState['variables'] = {};
 
@@ -399,13 +416,18 @@ const StagingArea: React.FC<{
                 case CommandType.StopMovie:
                 case CommandType.Jump:
                 case CommandType.Wait:
-                case CommandType.TextInput:
                     commandIndicator = { type: currentCommand.type, details: '' };
                     break;
+                case CommandType.TextInput: {
+                    const tiCmd = currentCommand as TextInputCommand;
+                    textInput = { prompt: tiCmd.prompt || 'Enter text…', placeholder: tiCmd.placeholder };
+                    commandIndicator = { type: currentCommand.type, details: '' };
+                    break;
+                }
             }
         }
 
-        setStageState({ backgroundUrl, characters, textOverlays, imageOverlays, buttonOverlays, screen, dialogue, movie, flash, choices, commandIndicator, variables: currentVariables });
+        setStageState({ backgroundUrl, characters, textOverlays, imageOverlays, buttonOverlays, screen, dialogue, movie, flash, choices, textInput, commandIndicator, variables: currentVariables });
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
@@ -487,7 +509,7 @@ const StagingArea: React.FC<{
             if (!offset) return;
             const newX = offset.x;
             const newY = offset.y;
-            for (const scene of Object.values(project.scenes)) {
+            for (const scene of Object.values(project.scenes) as VNScene[]) {
                 const idx = scene.commands.findIndex((c: VNCommand) => c.id === drag.sourceCommandId);
                 if (idx < 0) continue;
                 const cmd = scene.commands[idx];
@@ -591,6 +613,29 @@ const StagingArea: React.FC<{
     const hasCustomDialogueImage = dialogueBoxImageUrl || dialogueBorderImageUrl;
     const hasCustomChoiceImage = choiceButtonImageUrl || choiceBorderImageUrl;
 
+    // Input box settings
+    const inputBoxImageUrl = project.ui.inputBoxImage
+        ? (project.images[project.ui.inputBoxImage.id]?.imageUrl || project.backgrounds[project.ui.inputBoxImage.id]?.imageUrl)
+        : null;
+    const inputBorderImageUrl = (project.ui as any).inputBoxBorderImage
+        ? (project.images[(project.ui as any).inputBoxBorderImage.id]?.imageUrl || project.backgrounds[(project.ui as any).inputBoxBorderImage.id]?.imageUrl)
+        : null;
+    const inputBorderPadding = (project.ui as any).inputBorderPadding ?? 8;
+    const inputBoxPadding = project.ui.inputBoxPadding ?? 24;
+    const inputSizeMode = project.ui.inputBoxSizeMode ?? 'stretch';
+    const inputSlice = project.ui.inputBoxSlice ?? 20;
+    const inputColor = project.ui.inputBoxColor ?? '#0f172a';
+    const inputOpacity = project.ui.inputBoxOpacity ?? 92;
+    const inputBorderRadius = project.ui.inputBoxBorderRadius ?? 8;
+    const inputBgColor = hexToRgba(inputColor, inputOpacity);
+    const hasCustomInputImage = inputBoxImageUrl || inputBorderImageUrl;
+
+    // Quick menu settings
+    const qmPosition = project.ui.quickMenuPosition ?? 'above-dialogue';
+    const qmColor = project.ui.quickMenuColor ?? '#0f172a';
+    const qmOpacity = project.ui.quickMenuOpacity ?? 75;
+    const qmBorderRadius = project.ui.quickMenuBorderRadius ?? 4;
+
     // Build background styles
     const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
     const dialogueImageStyle: React.CSSProperties = dialogueBoxImageUrl
@@ -623,6 +668,26 @@ const StagingArea: React.FC<{
     const choiceHPct = choiceHeight ? (choiceHeight * 100 / gameH) : 25;
     const choiceXPct = project.ui.choiceButtonX ?? (50 - choiceWPct / 2);
     const choiceYPct = project.ui.choiceButtonY ?? 35;
+
+    // Input box layout rect
+    const inputBoxWidth = project.ui.inputBoxWidth || 0;
+    const inputWPct = inputBoxWidth ? (inputBoxWidth * 100 / gameW) : 30;
+    const inputHPct = project.ui.inputBoxHeight ? (project.ui.inputBoxHeight * 100 / gameH) : 20;
+    const inputXPct = project.ui.inputBoxX ?? (50 - inputWPct / 2);
+    const inputYPct = project.ui.inputBoxY ?? 40;
+
+    // Quick menu layout rect
+    const qmWPct = project.ui.quickMenuWidth ?? 40;
+    const qmHPct = project.ui.quickMenuHeight ?? 4;
+    const getQmDefaultPos = () => {
+        if (qmPosition === 'top-right') return { x: 100 - qmWPct - 1, y: 1 };
+        if (qmPosition === 'bottom-right') return { x: 100 - qmWPct - 1, y: 100 - qmHPct - 1 };
+        // above-dialogue
+        return { x: dialogueXPct, y: dialogueYPct - qmHPct - 1 };
+    };
+    const qmDefPos = getQmDefaultPos();
+    const qmXPct = project.ui.quickMenuX ?? qmDefPos.x;
+    const qmYPct = project.ui.quickMenuY ?? qmDefPos.y;
 
     const textPadTop = project.ui.dialogueTextPaddingTop ?? 0;
     const textPadBot = project.ui.dialogueTextPaddingBottom ?? 0;
@@ -662,6 +727,7 @@ const StagingArea: React.FC<{
                             height: '100%',
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: project.ui.dialogueNameFont?.align === 'center' ? 'center' : project.ui.dialogueNameFont?.align === 'right' ? 'flex-end' : 'flex-start',
                             ...nameboxBgStyle,
                             padding: `${s(nameboxPadding)} ${s(nameboxHPadding)}`,
                             ...(hasCustomDialogueImage || nameboxImageUrl ? {} : {
@@ -754,7 +820,7 @@ const StagingArea: React.FC<{
                                     padding: `${s(choicePadding)} ${s(choicePadding * 2)}`,
                                     ...(choiceHeight ? { height: s(choiceHeight) } : {}),
                                     ...fontSettingsToStyle(project.ui.choiceTextFont),
-                                    textAlign: 'center' as const,
+                                    textAlign: (project.ui.choiceTextFont?.align || 'center') as any,
                                     wordBreak: 'break-word' as const,
                                     overflowWrap: 'break-word' as const,
                                     cursor: 'pointer',
@@ -766,6 +832,106 @@ const StagingArea: React.FC<{
             })}
         </div>
     );
+
+    const renderInputBox = (ti: NonNullable<StageState['textInput']>) => {
+        const promptStyle: React.CSSProperties = project.ui.inputPromptFont
+            ? { ...fontSettingsToStyle(project.ui.inputPromptFont), textAlign: project.ui.inputPromptFont.align || 'center' }
+            : { color: '#FFFFFF', textAlign: 'center' };
+        const fieldStyle: React.CSSProperties = project.ui.inputFieldFont
+            ? fontSettingsToStyle(project.ui.inputFieldFont)
+            : { color: '#FFFFFF' };
+        const submitStyle: React.CSSProperties = project.ui.inputSubmitFont
+            ? fontSettingsToStyle(project.ui.inputSubmitFont)
+            : { color: '#FFFFFF' };
+
+        return (
+            <div className="absolute z-30 flex flex-col items-center justify-center"
+                 style={{
+                     left: `${inputXPct}%`,
+                     top: `${inputYPct}%`,
+                     width: `${inputWPct}%`,
+                     height: `${inputHPct}%`,
+                 }}>
+                <div className="relative"
+                     style={{
+                         borderRadius: s(inputBorderRadius),
+                         width: '100%',
+                         ...(inputBorderImageUrl
+                             ? { ...buildImageBackgroundStyle(inputBorderImageUrl, inputSizeMode, inputSlice), padding: s(inputBorderPadding) }
+                             : {}),
+                     }}>
+                    <div className="relative"
+                         style={{
+                             borderRadius: s(inputBorderRadius),
+                             overflow: 'hidden',
+                             ...(hasCustomInputImage ? {} : {
+                                 backgroundColor: inputBgColor,
+                                 border: '1px solid rgba(148,163,184,0.3)',
+                                 boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                             }),
+                             ...(inputBoxImageUrl
+                                 ? { ...buildImageBackgroundStyle(inputBoxImageUrl, inputSizeMode, inputSlice), backgroundColor: inputBgColor, ...(inputSizeMode !== 'nine-slice' ? { padding: s(inputBoxPadding) } : {}) }
+                                 : { padding: s(inputBoxPadding) }),
+                         }}>
+                        <div style={{
+                            position: 'relative',
+                            zIndex: 1,
+                            padding: inputSizeMode === 'nine-slice' && inputBoxImageUrl ? s(inputBoxPadding) : undefined,
+                        }}>
+                            <p className="mb-4" style={promptStyle}>
+                                <span style={extractTextGradientStyle(project.ui.inputPromptFont) || undefined}>{ti.prompt}</span>
+                            </p>
+                            <div className="w-full px-3 py-2"
+                                 style={{
+                                     ...fieldStyle,
+                                     backgroundColor: 'rgba(15,23,42,0.6)',
+                                     border: '1px solid rgba(148,163,184,0.3)',
+                                     borderRadius: s(Math.max(4, inputBorderRadius - 4)),
+                                 }}>
+                                <span style={{ opacity: 0.4 }}>{ti.placeholder || 'Type here…'}</span>
+                            </div>
+                            <div className="mt-3 text-center">
+                                <span className="inline-block px-4 py-1 rounded bg-sky-600/80" style={submitStyle}>
+                                    <span style={extractTextGradientStyle(project.ui.inputSubmitFont) || undefined}>Submit</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderQuickMenu = () => {
+        if (qmPosition === 'hidden') return null;
+        const qmBg = hexToRgba(qmColor, qmOpacity);
+        const labels = ['Back', 'Log', 'Auto', 'Skip'];
+        return (
+            <div className="absolute z-25 flex items-center justify-center"
+                 style={{
+                     left: `${qmXPct}%`,
+                     top: `${qmYPct}%`,
+                     width: `${qmWPct}%`,
+                     height: `${qmHPct}%`,
+                     pointerEvents: 'none',
+                 }}>
+                <div className="flex items-center gap-1.5">
+                    {labels.map(lbl => (
+                        <div key={lbl} style={{
+                            backgroundColor: qmBg,
+                            borderRadius: s(qmBorderRadius),
+                            fontSize: s(12),
+                            padding: `${s(4)} ${s(10)}`,
+                            color: 'rgba(255,255,255,0.8)',
+                            border: '1px solid rgba(148,163,184,0.2)',
+                        }}>
+                            {lbl}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
     
     // Convert pixel values to percentages based on reference resolution (1280x720)
     const REFERENCE_WIDTH = 1280;
@@ -789,11 +955,11 @@ const StagingArea: React.FC<{
                 ...style 
             }}
         >
-            <div className="w-full h-full flex items-center justify-center p-2">
+            <div ref={containerRef} className="w-full h-full flex items-center justify-center p-2">
                 <div 
                     ref={stageRef}
                     className="relative bg-[var(--bg-primary)]/50 rounded-md overflow-hidden" 
-                    style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, width: '100%', height: 'auto', maxHeight: '100%', maxWidth: '100%', '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
+                    style={{ width: stageSize.width, height: stageSize.height, '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
                 >
                     {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
 
@@ -846,8 +1012,16 @@ const StagingArea: React.FC<{
                     </div>
                 )}
 
-                {(Object.values(stageState.characters) as StageCharacterState[]).map((char) => {
-                    let posStyle = getPositionStyle(char.position);
+                {(() => {
+                    const allChars = Object.values(stageState.characters) as StageCharacterState[];
+                    const arranged = project.autoArrangeCharacters
+                        ? computeArrangedPositions(allChars.map(c => ({ id: c.charId, position: c.position })))
+                        : null;
+                    return allChars.map((char) => {
+                    const arrangedX = arranged?.get(char.charId);
+                    let posStyle = arrangedX !== undefined
+                        ? { top: '10%', left: `${arrangedX}%`, transform: 'translate(-50%, 0)' }
+                        : getPositionStyle(char.position);
                     const isCustomPosition = typeof char.position === 'object';
                     const isDragging = overlayDrag?.kind === 'character' && overlayDrag.overlayId === char.charId;
                     if (isDragging && overlayDragOffset) {
@@ -876,7 +1050,8 @@ const StagingArea: React.FC<{
                             )}
                         </div>
                     );
-                })}
+                });
+                })()}
                 {stageState.textOverlays.map(o => {
                      const isDragging = overlayDrag?.kind === 'text' && overlayDrag.overlayId === o.id;
                      const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
@@ -1014,7 +1189,9 @@ const StagingArea: React.FC<{
                 })}
 
                 {currentDialogue && renderDialogueBox(currentDialogue)}
+                {currentDialogue && renderQuickMenu()}
                 {currentChoices && renderChoiceMenu(currentChoices)}
+                {stageState.textInput && renderInputBox(stageState.textInput)}
 
                  {stageState.flash && (
                     <div className="absolute inset-0 z-50" style={{ backgroundColor: stageState.flash.color, opacity: 0.7 }}></div>

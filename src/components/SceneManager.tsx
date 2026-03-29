@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNScene } from '../features/scene/types';
@@ -273,20 +274,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
     onDrop,
     onContextMenu
 }) => {
-    const [renameValue, setRenameValue] = useState(scene.name);
-
-    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            onCommitRename(renameValue);
-        } else if (e.key === 'Escape') {
-            setRenameValue(scene.name);
-            onStartRenaming(); // This will cancel renaming
-        }
-    };
-
-    const handleRenameBlur = () => {
-        onCommitRename(renameValue);
-    };
+    const { inputProps: renameInputProps } = useInlineRename(scene.name, onCommitRename);
 
     return (
         <div
@@ -314,13 +302,8 @@ const SceneItem: React.FC<SceneItemProps> = ({
                 {isRenaming ? (
                     <input
                         type="text"
-                        value={renameValue}
-                        onChange={e => setRenameValue(e.target.value)}
-                        onBlur={handleRenameBlur}
-                        onKeyDown={handleRenameKeyDown}
+                        {...renameInputProps}
                         className="w-full bg-[var(--bg-primary)] text-white px-1 py-0.5 rounded text-xs outline-none ring-1 ring-sky-500"
-                        onClick={e => e.stopPropagation()}
-                        autoFocus
                     />
                 ) : (
                     <span className="text-xs block overflow-hidden text-ellipsis whitespace-nowrap" title={scene.name}>{scene.name}</span>

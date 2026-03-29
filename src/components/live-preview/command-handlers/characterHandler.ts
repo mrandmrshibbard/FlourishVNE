@@ -2,6 +2,7 @@ import { ShowCharacterCommand, HideCharacterCommand } from '../../../features/sc
 import { VNCharacterLayer } from '../../../features/character/types';
 import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
+import { TweenManager } from '../systems/tweenManager';
 
 /**
  * Handles showing a character with expression, layers, and transitions
@@ -18,6 +19,9 @@ export function handleShowCharacter(
   if (!charData || !exprData) {
     return { advance: true };
   }
+
+  // Clear any resting tween values so the new position takes effect cleanly
+  TweenManager.cancelForTarget(command.characterId, 'character');
 
   const imageUrls: string[] = [];
   const videoUrls: string[] = [];
@@ -227,6 +231,8 @@ export function handleHideCharacter(
     // Character not on stage, nothing to do
     return { advance: true };
   }
+
+  TweenManager.cancelForTarget(command.characterId, 'character');
 
   if (hideTransitionType && hideTransitionType !== 'instant') {
     // Block advancing while hide animation runs

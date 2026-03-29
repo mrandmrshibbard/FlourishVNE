@@ -25,7 +25,7 @@ export const handleDialogue = (
 
     // Play voice audio if specified
     if (voiceAudioId) {
-        context.playSound(voiceAudioId, context.settings.sfxVolume);
+        context.playSound(voiceAudioId, context.settings.voiceVolume ?? context.settings.sfxVolume);
     }
 
     return {

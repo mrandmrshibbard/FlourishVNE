@@ -1,9 +1,9 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.3.0",
+  "version": "2.4.3",
   "description": "Flourish VNE",
-  "author": "Flourish Team",
+  "author": "Memento_Morii",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

@@ -43,8 +43,9 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     ? project.videos[btn.image.id]?.videoUrl
                     : project.images[btn.image.id]?.imageUrl || project.backgrounds[btn.image.id]?.imageUrl
             ) : null;
+            const btnAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[btn.font?.align || 'center'];
             return <div
-                className="w-full h-full border border-white/20 rounded flex items-center justify-center relative overflow-hidden"
+                className={`w-full h-full border border-white/20 rounded flex items-center ${btnAlignClass} relative overflow-hidden`}
                 style={{ pointerEvents: 'none' }}
             >
                 {btnImageUrl ? (
@@ -57,10 +58,11 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
         }
         case UIElementType.Text: {
             const txt = element as UITextElement;
-            const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[txt.textAlign || 'center'];
+            const effectiveAlign = txt.textAlign || txt.font?.align || 'center';
+            const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[effectiveAlign];
             const vAlignClass = { top: 'items-start', middle: 'items-center', bottom: 'items-end' }[txt.verticalAlign || 'middle'];
 
-            const txtStyle: React.CSSProperties = { ...fontSettingsToStyle(txt.font), textAlign: txt.textAlign || 'center' };
+            const txtStyle: React.CSSProperties = { ...fontSettingsToStyle(txt.font), textAlign: effectiveAlign };
 
             return <div
                 className={`w-full h-full flex p-1 ${hAlignClass} ${vAlignClass}`}
@@ -649,7 +651,7 @@ const MenuEditor: React.FC<{
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
         if (screen.background.assetId) {
              const url = screen.background.type === 'image' 
-                ? project.backgrounds[screen.background.assetId]?.imageUrl
+                ? (project.backgrounds[screen.background.assetId]?.imageUrl || project.images?.[screen.background.assetId]?.imageUrl)
                 : project.videos[screen.background.assetId]?.videoUrl;
             if (url) return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' };
         }

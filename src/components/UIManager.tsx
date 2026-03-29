@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNUIScreen } from '../features/ui/types';
@@ -255,20 +256,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
     onDelete,
     onDuplicate
 }) => {
-    const [renameValue, setRenameValue] = useState(screen.name);
-
-    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            onCommitRename(renameValue);
-        } else if (e.key === 'Escape') {
-            setRenameValue(screen.name);
-            onStartRenaming(); // This will cancel renaming
-        }
-    };
-
-    const handleRenameBlur = () => {
-        onCommitRename(renameValue);
-    };
+    const { inputProps: renameInputProps } = useInlineRename(screen.name, onCommitRename);
 
     return (
         <div
@@ -286,13 +274,8 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                 {isRenaming && !isSpecial ? (
                     <input
                         type="text"
-                        value={renameValue}
-                        onChange={e => setRenameValue(e.target.value)}
-                        onBlur={handleRenameBlur}
-                        onKeyDown={handleRenameKeyDown}
+                        {...renameInputProps}
                         className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
-                        onClick={e => e.stopPropagation()}
-                        autoFocus
                     />
                 ) : (
                     <span className="text-sm flex items-center gap-1">

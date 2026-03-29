@@ -311,6 +311,46 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
                 fadeDuration: 1,
             };
         }
+        case CommandType.ShowImageMap: {
+            return {
+                type,
+                imageId: firstImageId || '',
+                hoverImageId: undefined,
+                regions: [],
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                opacity: 1,
+                waitForClick: true,
+                transition: 'fade' as const,
+                duration: 0.5,
+            } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.HideImageMap: {
+            return {
+                type,
+                targetCommandId: '',
+                transition: 'fade' as const,
+                duration: 0.5,
+            } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.CallCommonEvent: {
+            return {
+                type,
+                commonEventId: '',
+            } as Omit<VNCommand, 'id'>;
+        }
+        case CommandType.TweenElement: {
+            return {
+                type,
+                targetId: '',
+                targetType: 'character' as const,
+                duration: 1,
+                easing: 'easeInOutCubic',
+                waitForCompletion: true,
+            } as Omit<VNCommand, 'id'>;
+        }
         default: 
             return null;
     }

@@ -149,6 +149,7 @@ export const createInitialProject = (): VNProject => {
                 textSpeed: 50,
                 musicVolume: 0.8,
                 sfxVolume: 0.8,
+                voiceVolume: 0.8,
                 ambientVolume: 0.8,
                 enableSkip: true,
                 autoAdvance: false,

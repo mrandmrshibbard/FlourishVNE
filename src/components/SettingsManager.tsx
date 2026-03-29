@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
-import { VNProjectUI, VNFontSettings } from '../features/ui/types';
+import { VNProjectUI } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import { Cog6ToothIcon, PhotoIcon, BookOpenIcon, TrashIcon, SparklesIcon, ClockIcon, LockClosedIcon, ChevronDownIcon, UIScreensIcon } from './icons';
 import { VNID } from '../types';
@@ -117,6 +117,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                 textSpeed: current?.textSpeed ?? 50,
                 musicVolume: current?.musicVolume ?? 0.8,
                 sfxVolume: current?.sfxVolume ?? 0.8,
+                voiceVolume: current?.voiceVolume ?? 0.8,
                 ambientVolume: current?.ambientVolume ?? 0.8,
                 enableSkip: current?.enableSkip ?? true,
                 autoAdvance: current?.autoAdvance ?? false,
@@ -278,6 +279,28 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                 </div>
 
                 <div className="pt-4 border-t border-[var(--border-subtle)]">
+                    <h4 className="text-lg font-semibold text-white mb-4">Stage Behavior</h4>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <label className="text-sm font-medium text-[var(--text-primary)]">Auto-Arrange Characters</label>
+                                <p className="text-xs text-[var(--text-secondary)]">Automatically spread characters apart when they share the same stage position (e.g. two characters both set to "Center" will appear side-by-side). Characters are kept within view.</p>
+                            </div>
+                            <button
+                                onClick={() => onUpdate({ autoArrangeCharacters: !project.autoArrangeCharacters })}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                                    project.autoArrangeCharacters ? 'bg-sky-500' : 'bg-[var(--bg-tertiary)]'
+                                }`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    project.autoArrangeCharacters ? 'translate-x-6' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t border-[var(--border-subtle)]">
                     <h4 className="text-lg font-semibold text-white mb-4">Default Game Settings</h4>
                     <p className="text-xs text-[var(--text-secondary)] mb-4">These values are used as the initial settings when a player starts your game.</p>
                     <div className="space-y-4">
@@ -314,6 +337,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}
                                 onChange={(e) => updateGameSetting({ sfxVolume: parseInt(e.target.value) / 100 })}
+                                className="w-full accent-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Voice Volume: {Math.round((project.ui?.defaultGameSettings?.voiceVolume ?? 0.8) * 100)}%</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={Math.round((project.ui?.defaultGameSettings?.voiceVolume ?? 0.8) * 100)}
+                                onChange={(e) => updateGameSetting({ voiceVolume: parseInt(e.target.value) / 100 })}
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
                         </div>
@@ -1266,161 +1300,10 @@ const fileToBase64 = (file: File): Promise<string> =>
         reader.readAsDataURL(file);
     });
 
-/** Extracted as a top-level component to prevent focus loss on parent re-render */
-const FontEditorCard: React.FC<{
-    label: string;
-    fontKey: keyof VNProjectUI;
-    project: VNProject;
-    fontOptions: string[];
-    updateFont: (fontKey: keyof VNProjectUI, updates: Partial<VNFontSettings>) => void;
-}> = React.memo(({ label, fontKey, project, fontOptions, updateFont }) => {
-    const font = (project.ui[fontKey] as VNFontSettings) ?? { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal' as const, italic: false };
-
-    return (
-        <div className="border border-[var(--border-subtle)] rounded-lg p-4">
-            <h4 className="text-lg font-semibold text-white mb-4">{label}</h4>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Family</label>
-                    <select
-                        value={font.family}
-                        onChange={(e) => updateFont(fontKey, { family: e.target.value })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        {fontOptions.map(f => (
-                            <option key={f} value={f}>{f.split(',')[0]}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Size</label>
-                    <input
-                        type="number"
-                        value={font.size}
-                        onChange={(e) => updateFont(fontKey, { size: parseInt(e.target.value) })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Color</label>
-                    <input
-                        type="color"
-                        value={font.color}
-                        onChange={(e) => updateFont(fontKey, { color: e.target.value })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Weight</label>
-                    <select
-                        value={font.weight}
-                        onChange={(e) => updateFont(fontKey, { weight: e.target.value as 'normal' | 'bold' })}
-                        className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                    >
-                        <option value="normal">Normal</option>
-                        <option value="bold">Bold</option>
-                    </select>
-                </div>
-
-                <div className="col-span-2">
-                    <label className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={font.italic}
-                            onChange={(e) => updateFont(fontKey, { italic: e.target.checked })}
-                            className="rounded border-[var(--border-default)] text-sky-500 focus:ring-[var(--accent-lavender)]"
-                        />
-                        <span className="text-sm font-medium text-[var(--text-primary)]">Italic</span>
-                    </label>
-                </div>
-
-                <div className="col-span-2">
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Alignment</label>
-                    <div className="flex gap-1">
-                        {(['left', 'center', 'right'] as const).map(a => (
-                            <button
-                                key={a}
-                                onClick={() => updateFont(fontKey, { align: a })}
-                                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-                                    (font.align || 'left') === a
-                                        ? 'bg-sky-500 text-white'
-                                        : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
-                                }`}
-                            >
-                                {a === 'left' ? '\u2190 Left' : a === 'center' ? '\u2194 Center' : 'Right \u2192'}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-[var(--bg-primary)] rounded border border-[var(--border-default)]">
-                <p
-                    className="text-sm"
-                    style={{
-                        fontFamily: font.family,
-                        fontSize: `${font.size}px`,
-                        color: font.color,
-                        fontWeight: font.weight,
-                        fontStyle: font.italic ? 'italic' : 'normal',
-                        textAlign: font.align || 'left',
-                    }}
-                >
-                    Sample text with current font settings
-                </p>
-            </div>
-        </div>
-    );
-});
-
 const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
     const { dispatch } = useProject();
     
     const projectFontsArray = Object.values((project as any).fonts || {}) as VNProjectFont[];
-    
-    // Popular fonts list for the dropdowns
-    const popularFonts = [
-        'Poppins, sans-serif',
-        'Arial, sans-serif',
-        'Helvetica, sans-serif',
-        'Verdana, sans-serif',
-        'Times New Roman, serif',
-        'Georgia, serif',
-        'Courier New, monospace',
-        'Pacifico, cursive',
-        'Lato, sans-serif',
-        'Merriweather, serif',
-        'Oswald, sans-serif',
-        'Playfair Display, serif',
-        'Roboto, sans-serif',
-        'Caveat, cursive',
-    ];
-    
-    // Build a single stable list of all font options (project fonts + popular)
-    const allFontOptions = useMemo(() => {
-        const options = [...popularFonts];
-        for (const f of projectFontsArray) {
-            if (f?.fontFamily && !options.includes(f.fontFamily)) {
-                options.unshift(f.fontFamily);
-            }
-        }
-        // Also include current selections so they always appear
-        const fontKeys: (keyof VNProjectUI)[] = ['dialogueNameFont', 'dialogueTextFont', 'choiceTextFont', 'inputPromptFont', 'inputFieldFont', 'inputSubmitFont'];
-        for (const k of fontKeys) {
-            const cur = (project.ui[k] as VNFontSettings | undefined)?.family;
-            if (cur && !options.includes(cur)) options.unshift(cur);
-        }
-        return options;
-    }, [projectFontsArray, popularFonts, project.ui]);
-    
-    const updateFont = useCallback((fontKey: keyof VNProjectUI, updates: Partial<VNFontSettings>) => {
-        const currentFont = (project.ui[fontKey] as VNFontSettings) ?? { family: 'Poppins, sans-serif', size: 16, color: '#FFFFFF', weight: 'normal' as const, italic: false };
-        onUpdate({ [fontKey]: { ...currentFont, ...updates } });
-    }, [project.ui, onUpdate]);
     
     const addProjectFont = async () => {
         const input = document.createElement('input');
@@ -1522,12 +1405,9 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
             </div>
 
             <div className="space-y-6">
-                <FontEditorCard label="Dialogue Name Font" fontKey="dialogueNameFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
-                <FontEditorCard label="Dialogue Text Font" fontKey="dialogueTextFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
-                <FontEditorCard label="Choice Text Font" fontKey="choiceTextFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
-                <FontEditorCard label="Input Prompt Font" fontKey="inputPromptFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
-                <FontEditorCard label="Input Field Font" fontKey="inputFieldFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
-                <FontEditorCard label="Input Submit Button Font" fontKey="inputSubmitFont" project={project} fontOptions={allFontOptions} updateFont={updateFont} />
+                <div className="text-sm text-[var(--text-secondary)] bg-[var(--bg-primary)]/50 p-4 rounded border border-[var(--border-default)]">
+                    Font settings for dialogue text, name box, choice buttons, and input boxes are configured in the <strong className="text-white">In-Game UI</strong> editor. Select an element there to edit its font properties.
+                </div>
             </div>
         </div>
     );

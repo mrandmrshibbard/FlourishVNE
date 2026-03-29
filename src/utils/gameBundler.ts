@@ -6,6 +6,7 @@
 
 import JSZip from 'jszip';
 import { VNProject } from '../types/project';
+import { UIActionType } from '../types/shared';
 import { getGameEngineCode } from './gameEngineBundle';
 
 export interface BuildProgress {
@@ -911,8 +912,45 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
     if (bg) addAsset(bg.imageUrl, 'ui');
   }
 
+  // Collect confirm dialog image assets
+  const cd = project.ui.confirmDialogs;
+  if (cd) {
+    const cdImageFields: (keyof typeof cd)[] = [
+      'backgroundImage', 'borderImage',
+      'confirmButtonImage', 'cancelButtonImage',
+      'confirmHoverImage', 'cancelHoverImage',
+    ];
+    for (const field of cdImageFields) {
+      const asset = cd[field] as { id: string } | null | undefined;
+      if (asset?.id) {
+        const bg = project.backgrounds?.[asset.id] || project.images?.[asset.id];
+        if (bg) addAsset((bg as any).imageUrl, 'ui');
+      }
+    }
+  }
+
   // Collect UI screens and elements
   Object.values(project.uiScreens || {}).forEach(screen => {
+    // Collect screen-level background
+    if (screen.background && (screen.background.type === 'image' || screen.background.type === 'video') && screen.background.assetId) {
+      if (screen.background.type === 'image') {
+        const bg = project.backgrounds?.[screen.background.assetId] || project.images?.[screen.background.assetId];
+        if (bg) addAsset(bg.imageUrl, 'ui');
+      } else {
+        const vid = project.videos?.[screen.background.assetId];
+        if (vid) addAsset(vid.videoUrl, 'ui');
+      }
+    }
+    // Collect screen-level music
+    if (screen.music?.audioId) {
+      const audio = project.audio?.[screen.music.audioId];
+      if (audio) addAsset(audio.audioUrl, 'audio');
+    }
+    // Collect screen-level ambient noise
+    if (screen.ambientNoise?.audioId) {
+      const audio = project.audio?.[screen.ambientNoise.audioId];
+      if (audio) addAsset(audio.audioUrl, 'audio');
+    }
     Object.values(screen.elements || {}).forEach(element => {
       // Check for image/video assets in UI elements
       if ('image' in element && element.image) {
@@ -929,6 +967,16 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
           if (videoAsset) {
             addAsset(videoAsset.videoUrl, 'ui');
           }
+        }
+      }
+      // UIImageElement.background (image/video from assets or solid color)
+      if ('background' in element && element.background && typeof element.background === 'object' && 'assetId' in element.background && element.background.assetId) {
+        if (element.background.type === 'image') {
+          const bg = project.backgrounds?.[element.background.assetId] || project.images?.[element.background.assetId];
+          if (bg) addAsset(bg.imageUrl, 'ui');
+        } else if (element.background.type === 'video') {
+          const vid = project.videos?.[element.background.assetId];
+          if (vid) addAsset(vid.videoUrl, 'ui');
         }
       }
       if ('hoverImage' in element && element.hoverImage) {
@@ -1011,6 +1059,33 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
         if (img) addAsset(img.imageUrl, 'ui');
       }
     });
+
+    // Collect ChangeImage action assets from all action arrays
+    const collectActionAssets = (actions: any[]) => {
+      for (const action of actions) {
+        if (action.type === UIActionType.ChangeImage && action.newImageId) {
+          const img = project.images?.[action.newImageId];
+          if (img) addAsset(img.imageUrl, 'ui');
+        }
+      }
+    };
+    // Element actions (buttons, sliders, toggles, dropdowns, checkboxes)
+    Object.values(screen.elements || {}).forEach((element: any) => {
+      if (element.action) collectActionAssets([element.action]);
+      if (Array.isArray(element.actions)) collectActionAssets(element.actions);
+    });
+    // Hot zone element actions
+    Object.values(screen.hotZoneElements || {}).forEach((el: any) => {
+      if (Array.isArray(el.actions)) collectActionAssets(el.actions);
+    });
+    // Hot spot actions
+    Object.values(screen.hotSpots || {}).forEach((spot: any) => {
+      if (Array.isArray(spot.actions)) collectActionAssets(spot.actions);
+    });
+    // Win condition actions
+    if (screen.winCondition?.actions) {
+      collectActionAssets(screen.winCondition.actions);
+    }
   });
 
   return assets;

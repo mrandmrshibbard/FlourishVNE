@@ -97,6 +97,10 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 return `Btn: "${((command as any).text || '').substring(0, 15)}"`;
             case 'HideButton':
                 return `Hide Button`;
+            case 'ShowImageMap':
+                return `Map: ${project.images?.[(command as any).imageId]?.name || 'N/A'} (${(command as any).regions?.length || 0} regions)`;
+            case 'HideImageMap':
+                return `Hide Image Map`;
             case 'PanZoomScreen':
                 return `Zoom: ${(command as any).zoom || 1}x`;
             case 'ResetScreenEffects':
@@ -113,6 +117,10 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 const scriptId = (command as any).scriptId;
                 const script = scriptId ? (project.scripts || {})[scriptId] : null;
                 return `>_ ${(script as any)?.name || 'No Script'}`;
+            }
+            case 'TweenElement': {
+                const t = command as any;
+                return `Tween ${t.targetType}: ${t.duration}s`;
             }
             default:
                 return command.type.replace(/([A-Z])/g, ' $1').trim();

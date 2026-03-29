@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNCharacter } from '../features/character/types';
@@ -117,20 +118,7 @@ const CharacterItem: React.FC<CharacterItemProps> = ({
     onCommitRename,
     onDelete
 }) => {
-    const [renameValue, setRenameValue] = useState(character.name);
-
-    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            onCommitRename(renameValue);
-        } else if (e.key === 'Escape') {
-            setRenameValue(character.name);
-            onStartRenaming(); // This will cancel renaming
-        }
-    };
-
-    const handleRenameBlur = () => {
-        onCommitRename(renameValue);
-    };
+    const { inputProps: renameInputProps } = useInlineRename(character.name, onCommitRename);
 
     // Get thumbnail from base image or first expression
     const thumbnailUrl = character.baseImageUrl || (Object.values(character.expressions)[0] ? null : null);
@@ -161,13 +149,8 @@ const CharacterItem: React.FC<CharacterItemProps> = ({
                 {isRenaming ? (
                     <input
                         type="text"
-                        value={renameValue}
-                        onChange={e => setRenameValue(e.target.value)}
-                        onBlur={handleRenameBlur}
-                        onKeyDown={handleRenameKeyDown}
+                        {...renameInputProps}
                         className="w-full bg-slate-900 text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
-                        onClick={e => e.stopPropagation()}
-                        autoFocus
                     />
                 ) : (
                     <span className="text-sm">{character.name}</span>

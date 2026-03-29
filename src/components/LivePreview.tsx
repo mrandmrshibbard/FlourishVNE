@@ -12,7 +12,7 @@ import {
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, GameSetting, GameToggleSetting, UIElementType,
-    VNHotSpot, VNHotZoneElement
+    VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings
 } from '../features/ui/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
@@ -22,7 +22,9 @@ import {
     ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
-    CallCommonEventCommand
+    CallCommonEventCommand,
+    ShowImageMapCommand, HideImageMapCommand,
+    TweenElementCommand,
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -35,6 +37,7 @@ import {
     normalizeSetVariableOperator as normalizeOperator,
     calculateVariableValue 
 } from '../utils/variableUtils';
+import { computeArrangedPositions } from '../utils/characterArrange';
 
 /** Convert hex color to approximate hue rotation degrees for CSS filter */
 function getHueFromHex(hex: string): number {
@@ -173,6 +176,9 @@ import {
     handleSpawnParticles,
     handleStopParticles,
     handleCallCommonEvent,
+    handleShowImageMap,
+    handleHideImageMap,
+    handleTweenElement,
 } from './live-preview/command-handlers';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
@@ -183,6 +189,7 @@ import {
     TextOverlay,
     ImageOverlay,
     ButtonOverlay,
+    ImageMapOverlay,
     StageCharacterState,
     StageState,
     MusicState,
@@ -195,20 +202,14 @@ type StageSize = { width: number; height: number };
 
 // Import utility functions from extracted modules
 import { getOverlayTransitionClass } from './live-preview/systems/transitionUtils';
-// TODO: Remove duplicate local declarations before uncommenting buildSlideStyle
-// import { buildSlideStyle } from './live-preview/systems/transitionUtils';
-
-// Import renderer components from extracted modules  
-// TODO: Remove duplicate local declarations before uncommenting
-// import { TextOverlayElement } from './live-preview/renderers/TextOverlayRenderer';
-// import { ImageOverlayElement } from './live-preview/renderers/ImageOverlayRenderer';
-// import { ButtonOverlayElement } from './live-preview/renderers/ButtonOverlayRenderer';
-
+import { TweenManager } from './live-preview/systems/tweenManager';
+import { useTween } from './live-preview/hooks/useTween';
 
 const defaultSettings: GameSettings = {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
+    voiceVolume: 0.8,
     ambientVolume: 0.8,
     enableSkip: true,
     autoAdvance: false,
@@ -256,6 +257,7 @@ const buildSlideStyle = (x: number, _y: number, action: 'show' | 'hide' | undefi
 };
 
 const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize }> = ({ overlay, stageSize }) => {
+    const tweenValues = useTween(overlay.id, 'text');
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
     const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
     const timeoutRef = useRef<number | null>(null);
@@ -300,18 +302,26 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
     const isSlideTransition = overlay.transition === 'slide';
     const slideStyle = isSlideTransition ? buildSlideStyle(overlay.x, overlay.y ?? 0, overlay.action, stageSize) : {};
 
+    // Apply tween interpolated values
+    const tx = tweenValues?.x ?? overlay.x;
+    const ty = tweenValues?.y ?? overlay.y;
+    const tFontSize = tweenValues?.fontSize ?? overlay.fontSize;
+    const tColor = tweenValues?.color ?? overlay.color;
+    const tWidth = tweenValues?.width ?? overlay.width;
+    const tHeight = tweenValues?.height ?? overlay.height;
+
     const baseStyle: React.CSSProperties = {
-        left: `${overlay.x}%`,
-        top: `${overlay.y}%`,
+        left: `${tx}%`,
+        top: `${ty}%`,
         ...(isSlideTransition ? {} : { transform: 'translate(-50%, -50%)' }),
-        fontSize: `calc(var(--font-scale, 1) * ${overlay.fontSize}px)`,
+        fontSize: `calc(var(--font-scale, 1) * ${tFontSize}px)`,
         fontFamily: overlay.fontFamily,
-        color: overlay.color,
+        color: tColor,
         fontWeight: overlay.fontWeight || 'normal',
         fontStyle: overlay.fontStyle || 'normal',
         letterSpacing: overlay.letterSpacing ? `calc(var(--font-scale, 1) * ${overlay.letterSpacing}px)` : undefined,
-        width: overlay.width ? `calc(var(--font-scale, 1) * ${overlay.width}px)` : 'auto',
-        height: overlay.height ? `calc(var(--font-scale, 1) * ${overlay.height}px)` : 'auto',
+        width: tWidth ? `calc(var(--font-scale, 1) * ${tWidth}px)` : 'auto',
+        height: tHeight ? `calc(var(--font-scale, 1) * ${tHeight}px)` : 'auto',
         textAlign: overlay.textAlign || 'left',
         display: 'flex',
         alignItems: overlay.verticalAlign === 'top' ? 'flex-start' : overlay.verticalAlign === 'bottom' ? 'flex-end' : 'center',
@@ -370,6 +380,7 @@ const ButtonOverlayElement: React.FC<{
     onAdvance?: () => void;
     onCommitVariables?: () => void;
 }> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables }) => {
+    const tweenValues = useTween(overlay.id, 'button');
     const [isHovered, setIsHovered] = useState(false);
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
     const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
@@ -447,12 +458,22 @@ const ButtonOverlayElement: React.FC<{
     const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
     const animDuration = `${overlay.duration ?? 0.3}s`;
 
+    // Apply tween interpolated values
+    const bx = tweenValues?.x ?? overlay.x;
+    const by = tweenValues?.y ?? overlay.y;
+    const bw = tweenValues?.width ?? overlay.width;
+    const bh = tweenValues?.height ?? overlay.height;
+    const bOpacity = tweenValues?.opacity ?? overlay.opacity;
+    const bFontSize = tweenValues?.fontSize ?? overlay.fontSize;
+    const bBorderRadius = tweenValues?.borderRadius ?? overlay.borderRadius;
+    const bBgColor = tweenValues?.backgroundColor ?? overlay.backgroundColor;
+
     const containerStyle: React.CSSProperties = {
         position: 'absolute',
-        left: `${overlay.x}%`,
-        top: `${overlay.y}%`,
-        width: `${overlay.width}%`,
-        height: `${overlay.height}%`,
+        left: `${bx}%`,
+        top: `${by}%`,
+        width: `${bw}%`,
+        height: `${bh}%`,
         transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%)`,
         pointerEvents: 'auto',
     };
@@ -465,11 +486,11 @@ const ButtonOverlayElement: React.FC<{
     const buttonStyle: React.CSSProperties = {
         width: '100%',
         height: '100%',
-        backgroundColor: overlay.backgroundColor,
+        backgroundColor: bBgColor,
         color: overlay.textColor,
-        fontSize: `calc(var(--font-scale, 1) * ${overlay.fontSize}px)`,
+        fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
         fontWeight: overlay.fontWeight,
-        borderRadius: `${overlay.borderRadius}px`,
+        borderRadius: `${bBorderRadius}px`,
         border: 'none',
         cursor: 'pointer',
         display: 'flex',
@@ -478,7 +499,7 @@ const ButtonOverlayElement: React.FC<{
         transition: 'transform 0.1s, box-shadow 0.1s',
         boxShadow: isHovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
         transform: isHovered ? 'translateY(-2px)' : 'none',
-        opacity: overlay.opacity ?? 1,
+        opacity: bOpacity ?? 1,
     };
 
     const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
@@ -506,6 +527,7 @@ const ButtonOverlayElement: React.FC<{
 };
 
 const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSize }> = ({ overlay, stageSize }) => {
+    const tweenValues = useTween(overlay.id, 'image');
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
     const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
     const timeoutRef = useRef<number | null>(null);
@@ -550,11 +572,21 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     const isSlideTransition = overlay.transition === 'slide';
     const slideStyle = isSlideTransition ? buildSlideStyle(overlay.x, overlay.y ?? 0, overlay.action, stageSize) : {};
 
+    // Apply tween interpolated values
+    const ix = tweenValues?.x ?? overlay.x;
+    const iy = tweenValues?.y ?? overlay.y;
+    const iw = tweenValues?.width ?? overlay.width;
+    const ih = tweenValues?.height ?? overlay.height;
+    const iOpacity = tweenValues?.opacity ?? overlay.opacity;
+    const iRotation = tweenValues?.rotation ?? overlay.rotation;
+    const iScaleX = tweenValues?.scaleX ?? overlay.scaleX;
+    const iScaleY = tweenValues?.scaleY ?? overlay.scaleY;
+
     const containerStyle: React.CSSProperties = {
-        left: `${overlay.x}%`,
-        top: `${overlay.y}%`,
-        width: `${overlay.width}px`,
-        height: `${overlay.height}px`,
+        left: `${ix}%`,
+        top: `${iy}%`,
+        width: `${iw}px`,
+        height: `${ih}px`,
         ...(isSlideTransition ? {} : { transform: 'translate(-50%, -50%)' }),
     };
 
@@ -566,9 +598,9 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     const imageStyle: React.CSSProperties = {
         width: '100%',
         height: '100%',
-        transform: `rotate(${overlay.rotation}deg) scale(${overlay.scaleX}, ${overlay.scaleY})`,
+        transform: `rotate(${iRotation}deg) scale(${iScaleX}, ${iScaleY})`,
         transformOrigin: 'center center',
-        opacity: overlay.opacity,
+        opacity: iOpacity,
     };
 
     const className = `absolute${applyTransition ? ` ${transitionClass} transition-base` : ''}`;
@@ -598,6 +630,242 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
                     style={imageStyle} 
                 />
             )}
+        </div>
+    );
+};
+
+/** Renders a single image map region as a CSS overlay with click handling */
+const ImageMapRegionElement: React.FC<{
+    region: import('./live-preview/types/gameState').ImageMapRegionOverlay;
+    containerWidth: number;
+    containerHeight: number;
+    hasHoverImage?: boolean;
+    onAction: (action: VNUIAction) => void;
+    onAdvance?: () => void;
+    onCommitVariables?: () => void;
+    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
+    variables: Record<VNID, string | number | boolean>;
+    onRegionHover?: (regionId: string) => void;
+    onRegionLeave?: () => void;
+}> = ({ region, containerWidth, containerHeight, hasHoverImage, onAction, onAdvance, onCommitVariables, evaluateConditions, variables, onRegionHover, onRegionLeave }) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    if (region.conditions && region.conditions.length > 0) {
+        if (!evaluateConditions(region.conditions, variables)) return null;
+    }
+
+    const handleClick = () => {
+        const setVarActions = region.actions.filter(a => a.type === UIActionType.SetVariable);
+        const otherActions = region.actions.filter(a => a.type !== UIActionType.SetVariable);
+        setVarActions.forEach(a => onAction(a));
+        if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+        otherActions.forEach(a => onAction(a));
+        if (onAdvance) onAdvance();
+    };
+
+    const highlightColor = region.highlightColor || 'rgba(100, 149, 237, 0.3)';
+    const cursor = region.cursor || 'pointer';
+
+    const handleMouseEnter = () => {
+        setIsHovered(true);
+        if (onRegionHover) onRegionHover(region.id);
+    };
+    const handleMouseLeave = () => {
+        setIsHovered(false);
+        if (onRegionLeave) onRegionLeave();
+    };
+
+    if (region.shape === 'rect' && region.coords.length >= 4) {
+        const [x, y, w, h] = region.coords;
+        return (
+            <div
+                style={{
+                    position: 'absolute',
+                    left: `${x}%`, top: `${y}%`,
+                    width: `${w}%`, height: `${h}%`,
+                    cursor,
+                    backgroundColor: isHovered && !hasHoverImage ? highlightColor : 'transparent',
+                    transition: 'background-color 0.15s',
+                    pointerEvents: 'auto',
+                    borderRadius: 2,
+                    zIndex: 2,
+                }}
+                title={region.tooltip}
+                onClick={handleClick}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            />
+        );
+    }
+
+    if (region.shape === 'circle' && region.coords.length >= 3) {
+        const [cx, cy, r] = region.coords;
+        return (
+            <div
+                style={{
+                    position: 'absolute',
+                    left: `${cx - r}%`, top: `${cy - r}%`,
+                    width: `${r * 2}%`, height: `${r * 2}%`,
+                    borderRadius: '50%',
+                    cursor,
+                    backgroundColor: isHovered && !hasHoverImage ? highlightColor : 'transparent',
+                    transition: 'background-color 0.15s',
+                    pointerEvents: 'auto',
+                    zIndex: 2,
+                }}
+                title={region.tooltip}
+                onClick={handleClick}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            />
+        );
+    }
+
+    if (region.shape === 'poly' && region.coords.length >= 6) {
+        const points = [];
+        for (let i = 0; i < region.coords.length; i += 2) {
+            points.push(`${(region.coords[i] / 100) * containerWidth},${(region.coords[i + 1] / 100) * containerHeight}`);
+        }
+        return (
+            <svg style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}>
+                <polygon
+                    points={points.join(' ')}
+                    fill={isHovered && !hasHoverImage ? highlightColor : 'transparent'}
+                    style={{ cursor, pointerEvents: 'auto', transition: 'fill 0.15s' }}
+                    onClick={handleClick}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                >
+                    {region.tooltip && <title>{region.tooltip}</title>}
+                </polygon>
+            </svg>
+        );
+    }
+
+    return null;
+};
+
+/** Computes a CSS clip-path string for a given image map region */
+const getRegionClipPath = (region: import('./live-preview/types/gameState').ImageMapRegionOverlay): string | undefined => {
+    if (region.shape === 'rect' && region.coords.length >= 4) {
+        const [x, y, w, h] = region.coords;
+        return `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
+    }
+    if (region.shape === 'circle' && region.coords.length >= 3) {
+        const [cx, cy, r] = region.coords;
+        return `circle(${r}% at ${cx}% ${cy}%)`;
+    }
+    if (region.shape === 'poly' && region.coords.length >= 6) {
+        const points: string[] = [];
+        for (let i = 0; i < region.coords.length; i += 2) {
+            points.push(`${region.coords[i]}% ${region.coords[i + 1]}%`);
+        }
+        return `polygon(${points.join(', ')})`;
+    }
+    return undefined;
+};
+
+/** Renders a full image map overlay (image + clickable regions) */
+const ImageMapOverlayElement: React.FC<{
+    overlay: ImageMapOverlay;
+    onAction: (action: VNUIAction) => void;
+    onAdvance?: () => void;
+    onCommitVariables?: () => void;
+    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
+    variables: Record<VNID, string | number | boolean>;
+}> = ({ overlay, onAction, onAdvance, onCommitVariables, evaluateConditions, variables }) => {
+    const tweenValues = useTween(overlay.id, 'imageMap');
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+    const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+    const hasTransition = overlay.transition && overlay.transition !== 'instant';
+    const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
+    const timeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        if (!overlay.transition || overlay.transition === 'instant') { setPlayTransition(false); return; }
+        if (overlay.action === 'show') {
+            setPlayTransition(false);
+            timeoutRef.current = window.setTimeout(() => { setPlayTransition(true); timeoutRef.current = null; }, 0);
+            return () => { if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; } };
+        }
+        setPlayTransition(true);
+        return () => { if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; } };
+    }, [overlay.id, overlay.transition, overlay.action]);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const obs = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+            }
+        });
+        obs.observe(containerRef.current);
+        return () => obs.disconnect();
+    }, []);
+
+    const applyTransition = playTransition && overlay.transition && overlay.transition !== 'instant';
+    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
+    const animDuration = `${overlay.duration ?? 0.5}s`;
+
+    const containerStyle: React.CSSProperties = {
+        position: 'absolute',
+        left: `${tweenValues?.x ?? overlay.x}%`, top: `${tweenValues?.y ?? overlay.y}%`,
+        width: `${tweenValues?.width ?? overlay.width}%`, height: `${tweenValues?.height ?? overlay.height}%`,
+        opacity: tweenValues?.opacity ?? overlay.opacity,
+        pointerEvents: 'auto',
+    };
+
+    if (overlay.action === 'show' && hasTransition && !playTransition) {
+        containerStyle.opacity = 0;
+    }
+
+    return (
+        <div
+            ref={containerRef}
+            className={applyTransition ? transitionClass : ''}
+            style={{ ...containerStyle, ...(applyTransition ? { animationDuration: animDuration } : {}) }}
+        >
+            <img src={overlay.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+            {/* Ren'Py-style hover image: full-size overlay clipped to hovered region */}
+            {overlay.hoverImageUrl && hoveredRegionId && (() => {
+                const hoveredRegion = overlay.regions.find(r => r.id === hoveredRegionId);
+                if (!hoveredRegion) return null;
+                const clipPath = getRegionClipPath(hoveredRegion);
+                if (!clipPath) return null;
+                return (
+                    <img
+                        src={overlay.hoverImageUrl}
+                        alt=""
+                        style={{
+                            position: 'absolute',
+                            left: 0, top: 0,
+                            width: '100%', height: '100%',
+                            objectFit: 'contain',
+                            pointerEvents: 'none',
+                            clipPath,
+                            zIndex: 1,
+                        }}
+                    />
+                );
+            })()}
+            {overlay.regions.map(region => (
+                <ImageMapRegionElement
+                    key={region.id}
+                    region={region}
+                    containerWidth={containerSize.width}
+                    containerHeight={containerSize.height}
+                    hasHoverImage={!!overlay.hoverImageUrl}
+                    onAction={onAction}
+                    onAdvance={onAdvance}
+                    onCommitVariables={onCommitVariables}
+                    evaluateConditions={evaluateConditions}
+                    variables={variables}
+                    onRegionHover={setHoveredRegionId}
+                    onRegionLeave={() => setHoveredRegionId(null)}
+                />
+            ))}
         </div>
     );
 };
@@ -882,6 +1150,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         height: '100%',
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: projectUI.dialogueNameFont?.align === 'center' ? 'center' : projectUI.dialogueNameFont?.align === 'right' ? 'flex-end' : 'flex-start',
                         ...nameboxBgStyle,
                         padding: `${scalePx(nameboxPadding)} ${scalePx(nameboxHPadding)}`,
                         ...(hasCustomImage || nameboxImageUrl ? {} : {
@@ -1108,7 +1377,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                                 padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`, 
                                 ...(choiceHeight ? { height: scalePx(choiceHeight) } : {}), 
                                 ...fontSettingsToStyle(projectUI.choiceTextFont), 
-                                textAlign: 'center' as const, 
+                                textAlign: (projectUI.choiceTextFont?.align || 'center') as any, 
                                 wordBreak: 'break-word' as const, 
                                 overflowWrap: 'break-word' as const,
                                 cursor: 'pointer',
@@ -1457,7 +1726,7 @@ const ButtonElement: React.FC<{
         <button
             key={element.id}
             style={{...style, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit'}}
-            className="transition-transform transform hover:scale-105 relative flex items-center justify-center"
+            className={`transition-transform transform hover:scale-105 relative flex items-center ${{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[element.font?.align || 'center']}`}
             onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
             onMouseLeave={() => setIsHovered(false)}
             onClick={handleClick}
@@ -1520,7 +1789,7 @@ const AssetCyclerElement: React.FC<{
         // If no conditions match yet (no selections made), show all assets as fallback
         if (filteredAssetIds.length === 0) {
             // Check if any condition variables have values
-            const conditionVars = new Set(el.assetConditions.flatMap(c => c.conditions.map(cond => cond.variableId)));
+            const conditionVars = new Set<VNID>(el.assetConditions.flatMap(c => c.conditions.map(cond => cond.variableId)));
             const anyVarsSet = Array.from(conditionVars).some(varId => variables[varId]);
             
             if (!anyVarsSet) {
@@ -1983,6 +2252,100 @@ const HotZoneTextInput: React.FC<{
     );
 };
 
+/** Renders an imageMap element in HotZone runtime with Ren'Py-style hover support */
+const HotZoneImageMapRenderer: React.FC<{
+    el: VNHotZoneElement;
+    imageUrl: string | null;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
+    variables: Record<VNID, string | number | boolean>;
+    playSound: (soundId: VNID | null) => void;
+    handleLocalAction: (action: VNUIAction) => void;
+}> = ({ el, imageUrl, assetResolver, evaluateConditions, variables, playSound, handleLocalAction }) => {
+    const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+    const hoverImageUrl = (el as any).hoverImageId ? assetResolver((el as any).hoverImageId, 'image') : null;
+    const regions: any[] = (el as any).imageMapRegions || [];
+
+    // Compute clip-path for the hovered region
+    const hoveredRegion = hoveredRegionId ? regions.find((r: any) => r.id === hoveredRegionId) : null;
+    let hoverClipPath: string | undefined;
+    if (hoveredRegion) {
+        if (hoveredRegion.shape === 'rect' && hoveredRegion.coords.length >= 4) {
+            const [x, y, w, h] = hoveredRegion.coords;
+            hoverClipPath = `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
+        } else if (hoveredRegion.shape === 'circle' && hoveredRegion.coords.length >= 3) {
+            const [cx, cy, r] = hoveredRegion.coords;
+            hoverClipPath = `circle(${r}% at ${cx}% ${cy}%)`;
+        } else if (hoveredRegion.shape === 'poly' && hoveredRegion.coords.length >= 6) {
+            const points: string[] = [];
+            for (let i = 0; i < hoveredRegion.coords.length; i += 2) {
+                points.push(`${hoveredRegion.coords[i]}% ${hoveredRegion.coords[i + 1]}%`);
+            }
+            hoverClipPath = `polygon(${points.join(', ')})`;
+        }
+    }
+
+    return (
+        <div className="w-full h-full relative pointer-events-none">
+            {imageUrl && <img src={imageUrl} alt={el.name} className="w-full h-full object-contain" draggable={false} />}
+            {/* Ren'Py-style hover image clipped to hovered region */}
+            {hoverImageUrl && hoverClipPath && (
+                <img
+                    src={hoverImageUrl}
+                    alt=""
+                    style={{
+                        position: 'absolute',
+                        left: 0, top: 0,
+                        width: '100%', height: '100%',
+                        objectFit: 'contain',
+                        pointerEvents: 'none',
+                        clipPath: hoverClipPath,
+                        zIndex: 1,
+                    }}
+                    draggable={false}
+                />
+            )}
+            {regions.map((region: any) => {
+                if (region.conditions && region.conditions.length > 0 && !evaluateConditions(region.conditions, variables)) return null;
+                const regionStyle: React.CSSProperties = {
+                    position: 'absolute',
+                    cursor: region.cursor || 'pointer',
+                    pointerEvents: 'auto',
+                    zIndex: 2,
+                };
+                if (region.shape === 'rect') {
+                    regionStyle.left = `${region.coords[0]}%`;
+                    regionStyle.top = `${region.coords[1]}%`;
+                    regionStyle.width = `${region.coords[2]}%`;
+                    regionStyle.height = `${region.coords[3]}%`;
+                } else if (region.shape === 'circle') {
+                    const r = region.coords[2];
+                    regionStyle.left = `${region.coords[0] - r}%`;
+                    regionStyle.top = `${region.coords[1] - r}%`;
+                    regionStyle.width = `${r * 2}%`;
+                    regionStyle.height = `${r * 2}%`;
+                    regionStyle.borderRadius = '50%';
+                }
+                return (
+                    <div
+                        key={region.id}
+                        style={regionStyle}
+                        title={region.tooltip || region.name}
+                        className={!hoverImageUrl ? 'hover:bg-white/10 transition-colors' : 'transition-colors'}
+                        onClick={e => {
+                            e.stopPropagation();
+                            try { playSound((el as any).clickSoundId || null); } catch {}
+                            (region.actions || []).forEach((action: VNUIAction) => handleLocalAction(action));
+                        }}
+                        onMouseEnter={() => setHoveredRegionId(region.id)}
+                        onMouseLeave={() => setHoveredRegionId(null)}
+                    />
+                );
+            })}
+        </div>
+    );
+};
+
 // --- Hot Zone Runtime Renderer ---
 const HotZoneRuntime: React.FC<{
     screen: VNUIScreen;
@@ -2262,6 +2625,16 @@ const HotZoneRuntime: React.FC<{
                                 playSound={playSound}
                                 font={elFont}
                             />
+                        ) : elType === 'imageMap' ? (
+                            <HotZoneImageMapRenderer
+                                el={el}
+                                imageUrl={imageUrl}
+                                assetResolver={assetResolver}
+                                evaluateConditions={evaluateConditions}
+                                variables={variables}
+                                playSound={playSound}
+                                handleLocalAction={handleLocalAction}
+                            />
                         ) : imageUrl ? (
                             <img src={imageUrl} alt={el.name} className="w-full h-full object-contain pointer-events-none" draggable={false} />
                         ) : (
@@ -2362,7 +2735,8 @@ const UIScreenRenderer: React.FC<{
             }
             case UIElementType.Text: {
                 const el = element as UITextElement;
-                const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[el.textAlign || 'center'];
+                const effectiveAlign = el.textAlign || el.font?.align || 'center';
+                const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[effectiveAlign];
                 const vAlignClass = { top: 'items-start', middle: 'items-center', bottom: 'items-end' }[el.verticalAlign || 'middle'];
                 const interpolatedText = interpolateVariables(el.text, variables, project);
 
@@ -2927,6 +3301,186 @@ const UIScreenRenderer: React.FC<{
 });
 
 
+// --- In-Game Confirmation Dialog ---
+const InGameConfirmDialog: React.FC<{
+    type: 'quit' | 'newGame';
+    settings?: VNConfirmDialogSettings;
+    assetResolver: (id: VNID, type: string) => string;
+    onConfirm: () => void;
+    onCancel: () => void;
+}> = ({ type, settings: s, assetResolver, onConfirm, onCancel }) => {
+    const isQuit = type === 'quit';
+    const title = isQuit
+        ? (s?.quitTitle || 'Quit Game')
+        : (s?.newGameTitle || 'Start New Game');
+    const message = isQuit
+        ? (s?.quitMessage || 'Are you sure you want to quit?')
+        : (s?.newGameMessage || 'Any unsaved progress will be lost. Are you sure?');
+    const confirmLabel = isQuit
+        ? (s?.quitConfirmLabel || 'Quit')
+        : (s?.newGameConfirmLabel || 'New Game');
+    const cancelLabel = isQuit
+        ? (s?.quitCancelLabel || 'Cancel')
+        : (s?.newGameCancelLabel || 'Cancel');
+
+    const bgColor = s?.backgroundColor || '#0f172a';
+    const bgOpacity = (s?.backgroundOpacity ?? 92) / 100;
+    const borderRadius = s?.borderRadius ?? 12;
+    const overlayColor = s?.overlayColor || 'rgba(0,0,0,0.75)';
+    const confirmBtnColor = s?.confirmButtonColor || '';
+    const cancelBtnColor = s?.cancelButtonColor || '#1e293b';
+    const confirmHoverColor = s?.confirmHoverColor || '';
+    const cancelHoverColor = s?.cancelHoverColor || '#334155';
+    const btnBorderRadius = s?.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
+    const btnPad = s?.buttonPadding ?? 8;
+    const dialogPad = s?.dialogPadding ?? 32;
+
+    const titleStyle: React.CSSProperties = s?.titleFont ? fontSettingsToStyle(s.titleFont) : { fontSize: '1.25rem', fontWeight: 600, color: '#fff' };
+    const messageStyle: React.CSSProperties = s?.messageFont ? fontSettingsToStyle(s.messageFont) : { fontSize: '0.95rem', color: '#cbd5e1' };
+    const buttonStyle: React.CSSProperties = s?.buttonFont ? fontSettingsToStyle(s.buttonFont) : { fontSize: '0.95rem', fontWeight: 500, color: '#fff' };
+
+    // Resolve asset URLs
+    const resolveAsset = (asset?: { id: VNID } | null) => asset?.id ? assetResolver(asset.id, 'image') : null;
+    const bgImageUrl = resolveAsset(s?.backgroundImage);
+    const borderImageUrl = resolveAsset(s?.borderImage);
+    const confirmBtnImgUrl = resolveAsset(s?.confirmButtonImage);
+    const cancelBtnImgUrl = resolveAsset(s?.cancelButtonImage);
+    const confirmHoverImgUrl = resolveAsset(s?.confirmHoverImage);
+    const cancelHoverImgUrl = resolveAsset(s?.cancelHoverImage);
+
+    const sizeMode = s?.backgroundSizeMode || 'stretch';
+    const bgImageStyle: React.CSSProperties = bgImageUrl ? {
+        backgroundImage: `url(${bgImageUrl})`,
+        backgroundSize: sizeMode === 'nine-slice' ? undefined : (sizeMode === 'stretch' ? '100% 100%' : sizeMode),
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        ...(sizeMode === 'nine-slice' ? {
+            borderImage: `url(${bgImageUrl}) ${s?.backgroundSlice ?? 20} fill`,
+            borderImageWidth: `${s?.backgroundSlice ?? 20}px`,
+        } : {}),
+    } : {};
+
+    const makeBtnImageStyle = (imgUrl: string | null): React.CSSProperties => {
+        if (!imgUrl) return {};
+        const bsm = s?.buttonSizeMode || 'stretch';
+        return {
+            backgroundImage: `url(${imgUrl})`,
+            backgroundSize: bsm === 'nine-slice' ? undefined : (bsm === 'stretch' ? '100% 100%' : bsm),
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: 'transparent',
+            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${s?.buttonSlice ?? 10} fill`, borderImageWidth: `${s?.buttonSlice ?? 10}px` } : {}),
+        };
+    };
+
+    const borderPad = s?.borderPadding ?? 12;
+
+    return (
+        <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ backgroundColor: overlayColor, zIndex: 9998, animation: 'fade-in 0.2s ease-out' }}
+            onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+        >
+            {/* Border image wrapper */}
+            <div style={borderImageUrl ? {
+                backgroundImage: `url(${borderImageUrl})`,
+                backgroundSize: '100% 100%',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                padding: borderPad,
+                borderRadius,
+            } : {}}>
+                <div
+                    style={{
+                        backgroundColor: bgImageUrl ? 'transparent' : bgColor,
+                        opacity: bgImageUrl ? 1 : undefined,
+                        borderRadius,
+                        padding: dialogPad,
+                        ...(s?.dialogWidth ? { width: s.dialogWidth } : { minWidth: 320, maxWidth: 440 }),
+                        textAlign: 'center',
+                        boxShadow: borderImageUrl ? 'none' : '0 12px 40px rgba(0,0,0,0.5)',
+                        ...bgImageStyle,
+                        ...(bgImageUrl ? {} : { background: `${bgColor}${Math.round(bgOpacity * 255).toString(16).padStart(2, '0')}` }),
+                    }}
+                >
+                    <div style={{ ...titleStyle, marginBottom: '0.75rem' }}>{title}</div>
+                    <div style={{ ...messageStyle, marginBottom: '1.5rem' }}>{message}</div>
+                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                        <button
+                            onClick={onCancel}
+                            style={{
+                                ...buttonStyle,
+                                padding: `${btnPad}px ${btnPad * 3}px`,
+                                borderRadius: btnBorderRadius,
+                                backgroundColor: cancelBtnImgUrl ? 'transparent' : cancelBtnColor,
+                                border: cancelBtnImgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s',
+                                ...makeBtnImageStyle(cancelBtnImgUrl),
+                            }}
+                            onMouseEnter={e => {
+                                if (cancelHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${cancelHoverImgUrl})`;
+                                } else {
+                                    e.currentTarget.style.backgroundColor = cancelHoverColor;
+                                }
+                            }}
+                            onMouseLeave={e => {
+                                if (cancelBtnImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${cancelBtnImgUrl})`;
+                                } else if (cancelHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = 'none';
+                                    e.currentTarget.style.backgroundColor = cancelBtnColor;
+                                } else {
+                                    e.currentTarget.style.backgroundColor = cancelBtnColor;
+                                }
+                            }}
+                        >
+                            {cancelLabel}
+                        </button>
+                        <button
+                            onClick={onConfirm}
+                            style={{
+                                ...buttonStyle,
+                                padding: `${btnPad}px ${btnPad * 3}px`,
+                                borderRadius: btnBorderRadius,
+                                background: confirmBtnImgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)'),
+                                border: 'none',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s, box-shadow 0.15s',
+                                ...makeBtnImageStyle(confirmBtnImgUrl),
+                            }}
+                            onMouseEnter={e => {
+                                if (confirmHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${confirmHoverImgUrl})`;
+                                } else if (confirmHoverColor) {
+                                    e.currentTarget.style.background = confirmHoverColor;
+                                } else {
+                                    e.currentTarget.style.boxShadow = '0 4px 16px rgba(236,72,153,0.3)';
+                                }
+                            }}
+                            onMouseLeave={e => {
+                                if (confirmBtnImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${confirmBtnImgUrl})`;
+                                } else if (confirmHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = 'none';
+                                    e.currentTarget.style.background = confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)';
+                                } else if (confirmHoverColor) {
+                                    e.currentTarget.style.background = confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)';
+                                } else {
+                                    e.currentTarget.style.boxShadow = 'none';
+                                }
+                            }}
+                        >
+                            {confirmLabel}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- Main Player Component ---
 const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean }> = ({ onClose, hideCloseButton = false, autoStartMusic = false }) => {
     const { project } = useProject();
@@ -2951,6 +3505,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [hudStack, setHudStack] = useState<VNID[]>([]);
     // Track screens that are currently closing with transitions
     const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
+    // In-game confirmation dialog state
+    const [confirmDialog, setConfirmDialog] = useState<{ type: 'quit' | 'newGame'; pendingAction: VNUIAction } | null>(null);
     // Track scene exit transition (type, duration, and active state)
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
     const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
@@ -2965,6 +3521,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     });
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
+    // Tween tick counter — forces re-render each frame during active tweens
+    const [, setTweenTick] = useState(0);
+    useEffect(() => {
+        const unsub = TweenManager.subscribe(() => {
+            setTweenTick(t => t + 1);
+        });
+        return unsub;
+    }, []);
     const updatePlayerState = useCallback((updater: React.SetStateAction<PlayerState | null>) => {
         setPlayerState(prev => {
             const next = typeof updater === 'function'
@@ -3341,7 +3905,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
 
                     // Characters (layer images stacked at their positions)
-                    for (const char of Object.values(stage.characters)) {
+                    for (const char of Object.values(stage.characters) as StageCharacterState[]) {
                         if (char.isVideo) continue;
                         const pos = char.position;
                         let xPct = 50, yPct = 10;
@@ -3530,7 +4094,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentIndex: 0,
             commandStack: [],
             variables: initialVariables,
-            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
+            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], imageMapOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
             history: [],
             savedInputs: {},
             uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -4304,6 +4868,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     textOverlays: [],
                                     imageOverlays: [],
                                     buttonOverlays: [],
+                                    imageMapOverlays: [],
                                     movieOverlays: [],
                                     screen: {
                                         shake: { active: false, intensity: 0 },
@@ -4466,6 +5031,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         textOverlays: [],
                                         imageOverlays: [],
                                         buttonOverlays: [],
+                                        imageMapOverlays: [],
                                         movieOverlays: [],
                                         screen: {
                                             shake: { active: false, intensity: 0 },
@@ -5022,6 +5588,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                case CommandType.ShowImageMap: {
+                    const result = handleShowImageMap(command as ShowImageMapCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.HideImageMap: {
+                    const result = handleHideImageMap(command as HideImageMapCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
                 case CommandType.CreditRoll: {
                     const cmd = command as CreditRollCommand;
                     setActiveCreditRoll(cmd);
@@ -5046,6 +5622,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.CallCommonEvent: {
                     const result = handleCallCommonEvent(command as CallCommonEventCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.TweenElement: {
+                    const result = handleTweenElement(command as TweenElementCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -5230,6 +5811,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         newState.stageState = {
                             ...newState.stageState,
                             buttonOverlays: [],
+                            imageMapOverlays: [],
                             imageOverlays: [],
                             textOverlays: []
                         };
@@ -5386,8 +5968,36 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const handleUIAction = (action: VNUIAction) => {
         runtimeDebugLog('handleUIAction called with:', action.type, action);
         
+        // Intercept actions that need confirmation dialogs
+        if (action.type === UIActionType.QuitToTitle && playerState) {
+            // Show quit confirmation when a game is in progress
+            setConfirmDialog({ type: 'quit', pendingAction: action });
+            return;
+        }
+        if (action.type === UIActionType.StartNewGame && (playerState || gameSaves[0])) {
+            // Show new game confirmation when a game is in progress OR an auto-save exists
+            setConfirmDialog({ type: 'newGame', pendingAction: action });
+            return;
+        }
+
+        executeUIAction(action);
+    };
+
+    const executeUIAction = (action: VNUIAction) => {
         if (!playerState && action.type === UIActionType.StartNewGame) {
             startNewGame();
+        } else if (!playerState && action.type === UIActionType.ContinueGame) {
+            // Continue from title screen: load auto-save (slot 0), fallback to new game
+            const doLoad = async () => {
+                const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+                if (saves[0]) {
+                    loadGame(0);
+                } else {
+                    runtimeDebugLog('[ContinueGame] No auto-save found, starting new game instead');
+                    startNewGame();
+                }
+            };
+            void doLoad();
         } else if (playerState?.mode === 'paused' && action.type === UIActionType.ReturnToGame) {
              updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
              setScreenStack([]);
@@ -5530,6 +6140,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             stageState: {
                                                 ...p.stageState,
                                                 buttonOverlays: [],
+                                                imageMapOverlays: [],
                                                 imageOverlays: []
                                             }
                                         };
@@ -5560,6 +6171,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             stageState: {
                                                 ...p.stageState,
                                                 buttonOverlays: [],
+                                                imageMapOverlays: [],
                                                 imageOverlays: []
                                             }
                                         };
@@ -5599,6 +6211,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             }
         } else if (action.type === UIActionType.QuitToTitle) {
+            // Auto-save to slot 0 before quitting so Continue can restore the session
+            if (playerState) {
+                saveGame(0);
+            }
             // Stop game music and SFX immediately
             const audio = musicAudioRef.current;
             if (audio) {
@@ -5620,6 +6236,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
             uiDirtyVariableIdsRef.current.clear();
             if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+        } else if (action.type === UIActionType.ContinueGame) {
+            // Continue = load the auto-save from slot 0
+            const doLoad = async () => {
+                const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+                if (saves[0]) {
+                    loadGame(0);
+                } else {
+                    runtimeDebugLog('[ContinueGame] No auto-save found, starting new game instead');
+                    startNewGame();
+                }
+            };
+            void doLoad();
         } else if (action.type === UIActionType.SaveGame) {
             saveGame((action as SaveGameAction).slotNumber);
         } else if (action.type === UIActionType.LoadGame) {
@@ -5683,6 +6311,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             textOverlays: [], 
                             imageOverlays: [], 
                             buttonOverlays: [], 
+                            imageMapOverlays: [],
                             movieOverlays: [],
                             screen: { 
                                 shake: { active: false, intensity: 0 }, 
@@ -5755,6 +6384,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     textOverlays: [], 
                                     imageOverlays: [], 
                                     buttonOverlays: [], 
+                                    imageMapOverlays: [],
                                     movieOverlays: [],
                                     screen: { 
                                         shake: { active: false, intensity: 0 }, 
@@ -6011,6 +6641,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         stageState: {
                             ...p.stageState,
                             buttonOverlays: [],
+                            imageMapOverlays: [],
                             imageOverlays: [],
                             textOverlays: []
                         },
@@ -6261,7 +6892,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
         const shakeClass = activeShakeRef.current ? 'shake' : '';
         const intensityPx = activeShakeRef.current ? activeShakeRef.current.intensity * 1.5 : 0;
-        const panZoomStyle: React.CSSProperties = { transform: `scale(${state.screen.zoom}) translate(${state.screen.panX}%, ${state.screen.panY}%)`, transition: `transform ${state.screen.transitionDuration}s ease-in-out`, width: '100%', height: '100%' };
+        const screenTween = TweenManager.getCurrentValues('__screen__', 'screen');
+        const tweenedZoom = screenTween?.scaleX ?? state.screen.zoom;
+        const tweenedPanX = screenTween?.x ?? state.screen.panX;
+        const tweenedPanY = screenTween?.y ?? state.screen.panY;
+        const panZoomStyle: React.CSSProperties = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? 'none' : `transform ${state.screen.transitionDuration}s ease-in-out`, width: '100%', height: '100%' };
         const shakeIntensityStyle = (activeShakeRef.current ? { '--shake-intensity-x': `${intensityPx}px`, '--shake-intensity-y': `${intensityPx * 0.7}px`, } : {}) as React.CSSProperties;
         const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out`, };
 
@@ -6348,15 +6983,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 />
                             );
                         })}
-                        {Object.values(state.characters).map((char: StageCharacterState) => {
+                        {(() => {
+                            // Pre-compute arranged positions when auto-arrange is on
+                            const allChars = Object.values(state.characters) as StageCharacterState[];
+                            const arranged = project.autoArrangeCharacters
+                                ? computeArrangedPositions(allChars.map(c => ({ id: c.charId, position: c.position })))
+                                : null;
+                            return allChars.map((char: StageCharacterState) => {
                             let transitionClass = '';
                             let animationDuration = '1s';
                             let slideStyle: React.CSSProperties = {};
-                            let positionStyle = getPositionStyle(char.position);
+                            // Apply auto-arrange offset if applicable
+                            const arrangedX = arranged?.get(char.charId);
+                            let positionStyle = arrangedX !== undefined
+                                ? { top: '10%', left: `${arrangedX}%` }
+                                : getPositionStyle(char.position);
+
+                            // Apply tween interpolated position if active
+                            const charTween = TweenManager.getCurrentValues(char.charId, 'character');
+                            const hasTweenPosition = charTween && (charTween.x !== undefined || charTween.y !== undefined);
+                            if (hasTweenPosition) {
+                                const basePos = typeof char.position === 'object'
+                                    ? char.position
+                                    : { x: arrangedX ?? (char.position === 'left' ? 25 : char.position === 'right' ? 75 : char.position === 'center' ? 50 : char.position === 'off-left' ? -25 : 125), y: 10 };
+                                positionStyle = {
+                                    left: `${charTween.x ?? basePos.x}%`,
+                                    top: `${charTween.y ?? basePos.y}%`,
+                                    transform: 'translate(-50%, 0)',
+                                };
+                            }
                             
                             // Add centering transform for non-slide transitions
                             // Only apply centering for preset positions, not custom coordinates
-                            const isCustomPosition = typeof char.position === 'object';
+                            // Tween positions already include centering above
+                            const isCustomPosition = typeof char.position === 'object' || hasTweenPosition;
                             if (!char.transition || char.transition.type !== 'slide') {
                                 if (!isCustomPosition) {
                                     // For preset positions, center horizontally
@@ -6577,18 +7237,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 );
                             }
                             
+                            // Apply tween scale and opacity to character container
+                            const charScale = charTween?.scale ?? (char as any).scale ?? 1;
+                            const charOpacity = charTween?.opacity;
+
                             return (
                                 <div
                                     key={char.charId}
                                     className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
                                     style={{
                                         ...positionStyle, animationDuration, ...slideStyle, zIndex: 5,
+                                        ...(charScale !== 1 ? { transform: `${positionStyle.transform || ''} scale(${charScale})`.trim(), transformOrigin: 'center bottom' } : {}),
+                                        ...(charOpacity !== undefined ? { opacity: charOpacity } : {}),
                                     }}
                                 >
                                     {wrappedContent}
                                 </div>
                             );
-                        })}
+                        });
+                        })()}
                         {/* Particle System - above characters (z-5), below overlays */}
                         {(() => {
                             const pEffects = state.particleEffects;
@@ -6626,6 +7293,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 onAction={handleUIAction} 
                                 playSound={playSound} 
                                 onCommitVariables={commitUiVariablesToPlayerState}
+                                onAdvance={overlay.waitForClick ? () => {
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        return {
+                                            ...p,
+                                            currentIndex: p.currentIndex + 1,
+                                            uiState: { ...p.uiState, isWaitingForInput: false }
+                                        };
+                                    });
+                                } : undefined}
+                            />
+                        ))}
+                        {(state.imageMapOverlays || []).map((overlay: ImageMapOverlay) => (
+                            <ImageMapOverlayElement
+                                key={overlay.id}
+                                overlay={overlay}
+                                onAction={handleUIAction}
+                                onCommitVariables={commitUiVariablesToPlayerState}
+                                evaluateConditions={evaluateConditions}
+                                variables={playerState?.variables || {}}
                                 onAdvance={overlay.waitForClick ? () => {
                                     updatePlayerState(p => {
                                         if (!p) return null;
@@ -6930,10 +7617,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }, []);
         
         return (
-            <div className="absolute inset-0 bg-black/92 z-50 flex flex-col" style={{ backdropFilter: 'blur(4px)' }}>
+            <div className="absolute inset-0 bg-black z-50 flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/60"
-                    style={{ background: 'linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.8) 100%)' }}>
+                    style={{ background: 'linear-gradient(180deg, rgb(15,23,42) 0%, rgb(15,23,42) 100%)' }}>
                     <div className="flex items-center gap-3">
                         <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -6964,10 +7651,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 key={index}
                                 className={`group p-3 rounded-lg transition-colors ${
                                     entry.type === 'choice' 
-                                        ? 'bg-blue-900/20 border-l-3 border-blue-500/60 hover:bg-blue-900/30' 
+                                        ? 'bg-blue-900/40 border-l-3 border-blue-500/60 hover:bg-blue-900/50' 
                                         : entry.type === 'textInput'
-                                        ? 'bg-emerald-900/20 border-l-3 border-emerald-500/60 hover:bg-emerald-900/30'
-                                        : 'bg-slate-800/30 hover:bg-slate-800/50'
+                                        ? 'bg-emerald-900/40 border-l-3 border-emerald-500/60 hover:bg-emerald-900/50'
+                                        : 'bg-slate-800/50 hover:bg-slate-800/60'
                                 }`}
                                 style={{ cursor: onJumpTo ? 'pointer' : 'default' }}
                                 onClick={() => onJumpTo?.(index)}
@@ -7099,29 +7786,47 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const qmBg = hexToRgba(qmColor, qmOpacity);
                         const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
 
-                        const positionStyle: React.CSSProperties = qmPosition === 'top-right'
-                            ? { top: '8px', right: '8px', position: 'absolute' as const }
-                            : qmPosition === 'bottom-right'
-                            ? { bottom: '8px', right: '8px', position: 'absolute' as const }
-                            : { // above-dialogue
-                                bottom: `${(project.ui.dialogueBoxBottomMargin ?? 20) + (project.ui.dialogueBoxHeight || 120) + 8}px`,
-                                left: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-                                right: `${(100 - (project.ui.dialogueBoxWidth ?? 100)) / 2}%`,
-                                position: 'absolute' as const,
-                              };
+                        /* ── Percentage-based layout (matching InGameUIEditor) ── */
+                        const lpGameW = project.gameResolution?.width || 1920;
+                        const lpGameH = project.gameResolution?.height || 1080;
+                        const dlgW = project.ui.dialogueBoxWidth ?? 100;
+                        const dlgH = project.ui.dialogueBoxHeight ? (project.ui.dialogueBoxHeight * 100 / lpGameH) : 20;
+                        const dlgX = project.ui.dialogueBoxX ?? ((100 - dlgW) / 2);
+                        const dlgBm = (project.ui.dialogueBoxBottomMargin ?? 20) * 100 / lpGameH;
+                        const dlgY = project.ui.dialogueBoxY ?? (100 - dlgH - dlgBm);
+
+                        const qmWPct = project.ui.quickMenuWidth ?? 40;
+                        const qmHPct = project.ui.quickMenuHeight ?? 4;
+                        const getDefaultPos = () => {
+                            if (qmPosition === 'top-right') return { x: 100 - qmWPct - 1, y: 1 };
+                            if (qmPosition === 'bottom-right') return { x: 100 - qmWPct - 1, y: 100 - qmHPct - 1 };
+                            return { x: dlgX, y: dlgY - qmHPct - 1 };
+                        };
+                        const defPos = getDefaultPos();
+                        const qmX = project.ui.quickMenuX ?? defPos.x;
+                        const qmY = project.ui.quickMenuY ?? defPos.y;
 
                         return (
                             <div className="z-25 flex items-center justify-center gap-2" 
-                                style={{ ...positionStyle, pointerEvents: 'none' }}
+                                style={{
+                                    position: 'absolute' as const,
+                                    left: `${qmX}%`,
+                                    top: `${qmY}%`,
+                                    width: `${qmWPct}%`,
+                                    height: `${qmHPct}%`,
+                                    pointerEvents: 'none',
+                                }}
                             >
                                 <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
                                     {/* Skip Backward button */}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleSkipBackward(); }}
                                         disabled={playerState.history.length === 0}
-                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all"
+                                        className="flex items-center gap-1 font-medium transition-all"
                                         style={{
-                                            borderRadius: `${qmRadius}px`,
+                                            borderRadius: scalePx(qmRadius),
+                                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                                            fontSize: scalePx(12),
                                             background: playerState.history.length > 0 ? qmBg : qmBgDisabled,
                                             border: '1px solid rgba(148,163,184,0.2)',
                                             color: playerState.history.length > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)',
@@ -7139,9 +7844,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     {/* History button */}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); }}
-                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all hover:brightness-125"
+                                        className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
                                         style={{
-                                            borderRadius: `${qmRadius}px`,
+                                            borderRadius: scalePx(qmRadius),
+                                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                                            fontSize: scalePx(12),
                                             background: qmBg,
                                             border: '1px solid rgba(148,163,184,0.2)',
                                             color: 'rgba(255,255,255,0.8)',
@@ -7158,9 +7865,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     {/* Auto-advance toggle */}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); }}
-                                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all"
+                                        className="flex items-center gap-1 font-medium transition-all"
                                         style={{
-                                            borderRadius: `${qmRadius}px`,
+                                            borderRadius: scalePx(qmRadius),
+                                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                                            fontSize: scalePx(12),
                                             background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : qmBg,
                                             border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`,
                                             color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)',
@@ -7179,9 +7888,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     {settings.enableSkip && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); }}
-                                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all"
+                                            className="flex items-center gap-1 font-medium transition-all"
                                             style={{
-                                                borderRadius: `${qmRadius}px`,
+                                                borderRadius: scalePx(qmRadius),
+                                                padding: `${scalePx(4)} ${scalePx(10)}`,
+                                                fontSize: scalePx(12),
                                                 background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : qmBg,
                                                 border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`,
                                                 color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)',
@@ -7308,6 +8019,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 try { clearTimeout(timeoutId); } catch (e) {}
             });
             activeEffectTimeoutsRef.current = [];
+            
+            // Cancel all active tweens
+            TweenManager.cancelAll();
             
             // Stop all videos (including background videos on screens)
             const allVideos = document.querySelectorAll('video');
@@ -7635,6 +8349,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     />
                 )}
             </div>
+            {/* In-game confirmation dialog */}
+            {confirmDialog && (
+                <InGameConfirmDialog
+                    type={confirmDialog.type}
+                    settings={project.ui.confirmDialogs}
+                    assetResolver={assetResolver}
+                    onConfirm={() => {
+                        const action = confirmDialog.pendingAction;
+                        setConfirmDialog(null);
+                        executeUIAction(action);
+                    }}
+                    onCancel={() => setConfirmDialog(null)}
+                />
+            )}
             {!hideCloseButton && (
                 <button onClick={handleClose} className="absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50">
                     <XMarkIcon className="w-8 h-8"/>

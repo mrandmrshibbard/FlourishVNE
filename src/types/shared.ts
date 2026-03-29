@@ -33,6 +33,7 @@ export enum UIActionType {
     OpenURL = 'OpenURL',
     PlayAnimation = 'PlayAnimation',
     ChangeImage = 'ChangeImage',
+    ContinueGame = 'ContinueGame',
 }
 
 export interface BaseUIAction { type: UIActionType; }

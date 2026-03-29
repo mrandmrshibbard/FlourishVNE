@@ -2,6 +2,7 @@ import { VNID, VNPosition, VNTransition } from '../../types';
 import { VNSetVariableOperator } from '../variables/types';
 import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction } from '../../types/shared';
 import type { VNScreenOverlayEffectType, VNSnowAshVariant } from '../../types';
+import type { EasingType } from '../../components/live-preview/systems/easingFunctions';
 
 /**
  * Command execution modifiers for parallel/async execution
@@ -76,6 +77,9 @@ export enum CommandType {
     SpawnParticles = 'SpawnParticles', // Spawn a particle effect on stage
     StopParticles = 'StopParticles', // Stop/clear particle effects
     CallCommonEvent = 'CallCommonEvent', // Invoke a reusable Common Event
+    ShowImageMap = 'ShowImageMap', // Display an image with clickable hot spot regions
+    HideImageMap = 'HideImageMap', // Remove an image map from stage
+    TweenElement = 'TweenElement', // Animate position/size/opacity/etc. of an on-stage element over time
 }
 
 interface BaseCommand {
@@ -608,6 +612,105 @@ export interface CallCommonEventCommand extends BaseCommand {
     arguments?: Record<VNID, string | number | boolean>;
 }
 
+/** A clickable region within an image map */
+export interface ImageMapRegion {
+    id: VNID;
+    name: string;
+    shape: 'rect' | 'circle' | 'poly';
+    /** For rect: [x%, y%, width%, height%]. For circle: [cx%, cy%, radius%]. For poly: [x1%, y1%, x2%, y2%, ...] */
+    coords: number[];
+    /** Actions triggered when this region is clicked */
+    actions: VNUIAction[];
+    /** Optional hover tooltip text */
+    tooltip?: string;
+    /** Cursor on hover (default 'pointer') */
+    cursor?: string;
+    /** Highlight color on hover (CSS color, semi-transparent recommended) */
+    highlightColor?: string;
+    /** Only active when these conditions are met */
+    conditions?: VNCondition[];
+}
+
+export interface ShowImageMapCommand extends BaseCommand {
+    type: CommandType.ShowImageMap;
+    /** Background image for the image map */
+    imageId: VNID;
+    /** Hover state image (shown clipped to the hovered region, Ren'Py-style) */
+    hoverImageId?: VNID;
+    /** Clickable regions overlaid on the image */
+    regions: ImageMapRegion[];
+    x: number; // percentage
+    y: number; // percentage
+    width: number; // percentage
+    height: number; // percentage
+    opacity: number; // 0-1
+    /** Whether to pause command execution until a region is clicked */
+    waitForClick: boolean;
+    transition: VNTransition;
+    duration: number; // in seconds
+}
+
+export interface HideImageMapCommand extends BaseCommand {
+    type: CommandType.HideImageMap;
+    targetCommandId: VNID;
+    transition: VNTransition;
+    duration: number; // in seconds
+}
+
+/** Target element type for tween commands */
+export type TweenTargetType = 'character' | 'image' | 'text' | 'button' | 'imageMap' | 'screen';
+
+/**
+ * Tween command — smoothly animates properties of an on-stage element over time.
+ * Works with characters, images, text overlays, buttons, and screen effects.
+ */
+export interface TweenElementCommand extends BaseCommand {
+    type: CommandType.TweenElement;
+    /** ID of the target element (characterId for characters, command id for overlays) */
+    targetId: VNID;
+    /** Type of the target element */
+    targetType: TweenTargetType;
+    /** Duration of the tween in seconds */
+    duration: number;
+    /** Easing function (default: 'easeInOutCubic') */
+    easing?: EasingType;
+    /** Whether to wait for the tween to complete before advancing (default: true) */
+    waitForCompletion?: boolean;
+    // ── Animatable properties (only include those you want to change) ──
+    /** Target X position (percentage) */
+    x?: number;
+    /** Target Y position (percentage) */
+    y?: number;
+    /** Target width (pixels for images, percentage for buttons) */
+    width?: number;
+    /** Target height (pixels for images, percentage for buttons) */
+    height?: number;
+    /** Target opacity (0-1) */
+    opacity?: number;
+    /** Target rotation (degrees, for images) */
+    rotation?: number;
+    /** Target horizontal scale */
+    scaleX?: number;
+    /** Target vertical scale */
+    scaleY?: number;
+    /** Target uniform scale (for characters) */
+    scale?: number;
+    /** Target font size (for text overlays) */
+    fontSize?: number;
+    /** Target border radius (for buttons) */
+    borderRadius?: number;
+    /** Target color (hex string, for text/tint) */
+    color?: string;
+    /** Target background color (hex string, for buttons) */
+    backgroundColor?: string;
+    /** Target screen zoom level */
+    zoom?: number;
+    /** Target screen pan X (percentage) */
+    panX?: number;
+    /** Target screen pan Y (percentage) */
+    panY?: number;
+}
+
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
@@ -615,7 +718,9 @@ export type VNCommand =
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand
-  | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand;
+  | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
+  | ShowImageMapCommand | HideImageMapCommand
+  | TweenElementCommand;
 
 export interface VNScene {
     id: VNID;

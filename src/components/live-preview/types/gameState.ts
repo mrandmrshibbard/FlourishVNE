@@ -79,6 +79,34 @@ export interface ButtonOverlay {
     action?: 'show' | 'hide';
 }
 
+export interface ImageMapRegionOverlay {
+    id: VNID;
+    name: string;
+    shape: 'rect' | 'circle' | 'poly';
+    coords: number[];
+    actions: import('../../../types/shared').VNUIAction[];
+    tooltip?: string;
+    cursor?: string;
+    highlightColor?: string;
+    conditions?: import('../../../types/shared').VNCondition[];
+}
+
+export interface ImageMapOverlay {
+    id: VNID;
+    imageUrl: string;
+    hoverImageUrl?: string;
+    regions: ImageMapRegionOverlay[];
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    opacity: number;
+    waitForClick?: boolean;
+    transition?: VNTransition;
+    duration?: number;
+    action?: 'show' | 'hide';
+}
+
 export interface StageCharacterTransition {
     type: VNTransition;
     duration: number;
@@ -111,6 +139,7 @@ export interface StageState {
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
+    imageMapOverlays: ImageMapOverlay[];
     /** Persistent movie overlays (transparent, looping) that play behind characters */
     movieOverlays?: Array<{
         url: string;
@@ -239,6 +268,7 @@ export interface GameSettings {
     textSpeed: number;
     musicVolume: number;
     sfxVolume: number;
+    voiceVolume: number;
     ambientVolume: number;
     enableSkip: boolean;
     autoAdvance: boolean;
@@ -249,6 +279,7 @@ export const defaultSettings: GameSettings = {
     textSpeed: 50,
     musicVolume: 0.8,
     sfxVolume: 0.8,
+    voiceVolume: 0.8,
     ambientVolume: 0.8,
     enableSkip: true,
     autoAdvance: false,

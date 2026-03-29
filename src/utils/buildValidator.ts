@@ -206,6 +206,23 @@ function validateCommand(
             }
             break;
         }
+        case CommandType.ShowImageMap: {
+            if (cmd.imageId && !project.images[cmd.imageId]) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `ShowImageMap references missing image asset (ID: ${cmd.imageId}).`,
+                    location: loc
+                });
+            }
+            if (!cmd.regions || cmd.regions.length === 0) {
+                warnings.push({
+                    severity: 'warning',
+                    message: `ShowImageMap has no clickable regions defined.`,
+                    location: loc
+                });
+            }
+            break;
+        }
         case CommandType.ShowScreen: {
             if (!project.uiScreens[cmd.screenId]) {
                 warnings.push({

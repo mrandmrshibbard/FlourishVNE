@@ -11,6 +11,8 @@ import {
     LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground, CreditMedia,
     GroupCommand, RunScriptCommand, CallCommonEventCommand,
     SpawnParticlesCommand, StopParticlesCommand,
+    ShowImageMapCommand, HideImageMapCommand, ImageMapRegion,
+    TweenElementCommand,
     VNScene,
     ChoiceAction,
 } from '../features/scene/types';
@@ -24,7 +26,7 @@ import {
 import { VNCondition, VNConditionOperator, UIActionType, SetVariableAction } from '../types/shared';
 import { VNSetVariableOperator } from '../features/variables/types';
 import { VNUIScreen } from '../features/ui/types';
-import { VNVariable, VNVariableType } from '../features/variables/types';
+import { VNVariable } from '../features/variables/types';
 import { VNCharacter, VNCharacterExpression } from '../features/character/types';
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
@@ -34,6 +36,9 @@ import AssetSelector from './ui/AssetSelector';
 import ActionEditor from './menu-editor/ActionEditor';
 import SearchableSelect from './ui/SearchableSelect';
 import TransitionPreview from './ui/TransitionPreview';
+import ConditionsEditor from './ui/ConditionsEditor';
+import SceneConfigEditor from './SceneConfigEditor';
+import VariablePropertiesEditor from './VariablePropertiesEditor';
 
 const PositionInputs: React.FC<{
     label: string;
@@ -96,119 +101,6 @@ const PositionInputs: React.FC<{
         </div>
     );
 };
-
-const ConditionsEditor: React.FC<{
-    conditions: VNCondition[] | undefined;
-    project: VNProject;
-    onChange: (newConditions: VNCondition[] | undefined) => void;
-    isRequired?: boolean;
-}> = ({ conditions, project, onChange, isRequired }) => {
-    const hasVariables = Object.keys(project.variables).length > 0;
-
-    const getOperatorsForType = (type: VNVariableType | undefined): VNConditionOperator[] => {
-        switch (type) {
-            case 'string': return ['==', '!=', 'contains', 'startsWith'];
-            case 'number': return ['==', '!=', '>', '<', '>=', '<='];
-            case 'boolean': return ['is true', 'is false'];
-            default: return ['==', '!=', '>', '<', '>=', '<=', 'contains', 'startsWith'];
-        }
-    };
-
-    const handleAddCondition = () => {
-        const firstVarId = Object.keys(project.variables)[0];
-        if (!firstVarId) return;
-        const newCondition: VNCondition = {
-            variableId: firstVarId,
-            operator: '==',
-            value: ''
-        };
-        onChange([...(conditions || []), newCondition]);
-    };
-
-    const handleUpdateCondition = (index: number, updates: Partial<VNCondition>) => {
-        const newConditions = [...(conditions || [])];
-        newConditions[index] = { ...newConditions[index], ...updates };
-
-        // If operator changes, check if it's compatible
-        if(updates.operator) {
-            const variable = project.variables[newConditions[index].variableId];
-            const allowedOperators = getOperatorsForType(variable?.type);
-            if(!allowedOperators.includes(updates.operator)) {
-                newConditions[index].operator = allowedOperators[0];
-            }
-        }
-        // If variable changes, reset operator
-        if(updates.variableId) {
-            const variable = project.variables[updates.variableId];
-            newConditions[index].operator = getOperatorsForType(variable?.type)[0];
-        }
-
-        onChange(newConditions);
-    };
-
-    const handleRemoveCondition = (index: number) => {
-        const newConditions = (conditions || []).filter((_, i) => i !== index);
-        if (newConditions.length === 0 && !isRequired) {
-            onChange(undefined);
-        } else {
-            onChange(newConditions);
-        }
-    };
-
-    if (!hasVariables) {
-        return <p className="text-xs text-[var(--text-muted)]">No variables defined to create conditions.</p>;
-    }
-
-    if (!conditions && !isRequired) {
-        return <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs">Add Condition</button>;
-    }
-
-    return (
-        <div className="space-y-2">
-            {(conditions || []).map((condition, index) => {
-                const variable = project.variables[condition.variableId];
-                const operators = getOperatorsForType(variable?.type);
-                const valueIsHidden = condition.operator === 'is true' || condition.operator === 'is false';
-
-                return (
-                    <div key={index} className="p-1 border border-[var(--border-subtle)] rounded-md">
-                        <div className="flex gap-1 items-start">
-                            <div className="flex-grow space-y-1">
-                                <FormField label="Variable">
-                                    <Select value={condition.variableId} onChange={e => handleUpdateCondition(index, { variableId: e.target.value })}>
-                                        {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                    </Select>
-                                </FormField>
-                                <div className="grid grid-cols-2 gap-1">
-                                    <FormField label="Operator">
-                                        <Select value={condition.operator} onChange={e => handleUpdateCondition(index, { operator: e.target.value as VNConditionOperator })}>
-                                            {operators.map(op => <option key={op} value={op}>{op}</option>)}
-                                        </Select>
-                                    </FormField>
-                                    {!valueIsHidden && (
-                                        <FormField label="Value">
-                                            {variable?.type === 'boolean' ? (
-                                                <Select value={String(condition.value)} onChange={e => handleUpdateCondition(index, { value: e.target.value === 'true' })}>
-                                                    <option value="true">True</option>
-                                                    <option value="false">False</option>
-                                                </Select>
-                                            ) : (
-                                                <TextInput value={String(condition.value || '')} onChange={e => handleUpdateCondition(index, { value: e.target.value })} />
-                                            )}
-                                        </FormField>
-                                    )}
-                                </div>
-                            </div>
-                            <button onClick={() => handleRemoveCondition(index)} className="text-red-400 hover:text-red-300 mt-1 p-1"><XMarkIcon className="w-4 h-4" /></button>
-                        </div>
-                    </div>
-                );
-            })}
-             <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs mt-2 flex items-center gap-1"><PlusIcon className="w-4 h-4"/>Add Condition</button>
-        </div>
-    );
-}
-
 const useCommandDefaults = (
     command: VNCommand | undefined,
     project: VNProject,
@@ -415,181 +307,13 @@ const PropertiesInspector: React.FC<{
     const activeScene = project.scenes[activeSceneId];
 
     // Handle scene configuration
-    if (isConfigScene && activeScene) {
-        const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration'>>) => {
-            dispatch({ type: 'UPDATE_SCENE_CONFIG', payload: { sceneId: activeSceneId, updates } });
-        };
-
-        return (
-            <Panel title={`Scene Config: ${activeScene.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
-                <div className="flex flex-col h-full">
-                    <div className="flex-grow overflow-y-auto pr-1">
-                        {/* Exit Transition Settings */}
-                        <div className="mb-4">
-                            <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Exit Transition</h3>
-                            <p className="text-xs text-[var(--text-secondary)] mb-3">
-                                How the screen transitions out when leaving this scene.
-                            </p>
-                            <FormField label="Transition Style">
-                                <Select
-                                    value={activeScene.outTransition || 'fade'}
-                                    onChange={e => updateScene({ outTransition: (e.target.value as VNScene['outTransition']) || undefined })}
-                                >
-                                    <option value="fade">Fade to Black</option>
-                                    <option value="dissolve">Dissolve</option>
-                                    <option value="iris-out">Iris Out</option>
-                                    <option value="wipe-right">Wipe Right</option>
-                                    <option value="slide-left">Slide Left</option>
-                                    <option value="instant">Instant (No Transition)</option>
-                                </Select>
-                            </FormField>
-                            {(activeScene.outTransition || 'fade') !== 'instant' && (
-                                <FormField label="Duration (s)">
-                                    <TextInput
-                                        type="number"
-                                        min={0.1}
-                                        max={5}
-                                        step={0.1}
-                                        value={activeScene.outTransitionDuration ?? 0.5}
-                                        onChange={e => {
-                                            const val = parseFloat(e.target.value);
-                                            if (!isNaN(val) && val >= 0.1 && val <= 5) {
-                                                updateScene({ outTransitionDuration: val });
-                                            }
-                                        }}
-                                    />
-                                </FormField>
-                            )}
-                        </div>
-
-                        <hr className="border-[var(--border-subtle)] mb-4" />
-
-                        <div className="mb-4">
-                            <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Scene Conditions</h3>
-                            <p className="text-xs text-[var(--text-secondary)] mb-3">
-                                This scene will only play if all conditions are met. If conditions fail, the scene will be skipped.
-                            </p>
-                            <ConditionsEditor 
-                                conditions={activeScene.conditions} 
-                                project={project} 
-                                onChange={(cs) => updateScene({ conditions: cs })}
-                            />
-                        </div>
-                        
-                        {activeScene.conditions && activeScene.conditions.length > 0 && (
-                            <div className="mt-4">
-                                <FormField label="Fallback Scene">
-                                    <p className="text-xs text-[var(--text-secondary)] mb-2">
-                                        If conditions fail, jump to this scene instead:
-                                    </p>
-                                    <Select 
-                                        value={activeScene.fallbackSceneId || ''} 
-                                        onChange={e => updateScene({ fallbackSceneId: e.target.value || undefined })}
-                                    >
-                                        <option value="">Skip to next scene in sequence</option>
-                                        {Object.values(project.scenes).filter((s: VNScene) => s.id !== activeSceneId).map((s: VNScene) => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </Select>
-                                </FormField>
-                            </div>
-                        )}
-                    </div>
-                    <div className="pt-4 mt-auto">
-                        <button 
-                            onClick={onCloseSceneConfig} 
-                            className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-black font-bold py-1 px-2 rounded-lg transition-colors"
-                        >
-                            Done
-                        </button>
-                    </div>
-                </div>
-            </Panel>
-        );
+    if (isConfigScene) {
+        return <SceneConfigEditor activeSceneId={activeSceneId} onCloseSceneConfig={onCloseSceneConfig} />;
     }
 
     // Handle variable editing
     if (selectedVariableId && setSelectedVariableId) {
-        const variable = project.variables[selectedVariableId];
-        if (!variable) {
-            return (
-                <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
-                    <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-xs italic">
-                        <p>Variable not found.</p>
-                    </div>
-                </Panel>
-            );
-        }
-
-        const updateVariable = (updates: Partial<VNVariable>) => {
-            // Handle type changes that require defaultValue conversion
-            if (updates.type && updates.type !== variable.type) {
-                let newDefaultValue: string | number | boolean;
-                switch (updates.type) {
-                    case 'string':
-                        newDefaultValue = String(variable.defaultValue);
-                        break;
-                    case 'number':
-                        newDefaultValue = Number(variable.defaultValue) || 0;
-                        break;
-                    case 'boolean':
-                        newDefaultValue = Boolean(variable.defaultValue);
-                        break;
-                    default:
-                        newDefaultValue = variable.defaultValue;
-                }
-                updates.defaultValue = newDefaultValue;
-            }
-            dispatch({ type: 'UPDATE_VARIABLE', payload: { variableId: selectedVariableId, updates } });
-        };
-
-        const handleDelete = () => {
-            if (confirm(`Delete variable "${variable.name}"? This will break any commands that reference it.`)) {
-                dispatch({ type: 'DELETE_VARIABLE', payload: { variableId: selectedVariableId } });
-                setSelectedVariableId(null);
-            }
-        };
-
-        return (
-            <Panel title={`Variable: ${variable.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
-                <div className="flex flex-col h-full">
-                    <div className="flex-grow overflow-y-auto pr-1">
-                        <FormField label="Name">
-                            <TextInput value={variable.name} onChange={e => updateVariable({ name: e.target.value })} />
-                        </FormField>
-                        <FormField label="Type">
-                            <Select value={variable.type} onChange={e => updateVariable({ type: e.target.value as VNVariableType })}>
-                                <option value="string">String</option>
-                                <option value="number">Number</option>
-                                <option value="boolean">Boolean</option>
-                            </Select>
-                        </FormField>
-                        <FormField label="Default Value">
-                            {variable.type === 'boolean' ? (
-                                <Select value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value === 'true' })}>
-                                    <option value="true">True</option>
-                                    <option value="false">False</option>
-                                </Select>
-                            ) : variable.type === 'number' ? (
-                                <TextInput type="number" value={Number(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: parseFloat(e.target.value) || 0 })} />
-                            ) : (
-                                <TextInput value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value })} />
-                            )}
-                        </FormField>
-                        <div className="text-xs text-[var(--text-secondary)] mt-2">
-                            <p><strong>Type:</strong> {variable.type}</p>
-                            <p><strong>Current Value:</strong> {String(variable.defaultValue)}</p>
-                            <p className="mt-2">The default value is used when the game starts. You can change the variable's value during gameplay using Set Variable commands.</p>
-                        </div>
-                    </div>
-                    <div className="pt-4 mt-auto">
-                        <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded-lg flex items-center justify-center gap-1 transition-colors">
-                            <TrashIcon/> Delete Variable
-                        </button>
-                    </div>
-                </div>
-            </Panel>
-        );
+        return <VariablePropertiesEditor selectedVariableId={selectedVariableId} setSelectedVariableId={setSelectedVariableId} />;
     }
 
     if (selectedCommandIndex === null || !activeScene || !activeScene.commands[selectedCommandIndex]) {
@@ -1856,6 +1580,182 @@ const PropertiesInspector: React.FC<{
                     </>
                 );
             }
+            case CommandType.ShowImageMap: {
+                const cmd = command as ShowImageMapCommand;
+                const regions = cmd.regions || [];
+
+                const addRegion = () => {
+                    const newRegion: ImageMapRegion = {
+                        id: crypto.randomUUID(),
+                        name: `Region ${regions.length + 1}`,
+                        shape: 'rect',
+                        coords: [25, 25, 50, 50],
+                        actions: [],
+                        tooltip: '',
+                        cursor: 'pointer',
+                        highlightColor: 'rgba(99,102,241,0.3)',
+                    };
+                    updateCommand({ regions: [...regions, newRegion] });
+                };
+
+                const updateRegion = (index: number, patch: Partial<ImageMapRegion>) => {
+                    const newRegions = [...regions];
+                    newRegions[index] = { ...newRegions[index], ...patch };
+                    updateCommand({ regions: newRegions });
+                };
+
+                const removeRegion = (index: number) => {
+                    updateCommand({ regions: regions.filter((_, i) => i !== index) });
+                };
+
+                return (
+                    <>
+                        <AssetSelector label="Image Map Background" assetType="images" value={cmd.imageId || null} onChange={id => updateCommand({ imageId: id || '' })} />
+                        <AssetSelector label="Hover State Image" assetType="images" value={cmd.hoverImageId || null} onChange={id => updateCommand({ hoverImageId: id || undefined })} />
+                        <p className="text-[10px] text-[var(--text-secondary)] -mt-1">When a region is hovered, this image is shown clipped to that region (Ren'Py-style hover effect).</p>
+
+                        <div className="grid grid-cols-2 gap-1">
+                            <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                            <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1">
+                            <FormField label="Width (%)"><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 100 })} /></FormField>
+                            <FormField label="Height (%)"><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 100 })} /></FormField>
+                        </div>
+
+                        <FormField label={`Opacity: ${Math.round((cmd.opacity ?? 1) * 100)}%`}>
+                            <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                        </FormField>
+
+                        <FormField label="Wait for Click">
+                            <div className="flex items-center gap-1">
+                                <input type="checkbox" checked={cmd.waitForClick || false} onChange={e => updateCommand({ waitForClick: e.target.checked })} className="w-4 h-4" />
+                                <span className="text-xs text-[var(--text-secondary)]">Pause execution until a region is clicked</span>
+                            </div>
+                        </FormField>
+
+                        <hr className="border-[var(--border-subtle)] my-2" />
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
+
+                        <hr className="border-[var(--border-subtle)] my-2" />
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-bold text-xs text-[var(--text-secondary)]">Clickable Regions ({regions.length})</h4>
+                            <button onClick={addRegion} className="flex items-center gap-1 text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded transition-colors">
+                                <PlusIcon className="w-3 h-3" /> Add Region
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            {regions.map((region, idx) => (
+                                <div key={region.id} className="p-2 bg-[var(--bg-primary)] rounded space-y-2 border border-[var(--border-subtle)]">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-[var(--text-primary)]">Region {idx + 1}</span>
+                                        <button onClick={() => removeRegion(idx)} className="p-1 hover:bg-red-600 rounded transition-colors" title="Remove Region">
+                                            <TrashIcon className="w-3 h-3" />
+                                        </button>
+                                    </div>
+
+                                    <FormField label="Name"><TextInput value={region.name} onChange={e => updateRegion(idx, { name: e.target.value })} /></FormField>
+
+                                    <FormField label="Shape">
+                                        <Select value={region.shape} onChange={e => {
+                                            const shape = e.target.value as 'rect' | 'circle' | 'poly';
+                                            const defaultCoords = shape === 'rect' ? [25, 25, 50, 50] : shape === 'circle' ? [50, 50, 25] : [25, 25, 75, 25, 75, 75, 25, 75];
+                                            updateRegion(idx, { shape, coords: defaultCoords });
+                                        }}>
+                                            <option value="rect">Rectangle</option>
+                                            <option value="circle">Circle</option>
+                                            <option value="poly">Polygon</option>
+                                        </Select>
+                                    </FormField>
+
+                                    {region.shape === 'rect' && (
+                                        <div className="grid grid-cols-2 gap-1">
+                                            <FormField label="X (%)"><TextInput type="number" value={region.coords[0] ?? 0} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label="Y (%)"><TextInput type="number" value={region.coords[1] ?? 0} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label="Width (%)"><TextInput type="number" value={region.coords[2] ?? 50} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label="Height (%)"><TextInput type="number" value={region.coords[3] ?? 50} onChange={e => { const c = [...region.coords]; c[3] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                        </div>
+                                    )}
+
+                                    {region.shape === 'circle' && (
+                                        <div className="grid grid-cols-3 gap-1">
+                                            <FormField label="CX (%)"><TextInput type="number" value={region.coords[0] ?? 50} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label="CY (%)"><TextInput type="number" value={region.coords[1] ?? 50} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label="Radius (%)"><TextInput type="number" value={region.coords[2] ?? 25} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                        </div>
+                                    )}
+
+                                    {region.shape === 'poly' && (
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-[var(--text-secondary)]">Polygon points (x%, y% pairs):</p>
+                                            {Array.from({ length: Math.floor(region.coords.length / 2) }).map((_, pi) => (
+                                                <div key={pi} className="grid grid-cols-3 gap-1 items-end">
+                                                    <FormField label={`P${pi + 1} X`}><TextInput type="number" value={region.coords[pi * 2] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                                    <FormField label={`P${pi + 1} Y`}><TextInput type="number" value={region.coords[pi * 2 + 1] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                                    <button onClick={() => { const c = [...region.coords]; c.splice(pi * 2, 2); updateRegion(idx, { coords: c.length >= 2 ? c : [50, 50] }); }} className="p-1 hover:bg-red-600 rounded transition-colors mb-1" title="Remove Point">
+                                                        <XMarkIcon className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button onClick={() => { updateRegion(idx, { coords: [...region.coords, 50, 50] }); }} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded transition-colors">+ Add Point</button>
+                                        </div>
+                                    )}
+
+                                    <FormField label="Tooltip"><TextInput value={region.tooltip || ''} onChange={e => updateRegion(idx, { tooltip: e.target.value })} placeholder="Hover text..." /></FormField>
+                                    <FormField label="Highlight Color"><ColorInput value={region.highlightColor || 'rgba(99,102,241,0.3)'} onChange={val => updateRegion(idx, { highlightColor: val })} /></FormField>
+
+                                    <h4 className="font-bold text-xs mt-2 text-[var(--text-secondary)]">Region Actions</h4>
+                                    <div className="space-y-2">
+                                        {(region.actions || []).map((action, ai) => (
+                                            <div key={ai} className="p-2 bg-[var(--bg-secondary)] rounded space-y-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-xs text-[var(--text-secondary)]">Action {ai + 1}</span>
+                                                    <button onClick={() => { const newActions = (region.actions || []).filter((_, i) => i !== ai); updateRegion(idx, { actions: newActions }); }} className="p-1 hover:bg-red-600 rounded transition-colors" title="Remove Action">
+                                                        <TrashIcon className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                                <ActionEditor action={action} onActionChange={updatedAction => { const newActions = [...(region.actions || [])]; newActions[ai] = updatedAction; updateRegion(idx, { actions: newActions }); }} />
+                                            </div>
+                                        ))}
+                                        <button onClick={() => { const newAction = { type: 'GoToScreen', targetScreenId: '' } as any; updateRegion(idx, { actions: [...(region.actions || []), newAction] }); }} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">+ Add Action</button>
+                                    </div>
+
+                                    <h4 className="font-bold text-xs mt-2 text-[var(--text-secondary)]">Region Conditions</h4>
+                                    <p className="text-xs text-[var(--text-secondary)]">Region only active when conditions are met.</p>
+                                    <ConditionsEditor conditions={region.conditions || []} project={project} onChange={cs => updateRegion(idx, { conditions: cs })} />
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                );
+            }
+            case CommandType.HideImageMap: {
+                const cmd = command as HideImageMapCommand;
+                const availableImageMapCommands = activeScene.commands.filter(
+                    (c, i) => c.type === CommandType.ShowImageMap && i < selectedCommandIndex
+                ) as ShowImageMapCommand[];
+
+                return (
+                    <>
+                        <FormField label="Target Image Map to Hide">
+                            <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
+                                <option value="">Select Image Map...</option>
+                                {availableImageMapCommands.map(c => (
+                                    <option key={c.id} value={c.id}>
+                                        Image Map ({(c.regions || []).length} regions) (ID: {c.id})
+                                    </option>
+                                ))}
+                            </Select>
+                        </FormField>
+                        <hr className="border-[var(--border-subtle)] my-2" />
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
+                    </>
+                );
+            }
             case CommandType.CreditRoll: {
                 const cmd = command as CreditRollCommand;
                 const entries = cmd.entries || [];
@@ -2477,6 +2377,179 @@ const PropertiesInspector: React.FC<{
                                     )}
                                 </FormField>
                             ))}
+                        </>
+                    )}
+                </>;
+            }
+            case CommandType.TweenElement: {
+                const cmd = command as TweenElementCommand;
+                const targetTypeOptions = [
+                    { value: 'character', label: 'Character' },
+                    { value: 'image', label: 'Image Overlay' },
+                    { value: 'text', label: 'Text Overlay' },
+                    { value: 'button', label: 'Button Overlay' },
+                    { value: 'imageMap', label: 'Image Map' },
+                    { value: 'screen', label: 'Screen' },
+                ];
+                const easingOptions = [
+                    { group: 'Linear', options: ['linear'] },
+                    { group: 'Quad', options: ['easeInQuad', 'easeOutQuad', 'easeInOutQuad'] },
+                    { group: 'Cubic', options: ['easeInCubic', 'easeOutCubic', 'easeInOutCubic'] },
+                    { group: 'Quart', options: ['easeInQuart', 'easeOutQuart', 'easeInOutQuart'] },
+                    { group: 'Quint', options: ['easeInQuint', 'easeOutQuint', 'easeInOutQuint'] },
+                    { group: 'Sine', options: ['easeInSine', 'easeOutSine', 'easeInOutSine'] },
+                    { group: 'Expo', options: ['easeInExpo', 'easeOutExpo', 'easeInOutExpo'] },
+                    { group: 'Circ', options: ['easeInCirc', 'easeOutCirc', 'easeInOutCirc'] },
+                    { group: 'Back', options: ['easeInBack', 'easeOutBack', 'easeInOutBack'] },
+                    { group: 'Elastic', options: ['easeInElastic', 'easeOutElastic', 'easeInOutElastic'] },
+                    { group: 'Bounce', options: ['easeInBounce', 'easeOutBounce', 'easeInOutBounce'] },
+                ];
+                // Build target ID options based on selected target type
+                const targetIdOptions: { value: string; label: string }[] = [];
+                if (cmd.targetType === 'character') {
+                    Object.values(project.characters).forEach((c: VNCharacter) => targetIdOptions.push({ value: c.id, label: c.name }));
+                } else if (cmd.targetType === 'screen') {
+                    targetIdOptions.push({ value: '__screen__', label: 'Screen' });
+                } else if (cmd.targetType === 'text') {
+                    activeScene.commands
+                        .filter((c): c is ShowTextCommand => c.type === CommandType.ShowText)
+                        .forEach(c => targetIdOptions.push({ value: c.id, label: `"${c.text.substring(0, 30)}${c.text.length > 30 ? '…' : ''}"` }));
+                } else if (cmd.targetType === 'image') {
+                    activeScene.commands
+                        .filter((c): c is ShowImageCommand => c.type === CommandType.ShowImage)
+                        .forEach(c => {
+                            const img = (project.images || {})[c.imageId] as VNImage | undefined;
+                            targetIdOptions.push({ value: c.id, label: img?.name || `Image (${c.id.substring(0, 8)}…)` });
+                        });
+                } else if (cmd.targetType === 'button') {
+                    activeScene.commands
+                        .filter((c): c is ShowButtonCommand => c.type === CommandType.ShowButton)
+                        .forEach(c => targetIdOptions.push({ value: c.id, label: `"${c.text.substring(0, 30)}${c.text.length > 30 ? '…' : ''}"` }));
+                } else if (cmd.targetType === 'imageMap') {
+                    activeScene.commands
+                        .filter((c): c is ShowImageMapCommand => c.type === CommandType.ShowImageMap)
+                        .forEach(c => {
+                            const img = (project.images || {})[c.imageId] as VNImage | undefined;
+                            targetIdOptions.push({ value: c.id, label: img?.name || `Image Map (${c.id.substring(0, 8)}…)` });
+                        });
+                }
+
+                const showPosFields = cmd.targetType !== 'screen';
+                const showSizeFields = cmd.targetType === 'image' || cmd.targetType === 'button' || cmd.targetType === 'imageMap' || cmd.targetType === 'text';
+                const showOpacity = cmd.targetType !== 'screen' && cmd.targetType !== 'text';
+                const showRotation = cmd.targetType === 'image';
+                const showScale = cmd.targetType === 'character';
+                const showScaleXY = cmd.targetType === 'image';
+                const showFontSize = cmd.targetType === 'text' || cmd.targetType === 'button';
+                const showBorderRadius = cmd.targetType === 'button';
+                const showBgColor = cmd.targetType === 'button';
+                const showColor = cmd.targetType === 'text';
+                const showZoomPan = cmd.targetType === 'screen';
+
+                return <>
+                    <FormField label="Target Type">
+                        <Select value={cmd.targetType} onChange={e => updateCommand({ targetType: e.target.value, targetId: '' })}>
+                            {targetTypeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </Select>
+                    </FormField>
+                    <FormField label="Target ID">
+                        {targetIdOptions.length > 0 ? (
+                            <SearchableSelect
+                                options={targetIdOptions}
+                                value={cmd.targetId}
+                                onChange={(value) => updateCommand({ targetId: value })}
+                                placeholder="Select target..."
+                            />
+                        ) : (
+                            <TextInput
+                                value={cmd.targetId}
+                                onChange={e => updateCommand({ targetId: e.target.value })}
+                                placeholder="No matching Show commands found"
+                            />
+                        )}
+                    </FormField>
+                    <FormField label="Duration (seconds)">
+                        <TextInput type="number" min="0.01" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 1 })} />
+                    </FormField>
+                    <FormField label="Easing">
+                        <Select value={cmd.easing || 'easeInOutCubic'} onChange={e => updateCommand({ easing: e.target.value })}>
+                            {easingOptions.map(group => (
+                                <optgroup key={group.group} label={group.group}>
+                                    {group.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </optgroup>
+                            ))}
+                        </Select>
+                    </FormField>
+                    <div className="flex items-center gap-1 mt-1">
+                        <input type="checkbox" checked={cmd.waitForCompletion !== false} onChange={e => updateCommand({ waitForCompletion: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
+                        <label className="text-sm">Wait for completion</label>
+                    </div>
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <h4 className="text-xs font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Target Properties</h4>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Leave blank to keep the current value. Only filled properties will animate.</p>
+                    {showPosFields && (
+                        <div className="grid grid-cols-2 gap-1">
+                            <FormField label="X (%)"><TextInput type="number" step="0.1" value={cmd.x ?? ''} onChange={e => updateCommand({ x: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label="Y (%)"><TextInput type="number" step="0.1" value={cmd.y ?? ''} onChange={e => updateCommand({ y: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                        </div>
+                    )}
+                    {showSizeFields && (
+                        <div className="grid grid-cols-2 gap-1">
+                            <FormField label="Width"><TextInput type="number" min="0" step="1" value={cmd.width ?? ''} onChange={e => updateCommand({ width: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label="Height"><TextInput type="number" min="0" step="1" value={cmd.height ?? ''} onChange={e => updateCommand({ height: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                        </div>
+                    )}
+                    {showOpacity && (
+                        <FormField label={`Opacity: ${cmd.opacity !== undefined ? Math.round(cmd.opacity * 100) + '%' : '–'}`}>
+                            <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
+                        </FormField>
+                    )}
+                    {showRotation && (
+                        <FormField label="Rotation (°)"><TextInput type="number" step="1" value={cmd.rotation ?? ''} onChange={e => updateCommand({ rotation: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                    )}
+                    {showScale && (
+                        <FormField label="Scale">
+                            <div className="flex items-center gap-2">
+                                <input type="range" min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) })} className="flex-1" />
+                                <TextInput type="number" min="0.1" max="5" step="0.05" value={cmd.scale ?? ''} onChange={e => updateCommand({ scale: e.target.value ? parseFloat(e.target.value) : undefined })} style={{ width: '60px' }} />
+                            </div>
+                        </FormField>
+                    )}
+                    {showScaleXY && (
+                        <div className="grid grid-cols-2 gap-1">
+                            <FormField label="Scale X"><TextInput type="number" step="0.05" value={cmd.scaleX ?? ''} onChange={e => updateCommand({ scaleX: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label="Scale Y"><TextInput type="number" step="0.05" value={cmd.scaleY ?? ''} onChange={e => updateCommand({ scaleY: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                        </div>
+                    )}
+                    {showFontSize && (
+                        <FormField label="Font Size (px)"><TextInput type="number" min="1" step="1" value={cmd.fontSize ?? ''} onChange={e => updateCommand({ fontSize: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                    )}
+                    {showBorderRadius && (
+                        <FormField label="Border Radius (px)"><TextInput type="number" min="0" step="1" value={cmd.borderRadius ?? ''} onChange={e => updateCommand({ borderRadius: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                    )}
+                    {showColor && (
+                        <FormField label="Text Color">
+                            <div className="flex gap-1 items-center">
+                                <ColorInput value={cmd.color || '#FFFFFF'} onChange={val => updateCommand({ color: val })} className="w-12 h-10" />
+                                <TextInput value={cmd.color ?? ''} onChange={e => updateCommand({ color: e.target.value || undefined })} placeholder="–" className="flex-grow" />
+                            </div>
+                        </FormField>
+                    )}
+                    {showBgColor && (
+                        <FormField label="Background Color">
+                            <div className="flex gap-1 items-center">
+                                <ColorInput value={cmd.backgroundColor || '#6366f1'} onChange={val => updateCommand({ backgroundColor: val })} className="w-12 h-10" />
+                                <TextInput value={cmd.backgroundColor ?? ''} onChange={e => updateCommand({ backgroundColor: e.target.value || undefined })} placeholder="–" className="flex-grow" />
+                            </div>
+                        </FormField>
+                    )}
+                    {showZoomPan && (
+                        <>
+                            <FormField label="Zoom"><TextInput type="number" min="0.1" step="0.1" value={cmd.zoom ?? ''} onChange={e => updateCommand({ zoom: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <div className="grid grid-cols-2 gap-1">
+                                <FormField label="Pan X (%)"><TextInput type="number" step="1" value={cmd.panX ?? ''} onChange={e => updateCommand({ panX: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                                <FormField label="Pan Y (%)"><TextInput type="number" step="1" value={cmd.panY ?? ''} onChange={e => updateCommand({ panY: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            </div>
                         </>
                     )}
                 </>;

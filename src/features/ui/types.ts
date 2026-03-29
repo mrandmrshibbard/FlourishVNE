@@ -2,7 +2,7 @@ import { VNID } from '../../types';
 import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign } from '../../types/shared';
 
-import { VNTextShadow, VNTextGradient, VNTextBorder } from '../scene/types';
+import { VNTextShadow, VNTextGradient, VNTextBorder, ImageMapRegion } from '../scene/types';
 
 export interface VNFontSettings {
     family: string;
@@ -21,6 +21,7 @@ export interface VNDefaultGameSettings {
     textSpeed: number;
     musicVolume: number;
     sfxVolume: number;
+    voiceVolume: number;
     ambientVolume: number;
     enableSkip: boolean;
     autoAdvance: boolean;
@@ -118,6 +119,54 @@ export interface VNProjectUI {
     choiceTextFont: VNFontSettings;
     /** Author-defined initial game settings (text speed, volume, etc.) */
     defaultGameSettings?: VNDefaultGameSettings;
+
+    // ─── Confirmation Dialogs ────────────────────────────────────────── //
+    /** Settings for in-game confirmation popups (quit, new game, etc.) */
+    confirmDialogs?: VNConfirmDialogSettings;
+}
+
+export interface VNConfirmDialogSettings {
+    /** Quit / Exit confirmation */
+    quitTitle?: string;          // default "Quit Game"
+    quitMessage?: string;        // default "Are you sure you want to quit?"
+    quitConfirmLabel?: string;   // default "Quit"
+    quitCancelLabel?: string;    // default "Cancel"
+    /** New Game confirmation (shown when a game is already in progress) */
+    newGameTitle?: string;       // default "Start New Game"
+    newGameMessage?: string;     // default "Any unsaved progress will be lost. Are you sure?"
+    newGameConfirmLabel?: string;// default "New Game"
+    newGameCancelLabel?: string; // default "Cancel"
+    /** Visual styling */
+    backgroundColor?: string;   // default '#0f172a'
+    backgroundOpacity?: number;  // 0-100, default 92
+    borderRadius?: number;       // px, default 12
+    overlayColor?: string;       // backdrop colour, default 'rgba(0,0,0,0.75)'
+    titleFont?: VNFontSettings;
+    messageFont?: VNFontSettings;
+    buttonFont?: VNFontSettings;
+    confirmButtonColor?: string; // default gradient pink→purple
+    cancelButtonColor?: string;  // default '#1e293b'
+    backgroundImage?: UIAsset | null;
+    backgroundSizeMode?: 'stretch' | 'contain' | 'cover' | 'nine-slice';
+    backgroundSlice?: number;    // for nine-slice, default 20
+    /** Border image (drawn around the dialog) */
+    borderImage?: UIAsset | null;
+    borderPadding?: number;      // px of border visible around the background (default 12)
+    /** Dialog sizing */
+    dialogWidth?: number;        // px explicit width, 0/undefined = auto (default auto, 320-440)
+    dialogPadding?: number;      // px inner content padding (default 32)
+    /** Button images & hover */
+    confirmButtonImage?: UIAsset | null;
+    cancelButtonImage?: UIAsset | null;
+    confirmHoverImage?: UIAsset | null;
+    cancelHoverImage?: UIAsset | null;
+    confirmHoverColor?: string;  // hover color for confirm button
+    cancelHoverColor?: string;   // hover color for cancel button (default '#334155')
+    /** Button sizing */
+    buttonPadding?: number;      // px inner padding (default 8 12)
+    buttonBorderRadius?: number; // px corner radius (default borderRadius - 4)
+    buttonSizeMode?: 'stretch' | 'contain' | 'cover' | 'nine-slice';
+    buttonSlice?: number;        // for nine-slice on button images
 }
 
 export type UIAsset = {
@@ -211,7 +260,7 @@ export interface UISaveSlotGridElement extends BaseUIElement {
     slotHoverBorderColor?: string;
     slotHeaderColor?: string;
 }
-export type GameSetting = 'musicVolume' | 'sfxVolume' | 'ambientVolume' | 'textSpeed';
+export type GameSetting = 'musicVolume' | 'sfxVolume' | 'voiceVolume' | 'ambientVolume' | 'textSpeed';
 export interface UISettingsSliderElement extends BaseUIElement {
     type: UIElementType.SettingsSlider;
     setting: GameSetting;
@@ -389,7 +438,7 @@ export interface VNHotSpot {
     visible?: boolean; // Whether to show the spot visually (default false)
 }
 
-export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput';
+export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput' | 'imageMap';
 
 export interface VNHotZoneElement {
     id: VNID;
@@ -417,6 +466,8 @@ export interface VNHotZoneElement {
     actions?: VNUIAction[]; // Actions on click (when not dragging)
     clickSoundId?: VNID | null;
     hoverSoundId?: VNID | null;
+    hoverImageId?: VNID; // Hover state image (for imageMap type, Ren'Py-style)
+    imageMapRegions?: ImageMapRegion[]; // Clickable regions (for imageMap type)
 }
 
 export interface VNHotZoneWinCondition {

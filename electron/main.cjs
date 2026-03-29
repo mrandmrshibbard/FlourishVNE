@@ -326,7 +326,7 @@ function createWindow() {
               type: 'info',
               title: 'About Flourish Visual Novel Engine',
               message: 'Flourish Visual Novel Engine',
-              detail: 'Version 2.0\n\nCreate beautiful interactive stories without coding.\n\n© 2025 - Made with ❤️ for storytellers everywhere',
+              detail: `Version ${app.getVersion()}\n\nCreate beautiful interactive stories without coding.\n\n© 2025 - Made with ❤️ for storytellers everywhere`,
               buttons: ['OK']
             });
           }

@@ -11,6 +11,7 @@ export type ManagerWindowType =
   | 'ui'
   | 'assets'
   | 'variables'
+  | 'commonEvents'
   | 'settings'
   | 'templates';
 
@@ -51,6 +52,12 @@ const WINDOW_CONFIGS: Record<ManagerWindowType, WindowConfig> = {
     width: 800,
     height: 600,
     title: 'Variables Manager'
+  },
+  commonEvents: {
+    type: 'commonEvents',
+    width: 1000,
+    height: 700,
+    title: 'Common Events Manager'
   },
   settings: {
     type: 'settings',

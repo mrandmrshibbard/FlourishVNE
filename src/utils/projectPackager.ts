@@ -8,7 +8,8 @@ import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../features/charact
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
 // FIX: Removed GoToScreenAction as it is not exported from 'scene/types' and is unused.
 import { VNCommand, CommandType, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, PlayMovieCommand, ShowImageCommand, ShowButtonCommand, VNScene } from '../features/scene/types';
-import { UIElementType, UIButtonElement, UIImageElement, UIAsset, VNUIScreen, VNUIElement, UICharacterPreviewElement } from '../features/ui/types';
+import { UIElementType, UIButtonElement, UIImageElement, UISettingsSliderElement, UISettingsToggleElement, UIAsset, VNUIScreen, VNUIElement, UICharacterPreviewElement } from '../features/ui/types';
+import { UIActionType, VNUIAction } from '../types/shared';
 
 import { fileToBase64 } from './file';
 import { createInitialProject, createDefaultUIScreens } from '../constants';
@@ -327,6 +328,7 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
         if (screen.background.type === 'image' && screen.background.assetId) assetsToProcess.backgrounds.add(screen.background.assetId);
         if (screen.background.type === 'video' && screen.background.assetId) assetsToProcess.videos.add(screen.background.assetId);
         if (screen.music.audioId) assetsToProcess.audio.add(screen.music.audioId);
+        if (screen.ambientNoise?.audioId) assetsToProcess.audio.add(screen.ambientNoise.audioId);
 
         for (const element of Object.values(screen.elements) as VNUIElement[]) {
             if (element.type === UIElementType.Button) {
@@ -349,6 +351,30 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
                 const img = element as UIImageElement;
                 if (img.image?.type === 'image' && img.image.id) assetsToProcess.images.add(img.image.id);
                 if (img.image?.type === 'video' && img.image.id) assetsToProcess.videos.add(img.image.id);
+                if (img.background && (img.background.type === 'image' || img.background.type === 'video') && img.background.assetId) {
+                    if (img.background.type === 'image') assetsToProcess.images.add(img.background.assetId);
+                    else assetsToProcess.videos.add(img.background.assetId);
+                }
+            }
+            if (element.type === UIElementType.SettingsSlider) {
+                const slider = element as UISettingsSliderElement;
+                const enqueueSliderAsset = (asset?: UIAsset | null) => {
+                    if (!asset?.id) return;
+                    if (asset.type === 'video') assetsToProcess.videos.add(asset.id);
+                    else assetsToProcess.images.add(asset.id);
+                };
+                enqueueSliderAsset(slider.thumbImage);
+                enqueueSliderAsset(slider.trackImage);
+            }
+            if (element.type === UIElementType.SettingsToggle) {
+                const toggle = element as UISettingsToggleElement;
+                const enqueueToggleAsset = (asset?: UIAsset | null) => {
+                    if (!asset?.id) return;
+                    if (asset.type === 'video') assetsToProcess.videos.add(asset.id);
+                    else assetsToProcess.images.add(asset.id);
+                };
+                enqueueToggleAsset(toggle.checkedImage);
+                enqueueToggleAsset(toggle.uncheckedImage);
             }
         }
 
@@ -366,6 +392,36 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
             for (const spot of Object.values((screen as any).hotSpots) as any[]) {
                 if (spot.imageId) assetsToProcess.images.add(spot.imageId);
             }
+        }
+
+        // Scan all VNUIAction arrays for ChangeImage asset references
+        const collectActionAssets = (actions: VNUIAction[]) => {
+            for (const action of actions) {
+                if (action.type === UIActionType.ChangeImage && 'newImageId' in action && action.newImageId) {
+                    assetsToProcess.images.add(action.newImageId);
+                }
+            }
+        };
+        // Element actions (buttons, sliders, toggles, dropdowns, checkboxes)
+        for (const element of Object.values(screen.elements) as VNUIElement[]) {
+            if ('action' in element && element.action) collectActionAssets([element.action as VNUIAction]);
+            if ('actions' in element && Array.isArray(element.actions)) collectActionAssets(element.actions as VNUIAction[]);
+        }
+        // Hot zone element actions
+        if ((screen as any).hotZoneElements) {
+            for (const el of Object.values((screen as any).hotZoneElements) as any[]) {
+                if (el.actions && Array.isArray(el.actions)) collectActionAssets(el.actions);
+            }
+        }
+        // Hot spot actions
+        if ((screen as any).hotSpots) {
+            for (const spot of Object.values((screen as any).hotSpots) as any[]) {
+                if (spot.actions && Array.isArray(spot.actions)) collectActionAssets(spot.actions);
+            }
+        }
+        // Win condition actions
+        if ((screen as any).winCondition?.actions) {
+            collectActionAssets((screen as any).winCondition.actions);
         }
     }
 
@@ -769,6 +825,54 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
                 }
             } else {
                 addFailure(`ui:choiceHover`);
+            }
+        }
+    }
+
+    // Process confirm dialog image assets
+    const cdSettings = projectClone.ui.confirmDialogs;
+    if (cdSettings) {
+        const cdImageFields: { field: keyof typeof cdSettings; prefix: string }[] = [
+            { field: 'backgroundImage', prefix: 'cd_bg' },
+            { field: 'borderImage', prefix: 'cd_border' },
+            { field: 'confirmButtonImage', prefix: 'cd_confirm_btn' },
+            { field: 'cancelButtonImage', prefix: 'cd_cancel_btn' },
+            { field: 'confirmHoverImage', prefix: 'cd_confirm_hover' },
+            { field: 'cancelHoverImage', prefix: 'cd_cancel_hover' },
+        ];
+        for (const { field, prefix } of cdImageFields) {
+            const uiAsset = cdSettings[field] as { id: string } | null | undefined;
+            if (!uiAsset?.id) continue;
+            const assetId = uiAsset.id;
+            const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
+            const assetUrl = (asset as any)?.imageUrl;
+            if (assetUrl && assetUrl.startsWith('data:')) {
+                const { blob, mimeType } = await dataUrlToBlob(assetUrl);
+                const filename = `${prefix}_${assetId}.${mimeToExtension(mimeType)}`;
+                assetFolder.folder('ui')?.file(filename, blob);
+                const embeddedPath = `assets/ui/${filename}`;
+                addEmbedded('ui', embeddedPath);
+                if (projectClone.images[assetId]) {
+                    (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+                } else {
+                    (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+                }
+            } else if (assetUrl) {
+                const fetched = await fetchUrlToBlob(assetUrl);
+                if (fetched) {
+                    const { blob, mimeType } = fetched;
+                    const filename = `${prefix}_${assetId}.${mimeToExtension(mimeType)}`;
+                    assetFolder.folder('ui')?.file(filename, blob);
+                    const embeddedPath = `assets/ui/${filename}`;
+                    addEmbedded('ui', embeddedPath);
+                    if (projectClone.images[assetId]) {
+                        (projectClone.images[assetId] as any).imageUrl = embeddedPath;
+                    } else {
+                        (projectClone.backgrounds[assetId] as VNBackground).imageUrl = embeddedPath;
+                    }
+                } else {
+                    addFailure(`ui:${field}`);
+                }
             }
         }
     }

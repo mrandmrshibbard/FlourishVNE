@@ -21,12 +21,16 @@ import {
     HotZoneElementType,
     VNFontSettings,
 } from '../features/ui/types';
+import { ImageMapRegion } from '../features/scene/types';
 import { VNUIAction, UIActionType, VNCondition, VNConditionOperator } from '../types/shared';
 import { VNVariable, VNVariableType, VNSetVariableOperator } from '../features/variables/types';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import Panel from './ui/Panel';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
+import ScreenInspector from './menu-editor/ScreenInspector';
 import { PlusIcon, TrashIcon, PhotoIcon, SparklesIcon } from './icons';
+import ConditionsEditor from './ui/ConditionsEditor';
 
 const generateId = (prefix: string): VNID =>
     `${prefix}-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -34,121 +38,6 @@ const generateId = (prefix: string): VNID =>
 /* ------------------------------------------------------------------ */
 /*  Shared sub-components                                              */
 /* ------------------------------------------------------------------ */
-
-/** Conditions editor matching PropertiesInspector pattern */
-const HZConditionsEditor: React.FC<{
-    conditions: VNCondition[] | undefined;
-    project: VNProject;
-    onChange: (conditions: VNCondition[] | undefined) => void;
-}> = ({ conditions, project, onChange }) => {
-    const hasVariables = Object.keys(project.variables).length > 0;
-
-    const getOperatorsForType = (type: VNVariableType | undefined): VNConditionOperator[] => {
-        switch (type) {
-            case 'string': return ['==', '!=', 'contains', 'startsWith'];
-            case 'number': return ['==', '!=', '>', '<', '>=', '<='];
-            case 'boolean': return ['is true', 'is false'];
-            default: return ['==', '!=', '>', '<', '>=', '<=', 'contains', 'startsWith'];
-        }
-    };
-
-    const addCondition = () => {
-        const firstVarId = Object.keys(project.variables)[0];
-        if (!firstVarId) return;
-        onChange([...(conditions || []), { variableId: firstVarId as VNID, operator: '==', value: '' }]);
-    };
-
-    const updateCondition = (index: number, updates: Partial<VNCondition>) => {
-        const next = [...(conditions || [])];
-        next[index] = { ...next[index], ...updates };
-        if (updates.variableId) {
-            const variable = project.variables[updates.variableId];
-            next[index].operator = getOperatorsForType(variable?.type)[0];
-        }
-        if (updates.operator) {
-            const variable = project.variables[next[index].variableId];
-            const allowed = getOperatorsForType(variable?.type);
-            if (!allowed.includes(updates.operator)) next[index].operator = allowed[0];
-        }
-        onChange(next);
-    };
-
-    const removeCondition = (index: number) => {
-        const next = (conditions || []).filter((_, i) => i !== index);
-        onChange(next.length === 0 ? undefined : next);
-    };
-
-    if (!hasVariables) {
-        return <p className="text-[10px] text-[var(--text-muted)] italic">No variables defined.</p>;
-    }
-
-    return (
-        <div>
-            <div className="flex items-center justify-between mb-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Conditions</span>
-                <button onClick={addCondition} className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-0.5">
-                    <PlusIcon className="w-3 h-3" /> Add
-                </button>
-            </div>
-            {(!conditions || conditions.length === 0) && (
-                <p className="text-[10px] text-slate-500 italic">Always visible (no conditions)</p>
-            )}
-            {(conditions || []).map((cond, i) => {
-                const variable = project.variables[cond.variableId];
-                const operators = getOperatorsForType(variable?.type);
-                const hideValue = cond.operator === 'is true' || cond.operator === 'is false';
-
-                return (
-                    <div key={i} className="p-1.5 mb-1 border border-[var(--border-subtle)] rounded space-y-1">
-                        <div className="flex items-center gap-1">
-                            <select
-                                value={cond.variableId}
-                                onChange={e => updateCondition(i, { variableId: e.target.value as VNID })}
-                                className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
-                            >
-                                {Object.values(project.variables).map((v: VNVariable) => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
-                            </select>
-                            <button onClick={() => removeCondition(i)} className="text-red-400 hover:text-red-300 p-0.5">
-                                <TrashIcon className="w-3 h-3" />
-                            </button>
-                        </div>
-                        <div className="flex gap-1">
-                            <select
-                                value={cond.operator}
-                                onChange={e => updateCondition(i, { operator: e.target.value as VNConditionOperator })}
-                                className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
-                            >
-                                {operators.map(op => <option key={op} value={op}>{op}</option>)}
-                            </select>
-                            {!hideValue && (
-                                variable?.type === 'boolean' ? (
-                                    <select
-                                        value={String(cond.value)}
-                                        onChange={e => updateCondition(i, { value: e.target.value === 'true' })}
-                                        className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
-                                    >
-                                        <option value="true">True</option>
-                                        <option value="false">False</option>
-                                    </select>
-                                ) : (
-                                    <input
-                                        type={variable?.type === 'number' ? 'number' : 'text'}
-                                        value={String(cond.value ?? '')}
-                                        onChange={e => updateCondition(i, { value: variable?.type === 'number' ? Number(e.target.value) : e.target.value })}
-                                        className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
-                                        placeholder="Value..."
-                                    />
-                                )
-                            )}
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-};
 
 /** Full-featured actions list editor with inline detail editors for all action types */
 const HZActionsEditor: React.FC<{
@@ -341,6 +230,7 @@ const HZActionsEditor: React.FC<{
     const actionLabels: Record<string, string> = {
         [UIActionType.None]: '(No Action)',
         [UIActionType.StartNewGame]: 'Start New Game',
+        [UIActionType.ContinueGame]: 'Continue Game',
         [UIActionType.GoToScreen]: 'Go To Screen',
         [UIActionType.LoadGame]: 'Load Game',
         [UIActionType.SaveGame]: 'Save Game',
@@ -450,12 +340,21 @@ const HotZoneElementOverlay: React.FC<{
     parentSize: { width: number; height: number };
     onSelect: (e: React.MouseEvent) => void;
     onUpdate: (updates: { x?: number; y?: number; width?: number; height?: number }) => void;
-}> = ({ element, project, isSelected, parentSize, onSelect, onUpdate }) => {
+    onRegionUpdate?: (regionIdx: number, coords: number[]) => void;
+    selectedRegionIdx?: number | null;
+    onSelectRegion?: (idx: number | null) => void;
+}> = ({ element, project, isSelected, parentSize, onSelect, onUpdate, onRegionUpdate, selectedRegionIdx, onSelectRegion }) => {
     const imageUrl = project.images[element.imageId]?.imageUrl ||
                      project.backgrounds[element.imageId]?.imageUrl;
 
     const elType = element.elementType || 'image';
     const videoUrl = element.videoId ? (project.videos[element.videoId]?.videoUrl) : null;
+
+    // Compute the pixel size of this element on the canvas (for inner region drag/resize)
+    const elementPixelSize = useMemo(() => ({
+        width: parentSize.width * element.width / 100,
+        height: parentSize.height * element.height / 100,
+    }), [parentSize, element.width, element.height]);
     return (
         <ResizableDraggable
             x={element.x}
@@ -467,6 +366,7 @@ const HotZoneElementOverlay: React.FC<{
             onSelect={onSelect}
             onUpdate={onUpdate}
             snapGrid={1}
+            allowChildInteraction={elType === 'imageMap' && isSelected}
         >
             <div className="w-full h-full relative">
                 {elType === 'text' ? (
@@ -510,6 +410,83 @@ const HotZoneElementOverlay: React.FC<{
                                 border: `1px solid ${element.borderColor || '#475569'}`,
                             }}>
                             &#x2713;
+                        </div>
+                    </div>
+                ) : elType === 'imageMap' ? (
+                    <div className="w-full h-full relative">
+                        {imageUrl ? (
+                            <img src={imageUrl} alt={element.name} className="w-full h-full object-contain" />
+                        ) : (
+                            <div className="w-full h-full bg-emerald-500/20 border-2 border-emerald-400 border-dashed rounded" />
+                        )}
+                        {(element.imageMapRegions || []).map((region, idx) => {
+                            const isRegionSelected = isSelected && selectedRegionIdx === idx;
+                            // Rect regions: interactive drag/resize when element is selected
+                            if (region.shape === 'rect' && region.coords.length >= 4 && isSelected && onRegionUpdate) {
+                                const [rx, ry, rw, rh] = region.coords;
+                                return (
+                                    <ResizableDraggable
+                                        key={region.id}
+                                        x={rx}
+                                        y={ry}
+                                        width={rw}
+                                        height={rh}
+                                        anchorX={0}
+                                        anchorY={0}
+                                        parentSize={elementPixelSize}
+                                        isSelected={isRegionSelected}
+                                        onSelect={(e) => { e.stopPropagation(); onSelectRegion?.(idx); }}
+                                        onUpdate={(u) => onRegionUpdate(idx, [u.x, u.y, u.width, u.height])}
+                                        snapGrid={1}
+                                        label={region.name}
+                                    >
+                                        <div
+                                            className="w-full h-full"
+                                            style={{
+                                                backgroundColor: isRegionSelected
+                                                    ? (region.highlightColor || 'rgba(16,185,129,0.4)')
+                                                    : (region.highlightColor || 'rgba(16,185,129,0.25)'),
+                                                border: isRegionSelected
+                                                    ? '2px solid rgba(16,185,129,0.9)'
+                                                    : '1px solid rgba(16,185,129,0.6)',
+                                            }}
+                                        >
+                                            <span className="absolute top-0 left-0 text-[7px] text-emerald-300 bg-emerald-800/60 px-0.5 rounded-br">{region.name}</span>
+                                        </div>
+                                    </ResizableDraggable>
+                                );
+                            }
+                            // Non-rect or non-selected: static overlay
+                            const style: React.CSSProperties = {
+                                position: 'absolute',
+                                backgroundColor: region.highlightColor || 'rgba(16,185,129,0.25)',
+                                border: '1px solid rgba(16,185,129,0.6)',
+                                cursor: isSelected ? 'pointer' : 'default',
+                                pointerEvents: isSelected ? 'auto' : 'none',
+                            };
+                            if (region.shape === 'rect') {
+                                style.left = `${region.coords[0]}%`;
+                                style.top = `${region.coords[1]}%`;
+                                style.width = `${region.coords[2]}%`;
+                                style.height = `${region.coords[3]}%`;
+                            } else if (region.shape === 'circle') {
+                                const r = region.coords[2];
+                                style.left = `${region.coords[0] - r}%`;
+                                style.top = `${region.coords[1] - r}%`;
+                                style.width = `${r * 2}%`;
+                                style.height = `${r * 2}%`;
+                                style.borderRadius = '50%';
+                            }
+                            return (
+                                <div key={region.id} style={style} title={region.tooltip || region.name}
+                                    onClick={isSelected ? (e) => { e.stopPropagation(); onSelectRegion?.(idx); } : undefined}
+                                >
+                                    <span className="absolute top-0 left-0 text-[7px] text-emerald-300 bg-emerald-800/60 px-0.5 rounded-br">{region.name}</span>
+                                </div>
+                            );
+                        })}
+                        <div className="absolute bottom-0 right-0 bg-emerald-500/80 text-white text-[8px] px-1 rounded-tl">
+                            Map ({(element.imageMapRegions || []).length})
                         </div>
                     </div>
                 ) : imageUrl ? (
@@ -659,7 +636,7 @@ const HotSpotProperties: React.FC<{
             <hr className="border-[var(--border-subtle)]" />
 
             {/* Conditions */}
-            <HZConditionsEditor
+            <ConditionsEditor
                 conditions={spot.conditions}
                 project={project}
                 onChange={conditions => onUpdate({ conditions })}
@@ -728,13 +705,14 @@ const HotZoneElementProperties: React.FC<{
                     <option value="button">Button</option>
                     <option value="video">Video</option>
                     <option value="textInput">Text Input</option>
+                    <option value="imageMap">Image Map</option>
                 </select>
             </label>
 
             {/* Image selector (for image and button types) */}
-            {(elType === 'image' || elType === 'button') && (
+            {(elType === 'image' || elType === 'button' || elType === 'imageMap') && (
                 <label className="block">
-                    <span className="text-[var(--text-secondary)] text-xs">{elType === 'button' ? 'Background Image' : 'Image Asset'}</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{elType === 'button' ? 'Background Image' : elType === 'imageMap' ? 'Map Background Image' : 'Image Asset'}</span>
                     <select
                         value={element.imageId}
                         onChange={e => onUpdate({ imageId: e.target.value as VNID })}
@@ -745,6 +723,24 @@ const HotZoneElementProperties: React.FC<{
                             <option key={img.id} value={img.id}>{img.name || img.id}</option>
                         ))}
                     </select>
+                </label>
+            )}
+
+            {/* Hover image selector (for imageMap type) */}
+            {elType === 'imageMap' && (
+                <label className="block">
+                    <span className="text-[var(--text-secondary)] text-xs">Hover State Image</span>
+                    <select
+                        value={element.hoverImageId || ''}
+                        onChange={e => onUpdate({ hoverImageId: (e.target.value || undefined) as VNID | undefined })}
+                        className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
+                    >
+                        <option value="">-- None --</option>
+                        {imageAssets.map((img: any) => (
+                            <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                        ))}
+                    </select>
+                    <span className="text-[var(--text-muted)] text-[9px]">Shown clipped to hovered region (Ren'Py-style)</span>
                 </label>
             )}
 
@@ -832,6 +828,151 @@ const HotZoneElementProperties: React.FC<{
                     </div>
                 </>
             )}
+
+            {/* Image Map regions editor */}
+            {elType === 'imageMap' && (() => {
+                const regions = element.imageMapRegions || [];
+                const addRegion = () => {
+                    const newRegion: ImageMapRegion = {
+                        id: generateId('imr') as VNID,
+                        name: `Region ${regions.length + 1}`,
+                        shape: 'rect',
+                        coords: [25, 25, 50, 50],
+                        actions: [],
+                        tooltip: '',
+                        cursor: 'pointer',
+                        highlightColor: 'rgba(16,185,129,0.3)',
+                    };
+                    onUpdate({ imageMapRegions: [...regions, newRegion] });
+                };
+                const updateRegion = (idx: number, patch: Partial<ImageMapRegion>) => {
+                    const newRegions = [...regions];
+                    newRegions[idx] = { ...newRegions[idx], ...patch };
+                    onUpdate({ imageMapRegions: newRegions });
+                };
+                const removeRegion = (idx: number) => {
+                    onUpdate({ imageMapRegions: regions.filter((_, i) => i !== idx) });
+                };
+
+                return (
+                    <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[var(--text-secondary)] text-xs font-semibold">Clickable Regions ({regions.length})</span>
+                            <button onClick={addRegion} className="flex items-center gap-1 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">
+                                <PlusIcon className="w-3 h-3" /> Add
+                            </button>
+                        </div>
+
+                        {regions.map((region, idx) => (
+                            <div key={region.id} className="p-2 bg-[var(--bg-primary)] rounded border border-emerald-500/30 space-y-1">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-emerald-300">Region {idx + 1}</span>
+                                    <button onClick={() => removeRegion(idx)} className="text-red-400 hover:text-red-300 p-0.5" title="Remove Region">
+                                        <TrashIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
+
+                                <label className="block">
+                                    <span className="text-[var(--text-muted)] text-[10px]">Name</span>
+                                    <input type="text" value={region.name} onChange={e => updateRegion(idx, { name: e.target.value })}
+                                        className="w-full mt-0.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" />
+                                </label>
+
+                                <label className="block">
+                                    <span className="text-[var(--text-muted)] text-[10px]">Shape</span>
+                                    <select value={region.shape} onChange={e => {
+                                        const shape = e.target.value as 'rect' | 'circle' | 'poly';
+                                        const defaultCoords = shape === 'rect' ? [25, 25, 50, 50] : shape === 'circle' ? [50, 50, 25] : [25, 25, 75, 25, 75, 75, 25, 75];
+                                        updateRegion(idx, { shape, coords: defaultCoords });
+                                    }} className="w-full mt-0.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]">
+                                        <option value="rect">Rectangle</option>
+                                        <option value="circle">Circle</option>
+                                        <option value="poly">Polygon</option>
+                                    </select>
+                                </label>
+
+                                {region.shape === 'rect' && (
+                                    <div className="grid grid-cols-2 gap-1">
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">X %</span>
+                                            <input type="number" value={region.coords[0] ?? 0} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">Y %</span>
+                                            <input type="number" value={region.coords[1] ?? 0} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">W %</span>
+                                            <input type="number" value={region.coords[2] ?? 50} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">H %</span>
+                                            <input type="number" value={region.coords[3] ?? 50} onChange={e => { const c = [...region.coords]; c[3] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                    </div>
+                                )}
+
+                                {region.shape === 'circle' && (
+                                    <div className="grid grid-cols-3 gap-1">
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">CX %</span>
+                                            <input type="number" value={region.coords[0] ?? 50} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">CY %</span>
+                                            <input type="number" value={region.coords[1] ?? 50} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                        <label className="block"><span className="text-[var(--text-muted)] text-[10px]">R %</span>
+                                            <input type="number" value={region.coords[2] ?? 25} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" /></label>
+                                    </div>
+                                )}
+
+                                {region.shape === 'poly' && (
+                                    <div className="space-y-1">
+                                        <span className="text-[var(--text-muted)] text-[10px]">Points (x%, y%)</span>
+                                        {Array.from({ length: Math.floor(region.coords.length / 2) }).map((_, pi) => (
+                                            <div key={pi} className="grid grid-cols-3 gap-1 items-end">
+                                                <input type="number" value={region.coords[pi * 2] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                    className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} X`} />
+                                                <input type="number" value={region.coords[pi * 2 + 1] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
+                                                    className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} Y`} />
+                                                <button onClick={() => { const c = [...region.coords]; c.splice(pi * 2, 2); updateRegion(idx, { coords: c.length >= 2 ? c : [50, 50] }); }}
+                                                    className="text-red-400 hover:text-red-300 text-[10px] p-0.5" title="Remove Point">✕</button>
+                                            </div>
+                                        ))}
+                                        <button onClick={() => updateRegion(idx, { coords: [...region.coords, 50, 50] })}
+                                            className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">+ Point</button>
+                                    </div>
+                                )}
+
+                                <label className="block">
+                                    <span className="text-[var(--text-muted)] text-[10px]">Tooltip</span>
+                                    <input type="text" value={region.tooltip || ''} onChange={e => updateRegion(idx, { tooltip: e.target.value })} placeholder="Hover text..."
+                                        className="w-full mt-0.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" />
+                                </label>
+
+                                <label className="block">
+                                    <span className="text-[var(--text-muted)] text-[10px]">Highlight Color</span>
+                                    <input type="color" value={region.highlightColor?.startsWith('rgba') ? '#10b981' : (region.highlightColor || '#10b981')}
+                                        onChange={e => updateRegion(idx, { highlightColor: e.target.value + '4D' })}
+                                        className="w-full h-5 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
+                                </label>
+
+                                {/* Region Actions — full action editor like menu buttons */}
+                                <HZActionsEditor
+                                    actions={region.actions || []}
+                                    project={project}
+                                    hotZoneElements={hotZoneElements}
+                                    onChange={actions => updateRegion(idx, { actions })}
+                                    label="On Click Actions"
+                                />
+
+                                {/* Region Conditions */}
+                                <ConditionsEditor
+                                    conditions={region.conditions}
+                                    project={project}
+                                    onChange={cs => updateRegion(idx, { conditions: cs })}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                );
+            })()}
 
             {/* Text field (for text and button types) */}
             {(elType === 'text' || elType === 'button') && (
@@ -960,7 +1101,7 @@ const HotZoneElementProperties: React.FC<{
             <hr className="border-[var(--border-subtle)]" />
 
             {/* Conditions */}
-            <HZConditionsEditor
+            <ConditionsEditor
                 conditions={element.conditions}
                 project={project}
                 onChange={conditions => onUpdate({ conditions })}
@@ -990,14 +1131,23 @@ interface HotZoneEditorProps {
 
 const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
     const { project, dispatch } = useProject();
+    const toast = useToast();
     const screen = project.uiScreens[screenId];
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
     const [selectedId, setSelectedId] = useState<VNID | null>(null);
     const [selectedType, setSelectedType] = useState<'hotspot' | 'element' | null>(null);
+    const [selectedRegionIdx, setSelectedRegionIdx] = useState<number | null>(null);
 
     const hotSpots = useMemo(() => screen.hotSpots || {}, [screen.hotSpots]);
     const hotZoneElements = useMemo(() => screen.hotZoneElements || {}, [screen.hotZoneElements]);
+
+    // Clipboard for copy/cut/paste (supports hotspots, elements, and individual image map regions)
+    const clipboardRef = useRef<
+        | { type: 'hotspot' | 'element'; item: VNHotSpot | VNHotZoneElement; isCut: boolean }
+        | { type: 'region'; item: ImageMapRegion; sourceElementId: VNID; sourceRegionIdx: number; isCut: boolean }
+        | null
+    >(null);
 
     // Track stage size
     useEffect(() => {
@@ -1060,6 +1210,14 @@ const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
         updateScreen({ hotZoneElements: { ...hotZoneElements, [id]: { ...el, ...updates } } });
     }, [hotZoneElements, updateScreen]);
 
+    const handleRegionUpdate = useCallback((elementId: VNID, regionIdx: number, newCoords: number[]) => {
+        const el = hotZoneElements[elementId];
+        if (!el || !el.imageMapRegions) return;
+        const updatedRegions = [...el.imageMapRegions];
+        updatedRegions[regionIdx] = { ...updatedRegions[regionIdx], coords: newCoords };
+        updateElement(elementId, { imageMapRegions: updatedRegions });
+    }, [hotZoneElements, updateElement]);
+
     const deleteElement = useCallback((id: VNID) => {
         const next = { ...hotZoneElements };
         delete next[id];
@@ -1076,6 +1234,160 @@ const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
         const current = screen.winCondition || { type: 'allPlaced' as const, actions: [] };
         updateScreen({ winCondition: { ...current, ...updates } });
     }, [screen.winCondition, updateScreen]);
+
+    // --- Clipboard operations ---
+    const handleCopy = useCallback(() => {
+        if (!selectedId || !selectedType) return;
+        // If a region is selected within an image map element, copy just the region
+        if (selectedType === 'element' && selectedRegionIdx !== null) {
+            const el = hotZoneElements[selectedId];
+            if (!el || !el.imageMapRegions || !el.imageMapRegions[selectedRegionIdx]) return;
+            const region = el.imageMapRegions[selectedRegionIdx];
+            clipboardRef.current = { type: 'region', item: JSON.parse(JSON.stringify(region)), sourceElementId: selectedId, sourceRegionIdx: selectedRegionIdx, isCut: false };
+            toast.info(`Copied region "${region.name}"`, { duration: 1500 });
+            return;
+        }
+        if (selectedType === 'hotspot') {
+            const spot = hotSpots[selectedId];
+            if (!spot) return;
+            clipboardRef.current = { type: 'hotspot', item: JSON.parse(JSON.stringify(spot)), isCut: false };
+            toast.info(`Copied hot spot "${spot.name}"`, { duration: 1500 });
+        } else {
+            const el = hotZoneElements[selectedId];
+            if (!el) return;
+            clipboardRef.current = { type: 'element', item: JSON.parse(JSON.stringify(el)), isCut: false };
+            toast.info(`Copied element "${el.name}"`, { duration: 1500 });
+        }
+    }, [selectedId, selectedType, selectedRegionIdx, hotSpots, hotZoneElements, toast]);
+
+    const handleCut = useCallback(() => {
+        if (!selectedId || !selectedType) return;
+        // If a region is selected within an image map element, cut just the region
+        if (selectedType === 'element' && selectedRegionIdx !== null) {
+            const el = hotZoneElements[selectedId];
+            if (!el || !el.imageMapRegions || !el.imageMapRegions[selectedRegionIdx]) return;
+            const region = el.imageMapRegions[selectedRegionIdx];
+            clipboardRef.current = { type: 'region', item: JSON.parse(JSON.stringify(region)), sourceElementId: selectedId, sourceRegionIdx: selectedRegionIdx, isCut: true };
+            const updatedRegions = el.imageMapRegions.filter((_, i) => i !== selectedRegionIdx);
+            updateElement(selectedId, { imageMapRegions: updatedRegions });
+            setSelectedRegionIdx(null);
+            toast.info(`Cut region "${region.name}"`, { duration: 1500 });
+            return;
+        }
+        if (selectedType === 'hotspot') {
+            const spot = hotSpots[selectedId];
+            if (!spot) return;
+            clipboardRef.current = { type: 'hotspot', item: JSON.parse(JSON.stringify(spot)), isCut: true };
+            deleteHotSpot(selectedId);
+            toast.info(`Cut hot spot "${spot.name}"`, { duration: 1500 });
+        } else {
+            const el = hotZoneElements[selectedId];
+            if (!el) return;
+            clipboardRef.current = { type: 'element', item: JSON.parse(JSON.stringify(el)), isCut: true };
+            deleteElement(selectedId);
+            toast.info(`Cut element "${el.name}"`, { duration: 1500 });
+        }
+    }, [selectedId, selectedType, selectedRegionIdx, hotSpots, hotZoneElements, deleteHotSpot, deleteElement, updateElement, toast]);
+
+    const handlePaste = useCallback(() => {
+        if (!clipboardRef.current) return;
+        const clipboard = clipboardRef.current;
+        if (clipboard.type === 'region') {
+            // Paste region into the currently selected image map element (or the source element)
+            const targetId = (selectedType === 'element' && selectedId) ? selectedId : clipboard.sourceElementId;
+            const targetEl = hotZoneElements[targetId];
+            if (!targetEl) { toast.error('Select an image map element to paste the region into', { duration: 2000 }); return; }
+            const region = clipboard.item as ImageMapRegion;
+            const newRegion: ImageMapRegion = {
+                ...JSON.parse(JSON.stringify(region)),
+                id: generateId('imr') as VNID,
+                name: clipboard.isCut ? region.name : `${region.name} (copy)`,
+            };
+            const regions = [...(targetEl.imageMapRegions || []), newRegion];
+            updateElement(targetId, { imageMapRegions: regions });
+            setSelectedId(targetId);
+            setSelectedType('element');
+            setSelectedRegionIdx(regions.length - 1);
+            toast.info(`Pasted region "${newRegion.name}"`, { duration: 1500 });
+            if (clipboard.isCut) clipboardRef.current = null;
+            return;
+        }
+        const { type, item, isCut } = clipboard;
+        if (type === 'hotspot') {
+            const spot = item as VNHotSpot;
+            const newId = generateId('hs');
+            const clone: VNHotSpot = {
+                ...JSON.parse(JSON.stringify(spot)),
+                id: newId,
+                name: isCut ? spot.name : `${spot.name} (copy)`,
+                x: spot.x + (isCut ? 0 : 2),
+                y: spot.y + (isCut ? 0 : 2),
+            };
+            updateScreen({ hotSpots: { ...hotSpots, [newId]: clone } });
+            setSelectedId(newId);
+            setSelectedType('hotspot');
+        } else {
+            const el = item as VNHotZoneElement;
+            const newId = generateId('hze');
+            const clone: VNHotZoneElement = {
+                ...JSON.parse(JSON.stringify(el)),
+                id: newId,
+                name: isCut ? el.name : `${el.name} (copy)`,
+                x: el.x + (isCut ? 0 : 2),
+                y: el.y + (isCut ? 0 : 2),
+            };
+            updateScreen({ hotZoneElements: { ...hotZoneElements, [newId]: clone } });
+            setSelectedId(newId);
+            setSelectedType('element');
+        }
+        toast.info(`Pasted ${type === 'hotspot' ? 'hot spot' : 'element'}`, { duration: 1500 });
+        if (isCut) clipboardRef.current = null;
+    }, [hotSpots, hotZoneElements, updateScreen, toast]);
+
+    const handleDeleteSelected = useCallback(() => {
+        if (!selectedId || !selectedType) return;
+        // If a region is selected, delete just the region
+        if (selectedType === 'element' && selectedRegionIdx !== null) {
+            const el = hotZoneElements[selectedId];
+            if (!el || !el.imageMapRegions || !el.imageMapRegions[selectedRegionIdx]) return;
+            const updatedRegions = el.imageMapRegions.filter((_, i) => i !== selectedRegionIdx);
+            updateElement(selectedId, { imageMapRegions: updatedRegions });
+            setSelectedRegionIdx(null);
+            return;
+        }
+        if (selectedType === 'hotspot') {
+            deleteHotSpot(selectedId);
+        } else {
+            deleteElement(selectedId);
+        }
+    }, [selectedId, selectedType, selectedRegionIdx, hotZoneElements, deleteHotSpot, deleteElement, updateElement]);
+
+    // --- Keyboard shortcuts ---
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+            if (!screen) return;
+
+            const isCtrl = e.ctrlKey || e.metaKey;
+
+            if (isCtrl && e.key === 'c') {
+                e.preventDefault();
+                handleCopy();
+            } else if (isCtrl && e.key === 'x') {
+                e.preventDefault();
+                handleCut();
+            } else if (isCtrl && e.key === 'v') {
+                e.preventDefault();
+                handlePaste();
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                handleDeleteSelected();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [screen, handleCopy, handleCut, handlePaste, handleDeleteSelected]);
 
     // Background
     const getBackground = (): React.CSSProperties => {
@@ -1147,7 +1459,7 @@ const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
                                 <span className="truncate flex items-center gap-1">
                                     {el.name}
                                     <span className="text-[8px] bg-purple-500/20 text-purple-300 px-0.5 rounded">
-                                        {{ image: 'I', text: 'T', button: 'B', video: 'V', textInput: 'TI' }[el.elementType || 'image']}
+                                        {{ image: 'I', text: 'T', button: 'B', video: 'V', textInput: 'TI', imageMap: 'IM' }[el.elementType || 'image']}
                                     </span>
                                     {el.draggable && <span className="text-[8px] bg-sky-500/30 text-sky-300 px-0.5 rounded">D</span>}
                                     {el.conditions && el.conditions.length > 0 && (
@@ -1232,7 +1544,7 @@ const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
                     <div
                         ref={stageRef}
                         className="bg-slate-900/50 rounded-md relative overflow-hidden mx-auto"
-                        onMouseDown={() => { setSelectedId(null); setSelectedType(null); }}
+                        onMouseDown={() => { setSelectedId(null); setSelectedType(null); setSelectedRegionIdx(null); }}
                         style={{
                             ...getBackground(),
                             aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`,
@@ -1262,8 +1574,11 @@ const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
                                         project={project}
                                         isSelected={selectedId === el.id}
                                         parentSize={stageSize}
-                                        onSelect={(e) => { e.stopPropagation(); setSelectedId(el.id); setSelectedType('element'); }}
+                                        onSelect={(e) => { e.stopPropagation(); setSelectedId(el.id); setSelectedType('element'); setSelectedRegionIdx(null); }}
                                         onUpdate={updates => updateElement(el.id, updates)}
+                                        onRegionUpdate={(regionIdx, coords) => handleRegionUpdate(el.id, regionIdx, coords)}
+                                        selectedRegionIdx={selectedId === el.id ? selectedRegionIdx : null}
+                                        onSelectRegion={setSelectedRegionIdx}
                                     />
                                 ))}
                             </>
@@ -1273,28 +1588,29 @@ const HotZoneEditor: React.FC<HotZoneEditorProps> = ({ screenId }) => {
             </div>
 
             {/* Right sidebar - properties */}
-            <div className="w-64 flex-shrink-0 bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-lg overflow-y-auto p-3">
-                {selectedHotSpot ? (
+            {selectedHotSpot ? (
+                <div className="w-64 flex-shrink-0 bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-lg overflow-y-auto p-3">
                     <HotSpotProperties
                         spot={selectedHotSpot}
                         project={project}
                         hotZoneElements={hotZoneElements}
                         onUpdate={updates => updateHotSpot(selectedHotSpot.id, updates)}
                     />
-                ) : selectedElement ? (
+                </div>
+            ) : selectedElement ? (
+                <div className="w-64 flex-shrink-0 bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-lg overflow-y-auto p-3">
                     <HotZoneElementProperties
                         element={selectedElement}
                         project={project}
                         hotZoneElements={hotZoneElements}
                         onUpdate={updates => updateElement(selectedElement.id, updates)}
                     />
-                ) : (
-                    <div className="text-center text-[var(--text-secondary)] text-sm mt-8">
-                        <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                        <p>Select a hot spot or element to edit its properties</p>
-                    </div>
-                )}
-            </div>
+                </div>
+            ) : (
+                <div className="flex-shrink-0 overflow-y-auto">
+                    <ScreenInspector screenId={screenId} />
+                </div>
+            )}
         </div>
     );
 };

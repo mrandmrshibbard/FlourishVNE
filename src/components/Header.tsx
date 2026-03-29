@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon, GlobeIcon, CodeBracketIcon, CommonEventsIcon, PuzzlePieceIcon, GamepadIcon, HelpIcon } from './icons';
+import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon, GlobeIcon, CodeBracketIcon, PuzzlePieceIcon, GamepadIcon, HelpIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { exportProject } from '../utils/projectPackager';
@@ -37,8 +37,7 @@ const Header: React.FC<{
     onTitleChange: (newTitle: string) => void;
     navigationTabs?: React.ReactNode;
     onShowKeyboardShortcuts?: () => void;
-    onOpenCommonEvents?: () => void;
-}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts, onOpenCommonEvents }) => {
+}> = ({ onPlay, title, onExit, onTitleChange, navigationTabs, onShowKeyboardShortcuts }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(title);
     const [showBuilder, setShowBuilder] = useState(false);
@@ -335,14 +334,6 @@ const Header: React.FC<{
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
-                                            onClick={() => { onOpenCommonEvents?.(); setShowToolsMenu(false); }}
-                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-amber-400"
-                                        >
-                                            <CommonEventsIcon className="w-4 h-4" />
-                                            Common Events
-                                        </button>
-                                        <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
-                                        <button
                                             onClick={() => { setShowPluginManager(true); setShowToolsMenu(false); }}
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"
                                         >
@@ -369,20 +360,23 @@ const Header: React.FC<{
                             <SaveIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
                             Save
                         </button>
-                        <button
-                            onClick={() => setShowBuilder(true)}
-                            className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs shadow-md hover:shadow-lg hover:shadow-green-500/20"
-                            title="Build standalone game (no coding required!)"
-                        >
-                            <GamepadIcon className="w-4 h-4" /> Build
-                        </button>
-                        <button
-                            onClick={onPlay}
-                            className="btn-primary-gradient text-white font-semibold px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-xs"
-                        >
-                            <PlayIcon className="w-4 h-4" />
-                            Play
-                        </button>
+                        <div className="flex flex-col gap-0.5">
+                            <button
+                                onClick={onPlay}
+                                className="btn-primary-gradient text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 text-[11px] leading-tight"
+                            >
+                                <PlayIcon className="w-3.5 h-3.5" />
+                                Play
+                            </button>
+                            <button
+                                onClick={() => setShowBuilder(true)}
+                                className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 transition-all text-[11px] leading-tight shadow-sm hover:shadow-md hover:shadow-green-500/20"
+                                title="Build standalone game (no coding required!)"
+                            >
+                                <GamepadIcon className="w-3.5 h-3.5" />
+                                Build
+                            </button>
+                        </div>
                     </div>
                 </>
             )}

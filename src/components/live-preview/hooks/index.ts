@@ -5,3 +5,4 @@
 
 export { useTypewriter } from './useTypewriter';
 export { useStageSize } from './useStageSize';
+export { useTween } from './useTween';

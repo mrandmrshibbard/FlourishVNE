@@ -1,9 +1,8 @@
 import React from 'react';
-import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon } from './icons';
+import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
 export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'settings';
-// Note: 'commonEvents' is accessed via the Tools dropdown, not as a tab.
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -13,6 +12,7 @@ interface NavigationTabsProps {
     uiScreenCount: number;
     assetCount: number;
     variableCount: number;
+    commonEventCount: number;
 }
 
 // Rainbow colors for each tab
@@ -33,7 +33,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     characterCount,
     uiScreenCount,
     assetCount,
-    variableCount
+    variableCount,
+    commonEventCount
 }) => {
     const isChildWindow = isManagerWindow();
 
@@ -88,6 +89,13 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 description: 'Create and manage story variables and game state'
             },
             {
+                id: 'commonEvents',
+                label: 'Events',
+                icon: <CommonEventsIcon className="w-4 h-4" />,
+                count: commonEventCount,
+                description: 'Reusable command sequences triggered from scenes'
+            },
+            {
                 id: 'settings',
                 label: 'Settings',
                 icon: <SettingsIcon className="w-4 h-4" />,
@@ -103,7 +111,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         characterCount,
         uiScreenCount,
         assetCount,
-        variableCount
+        variableCount,
+        commonEventCount
     ]);
 
     const handleOpenInWindow = (tabId: NavigationTab, event: React.MouseEvent) => {
@@ -112,7 +121,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const handleRightClick = (tabId: NavigationTab, event: React.MouseEvent) => {
-        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'templates') {
+        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings') {
             event.preventDefault();
             event.stopPropagation();
             focusManagerWindow(tabId as ManagerWindowType);
@@ -120,7 +129,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const focusableTabs = React.useMemo(
-        () => tabs.filter(tab => tab.id !== 'settings' && tab.id !== 'templates'),
+        () => tabs.filter(tab => tab.id !== 'settings'),
         [tabs]
     );
 
@@ -174,8 +183,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
 
             if (
                 isMultiWindowSupported() &&
-                targetTab.id !== 'settings' &&
-                targetTab.id !== 'templates'
+                targetTab.id !== 'settings'
             ) {
                 openManagerWindow(targetTab.id as ManagerWindowType);
             }
@@ -229,7 +237,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             {tabs.map((tab, index) => {
                 const shortcut = getShortcutLabel(tab.id);
                 const baseTooltip = shortcut ? `${tab.description} (${shortcut})` : tab.description;
-                const rightClickHint = isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings' && tab.id !== 'templates'
+                const rightClickHint = isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings'
                     ? ' | Right-click to focus manager window'
                     : '';
                 const tooltip = `${baseTooltip}${rightClickHint}`;
@@ -316,7 +324,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         </button>
                     
                         {/* Pop-out Window Button - Only show in main window */}
-                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'templates' && (
+                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && (
                             <button
                                 onClick={(e) => handleOpenInWindow(tab.id, e)}
                                 className="absolute -top-2 -right-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"

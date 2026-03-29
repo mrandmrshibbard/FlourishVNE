@@ -9,13 +9,14 @@
  */
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { VNProject } from '../types/project';
-import { VNProjectUI, VNFontSettings } from '../features/ui/types';
+import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
-import { fontSettingsToStyle } from '../utils/styleUtils';
+import FontEditor, { defaultFontSettings } from './ui/FontEditor';
+import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
 import {
     ChatBubbleIcon, BookmarkSquareIcon, SparklesIcon, PencilIcon,
-    ChevronDownIcon,
+    ChevronDownIcon, QuestionMarkIcon,
 } from './icons';
 
 /* ------------------------------------------------------------------ */
@@ -27,7 +28,8 @@ export type InGameUIElement =
     | 'nameBox'
     | 'choiceButtons'
     | 'inputBox'
-    | 'quickMenu';
+    | 'quickMenu'
+    | 'confirmDialogs';
 
 interface ElementConfig {
     id: InGameUIElement;
@@ -42,6 +44,7 @@ const ELEMENTS: ElementConfig[] = [
     { id: 'choiceButtons', label: 'Choice Buttons',  icon: <SparklesIcon className="w-4 h-4" />,         description: 'Player choice / decision buttons' },
     { id: 'inputBox',      label: 'Text Input',      icon: <PencilIcon className="w-4 h-4" />,           description: 'Player text input prompt box' },
     { id: 'quickMenu',     label: 'Quick Menu',      icon: <ChevronDownIcon className="w-4 h-4" />,      description: 'Skip, Auto, Log, Back buttons' },
+    { id: 'confirmDialogs', label: 'Confirm Dialogs', icon: <QuestionMarkIcon className="w-4 h-4" />, description: 'Quit & New Game confirmation popups' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -219,14 +222,24 @@ const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui,
         ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
         : null;
 
+    const nameAlign = ui.dialogueNameFont?.align || 'left';
+    const justifyMap = { left: 'flex-start', center: 'center', right: 'flex-end' } as const;
+
     return (
         <div className="w-full h-full flex items-center" style={{
-            backgroundColor: bgUrl ? undefined : bgColor,
+            justifyContent: justifyMap[nameAlign] || 'flex-start',
             borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
             padding: `calc(var(--font-scale,1) * ${pad}px) calc(var(--font-scale,1) * ${hPad}px)`,
-            ...(bgUrl ? buildImageBackgroundStyle(bgUrl, ui.nameboxSizeMode ?? 'stretch') : {}),
+            ...(bgUrl
+                ? buildImageBackgroundStyle(bgUrl, ui.nameboxSizeMode ?? 'stretch')
+                : {
+                    backgroundColor: bgColor,
+                    border: '1px solid rgba(148,163,184,0.35)',
+                }),
         }}>
-            <span style={fontToStyle(ui.dialogueNameFont)} className="opacity-90">Character Name</span>
+            <span style={fontToStyle(ui.dialogueNameFont)} className="opacity-90">
+                <span style={extractTextGradientStyle(ui.dialogueNameFont) || undefined}>Character Name</span>
+            </span>
         </div>
     );
 };
@@ -235,22 +248,46 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
     const bgColor = hexToRgba(ui.choiceButtonColor ?? '#1e293b', ui.choiceButtonOpacity ?? 90);
     const br = ui.choiceButtonBorderRadius ?? 8;
     const pad = ui.choiceButtonPadding ?? 16;
+    const slice = ui.choiceButtonSlice ?? 15;
+    const sizeMode = ui.choiceButtonSizeMode ?? 'stretch';
 
     const bgImgId = ui.choiceButtonImage?.id;
     const bgUrl = bgImgId
         ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
         : null;
 
+    const borderImgId = (ui as any).choiceButtonBorderImage?.id;
+    const borderUrl = borderImgId
+        ? ((project.images as any)[borderImgId]?.imageUrl || (project.backgrounds as any)[borderImgId]?.imageUrl)
+        : null;
+    const borderPadding = (ui as any).choiceBorderPadding ?? 8;
+    const hasCustomImage = bgUrl || borderUrl;
+
     return (
         <div className="w-full h-full flex flex-col items-center justify-center gap-[4%]">
             {['Choice A', 'Choice B', 'Choice C'].map(label => (
-                <div key={label} className="w-[80%] text-center" style={{
-                    backgroundColor: bgUrl ? undefined : bgColor,
-                    borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
-                    padding: `calc(var(--font-scale,1) * ${pad}px)`,
-                    ...(bgUrl ? buildImageBackgroundStyle(bgUrl, ui.choiceButtonSizeMode ?? 'stretch') : {}),
-                }}>
-                    <span style={fontToStyle(ui.choiceTextFont)} className="opacity-90">{label}</span>
+                <div key={label} className="w-[80%]"
+                     style={borderUrl
+                         ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
+                         : {}}>
+                    <div className="w-full" style={{
+                        textAlign: (ui.choiceTextFont?.align || 'center') as any,
+                        borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
+                        padding: `calc(var(--font-scale,1) * ${pad}px)`,
+                        ...(bgUrl
+                            ? { ...buildImageBackgroundStyle(bgUrl, sizeMode, slice), backgroundColor: bgColor }
+                            : !hasCustomImage
+                                ? {
+                                    backgroundColor: bgColor,
+                                    border: '1px solid rgba(148,163,184,0.3)',
+                                    boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                  }
+                                : {}),
+                    }}>
+                        <span style={fontToStyle(ui.choiceTextFont)} className="opacity-90">
+                            <span style={extractTextGradientStyle(ui.choiceTextFont) || undefined}>{label}</span>
+                        </span>
+                    </div>
                 </div>
             ))}
         </div>
@@ -261,25 +298,52 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
     const bgColor = hexToRgba(ui.inputBoxColor ?? '#0f172a', ui.inputBoxOpacity ?? 92);
     const br = ui.inputBoxBorderRadius ?? 8;
     const pad = ui.inputBoxPadding ?? 24;
+    const slice = ui.inputBoxSlice ?? 20;
+    const sizeMode = ui.inputBoxSizeMode ?? 'stretch';
 
     const bgImgId = ui.inputBoxImage?.id;
     const bgUrl = bgImgId
         ? ((project.images as any)[bgImgId]?.imageUrl || (project.backgrounds as any)[bgImgId]?.imageUrl)
         : null;
 
+    const borderImgId = (ui as any).inputBoxBorderImage?.id;
+    const borderUrl = borderImgId
+        ? ((project.images as any)[borderImgId]?.imageUrl || (project.backgrounds as any)[borderImgId]?.imageUrl)
+        : null;
+    const borderPadding = (ui as any).inputBorderPadding ?? 8;
+    const hasCustomImage = bgUrl || borderUrl;
+
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-[6%]" style={{
-            backgroundColor: bgUrl ? undefined : bgColor,
-            borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
-            padding: `calc(var(--font-scale,1) * ${pad}px)`,
-            ...(bgUrl ? buildImageBackgroundStyle(bgUrl, ui.inputBoxSizeMode ?? 'stretch') : {}),
-        }}>
-            <p style={fontToStyle(ui.inputPromptFont)} className="opacity-90 text-center">What is your name?</p>
-            <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={fontToStyle(ui.inputFieldFont)}>
-                <span className="opacity-40">Type here…</span>
-            </div>
-            <div className="px-4 py-1 rounded bg-sky-600/80">
-                <span style={fontToStyle(ui.inputSubmitFont)}>Submit</span>
+        <div className="w-full h-full flex flex-col items-center justify-center">
+            <div className="w-full"
+                 style={borderUrl
+                     ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
+                     : {}}>
+                <div className="w-full flex flex-col items-center justify-center gap-[6%]" style={{
+                    borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
+                    padding: `calc(var(--font-scale,1) * ${pad}px)`,
+                    ...(bgUrl
+                        ? { ...buildImageBackgroundStyle(bgUrl, sizeMode, slice), backgroundColor: bgColor, ...(sizeMode !== 'nine-slice' ? {} : {}) }
+                        : !hasCustomImage
+                            ? {
+                                backgroundColor: bgColor,
+                                border: '1px solid rgba(148,163,184,0.3)',
+                                boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                              }
+                            : {}),
+                }}>
+                    <p style={fontToStyle(ui.inputPromptFont)} className="opacity-90">
+                        <span style={extractTextGradientStyle(ui.inputPromptFont) || undefined}>What is your name?</span>
+                    </p>
+                    <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={fontToStyle(ui.inputFieldFont)}>
+                        <span className="opacity-40">Type here…</span>
+                    </div>
+                    <div className="px-4 py-1 rounded bg-sky-600/80">
+                        <span style={fontToStyle(ui.inputSubmitFont)}>
+                            <span style={extractTextGradientStyle(ui.inputSubmitFont) || undefined}>Submit</span>
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -293,15 +357,128 @@ const QuickMenuPreview: React.FC<{ ui: VNProjectUI }> = ({ ui }) => {
     return (
         <div className="w-full h-full flex items-center justify-center gap-[2%]">
             {buttons.map(lbl => (
-                <div key={lbl} className="px-2 py-0.5" style={{
+                <div key={lbl} style={{
                     backgroundColor: bgColor,
                     borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
                     fontSize: 'calc(var(--font-scale,1) * 12px)',
-                    color: '#94a3b8',
+                    padding: 'calc(var(--font-scale,1) * 10px) calc(var(--font-scale,1) * 10px)',
+                    color: 'rgba(255,255,255,0.8)',
+                    border: '1px solid rgba(148,163,184,0.2)',
                 }}>
                     {lbl}
                 </div>
             ))}
+        </div>
+    );
+};
+
+const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const cd = ui.confirmDialogs || {};
+    const bgColor = cd.backgroundColor ?? '#0f172a';
+    const bgOpacity = (cd.backgroundOpacity ?? 92) / 100;
+    const borderRadius = cd.borderRadius ?? 12;
+    const overlayColor = cd.overlayColor ?? 'rgba(0,0,0,0.75)';
+    const confirmBtnColor = cd.confirmButtonColor ?? '';
+    const cancelBtnColor = cd.cancelButtonColor ?? '#1e293b';
+    const btnBorderRadius = cd.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
+    const btnPad = cd.buttonPadding ?? 8;
+    const dialogPad = cd.dialogPadding ?? 32;
+
+    // Resolve assets
+    const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
+    const resolveUrl = (asset?: { id: string } | null) => asset?.id ? (allAssets[asset.id]?.imageUrl || null) : null;
+
+    const bgImageUrl = resolveUrl(cd.backgroundImage as any);
+    const borderImageUrl = resolveUrl(cd.borderImage as any);
+    const confirmBtnImgUrl = resolveUrl(cd.confirmButtonImage as any);
+    const cancelBtnImgUrl = resolveUrl(cd.cancelButtonImage as any);
+
+    const sizeMode = cd.backgroundSizeMode || 'stretch';
+
+    const bgImageStyle: React.CSSProperties = bgImageUrl ? {
+        backgroundImage: `url(${bgImageUrl})`,
+        backgroundSize: sizeMode === 'nine-slice' ? undefined : (sizeMode === 'stretch' ? '100% 100%' : sizeMode),
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+    } : {};
+
+    const titleStyle: React.CSSProperties = cd.titleFont ? fontToStyle(cd.titleFont) : {
+        fontSize: 'calc(var(--font-scale,1) * 20px)', fontWeight: 600, color: '#fff'
+    };
+    const messageStyle: React.CSSProperties = cd.messageFont ? fontToStyle(cd.messageFont) : {
+        fontSize: 'calc(var(--font-scale,1) * 15px)', color: '#cbd5e1'
+    };
+    const btnStyle: React.CSSProperties = cd.buttonFont ? fontToStyle(cd.buttonFont) : {
+        fontSize: 'calc(var(--font-scale,1) * 14px)', fontWeight: 500, color: '#fff'
+    };
+
+    const alphaHex = Math.round(bgOpacity * 255).toString(16).padStart(2, '0');
+
+    const makeBtnImageStyle = (imgUrl: string | null): React.CSSProperties => {
+        if (!imgUrl) return {};
+        const bsm = cd.buttonSizeMode || 'stretch';
+        return {
+            backgroundImage: `url(${imgUrl})`,
+            backgroundSize: bsm === 'nine-slice' ? undefined : (bsm === 'stretch' ? '100% 100%' : bsm),
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: 'transparent',
+            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${cd.buttonSlice ?? 10} fill`, borderImageWidth: `${cd.buttonSlice ?? 10}px` } : {}),
+        };
+    };
+
+    const borderPad = cd.borderPadding ?? 12;
+
+    return (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ backgroundColor: overlayColor }}>
+            {/* Border image wrapper */}
+            <div style={borderImageUrl ? {
+                backgroundImage: `url(${borderImageUrl})`,
+                backgroundSize: '100% 100%',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                padding: `calc(var(--font-scale,1) * ${borderPad}px)`,
+                borderRadius: `calc(var(--font-scale,1) * ${borderRadius}px)`,
+            } : {}}>
+                <div style={{
+                    backgroundColor: bgImageUrl ? 'transparent' : `${bgColor}${alphaHex}`,
+                    borderRadius: `calc(var(--font-scale,1) * ${borderRadius}px)`,
+                    padding: `calc(var(--font-scale,1) * ${dialogPad}px)`,
+                    ...(cd.dialogWidth ? { width: `calc(var(--font-scale,1) * ${cd.dialogWidth}px)` } : { minWidth: 'calc(var(--font-scale,1) * 320px)', maxWidth: 'calc(var(--font-scale,1) * 440px)' }),
+                    textAlign: 'center' as const,
+                    boxShadow: borderImageUrl ? 'none' : '0 12px 40px rgba(0,0,0,0.5)',
+                    ...bgImageStyle,
+                }}>
+                    <div style={{ ...titleStyle, marginBottom: 'calc(var(--font-scale,1) * 12px)' }}>
+                        {cd.quitTitle || 'Quit Game'}
+                    </div>
+                    <div style={{ ...messageStyle, marginBottom: 'calc(var(--font-scale,1) * 24px)' }}>
+                        {cd.quitMessage || 'Are you sure you want to quit?'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 'calc(var(--font-scale,1) * 12px)', justifyContent: 'center' }}>
+                        <div style={{
+                            ...btnStyle,
+                            padding: `calc(var(--font-scale,1) * ${btnPad}px) calc(var(--font-scale,1) * ${btnPad * 3}px)`,
+                            borderRadius: `calc(var(--font-scale,1) * ${btnBorderRadius}px)`,
+                            backgroundColor: cancelBtnImgUrl ? 'transparent' : cancelBtnColor,
+                            border: cancelBtnImgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                            ...makeBtnImageStyle(cancelBtnImgUrl),
+                        }}>
+                            {cd.quitCancelLabel || 'Cancel'}
+                        </div>
+                        <div style={{
+                            ...btnStyle,
+                            padding: `calc(var(--font-scale,1) * ${btnPad}px) calc(var(--font-scale,1) * ${btnPad * 3}px)`,
+                            borderRadius: `calc(var(--font-scale,1) * ${btnBorderRadius}px)`,
+                            background: confirmBtnImgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)'),
+                            ...makeBtnImageStyle(confirmBtnImgUrl),
+                        }}>
+                            {cd.quitConfirmLabel || 'Quit'}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -429,6 +606,12 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <NumInput label="Left" value={ui.dialogueTextPaddingLeft} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingLeft: v })} />
                     <NumInput label="Right" value={ui.dialogueTextPaddingRight} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingRight: v })} />
                 </div>
+
+                <FontEditor
+                    label="Dialogue Text Font"
+                    font={(ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings}
+                    onFontChange={(prop, value) => onUpdate({ dialogueTextFont: { ...((ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                />
             </div>
         );
     }
@@ -471,6 +654,12 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </select>
                     </Field>
                 )}
+
+                <FontEditor
+                    label="Name Font"
+                    font={(ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings}
+                    onFontChange={(prop, value) => onUpdate({ dialogueNameFont: { ...((ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                />
             </div>
         );
     }
@@ -543,6 +732,12 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                 {ui.choiceButtonBorderImage && (
                     <NumInput label="Border Padding (px)" value={ui.choiceBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ choiceBorderPadding: v })} />
                 )}
+
+                <FontEditor
+                    label="Choice Text Font"
+                    font={(ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings}
+                    onFontChange={(prop, value) => onUpdate({ choiceTextFont: { ...((ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                />
             </div>
         );
     }
@@ -601,6 +796,22 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                 {ui.inputBoxBorderImage && (
                     <NumInput label="Border Padding (px)" value={ui.inputBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ inputBorderPadding: v })} />
                 )}
+
+                <FontEditor
+                    label="Prompt Font"
+                    font={(ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings}
+                    onFontChange={(prop, value) => onUpdate({ inputPromptFont: { ...((ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                />
+                <FontEditor
+                    label="Input Field Font"
+                    font={(ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings}
+                    onFontChange={(prop, value) => onUpdate({ inputFieldFont: { ...((ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                />
+                <FontEditor
+                    label="Submit Button Font"
+                    font={(ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings}
+                    onFontChange={(prop, value) => onUpdate({ inputSubmitFont: { ...((ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                />
             </div>
         );
     }
@@ -623,6 +834,225 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         <option value="hidden">Hidden</option>
                     </select>
                 </Field>
+            </div>
+        );
+    }
+
+    /* Confirm Dialogs properties */
+    if (element === 'confirmDialogs') {
+        const cd = ui.confirmDialogs || {} as VNConfirmDialogSettings;
+        const updateCD = (patch: Partial<VNConfirmDialogSettings>) => onUpdate({ confirmDialogs: { ...cd, ...patch } });
+
+        return (
+            <div className="space-y-3 p-3">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Confirmation Dialogs</h4>
+                <p className="text-xs text-[var(--text-secondary)]">
+                    Shown when the player quits to title or starts a new game while a game is in progress.
+                </p>
+
+                {/* Quit dialog text */}
+                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
+                    <span className="text-xs font-semibold text-sky-400">Quit Confirmation</span>
+                    <Field label="Title">
+                        <input className={inputCls} value={cd.quitTitle ?? ''} placeholder="Quit Game"
+                            onChange={e => updateCD({ quitTitle: e.target.value || undefined })} />
+                    </Field>
+                    <Field label="Message">
+                        <textarea className={inputCls} rows={2} value={cd.quitMessage ?? ''} placeholder="Are you sure you want to quit?"
+                            onChange={e => updateCD({ quitMessage: e.target.value || undefined })} />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Confirm Button">
+                            <input className={inputCls} value={cd.quitConfirmLabel ?? ''} placeholder="Quit"
+                                onChange={e => updateCD({ quitConfirmLabel: e.target.value || undefined })} />
+                        </Field>
+                        <Field label="Cancel Button">
+                            <input className={inputCls} value={cd.quitCancelLabel ?? ''} placeholder="Cancel"
+                                onChange={e => updateCD({ quitCancelLabel: e.target.value || undefined })} />
+                        </Field>
+                    </div>
+                </div>
+
+                {/* New Game dialog text */}
+                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
+                    <span className="text-xs font-semibold text-sky-400">New Game Confirmation</span>
+                    <Field label="Title">
+                        <input className={inputCls} value={cd.newGameTitle ?? ''} placeholder="Start New Game"
+                            onChange={e => updateCD({ newGameTitle: e.target.value || undefined })} />
+                    </Field>
+                    <Field label="Message">
+                        <textarea className={inputCls} rows={2} value={cd.newGameMessage ?? ''} placeholder="Any unsaved progress will be lost. Are you sure?"
+                            onChange={e => updateCD({ newGameMessage: e.target.value || undefined })} />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Confirm Button">
+                            <input className={inputCls} value={cd.newGameConfirmLabel ?? ''} placeholder="New Game"
+                                onChange={e => updateCD({ newGameConfirmLabel: e.target.value || undefined })} />
+                        </Field>
+                        <Field label="Cancel Button">
+                            <input className={inputCls} value={cd.newGameCancelLabel ?? ''} placeholder="Cancel"
+                                onChange={e => updateCD({ newGameCancelLabel: e.target.value || undefined })} />
+                        </Field>
+                    </div>
+                </div>
+
+                {/* Visual styling */}
+                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
+                    <span className="text-xs font-semibold text-sky-400">Dialog Box Appearance</span>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Background" value={cd.backgroundColor ?? '#0f172a'} onChange={v => updateCD({ backgroundColor: v })} />
+                        <OpacityField label="Opacity" value={cd.backgroundOpacity ?? 92} onChange={v => updateCD({ backgroundOpacity: v })} />
+                    </div>
+                    <NumInput label="Border Radius (px)" value={cd.borderRadius} fallback={12} min={0} onChange={v => updateCD({ borderRadius: v })} />
+                    <NumInput label="Dialog Width (px)" value={cd.dialogWidth} fallback={0} min={0} max={1200} onChange={v => updateCD({ dialogWidth: v || undefined })} />
+                    <NumInput label="Inner Padding (px)" value={cd.dialogPadding} fallback={32} min={0} max={100} onChange={v => updateCD({ dialogPadding: v })} />
+                    <ColorField label="Overlay / Backdrop Color" value={cd.overlayColor ?? '#000000'} onChange={v => updateCD({ overlayColor: `${v}bf` })} />
+
+                    <Field label="Background Image">
+                        <select className={inputCls} value={cd.backgroundImage?.id || ''}
+                            onChange={e => {
+                                if (!e.target.value) { updateCD({ backgroundImage: null }); return; }
+                                updateCD({ backgroundImage: { type: 'image', id: e.target.value as any } });
+                            }}>
+                            <option value="">None</option>
+                            {allImages.map((img: any) => (
+                                <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                            ))}
+                        </select>
+                    </Field>
+                    {cd.backgroundImage && (
+                        <Field label="Image Sizing">
+                            <select className={inputCls} value={cd.backgroundSizeMode ?? 'stretch'}
+                                onChange={e => updateCD({ backgroundSizeMode: e.target.value as any })}>
+                                <option value="stretch">Stretch</option>
+                                <option value="contain">Contain</option>
+                                <option value="cover">Cover</option>
+                                <option value="nine-slice">Nine-Slice</option>
+                            </select>
+                        </Field>
+                    )}
+                    {cd.backgroundImage && cd.backgroundSizeMode === 'nine-slice' && (
+                        <NumInput label="Slice Size (px)" value={cd.backgroundSlice} fallback={20} min={1} onChange={v => updateCD({ backgroundSlice: v })} />
+                    )}
+
+                    <Field label="Border Image">
+                        <select className={inputCls} value={cd.borderImage?.id || ''}
+                            onChange={e => {
+                                if (!e.target.value) { updateCD({ borderImage: null }); return; }
+                                updateCD({ borderImage: { type: 'image', id: e.target.value as any } });
+                            }}>
+                            <option value="">None</option>
+                            {allImages.map((img: any) => (
+                                <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                            ))}
+                        </select>
+                    </Field>
+                    {cd.borderImage && (
+                        <NumInput label="Border Padding (px)" value={cd.borderPadding} fallback={12} min={0} onChange={v => updateCD({ borderPadding: v })} />
+                    )}
+                </div>
+
+                {/* Button styling */}
+                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
+                    <span className="text-xs font-semibold text-sky-400">Button Styling</span>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Confirm Btn Color" value={cd.confirmButtonColor ?? '#ec4899'} onChange={v => updateCD({ confirmButtonColor: v })} />
+                        <ColorField label="Cancel Btn Color" value={cd.cancelButtonColor ?? '#1e293b'} onChange={v => updateCD({ cancelButtonColor: v })} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Confirm Hover Color" value={cd.confirmHoverColor ?? ''} onChange={v => updateCD({ confirmHoverColor: v || undefined })} />
+                        <ColorField label="Cancel Hover Color" value={cd.cancelHoverColor ?? '#334155'} onChange={v => updateCD({ cancelHoverColor: v })} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <NumInput label="Button Padding (px)" value={cd.buttonPadding} fallback={8} min={0} max={60} onChange={v => updateCD({ buttonPadding: v })} />
+                        <NumInput label="Button Radius (px)" value={cd.buttonBorderRadius} fallback={8} min={0} onChange={v => updateCD({ buttonBorderRadius: v })} />
+                    </div>
+
+                    <Field label="Confirm Button Image">
+                        <select className={inputCls} value={cd.confirmButtonImage?.id || ''}
+                            onChange={e => {
+                                if (!e.target.value) { updateCD({ confirmButtonImage: null }); return; }
+                                updateCD({ confirmButtonImage: { type: 'image', id: e.target.value as any } });
+                            }}>
+                            <option value="">None (solid color)</option>
+                            {allImages.map((img: any) => (
+                                <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Cancel Button Image">
+                        <select className={inputCls} value={cd.cancelButtonImage?.id || ''}
+                            onChange={e => {
+                                if (!e.target.value) { updateCD({ cancelButtonImage: null }); return; }
+                                updateCD({ cancelButtonImage: { type: 'image', id: e.target.value as any } });
+                            }}>
+                            <option value="">None (solid color)</option>
+                            {allImages.map((img: any) => (
+                                <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Confirm Hover Image">
+                        <select className={inputCls} value={cd.confirmHoverImage?.id || ''}
+                            onChange={e => {
+                                if (!e.target.value) { updateCD({ confirmHoverImage: null }); return; }
+                                updateCD({ confirmHoverImage: { type: 'image', id: e.target.value as any } });
+                            }}>
+                            <option value="">None</option>
+                            {allImages.map((img: any) => (
+                                <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Cancel Hover Image">
+                        <select className={inputCls} value={cd.cancelHoverImage?.id || ''}
+                            onChange={e => {
+                                if (!e.target.value) { updateCD({ cancelHoverImage: null }); return; }
+                                updateCD({ cancelHoverImage: { type: 'image', id: e.target.value as any } });
+                            }}>
+                            <option value="">None</option>
+                            {allImages.map((img: any) => (
+                                <option key={img.id} value={img.id}>{img.name || img.id}</option>
+                            ))}
+                        </select>
+                    </Field>
+                    {(cd.confirmButtonImage || cd.cancelButtonImage) && (
+                        <>
+                            <Field label="Button Image Sizing">
+                                <select className={inputCls} value={cd.buttonSizeMode ?? 'stretch'}
+                                    onChange={e => updateCD({ buttonSizeMode: e.target.value as any })}>
+                                    <option value="stretch">Stretch</option>
+                                    <option value="contain">Contain</option>
+                                    <option value="cover">Cover</option>
+                                    <option value="nine-slice">Nine-Slice</option>
+                                </select>
+                            </Field>
+                            {cd.buttonSizeMode === 'nine-slice' && (
+                                <NumInput label="Button Slice (px)" value={cd.buttonSlice} fallback={10} min={1} onChange={v => updateCD({ buttonSlice: v })} />
+                            )}
+                        </>
+                    )}
+                </div>
+
+                {/* Font editors */}
+                <FontEditor
+                    label="Title Font"
+                    font={cd.titleFont ?? defaultFontSettings}
+                    onFontChange={(prop, value) => updateCD({ titleFont: { ...(cd.titleFont ?? defaultFontSettings), [prop]: value } })}
+                    defaultAlign="center"
+                />
+                <FontEditor
+                    label="Message Font"
+                    font={cd.messageFont ?? defaultFontSettings}
+                    onFontChange={(prop, value) => updateCD({ messageFont: { ...(cd.messageFont ?? defaultFontSettings), [prop]: value } })}
+                    defaultAlign="center"
+                />
+                <FontEditor
+                    label="Button Font"
+                    font={cd.buttonFont ?? defaultFontSettings}
+                    onFontChange={(prop, value) => updateCD({ buttonFont: { ...(cd.buttonFont ?? defaultFontSettings), [prop]: value } })}
+                    defaultAlign="center"
+                />
             </div>
         );
     }
@@ -746,7 +1176,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     }, [project.backgrounds]);
 
     /* ─── Determine which element to render ─── */
-    const elementRects: Record<InGameUIElement, { rect: ReturnType<typeof getDialogueRect>; handler: typeof handleDragDialogue; preview: React.ReactNode }> = useMemo(() => ({
+    const elementRects: Partial<Record<InGameUIElement, { rect: ReturnType<typeof getDialogueRect>; handler: typeof handleDragDialogue; preview: React.ReactNode }>> = useMemo(() => ({
         dialogueBox:   { rect: dialogueRect,   handler: handleDragDialogue,  preview: <DialogueBoxPreview ui={ui} project={project} /> },
         nameBox:       { rect: nameboxRect,    handler: handleDragNamebox,   preview: <NameBoxPreview ui={ui} project={project} /> },
         choiceButtons: { rect: choiceRect,     handler: handleDragChoice,    preview: <ChoiceButtonsPreview ui={ui} project={project} /> },
@@ -755,7 +1185,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     }), [dialogueRect, nameboxRect, choiceRect, inputRect, quickMenuRect, ui, project,
          handleDragDialogue, handleDragNamebox, handleDragChoice, handleDragInput, handleDragQuickMenu]);
 
-    const activeEl = selectedElement && !isHidden(selectedElement) ? elementRects[selectedElement] : null;
+    const activeEl = selectedElement && !isHidden(selectedElement) ? elementRects[selectedElement] ?? null : null;
 
     return (
         <div className="flex h-full">
@@ -823,7 +1253,12 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         </ResizableDraggable>
                     )}
 
-                    {!activeEl && (
+                    {/* Confirm Dialogs preview – full-canvas overlay, not draggable */}
+                    {selectedElement === 'confirmDialogs' && (
+                        <ConfirmDialogPreview ui={ui} project={project} />
+                    )}
+
+                    {!activeEl && selectedElement !== 'confirmDialogs' && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <p className="text-sm text-white/30">Select an element from the sidebar</p>
                         </div>
