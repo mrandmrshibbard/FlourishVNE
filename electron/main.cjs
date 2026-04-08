@@ -5,6 +5,18 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const os = require('os');
 
+// ── Steam Detection ─────────────────────────────────────────────────────────
+// When Flourish is launched through the Steam client, Steam injects several
+// environment variables into the process. Detecting these lets us disable the
+// GitHub-based electron-updater so it doesn't fight with Steam's own update
+// system. Steam users get updates automatically through the Steam client;
+// itch.io and direct-download users continue to get updates from GitHub
+// exactly as before.
+const isRunningUnderSteam = !!(process.env.SteamAppId || process.env.SteamGameId);
+if (isRunningUnderSteam) {
+  console.log('[startup] Detected Steam environment — GitHub auto-updater disabled. Updates will be handled by Steam.');
+}
+
 /**
  * Run a shell command asynchronously, returning a promise.
  * This keeps the Electron main process responsive during long-running builds.
@@ -416,58 +428,62 @@ app.whenReady().then(() => {
   // ── Auto-Update ──────────────────────────────────────────────────────────
   // Configure electron-updater: download updates silently in the background.
   // Once downloaded, the renderer is notified and shows a restart prompt.
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = false; // Disable so manual "Restart & Update" is the single trigger — prevents double-spawning the installer.
-  autoUpdater.autoRunAppAfterInstall = true;
-  // Use the logger built into electron-updater (logs to ~/AppData/…/logs/)
-  autoUpdater.logger = require('electron-updater').log;
-  if (autoUpdater.logger) {
-    autoUpdater.logger.transports = autoUpdater.logger.transports || {};
+  // SKIPPED entirely when running under Steam — Steam handles its own updates
+  // and we don't want two update systems fighting over the same files.
+  if (!isRunningUnderSteam) {
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = false; // Disable so manual "Restart & Update" is the single trigger — prevents double-spawning the installer.
+    autoUpdater.autoRunAppAfterInstall = true;
+    // Use the logger built into electron-updater (logs to ~/AppData/…/logs/)
+    autoUpdater.logger = require('electron-updater').log;
+    if (autoUpdater.logger) {
+      autoUpdater.logger.transports = autoUpdater.logger.transports || {};
+    }
+
+    // Forward update lifecycle events to the renderer so we can show UI.
+    autoUpdater.on('checking-for-update', () => {
+      sendUpdateStatus('checking');
+    });
+
+    autoUpdater.on('update-available', (info) => {
+      sendUpdateStatus('available', {
+        version: info.version,
+        releaseDate: info.releaseDate,
+      });
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      sendUpdateStatus('not-available');
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+      sendUpdateStatus('downloading', {
+        percent: Math.round(progress.percent),
+        transferred: progress.transferred,
+        total: progress.total,
+      });
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      updateDownloaded = true;
+      sendUpdateStatus('downloaded', {
+        version: info.version,
+        releaseDate: info.releaseDate,
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('Auto-update error:', err);
+      sendUpdateStatus('error', { message: err?.message || 'Unknown error' });
+    });
+
+    // Kick off the check after a short delay so the UI finishes rendering first.
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error('Update check failed:', err);
+      });
+    }, 3000); // milliseconds
   }
-
-  // Forward update lifecycle events to the renderer so we can show UI.
-  autoUpdater.on('checking-for-update', () => {
-    sendUpdateStatus('checking');
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    sendUpdateStatus('available', {
-      version: info.version,
-      releaseDate: info.releaseDate,
-    });
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    sendUpdateStatus('not-available');
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    sendUpdateStatus('downloading', {
-      percent: Math.round(progress.percent),
-      transferred: progress.transferred,
-      total: progress.total,
-    });
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    updateDownloaded = true;
-    sendUpdateStatus('downloaded', {
-      version: info.version,
-      releaseDate: info.releaseDate,
-    });
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('Auto-update error:', err);
-    sendUpdateStatus('error', { message: err?.message || 'Unknown error' });
-  });
-
-  // Kick off the check after a short delay so the UI finishes rendering first.
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error('Update check failed:', err);
-    });
-  }, 3000); // milliseconds
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked
@@ -523,6 +539,14 @@ function performQuitAndInstall() {
 // IPC: renderer requests to install a downloaded update and restart.
 // Uses handle (not on) so the renderer gets a response / error.
 ipcMain.handle('install-update', async () => {
+  // Steam users should never trigger this path — Steam manages updates
+  // independently. If somehow called (e.g. UI button still visible), return
+  // a friendly status so the renderer can ignore it gracefully.
+  if (isRunningUnderSteam) {
+    console.log('[install-update] Ignored — running under Steam. Updates are managed by the Steam client.');
+    return { status: 'managed-externally', message: 'Updates are managed automatically by Steam.' };
+  }
+
   console.log('[install-update] Called. updateDownloaded =', updateDownloaded);
 
   if (updateDownloaded) {
@@ -593,6 +617,12 @@ ipcMain.handle('install-update', async () => {
 
 // IPC: renderer requests a manual update check
 ipcMain.handle('check-for-updates', async () => {
+  // Under Steam, return a status indicating updates are externally managed
+  // rather than actually hitting GitHub.
+  if (isRunningUnderSteam) {
+    return { success: true, managedExternally: true, message: 'Updates are managed automatically by Steam.' };
+  }
+
   try {
     const result = await autoUpdater.checkForUpdates();
     return { success: true, version: result?.updateInfo?.version };
