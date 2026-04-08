@@ -12456,7 +12456,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "2.4.3",
+    version: "2.4.4",
     /**
      * Check if the engine is ready
      */
