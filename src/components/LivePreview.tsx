@@ -1230,7 +1230,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         paddingLeft: textPadLeft ? scalePx(textPadLeft) : undefined,
                         paddingRight: textPadRight ? scalePx(textPadRight) : undefined,
                     }}>
-                        <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
+                        <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'normal' as const, overflowWrap: 'break-word' as const}}>
                             <AnimatedDialogueText 
                                 displayText={displayText}
                                 textEffect={dialogue.textEffect}
@@ -1384,8 +1384,8 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                                 padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`, 
                                 ...(choiceHeight ? { height: scalePx(choiceHeight) } : {}), 
                                 ...fontSettingsToStyle(projectUI.choiceTextFont), 
-                                textAlign: (projectUI.choiceTextFont?.align || 'center') as any, 
-                                wordBreak: 'break-word' as const, 
+                                textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
+                                wordBreak: 'normal' as const,
                                 overflowWrap: 'break-word' as const,
                                 cursor: 'pointer',
                             }}
@@ -6982,8 +6982,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!playerState) return;
             
-            // Spacebar to advance dialogue
-            if (e.key === ' ' && playerState.mode === 'playing' && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
+            // Spacebar or Enter to advance dialogue
+            if ((e.key === ' ' || e.key === 'Enter') && playerState.mode === 'playing' && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
                 e.preventDefault();
                 handleDialogueAdvance();
                 return;

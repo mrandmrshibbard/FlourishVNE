@@ -29,11 +29,15 @@ export default defineConfig(({ mode }) => {
             manualChunks(id) {
               if (!id.includes('node_modules')) return;
 
-              if (id.includes('react')) return 'react-vendor';
-              if (id.includes('react-dom')) return 'react-vendor';
-
+              // Monaco is huge and self-contained — keep it in its own chunk.
               if (id.includes('monaco-editor')) return 'monaco';
 
+              // Everything else (React, react-dom, react-i18next, i18next, etc.)
+              // goes in a single vendor chunk. Do NOT split React into a separate
+              // chunk: `react-i18next` (matches "react") would land with React while
+              // its deps (i18next, use-sync-external-store) land elsewhere, creating
+              // a circular chunk reference that leaves React undefined at runtime
+              // ("Cannot set properties of undefined (setting 'Activity')").
               return 'vendor';
             },
           },

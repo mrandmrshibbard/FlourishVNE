@@ -3433,28 +3433,36 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!textEffect || textEffect.type === "none") {
       return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: displayText });
     }
-    const chars = displayText.split("");
-    return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: chars.map((char, i) => {
-      if (char === " ") {
-        return /* @__PURE__ */ jsxRuntime2.jsx("span", { children: " " }, i);
+    const tokens = displayText.split(/(\s+)/);
+    displayText.length;
+    let charIndex = 0;
+    return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientStyle || void 0, children: tokens.map((token, ti) => {
+      if (token === "") return null;
+      if (/^\s+$/.test(token)) {
+        charIndex += token.length;
+        return /* @__PURE__ */ jsxRuntime2.jsx("span", { children: token }, ti);
       }
-      const charStyle = getCharacterStyle(textEffect, i, chars.length);
-      return /* @__PURE__ */ jsxRuntime2.jsx(
-        "span",
-        {
-          style: {
-            ...charStyle,
-            // Preserve any gradient styling
-            ...gradientStyle ? {
-              WebkitBackgroundClip: void 0,
-              backgroundClip: void 0,
-              WebkitTextFillColor: void 0
-            } : {}
+      const wordStart = charIndex;
+      charIndex += token.length;
+      return /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { display: "inline-block", whiteSpace: "nowrap" }, children: token.split("").map((char, ci) => {
+        const charStyle = getCharacterStyle(textEffect, wordStart + ci);
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "span",
+          {
+            style: {
+              ...charStyle,
+              // Preserve any gradient styling
+              ...gradientStyle ? {
+                WebkitBackgroundClip: void 0,
+                backgroundClip: void 0,
+                WebkitTextFillColor: void 0
+              } : {}
+            },
+            children: char
           },
-          children: char
-        },
-        i
-      );
+          ci
+        );
+      }) }, ti);
     }) });
   };
   const normalizeSetVariableOperator = (variableType, variableName, operator) => {
@@ -6756,7 +6764,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     paddingLeft: textPadLeft ? scalePx(textPadLeft) : void 0,
                     paddingRight: textPadRight ? scalePx(textPadRight) : void 0
                   }, children: [
-                    /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "leading-relaxed", style: { ...dialogueTextStyle, wordBreak: "break-word", overflowWrap: "break-word" }, children: [
+                    /* @__PURE__ */ jsxRuntime2.jsxs("p", { className: "leading-relaxed", style: { ...dialogueTextStyle, wordBreak: "normal", overflowWrap: "break-word" }, children: [
                       /* @__PURE__ */ jsxRuntime2.jsx(
                         AnimatedDialogueText,
                         {
@@ -6883,7 +6891,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       ...choiceHeight ? { height: scalePx(choiceHeight) } : {},
                       ...fontSettingsToStyle(projectUI.choiceTextFont),
                       textAlign: ((_a2 = projectUI.choiceTextFont) == null ? void 0 : _a2.align) || "center",
-                      wordBreak: "break-word",
+                      wordBreak: "normal",
                       overflowWrap: "break-word",
                       cursor: "pointer"
                     },
@@ -11695,7 +11703,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     React2.useEffect(() => {
       const handleKeyDown = (e) => {
         if (!playerState) return;
-        if (e.key === " " && playerState.mode === "playing" && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
+        if ((e.key === " " || e.key === "Enter") && playerState.mode === "playing" && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
           e.preventDefault();
           handleDialogueAdvance();
           return;
@@ -13268,7 +13276,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "2.7.0",
+    version: "2.7.2",
     /**
      * Check if the engine is ready
      */

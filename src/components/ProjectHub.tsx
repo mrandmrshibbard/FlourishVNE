@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { VNProject } from '../types/project';
 import { createInitialProject } from '../constants';
 import { PlusIcon, UploadIcon, SparkleIcon, ClockIcon, TrashIcon } from './icons';
@@ -96,7 +97,8 @@ export const ProjectHub: React.FC<{
     const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
     const [showRecovery, setShowRecovery] = useState(false);
     const toast = useToast();
-    
+    const { t } = useTranslation('hub');
+
     const ITCHIO_URL = 'https://memento-morii1.itch.io/flourish-visual-novel-engine';
 
     useEffect(() => {
@@ -191,7 +193,7 @@ export const ProjectHub: React.FC<{
                     setUpdateAvailable({ version: releaseData.version, isNew: isNewUpdate, downloadUrl: releaseData.downloadUrl });
 
                     if (isNewUpdate) {
-                        toast.info(`🎉 New version ${releaseData.version} is available!`, { duration: 5000 });
+                        toast.info(t('toast.newVersionAvailable', { version: releaseData.version }), { duration: 5000 });
                         setShowChangelog(true);
                         localStorage.setItem('lastShownChangelogVersion', releaseData.version);
                     }
@@ -211,12 +213,12 @@ export const ProjectHub: React.FC<{
         api.onUpdateStatus((event: any) => {
             setAutoUpdateStatus(event.status);
             if (event.status === 'error') {
-                setAutoUpdateError(event.message || 'Update failed');
+                setAutoUpdateError(event.message || t('toast.updateFailed'));
             } else {
                 setAutoUpdateError(null);
             }
             if (event.status === 'downloaded') {
-                toast.success('Update downloaded! Click "Restart & Update" to install.');
+                toast.success(t('toast.updateDownloaded'));
             }
         });
     }, [toast]);
@@ -224,7 +226,7 @@ export const ProjectHub: React.FC<{
     const handleRestartAndUpdate = async () => {
         const api = (window as any).electronAPI;
         if (!api?.installUpdate) {
-            toast.error('Auto-update is not available in this environment.');
+            toast.error(t('toast.autoUpdateUnavailable'));
             return;
         }
         setAutoUpdateStatus('installing');
@@ -233,13 +235,13 @@ export const ProjectHub: React.FC<{
             const result = await api.installUpdate();
             if (result?.status === 'error') {
                 setAutoUpdateStatus('error');
-                setAutoUpdateError(result.message || 'Update failed');
-                toast.error(result.message || 'Update failed — try downloading manually.');
+                setAutoUpdateError(result.message || t('toast.updateFailed'));
+                toast.error(result.message || t('toast.updateFailedManual'));
             }
         } catch (err: any) {
             setAutoUpdateStatus('error');
-            setAutoUpdateError(err?.message || 'Update failed');
-            toast.error('Update failed — try downloading manually from GitHub.');
+            setAutoUpdateError(err?.message || t('toast.updateFailed'));
+            toast.error(t('toast.updateFailedManualGithub'));
         }
     };
 
@@ -314,10 +316,10 @@ export const ProjectHub: React.FC<{
                 (window as any).electronAPI.setHubActive(false);
             }
             onProjectSelect(project);
-            toast.success('Tutorial project loaded!');
+            toast.success(t('toast.tutorialLoaded'));
         } catch (error) {
             console.error('Error loading tutorial project:', error);
-            toast.error(`Failed to load tutorial: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(t('toast.tutorialFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         }
     };
 
@@ -344,7 +346,7 @@ export const ProjectHub: React.FC<{
         try {
             const result = await api.readProjectFile(filePath);
             if (!result.success) {
-                toast.error(result.error || 'Failed to read project file.');
+                toast.error(result.error || t('toast.readFileFailed'));
                 return;
             }
 
@@ -354,11 +356,11 @@ export const ProjectHub: React.FC<{
                 api.setHubActive(false);
             }
             saveRecentProject(project, filePath);
-            toast.success('Project loaded!');
+            toast.success(t('toast.projectLoaded'));
             onProjectSelect(project);
         } catch (error) {
             console.error('Error opening project from path:', error);
-            toast.error(`Failed to open project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(t('toast.openFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         } finally {
             setIsImporting(false);
         }
@@ -379,7 +381,7 @@ export const ProjectHub: React.FC<{
         try {
             const result = await api.openProjectDialog();
             if (!result.success) {
-                if (!result.canceled) toast.error(result.error || 'Failed to open project.');
+                if (!result.canceled) toast.error(result.error || t('toast.openFailedGeneric'));
                 return;
             }
 
@@ -388,11 +390,11 @@ export const ProjectHub: React.FC<{
                 api.setHubActive(false);
             }
             saveRecentProject(project, result.filePath);
-            toast.success('Project loaded!');
+            toast.success(t('toast.projectLoaded'));
             onProjectSelect(project);
         } catch (error) {
             console.error('Error opening project:', error);
-            toast.error(`Failed to open project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(t('toast.openFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         } finally {
             setIsImporting(false);
         }
@@ -408,7 +410,7 @@ export const ProjectHub: React.FC<{
             const paths = await api.getUserDataPaths();
             await api.revealInExplorer(paths.projects);
         } catch {
-            toast.error('Could not open folder.');
+            toast.error(t('toast.folderOpenFailed'));
         }
     };
 
@@ -426,11 +428,11 @@ export const ProjectHub: React.FC<{
             }
             // Save to recent projects
             saveRecentProject(project);
-            toast.success('Project imported successfully!');
+            toast.success(t('toast.importSuccess'));
             onProjectSelect(project);
         } catch (error) {
             console.error("Error importing project file:", error);
-            toast.error(`Failed to import project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast.error(t('toast.importFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         } finally {
             setIsImporting(false);
         }
@@ -445,19 +447,19 @@ export const ProjectHub: React.FC<{
         e.stopPropagation();
         const updated = removeRecentProject(projectId);
         setRecentProjects(updated);
-        toast.info('Removed from recent projects');
+        toast.info(t('toast.removedFromRecent'));
     };
 
     // Format relative time
     const formatTimeAgo = (timestamp: number): string => {
         const seconds = Math.floor((Date.now() - timestamp) / 1000);
-        if (seconds < 60) return 'Just now';
+        if (seconds < 60) return t('time.justNow');
         const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `${minutes}m ago`;
+        if (minutes < 60) return t('time.minutesAgo', { count: minutes });
         const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `${hours}h ago`;
+        if (hours < 24) return t('time.hoursAgo', { count: hours });
         const days = Math.floor(hours / 24);
-        if (days < 7) return `${days}d ago`;
+        if (days < 7) return t('time.daysAgo', { count: days });
         return new Date(timestamp).toLocaleDateString();
     };
 
@@ -500,9 +502,9 @@ export const ProjectHub: React.FC<{
                         <SparkleIcon className="w-5 h-5 animate-glow" />
                         
                         <span className="font-semibold">
-                            {updateAvailable.isNew 
-                                ? `🎉 New Update Available: v${updateAvailable.version}!` 
-                                : `Version ${updateAvailable.version} available`
+                            {updateAvailable.isNew
+                                ? t('updateBanner.newUpdate', { version: updateAvailable.version })
+                                : t('updateBanner.versionAvailable', { version: updateAvailable.version })
                             }
                         </span>
                         
@@ -513,9 +515,9 @@ export const ProjectHub: React.FC<{
                                 disabled={autoUpdateStatus === 'installing'}
                                 className="ml-2 px-4 py-1.5 bg-white/30 hover:bg-white/45 rounded-full font-bold text-sm transition-all flex items-center gap-1.5 hover:scale-105 disabled:opacity-50 disabled:cursor-wait border border-white/40"
                             >
-                                {autoUpdateStatus === 'installing' ? '⏳ Installing...' 
-                                    : autoUpdateStatus === 'downloading' ? '⏳ Downloading...'
-                                    : '🔄 Restart & Update'}
+                                {autoUpdateStatus === 'installing' ? t('updateBanner.installing')
+                                    : autoUpdateStatus === 'downloading' ? t('updateBanner.downloading')
+                                    : t('updateBanner.restartUpdate')}
                             </button>
                         )}
 
@@ -530,7 +532,7 @@ export const ProjectHub: React.FC<{
                             onClick={handleDownloadNewVersion}
                             className="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-full font-semibold text-sm transition-all flex items-center gap-1.5 hover:scale-105"
                         >
-                            📥 Download from GitHub
+                            {t('updateBanner.downloadGithub')}
                         </button>
                         
                         {/* Also show itch.io link */}
@@ -545,14 +547,14 @@ export const ProjectHub: React.FC<{
                             onClick={() => setShowChangelog(true)}
                             className="px-3 py-1 text-sm opacity-80 hover:opacity-100 underline decoration-dotted underline-offset-2"
                         >
-                            What's new?
+                            {t('updateBanner.whatsNew')}
                         </button>
                         
                         {/* Dismiss button */}
                         <button
                             onClick={() => setBannerDismissed(true)}
                             className="ml-2 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-all"
-                            title="Dismiss"
+                            title={t('updateBanner.dismiss')}
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                 <path d="M18 6L6 18M6 6l12 12" />
@@ -565,9 +567,9 @@ export const ProjectHub: React.FC<{
             {showRecovery && recoveryProjects.length > 0 && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-[var(--bg-secondary)] border border-[var(--accent-cyan)]/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-                        <h2 className="text-xl font-bold mb-2 text-[var(--accent-cyan)]">Recover Unsaved Work</h2>
+                        <h2 className="text-xl font-bold mb-2 text-[var(--accent-cyan)]">{t('recovery.title')}</h2>
                         <p className="text-[var(--text-secondary)] text-sm mb-4">
-                            Auto-saved projects were found from a previous session. Would you like to restore one?
+                            {t('recovery.prompt')}
                         </p>
                         <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
                             {recoveryProjects.map(rp => (
@@ -578,13 +580,13 @@ export const ProjectHub: React.FC<{
                                             const project = await loadProjectFromIDB(rp.id as any);
                                             if (project) {
                                                 saveRecentProject(project);
-                                                toast.success('Project recovered!');
+                                                toast.success(t('toast.projectRecovered'));
                                                 onProjectSelect(project);
                                             } else {
-                                                toast.error('Could not load saved project.');
+                                                toast.error(t('toast.couldNotLoadSaved'));
                                             }
                                         } catch {
-                                            toast.error('Failed to recover project.');
+                                            toast.error(t('toast.recoverFailed'));
                                         }
                                         setShowRecovery(false);
                                     }}
@@ -592,7 +594,7 @@ export const ProjectHub: React.FC<{
                                 >
                                     <div className="font-medium text-[var(--text-primary)]">{rp.title}</div>
                                     <div className="text-xs text-[var(--text-muted)] mt-1">
-                                        Saved {formatTimeAgo(rp.savedAt)}
+                                        {t('recovery.savedAt', { time: formatTimeAgo(rp.savedAt) })}
                                     </div>
                                 </button>
                             ))}
@@ -602,7 +604,7 @@ export const ProjectHub: React.FC<{
                                 onClick={() => setShowRecovery(false)}
                                 className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-tertiary)]/80 text-[var(--text-secondary)] transition-colors text-sm"
                             >
-                                Start Fresh
+                                {t('recovery.startFresh')}
                             </button>
                             <button
                                 onClick={async () => {
@@ -611,11 +613,11 @@ export const ProjectHub: React.FC<{
                                     }
                                     setRecoveryProjects([]);
                                     setShowRecovery(false);
-                                    toast.info('Auto-saves cleared.');
+                                    toast.info(t('toast.autoSavesCleared'));
                                 }}
                                 className="px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-300 transition-colors text-sm"
                             >
-                                Discard All
+                                {t('recovery.discardAll')}
                             </button>
                         </div>
                     </div>
@@ -647,10 +649,10 @@ export const ProjectHub: React.FC<{
                     >
                         Flourish
                     </h1>
-                    <p className="text-[var(--text-secondary)] text-lg font-medium">Visual Novel Engine</p>
+                    <p className="text-[var(--text-secondary)] text-lg font-medium">{t('tagline')}</p>
                     <p className="text-[var(--text-muted)] mt-2 text-sm flex items-center justify-center gap-2">
                         <span className="inline-block w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-pink)]" />
-                        Create Without Limits
+                        {t('subtitle')}
                         <span className="inline-block w-8 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-cyan)]" />
                     </p>
                 </header>
@@ -690,8 +692,8 @@ export const ProjectHub: React.FC<{
                         >
                             <PlusIcon className="w-10 h-10 text-[var(--accent-pink)]" />
                         </div>
-                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Create New Project</h2>
-                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Start your story from scratch</p>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">{t('createNew')}</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">{t('createNewDesc')}</p>
                         
                         {/* Decorative sparkles */}
                         <div className="absolute top-6 right-8 text-[var(--accent-pink)] opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
@@ -730,8 +732,8 @@ export const ProjectHub: React.FC<{
                         >
                             <span className="text-4xl">🎓</span>
                         </div>
-                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Start Tutorial</h2>
-                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Learn the basics with a guided project</p>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">{t('startTutorial')}</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">{t('startTutorialDesc')}</p>
                         
                         <div className="absolute top-6 right-8 text-yellow-400 opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
                         <div className="absolute bottom-8 left-10 text-amber-300 opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
@@ -771,8 +773,8 @@ export const ProjectHub: React.FC<{
                         >
                             <UploadIcon className="w-10 h-10 text-[var(--accent-cyan)]" />
                         </div>
-                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">Open Project</h2>
-                        <p className="relative z-10 text-[var(--text-muted)] text-sm">Load a .flourish or .zip project</p>
+                        <h2 className="relative z-10 text-xl font-bold text-[var(--text-primary)] mb-2">{t('openProject')}</h2>
+                        <p className="relative z-10 text-[var(--text-muted)] text-sm">{t('openProjectDesc')}</p>
                         
                         {/* Decorative sparkles */}
                         <div className="absolute top-8 left-8 text-[var(--accent-cyan)] opacity-40 group-hover:opacity-80 transition-opacity">✦</div>
@@ -787,7 +789,7 @@ export const ProjectHub: React.FC<{
                         <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-5 flex items-center gap-3 uppercase tracking-widest">
                             <span className="w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-lavender)]" />
                             <ClockIcon className="w-4 h-4 text-[var(--accent-lavender)]" />
-                            Recent Projects
+                            {t('recentProjects')}
                             <span className="w-8 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-lavender)]" />
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -808,7 +810,7 @@ export const ProjectHub: React.FC<{
                                             isElectron ? handleNativeOpen() : handleFileOpen();
                                         }
                                     }}
-                                    title={recent.filePath ? `Open ${recent.filePath}` : 'Import this project to continue working on it'}
+                                    title={recent.filePath ? t('openFile', { path: recent.filePath }) : t('importToContinue')}
                                 >
                                     {/* Color accent bar */}
                                     <div 
@@ -823,7 +825,7 @@ export const ProjectHub: React.FC<{
                                     <button
                                         onClick={(e) => handleRemoveRecent(recent.id, e)}
                                         className="absolute top-4 right-4 p-2 rounded-xl opacity-0 group-hover:opacity-100 bg-[var(--bg-primary)]/80 hover:bg-red-500/20 text-[var(--text-muted)] hover:text-red-400 transition-all backdrop-blur-sm"
-                                        title="Remove from recent"
+                                        title={t('removeFromRecent')}
                                     >
                                         <TrashIcon className="w-3.5 h-3.5" />
                                     </button>
@@ -859,7 +861,7 @@ export const ProjectHub: React.FC<{
                         <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-5 flex items-center gap-3 uppercase tracking-widest">
                             <span className="w-8 h-[1px] bg-gradient-to-r from-transparent to-[var(--accent-cyan)]" />
                             <span className="text-base">📂</span>
-                            Saved Projects
+                            {t('savedProjects')}
                             <span className="w-8 h-[1px] bg-gradient-to-l from-transparent to-[var(--accent-cyan)]" />
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -890,13 +892,13 @@ export const ProjectHub: React.FC<{
                  <footer className="text-center mt-8 pb-4 text-[var(--text-muted)] text-sm">
                     {isElectron ? (
                         <>
-                            <p className="opacity-70">Projects are saved to your <strong>Documents//Projects</strong> folder.</p>
+                            <p className="opacity-70"><Trans t={t} i18nKey="projectsFolderNote" components={{ strong: <strong /> }} /></p>
                             <div className="flex items-center justify-center gap-4 mt-3">
                                 <button
                                     onClick={handleRevealProjectsFolder}
                                     className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
                                 >
-                                    📂 Open Projects Folder
+                                    📂 {t('openProjectsFolder')}
                                     <span className="group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                                 <span className="text-[var(--border-subtle)]">|</span>
@@ -904,19 +906,19 @@ export const ProjectHub: React.FC<{
                                     onClick={() => setShowChangelog(true)}
                                     className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
                                 >
-                                    View Latest Changes
+                                    {t('viewLatestChanges')}
                                     <span className="group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                             </div>
                         </>
                     ) : (
                         <>
-                            <p className="opacity-70">Your work is managed in memory. Use the 'Export' button in the editor to save.</p>
+                            <p className="opacity-70">{t('inMemoryNote')}</p>
                             <button
                                 onClick={() => setShowChangelog(true)}
                                 className="mt-4 text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-all inline-flex items-center gap-2 group"
                             >
-                                View Latest Changes
+                                {t('viewLatestChanges')}
                                 <span className="group-hover:translate-x-1 transition-transform">→</span>
                             </button>
                         </>
@@ -925,10 +927,10 @@ export const ProjectHub: React.FC<{
                 </footer>
             </div>
             <ChangelogModal visible={showChangelog} onClose={() => setShowChangelog(false)} />
-            <LoadingOverlay 
-                isVisible={isImporting} 
-                message="Importing Project..." 
-                subMessage="Extracting and processing files"
+            <LoadingOverlay
+                isVisible={isImporting}
+                message={t('importingProject')}
+                subMessage={t('importingProjectSub')}
             />
         </div>
     );

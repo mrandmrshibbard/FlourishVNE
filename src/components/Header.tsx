@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, KeyboardIcon, SparklesIcon, GlobeIcon, CodeBracketIcon, PuzzlePieceIcon, GamepadIcon, HelpIcon } from './icons';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
@@ -54,6 +55,7 @@ const Header: React.FC<{
     const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
     const { project, dispatch, undo, redo, canUndo, canRedo, isDirty, markSaved } = useProject();
     const toast = useToast();
+    const { t } = useTranslation(['header', 'common']);
     const isChildWindow = isManagerWindow();
 
     const isDirtyRef = useRef(isDirty);
@@ -229,10 +231,10 @@ const Header: React.FC<{
                         <button 
                             onClick={handleHubClick}
                             className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-pink)] text-[var(--text-secondary)] hover:text-[var(--accent-pink)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title="Return to Project Hub"
+                            title={t('returnToHub')}
                         >
                             <HomeIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                            Hub
+                            {t('hub')}
                         </button>
                         <div className="w-px h-6 bg-[var(--border-subtle)]" />
                         {isEditing ? (
@@ -249,7 +251,7 @@ const Header: React.FC<{
                             <h1 
                                 className="font-heading text-sm font-semibold text-[var(--text-primary)] cursor-pointer hover:bg-[var(--bg-primary)] py-1 px-2 rounded-lg transition-colors"
                                 onClick={() => setIsEditing(true)}
-                                title="Click to edit project title"
+                                title={t('editTitle')}
                             >
                                 {title}
                             </h1>
@@ -264,7 +266,7 @@ const Header: React.FC<{
                                 onClick={undo}
                                 disabled={!canUndo}
                                 className="hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-md flex items-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="Undo (Ctrl+Z)"
+                                title={t('undo')}
                             >
                                 <ArrowUturnLeftIcon className="w-4 h-4" />
                             </button>
@@ -272,7 +274,7 @@ const Header: React.FC<{
                                 onClick={redo}
                                 disabled={!canRedo}
                                 className="hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-md flex items-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="Redo (Ctrl+Shift+Z or Ctrl+Y)"
+                                title={t('redo')}
                             >
                                 <ArrowUturnRightIcon className="w-4 h-4" />
                             </button>
@@ -287,7 +289,7 @@ const Header: React.FC<{
                                             backgroundSize: '300% 300%',
                                             animation: 'rainbow-shift 4s ease infinite'
                                         }}
-                                        title="Keyboard Shortcuts"
+                                        title={t('keyboardShortcuts')}
                                     >
                                         <KeyboardIcon className="w-4 h-4 text-white relative z-10 group-hover:scale-110 transition-transform" />
                                         <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -300,10 +302,10 @@ const Header: React.FC<{
                             <button
                                 onClick={() => setShowToolsMenu(!showToolsMenu)}
                                 className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                                title="Tools Menu"
+                                title={t('toolsMenu')}
                             >
                                 <SparklesIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                                Tools
+                                {t('tools')}
                                 <svg className={`w-3 h-3 transition-transform ${showToolsMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                             </button>
                             {showToolsMenu && (
@@ -322,7 +324,7 @@ const Header: React.FC<{
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-mint)]"
                                         >
                                             <GlobeIcon className="w-4 h-4" />
-                                            Localization
+                                            {t('localization')}
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
@@ -330,7 +332,7 @@ const Header: React.FC<{
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-emerald-400"
                                         >
                                             <CodeBracketIcon className="w-4 h-4" />
-                                            Script Editor
+                                            {t('scriptEditor')}
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
@@ -338,7 +340,7 @@ const Header: React.FC<{
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"
                                         >
                                             <PuzzlePieceIcon className="w-4 h-4" />
-                                            Plugin Manager
+                                            {t('pluginManager')}
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
@@ -346,7 +348,7 @@ const Header: React.FC<{
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)]"
                                         >
                                             <HelpIcon className="w-4 h-4" />
-                                            Help & Docs
+                                            {t('helpDocs')}
                                         </button>
                                     </div>
                                 </>
@@ -355,10 +357,10 @@ const Header: React.FC<{
                         <button
                             onClick={handleExport}
                             className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-lavender)] text-[var(--text-secondary)] hover:text-[var(--accent-lavender)] font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
-                            title="Save project to disk (.flourish)"
+                            title={t('saveToDisk')}
                         >
                             <SaveIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                            Save
+                            {t('common:save')}
                         </button>
                         <div className="flex flex-col gap-0.5">
                             <button
@@ -366,15 +368,15 @@ const Header: React.FC<{
                                 className="btn-primary-gradient text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 text-[11px] leading-tight"
                             >
                                 <PlayIcon className="w-3.5 h-3.5" />
-                                Play
+                                {t('play')}
                             </button>
                             <button
                                 onClick={() => setShowBuilder(true)}
                                 className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold px-3 py-1 rounded-lg flex items-center justify-center gap-1 transition-all text-[11px] leading-tight shadow-sm hover:shadow-md hover:shadow-green-500/20"
-                                title="Build standalone game (no coding required!)"
+                                title={t('buildStandalone')}
                             >
                                 <GamepadIcon className="w-3.5 h-3.5" />
-                                Build
+                                {t('build')}
                             </button>
                         </div>
                     </div>
@@ -397,8 +399,8 @@ const Header: React.FC<{
                         boxShadow: '0 12px 40px rgba(0,0,0,0.4), 0 0 60px rgba(168, 85, 247, 0.1)'
                     }}
                 >
-                    <h2 className="text-lg font-semibold mb-2 text-[var(--text-primary)]">Save Before Leaving?</h2>
-                    <p className="text-sm text-[var(--text-secondary)] mb-5">Do you want to export your project before leaving?</p>
+                    <h2 className="text-lg font-semibold mb-2 text-[var(--text-primary)]">{t('saveBeforeLeaving')}</h2>
+                    <p className="text-sm text-[var(--text-secondary)] mb-5">{t('saveBeforeLeavingPrompt')}</p>
                     <div className="flex flex-col gap-2">
                         <button
                             onClick={handleConfirmReturn}
@@ -407,7 +409,7 @@ const Header: React.FC<{
                         >
                             <span className="flex items-center justify-center gap-2">
                                 <SaveIcon className="w-4 h-4" />
-                                {isExporting ? "Saving..." : "Save & Leave"}
+                                {isExporting ? t('saving') : t('saveAndLeave')}
                             </span>
                         </button>
                         <button
@@ -415,7 +417,7 @@ const Header: React.FC<{
                             disabled={isExporting}
                             className="w-full px-4 py-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all font-medium text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                         >
-                            Cancel
+                            {t('common:cancel')}
                         </button>
                         <div className="flex justify-center pt-1">
                             <button
@@ -423,7 +425,7 @@ const Header: React.FC<{
                                 disabled={isExporting}
                                 className="text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors underline underline-offset-2 disabled:opacity-40"
                             >
-                                Exit Without Saving
+                                {t('exitWithoutSaving')}
                             </button>
                         </div>
                     </div>
@@ -436,16 +438,16 @@ const Header: React.FC<{
         <InfoModal
             isOpen={showErrorModal}
             onClose={() => setShowErrorModal(false)}
-            title="Export Error"
+            title={t('exportError')}
         >
             {errorMessage}
         </InfoModal>
         
         {/* Export Loading Overlay */}
         <LoadingOverlay 
-            isVisible={isExportingQuick} 
-            message="Exporting Project..." 
-            subMessage="Packaging your project files"
+            isVisible={isExportingQuick}
+            message={t('exportingProject')}
+            subMessage={t('packagingFiles')}
         />
         
         {!isChildWindow && (

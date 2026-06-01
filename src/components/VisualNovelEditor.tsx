@@ -214,6 +214,10 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 // Everything else → the standard UIElementInspector.
                 if (selectedElement) {
                     const targetable = Object.values(deriveHotZoneElementsFromScreen(activeScreen)).map(el => ({ id: el.id, name: el.name }));
+                    const deleteSelectedElement = () => {
+                        dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId: activeMenuScreenId, elementId: lastId } });
+                        setSelectedUIElementIds([]);
+                    };
                     if (isHotSpotElement(selectedElement)) {
                         return (
                             <HotSpotProperties
@@ -224,6 +228,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                     type: 'UPDATE_UI_ELEMENT',
                                     payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch as Partial<VNUIElement> },
                                 })}
+                                onDelete={deleteSelectedElement}
                             />
                         );
                     }
@@ -237,6 +242,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                     type: 'UPDATE_UI_ELEMENT',
                                     payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch },
                                 })}
+                                onDelete={deleteSelectedElement}
                             />
                         );
                     }

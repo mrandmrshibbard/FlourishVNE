@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.7.0",
+  "version": "2.7.2",
   "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",
@@ -28,9 +28,11 @@
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
+    "i18next": "^26.3.0",
     "jszip": "^3.10.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-i18next": "^17.0.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

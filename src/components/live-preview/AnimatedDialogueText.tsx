@@ -187,31 +187,49 @@ export const AnimatedDialogueText: React.FC<AnimatedDialogueTextProps> = ({
         );
     }
 
-    // For rainbow, we need periodic re-render for color animation
-    // We use a CSS custom property approach for performance
-    const chars = displayText.split('');
+    // Split into word + whitespace tokens. Each word's animated characters are
+    // wrapped in an inline-block, white-space:nowrap group so the word stays on
+    // one line — a per-character inline-block layout otherwise lets the browser
+    // break words mid-word at any character. Whitespace between words stays
+    // breakable so lines still wrap normally. The running `charIndex` (counting
+    // spaces too) keeps the animation stagger (wave/shake/rainbow) consistent
+    // across the whole line.
+    const tokens = displayText.split(/(\s+)/);
+    const totalChars = displayText.length;
+    let charIndex = 0;
 
     return (
         <span style={gradientStyle || undefined}>
-            {chars.map((char, i) => {
-                if (char === ' ') {
-                    return <span key={i}>&nbsp;</span>;
+            {tokens.map((token, ti) => {
+                if (token === '') return null;
+                if (/^\s+$/.test(token)) {
+                    charIndex += token.length;
+                    // Breakable whitespace between words
+                    return <span key={ti}>{token}</span>;
                 }
-                const charStyle = getCharacterStyle(textEffect, i, chars.length);
+                const wordStart = charIndex;
+                charIndex += token.length;
                 return (
-                    <span
-                        key={i}
-                        style={{
-                            ...charStyle,
-                            // Preserve any gradient styling
-                            ...(gradientStyle ? { 
-                                WebkitBackgroundClip: undefined,
-                                backgroundClip: undefined,
-                                WebkitTextFillColor: undefined,
-                            } : {}),
-                        }}
-                    >
-                        {char}
+                    <span key={ti} style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+                        {token.split('').map((char, ci) => {
+                            const charStyle = getCharacterStyle(textEffect, wordStart + ci, totalChars);
+                            return (
+                                <span
+                                    key={ci}
+                                    style={{
+                                        ...charStyle,
+                                        // Preserve any gradient styling
+                                        ...(gradientStyle ? {
+                                            WebkitBackgroundClip: undefined,
+                                            backgroundClip: undefined,
+                                            WebkitTextFillColor: undefined,
+                                        } : {}),
+                                    }}
+                                >
+                                    {char}
+                                </span>
+                            );
+                        })}
                     </span>
                 );
             })}

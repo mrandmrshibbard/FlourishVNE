@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
 import { VNProjectUI } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
@@ -27,6 +29,7 @@ interface SettingsManagerProps {
 
 const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
+    const { t } = useTranslation('settings');
     const [activeSection, setActiveSection] = useState<'general' | 'fonts' | 'screens' | 'accessibility' | 'analytics' | 'cg-gallery'>('general');
 
     const updateUI = (updates: Partial<VNProjectUI>) => {
@@ -40,12 +43,12 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
     };
 
     const sections = [
-        { id: 'general' as const, name: 'General', icon: Cog6ToothIcon },
-        { id: 'fonts' as const, name: 'Fonts', icon: BookOpenIcon },
-        { id: 'screens' as const, name: 'Screens', icon: UIScreensIcon },
-        { id: 'cg-gallery' as const, name: 'CG Gallery', icon: PhotoIcon },
-        { id: 'accessibility' as const, name: 'Accessibility', icon: SparklesIcon },
-        { id: 'analytics' as const, name: 'Analytics', icon: ClockIcon },
+        { id: 'general' as const, name: t('sections.general'), icon: Cog6ToothIcon },
+        { id: 'fonts' as const, name: t('sections.fonts'), icon: BookOpenIcon },
+        { id: 'screens' as const, name: t('sections.screens'), icon: UIScreensIcon },
+        { id: 'cg-gallery' as const, name: t('sections.cgGallery'), icon: PhotoIcon },
+        { id: 'accessibility' as const, name: t('sections.accessibility'), icon: SparklesIcon },
+        { id: 'analytics' as const, name: t('sections.analytics'), icon: ClockIcon },
     ];
 
     return (
@@ -55,7 +58,7 @@ const SettingsManager: React.FC<SettingsManagerProps> = ({ project }) => {
                 <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <Cog6ToothIcon className="w-5 h-5" />
-                        Settings
+                        {t('title')}
                     </h2>
                 </div>
 
@@ -109,6 +112,7 @@ interface GeneralSettingsProps {
 }
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, onUpdateUI }) => {
+    const { t, i18n } = useTranslation('settings');
     // Helper to update a single game-settings field without re-spreading every default manually
     const updateGameSetting = (patch: Partial<import('../features/ui/types').VNDefaultGameSettings>) => {
         const current = project.ui?.defaultGameSettings;
@@ -129,22 +133,36 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-6">General Settings</h3>
+            <h3 className="text-xl font-bold text-white mb-6">{t('general.heading')}</h3>
 
             <div className="space-y-6 max-w-md">
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Project Title</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.language')}</label>
+                    <select
+                        value={i18n.language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                    >
+                        {SUPPORTED_LANGUAGES.map(lang => (
+                            <option key={lang.code} value={lang.code}>{lang.label}</option>
+                        ))}
+                    </select>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">{t('general.languageHint')}</p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.projectTitle')}</label>
                     <input
                         type="text"
                         value={project.title}
                         onChange={(e) => onUpdate({ title: e.target.value })}
                         className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        placeholder="Enter project title"
+                        placeholder={t('general.projectTitlePlaceholder')}
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Starting Scene</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.startingScene')}</label>
                     <select
                         value={project.startSceneId}
                         onChange={(e) => onUpdate({ startSceneId: e.target.value })}
@@ -159,43 +177,43 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Description</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.description')}</label>
                     <textarea
                         value={project.description || ''}
                         onChange={(e) => onUpdate({ description: e.target.value })}
                         className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        placeholder="Enter project description"
+                        placeholder={t('general.descriptionPlaceholder')}
                         rows={3}
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Author</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.author')}</label>
                     <input
                         type="text"
                         value={project.author || ''}
                         onChange={(e) => onUpdate({ author: e.target.value })}
                         className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        placeholder="Enter author name"
+                        placeholder={t('general.authorPlaceholder')}
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Project Version</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.projectVersion')}</label>
                     <input
                         type="text"
                         value={project.version || ''}
                         onChange={(e) => onUpdate({ version: e.target.value })}
                         className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                        placeholder="e.g. 1.0.0"
+                        placeholder={t('general.projectVersionPlaceholder')}
                     />
                 </div>
 
                 <div className="pt-4 border-t border-[var(--border-subtle)]">
-                    <h4 className="text-lg font-semibold text-white mb-4">Game Resolution</h4>
+                    <h4 className="text-lg font-semibold text-white mb-4">{t('general.gameResolution')}</h4>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Preset</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('general.preset')}</label>
                             <select
                                 value={
                                     project.gameResolution
@@ -226,7 +244,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Width</label>
+                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.width')}</label>
                                 <input
                                     type="number"
                                     value={project.gameResolution?.width || 1920}
@@ -249,7 +267,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Height</label>
+                                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.height')}</label>
                                 <input
                                     type="number"
                                     value={project.gameResolution?.height || 1080}
@@ -273,18 +291,18 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             </div>
                         </div>
                         <div className="text-xs text-[var(--text-secondary)]">
-                            Aspect Ratio: {project.gameResolution?.aspectRatio || '16:9'}
+                            {t('general.aspectRatio', { ratio: project.gameResolution?.aspectRatio || '16:9' })}
                         </div>
                     </div>
                 </div>
 
                 <div className="pt-4 border-t border-[var(--border-subtle)]">
-                    <h4 className="text-lg font-semibold text-white mb-4">Stage Behavior</h4>
+                    <h4 className="text-lg font-semibold text-white mb-4">{t('general.stageBehavior')}</h4>
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <label className="text-sm font-medium text-[var(--text-primary)]">Auto-Arrange Characters</label>
-                                <p className="text-xs text-[var(--text-secondary)]">Automatically spread characters apart when they share the same stage position (e.g. two characters both set to "Center" will appear side-by-side). Characters are kept within view.</p>
+                                <label className="text-sm font-medium text-[var(--text-primary)]">{t('general.autoArrange')}</label>
+                                <p className="text-xs text-[var(--text-secondary)]">{t('general.autoArrangeDesc')}</p>
                             </div>
                             <button
                                 onClick={() => onUpdate({ autoArrangeCharacters: !project.autoArrangeCharacters })}
@@ -301,11 +319,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                 </div>
 
                 <div className="pt-4 border-t border-[var(--border-subtle)]">
-                    <h4 className="text-lg font-semibold text-white mb-4">Default Game Settings</h4>
-                    <p className="text-xs text-[var(--text-secondary)] mb-4">These values are used as the initial settings when a player starts your game.</p>
+                    <h4 className="text-lg font-semibold text-white mb-4">{t('general.defaultGameSettings')}</h4>
+                    <p className="text-xs text-[var(--text-secondary)] mb-4">{t('general.defaultGameSettingsDesc')}</p>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Text Speed: {project.ui?.defaultGameSettings?.textSpeed ?? 50}</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.textSpeed', { value: project.ui?.defaultGameSettings?.textSpeed ?? 50 })}</label>
                             <input
                                 type="range"
                                 min="1"
@@ -315,11 +333,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                                 className="w-full accent-[var(--accent-lavender)]"
                             />
                             <div className="flex justify-between text-xs text-[var(--text-secondary)] mt-1">
-                                <span>Slow</span><span>Fast</span>
+                                <span>{t('general.slow')}</span><span>{t('general.fast')}</span>
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Music Volume: {Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}%</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.musicVolume', { value: Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100) })}</label>
                             <input
                                 type="range"
                                 min="0"
@@ -330,7 +348,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">SFX Volume: {Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}%</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.sfxVolume', { value: Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100) })}</label>
                             <input
                                 type="range"
                                 min="0"
@@ -341,7 +359,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Voice Volume: {Math.round((project.ui?.defaultGameSettings?.voiceVolume ?? 0.8) * 100)}%</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.voiceVolume', { value: Math.round((project.ui?.defaultGameSettings?.voiceVolume ?? 0.8) * 100) })}</label>
                             <input
                                 type="range"
                                 min="0"
@@ -352,7 +370,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Ambient Volume: {Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100)}%</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.ambientVolume', { value: Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100) })}</label>
                             <input
                                 type="range"
                                 min="0"
@@ -363,7 +381,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Auto-Advance Delay: {project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3}s</label>
+                            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.autoAdvanceDelay', { value: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 })}</label>
                             <input
                                 type="range"
                                 min="1"
@@ -379,8 +397,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div className="flex items-center justify-between">
                             <div>
-                                <label className="text-sm font-medium text-[var(--text-primary)]">Enable Skip</label>
-                                <p className="text-xs text-[var(--text-secondary)]">Allow players to skip through text quickly</p>
+                                <label className="text-sm font-medium text-[var(--text-primary)]">{t('general.enableSkip')}</label>
+                                <p className="text-xs text-[var(--text-secondary)]">{t('general.enableSkipDesc')}</p>
                             </div>
                             <button
                                 onClick={() => updateGameSetting({ enableSkip: !(project.ui?.defaultGameSettings?.enableSkip ?? true) })}
@@ -395,8 +413,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div className="flex items-center justify-between">
                             <div>
-                                <label className="text-sm font-medium text-[var(--text-primary)]">Auto-Advance</label>
-                                <p className="text-xs text-[var(--text-secondary)]">Automatically proceed to next dialogue line</p>
+                                <label className="text-sm font-medium text-[var(--text-primary)]">{t('general.autoAdvance')}</label>
+                                <p className="text-xs text-[var(--text-secondary)]">{t('general.autoAdvanceDesc')}</p>
                             </div>
                             <button
                                 onClick={() => updateGameSetting({ autoAdvance: !(project.ui?.defaultGameSettings?.autoAdvance ?? false) })}
@@ -413,17 +431,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                 </div>
 
                 <div className="pt-4 border-t border-[var(--border-subtle)]">
-                    <h4 className="text-lg font-semibold text-white mb-4">Project Summary</h4>
+                    <h4 className="text-lg font-semibold text-white mb-4">{t('general.projectSummary')}</h4>
                     <div className="grid grid-cols-2 gap-3">
                         {[
-                            { label: 'Scenes', value: Object.keys(project.scenes || {}).length },
-                            { label: 'Characters', value: Object.keys(project.characters || {}).length },
-                            { label: 'Variables', value: Object.keys(project.variables || {}).length },
-                            { label: 'Backgrounds', value: Object.keys(project.backgrounds || {}).length },
-                            { label: 'Images', value: Object.keys(project.images || {}).length },
-                            { label: 'Audio Files', value: Object.keys(project.audio || {}).length },
-                            { label: 'UI Screens', value: Object.keys(project.uiScreens || {}).length },
-                            { label: 'Total Events', value: Object.values(project.scenes || {}).reduce((sum: number, s: any) => sum + (s.commands?.length || 0), 0) },
+                            { label: t('general.summary.scenes'), value: Object.keys(project.scenes || {}).length },
+                            { label: t('general.summary.characters'), value: Object.keys(project.characters || {}).length },
+                            { label: t('general.summary.variables'), value: Object.keys(project.variables || {}).length },
+                            { label: t('general.summary.backgrounds'), value: Object.keys(project.backgrounds || {}).length },
+                            { label: t('general.summary.images'), value: Object.keys(project.images || {}).length },
+                            { label: t('general.summary.audioFiles'), value: Object.keys(project.audio || {}).length },
+                            { label: t('general.summary.uiScreens'), value: Object.keys(project.uiScreens || {}).length },
+                            { label: t('general.summary.totalEvents'), value: Object.values(project.scenes || {}).reduce((sum: number, s: any) => sum + (s.commands?.length || 0), 0) },
                         ].map(item => (
                             <div key={item.label} className="p-3 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
                                 <span className="block text-xs text-[var(--text-secondary)]">{item.label}</span>

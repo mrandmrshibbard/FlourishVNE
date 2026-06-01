@@ -207,7 +207,9 @@ export const HotSpotProperties: React.FC<{
     /** Names of draggable elements on the screen — used as the "Accepted Elements" picker. */
     targetableElements: { id: VNID; name: string }[];
     onUpdate: (patch: Partial<UIHotSpotElement>) => void;
-}> = ({ spot, project, targetableElements, onUpdate: typedOnUpdate }) => {
+    /** Removes this hot spot from the screen. */
+    onDelete?: () => void;
+}> = ({ spot, project, targetableElements, onUpdate: typedOnUpdate, onDelete }) => {
     // Inside the body we still operate on the legacy VNHotSpot shape (field
     // names match), so existing JSX builds Partial<VNHotSpot> patches; convert
     // to Partial<UIHotSpotElement> at the boundary.
@@ -356,6 +358,15 @@ export const HotSpotProperties: React.FC<{
                 onChange={actions => onUpdate({ actions })}
                 label="Trigger Actions"
             />
+
+            {onDelete && (
+                <>
+                    <hr className="border-[var(--border-subtle)]" />
+                    <button onClick={onDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                        <TrashIcon /> Delete Hot Spot
+                    </button>
+                </>
+            )}
             </div>
         </Panel>
     );
@@ -368,7 +379,9 @@ export const HotZoneElementProperties: React.FC<{
      *  editor's target-element pickers. */
     targetableElements: { id: VNID; name: string }[];
     onUpdate: (patch: Partial<VNUIElement>) => void;
-}> = ({ element: typedElement, project, targetableElements, onUpdate: typedOnUpdate }) => {
+    /** Removes this element (draggable / image map) from the screen. */
+    onDelete?: () => void;
+}> = ({ element: typedElement, project, targetableElements, onUpdate: typedOnUpdate, onDelete }) => {
     const element = toLegacyHotZoneElement(typedElement);
     if (!element) return null;
     // Existing JSX produces Partial<VNHotZoneElement> patches; translate at the
@@ -842,6 +855,15 @@ export const HotZoneElementProperties: React.FC<{
                 onChange={actions => onUpdate({ actions })}
                 label={element.draggable ? 'Click Actions (non-drag)' : 'Click Actions'}
             />
+
+            {onDelete && (
+                <>
+                    <hr className="border-[var(--border-subtle)]" />
+                    <button onClick={onDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                        <TrashIcon /> Delete Element
+                    </button>
+                </>
+            )}
             </div>
         </Panel>
     );
