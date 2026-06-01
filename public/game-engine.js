@@ -7907,132 +7907,137 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         spot.actions.forEach((a) => handleLocalAction(a));
       }
     }, [handleLocalAction]);
-    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: containerRef, className: "absolute inset-0 w-full h-full", children: [
-      Object.values(hotSpots).map((spot) => {
-        if (spot.conditions && !evaluateConditions2(spot.conditions, variables)) return null;
-        return /* @__PURE__ */ jsxRuntime2.jsx(
-          "div",
-          {
-            className: "absolute",
-            style: {
-              left: `${spot.x}%`,
-              top: `${spot.y}%`,
-              width: `${spot.width}%`,
-              height: `${spot.height}%`,
-              borderRadius: spot.shape === "circle" ? "50%" : void 0,
-              backgroundColor: spot.visible ? spot.highlightColor || "rgba(59, 130, 246, 0.2)" : "transparent",
-              border: spot.visible ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
-              pointerEvents: spot.trigger === "drag-drop" ? "none" : "auto",
-              cursor: spot.trigger === "click" ? "pointer" : void 0
+    return (
+      // pointer-events:none lets clicks pass through empty overlay areas to standard
+      // elements (buttons, etc.) rendered underneath; interactive children below
+      // re-enable pointer events individually with pointer-events:auto.
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: containerRef, className: "absolute inset-0 w-full h-full", style: { pointerEvents: "none" }, children: [
+        Object.values(hotSpots).map((spot) => {
+          if (spot.conditions && !evaluateConditions2(spot.conditions, variables)) return null;
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            "div",
+            {
+              className: "absolute",
+              style: {
+                left: `${spot.x}%`,
+                top: `${spot.y}%`,
+                width: `${spot.width}%`,
+                height: `${spot.height}%`,
+                borderRadius: spot.shape === "circle" ? "50%" : void 0,
+                backgroundColor: spot.visible ? spot.highlightColor || "rgba(59, 130, 246, 0.2)" : "transparent",
+                border: spot.visible ? `2px dashed ${spot.highlightColor || "rgba(59, 130, 246, 0.5)"}` : "none",
+                pointerEvents: spot.trigger === "drag-drop" ? "none" : "auto",
+                cursor: spot.trigger === "click" ? "pointer" : void 0
+              },
+              onClick: () => handleSpotClick(spot),
+              onMouseEnter: () => handleSpotHover(spot)
             },
-            onClick: () => handleSpotClick(spot),
-            onMouseEnter: () => handleSpotHover(spot)
-          },
-          spot.id
-        );
-      }),
-      Object.values(hotZoneElements).map((el) => {
-        if (el.conditions && !evaluateConditions2(el.conditions, variables)) return null;
-        if (el.snapToHotSpot && el.hideOnDrop && placedElements[el.id]) return null;
-        const isDragging = (dragState == null ? void 0 : dragState.elementId) === el.id;
-        const pos = isDragging && dragOffset ? dragOffset : elementPositions[el.id] || { x: el.x, y: el.y };
-        const effectiveImageId = imageOverrides[el.id] || el.imageId;
-        const imageUrl = assetResolver(effectiveImageId, "image");
-        const anim = activeAnimations[el.id];
-        const animationKeyframes = {
-          shake: "hz-shake",
-          bounce: "hz-bounce",
-          pulse: "hz-pulse",
-          spin: "hz-spin",
-          fadeIn: "hz-fadeIn",
-          fadeOut: "hz-fadeOut",
-          slideIn: "hz-slideIn",
-          glow: "hz-glow"
-        };
-        const elType = el.elementType || "image";
-        const elText = el.text || "";
-        const elFont = el.font;
-        const videoUrl = el.videoId ? assetResolver(el.videoId, "video") : null;
-        const isFadedOut = !anim && persistentEffects[el.id] === "fadedOut";
-        return /* @__PURE__ */ jsxRuntime2.jsx(
-          "div",
-          {
-            className: "absolute",
-            style: {
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              width: `${el.width}%`,
-              height: `${el.height}%`,
-              cursor: el.draggable ? isDragging ? "grabbing" : "grab" : elType === "textInput" ? "text" : "pointer",
-              zIndex: isDragging ? 50 : 10,
-              pointerEvents: isFadedOut ? "none" : "auto",
-              opacity: isFadedOut ? 0 : void 0,
-              transition: isDragging ? "none" : "left 0.2s, top 0.2s",
-              animation: anim ? `${animationKeyframes[anim.animation] || "hz-shake"} ${anim.duration}ms ease` : void 0
-            },
-            onMouseDown: (e) => elType !== "textInput" && handleElementMouseDown(e, el),
-            onMouseEnter: () => {
-              try {
-                playSound(el.hoverSoundId || null);
-              } catch (e) {
-              }
-            },
-            children: elType === "text" ? /* @__PURE__ */ jsxRuntime2.jsx(
-              "div",
-              {
-                className: "w-full h-full flex items-center justify-center text-white pointer-events-none",
-                style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? "bold" : "normal", fontStyle: elFont.italic ? "italic" : "normal", color: elFont.color || "#fff" } : {},
-                children: project ? interpolateVariables(elText, variables, project) : elText
-              }
-            ) : elType === "button" ? /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full relative flex items-center justify-center pointer-events-none", children: [
-              imageUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "absolute inset-0 w-full h-full object-fill", draggable: false }),
-              /* @__PURE__ */ jsxRuntime2.jsx(
-                "span",
+            spot.id
+          );
+        }),
+        Object.values(hotZoneElements).map((el) => {
+          if (el.conditions && !evaluateConditions2(el.conditions, variables)) return null;
+          if (el.snapToHotSpot && el.hideOnDrop && placedElements[el.id]) return null;
+          const isDragging = (dragState == null ? void 0 : dragState.elementId) === el.id;
+          const pos = isDragging && dragOffset ? dragOffset : elementPositions[el.id] || { x: el.x, y: el.y };
+          const effectiveImageId = imageOverrides[el.id] || el.imageId;
+          const imageUrl = assetResolver(effectiveImageId, "image");
+          const anim = activeAnimations[el.id];
+          const animationKeyframes = {
+            shake: "hz-shake",
+            bounce: "hz-bounce",
+            pulse: "hz-pulse",
+            spin: "hz-spin",
+            fadeIn: "hz-fadeIn",
+            fadeOut: "hz-fadeOut",
+            slideIn: "hz-slideIn",
+            glow: "hz-glow"
+          };
+          const elType = el.elementType || "image";
+          const elText = el.text || "";
+          const elFont = el.font;
+          const videoUrl = el.videoId ? assetResolver(el.videoId, "video") : null;
+          const isFadedOut = !anim && persistentEffects[el.id] === "fadedOut";
+          return /* @__PURE__ */ jsxRuntime2.jsx(
+            "div",
+            {
+              className: "absolute",
+              style: {
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
+                width: `${el.width}%`,
+                height: `${el.height}%`,
+                cursor: el.draggable ? isDragging ? "grabbing" : "grab" : elType === "textInput" ? "text" : "pointer",
+                zIndex: isDragging ? 50 : 10,
+                pointerEvents: isFadedOut ? "none" : "auto",
+                opacity: isFadedOut ? 0 : void 0,
+                transition: isDragging ? "none" : "left 0.2s, top 0.2s",
+                animation: anim ? `${animationKeyframes[anim.animation] || "hz-shake"} ${anim.duration}ms ease` : void 0
+              },
+              onMouseDown: (e) => elType !== "textInput" && handleElementMouseDown(e, el),
+              onMouseEnter: () => {
+                try {
+                  playSound(el.hoverSoundId || null);
+                } catch (e) {
+                }
+              },
+              children: elType === "text" ? /* @__PURE__ */ jsxRuntime2.jsx(
+                "div",
                 {
-                  className: "relative z-10 text-white text-sm font-semibold",
-                  style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || "#fff" } : {},
+                  className: "w-full h-full flex items-center justify-center text-white pointer-events-none",
+                  style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? "bold" : "normal", fontStyle: elFont.italic ? "italic" : "normal", color: elFont.color || "#fff" } : {},
                   children: project ? interpolateVariables(elText, variables, project) : elText
                 }
-              )
-            ] }) : elType === "video" ? videoUrl ? /* @__PURE__ */ jsxRuntime2.jsx(
-              "video",
-              {
-                src: videoUrl,
-                className: "w-full h-full object-contain pointer-events-none",
-                autoPlay: true,
-                loop: el.videoLoop ?? true,
-                muted: el.videoMuted ?? true,
-                playsInline: true
-              }
-            ) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full bg-indigo-500/30 border border-indigo-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: [
-              el.name,
-              " (no video)"
-            ] }) : elType === "textInput" ? /* @__PURE__ */ jsxRuntime2.jsx(
-              HotZoneTextInput,
-              {
-                element: el,
-                variables,
-                onVariableChange,
-                playSound,
-                font: elFont
-              }
-            ) : elType === "imageMap" ? /* @__PURE__ */ jsxRuntime2.jsx(
-              HotZoneImageMapRenderer,
-              {
-                el,
-                imageUrl,
-                assetResolver,
-                evaluateConditions: evaluateConditions2,
-                variables,
-                playSound,
-                handleLocalAction
-              }
-            ) : imageUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "w-full h-full object-contain pointer-events-none", draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full bg-purple-500/30 border border-purple-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: el.name })
-          },
-          el.id
-        );
-      })
-    ] });
+              ) : elType === "button" ? /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full relative flex items-center justify-center pointer-events-none", children: [
+                imageUrl && /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "absolute inset-0 w-full h-full object-fill", draggable: false }),
+                /* @__PURE__ */ jsxRuntime2.jsx(
+                  "span",
+                  {
+                    className: "relative z-10 text-white text-sm font-semibold",
+                    style: elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || "#fff" } : {},
+                    children: project ? interpolateVariables(elText, variables, project) : elText
+                  }
+                )
+              ] }) : elType === "video" ? videoUrl ? /* @__PURE__ */ jsxRuntime2.jsx(
+                "video",
+                {
+                  src: videoUrl,
+                  className: "w-full h-full object-contain pointer-events-none",
+                  autoPlay: true,
+                  loop: el.videoLoop ?? true,
+                  muted: el.videoMuted ?? true,
+                  playsInline: true
+                }
+              ) : /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "w-full h-full bg-indigo-500/30 border border-indigo-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: [
+                el.name,
+                " (no video)"
+              ] }) : elType === "textInput" ? /* @__PURE__ */ jsxRuntime2.jsx(
+                HotZoneTextInput,
+                {
+                  element: el,
+                  variables,
+                  onVariableChange,
+                  playSound,
+                  font: elFont
+                }
+              ) : elType === "imageMap" ? /* @__PURE__ */ jsxRuntime2.jsx(
+                HotZoneImageMapRenderer,
+                {
+                  el,
+                  imageUrl,
+                  assetResolver,
+                  evaluateConditions: evaluateConditions2,
+                  variables,
+                  playSound,
+                  handleLocalAction
+                }
+              ) : imageUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: imageUrl, alt: el.name, className: "w-full h-full object-contain pointer-events-none", draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full bg-purple-500/30 border border-purple-400 rounded flex items-center justify-center text-xs text-white pointer-events-none", children: el.name })
+            },
+            el.id
+          );
+        })
+      ] })
+    );
   };
   const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables }) => {
     const { project } = useProject();

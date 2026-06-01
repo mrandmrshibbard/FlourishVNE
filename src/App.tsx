@@ -154,12 +154,8 @@ const App = () => {
                     <VisualNovelEditor onExit={handleCloseProject} initialTab={initialTab} />
                 </UIScreenThemeProvider>
             </ProjectProvider>
-            <MusicPlayer
-                isPlaying={isMusicPlaying}
-                onPlayingChange={handleMusicPlayingChange}
-                currentSong={currentSongName}
-                onSongChange={handleSongChange}
-            />
+            {/* Music player is intentionally Hub-only — inside the editor it would overlap the
+                Properties inspector and other panels. Hub music is stopped on project open. */}
         </ToastProvider>
     );
 };

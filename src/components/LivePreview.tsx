@@ -2593,7 +2593,10 @@ const HotZoneRuntime: React.FC<{
     }, [handleLocalAction]);
 
     return (
-        <div ref={containerRef} className="absolute inset-0 w-full h-full">
+        // pointer-events:none lets clicks pass through empty overlay areas to standard
+        // elements (buttons, etc.) rendered underneath; interactive children below
+        // re-enable pointer events individually with pointer-events:auto.
+        <div ref={containerRef} className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
             {/* Hot Spots */}
             {(Object.values(hotSpots) as VNHotSpot[]).map(spot => {
                 if (spot.conditions && !evaluateConditions(spot.conditions, variables)) return null;
