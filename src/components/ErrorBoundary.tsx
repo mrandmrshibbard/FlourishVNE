@@ -31,7 +31,7 @@ class ErrorBoundary extends Component<Props, State> {
         const { error, errorInfo } = this.state;
         const panelName = this.props.panelName || 'Unknown Panel';
         return [
-            `Flourish VNE Error Report`,
+            `Flourish Visual Novel Engine Error Report`,
             `Panel: ${panelName}`,
             `Time: ${new Date().toISOString()}`,
             `Error: ${error?.message || 'Unknown error'}`,

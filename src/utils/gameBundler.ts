@@ -142,7 +142,15 @@ export async function buildStandaloneGame(
     message: 'Preparing game data...'
   });
 
-  const projectData = JSON.stringify(resolvedProject, null, 2);
+  // Build the asset map ONCE and strip data URLs from the project before
+  // inlining it. The HTML used to contain the full project (data URLs and all),
+  // which doubled the download/parse cost; the lean copy holds only filename
+  // references and the runtime loads each asset from the `assets/` folder on
+  // demand via the standard image / video / audio resolvers.
+  const assetUrls = collectAllAssets(resolvedProject);
+  const leanProject = buildLeanProject(resolvedProject, assetUrls);
+  // (projectData was previously stringified here for legacy logging — the
+  // lean copy is now serialized inside generateStandaloneHTML.)
 
   // Step 2: Generate game files (30%)
   onProgress?.({
@@ -151,7 +159,7 @@ export async function buildStandaloneGame(
     message: 'Generating game files...'
   });
 
-  const htmlContent = await generateStandaloneHTML(resolvedProject);
+  const htmlContent = await generateStandaloneHTML(leanProject);
   zip.file('index.html', htmlContent);
 
   // Step 3: Copy all assets (50%)
@@ -164,8 +172,6 @@ export async function buildStandaloneGame(
   // Create assets directory and copy all referenced assets
   const assetsFolder = zip.folder('assets');
   if (!assetsFolder) throw new Error('Failed to create assets folder');
-
-  const assetUrls = collectAllAssets(resolvedProject);
   let assetCount = 0;
   
   for (const [name, dataUrl] of Object.entries(assetUrls)) {
@@ -1033,8 +1039,11 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       }
     });
 
-    // Collect Hot Zone element assets
-    Object.values(screen.hotZoneElements || {}).forEach((el: any) => {
+    // Legacy hot zone asset collection — post-Phase-3 these fields are migrated
+    // into `screen.elements` and the standard walk below picks them up. These
+    // branches survive only for projects that haven't been loaded through the
+    // migration yet (e.g. raw .flourish files passed straight to the bundler).
+    Object.values((screen as any).hotZoneElements || {}).forEach((el: any) => {
       if (el.imageId) {
         const img = project.images?.[el.imageId];
         if (img) addAsset(img.imageUrl, 'ui');
@@ -1052,11 +1061,35 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
         if (audio) addAsset(audio.audioUrl, 'audio');
       }
     });
-    // Collect Hot Spot assets
-    Object.values(screen.hotSpots || {}).forEach((spot: any) => {
+    Object.values((screen as any).hotSpots || {}).forEach((spot: any) => {
       if (spot.imageId) {
         const img = project.images?.[spot.imageId];
         if (img) addAsset(img.imageUrl, 'ui');
+      }
+    });
+
+    // Post-unification: walk `screen.elements` for the asset references that
+    // used to live on `hotZoneElements` / `hotSpots`. UIImageMapElement gets
+    // its image / hoverImage / per-region actions; UIHotSpotElement gets its
+    // actions; any element with clickSoundId / hoverSoundId gets those.
+    Object.values(screen.elements || {}).forEach((element: any) => {
+      if (element.clickSoundId) {
+        const audio = project.audio?.[element.clickSoundId];
+        if (audio) addAsset(audio.audioUrl, 'audio');
+      }
+      if (element.hoverSoundId) {
+        const audio = project.audio?.[element.hoverSoundId];
+        if (audio) addAsset(audio.audioUrl, 'audio');
+      }
+      if (element.type === 'ImageMap') {
+        if (element.image?.id) {
+          const img = project.images?.[element.image.id];
+          if (img) addAsset(img.imageUrl, 'ui');
+        }
+        if (element.hoverImage?.id) {
+          const img = project.images?.[element.hoverImage.id];
+          if (img) addAsset(img.imageUrl, 'ui');
+        }
       }
     });
 
@@ -1074,13 +1107,22 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       if (element.action) collectActionAssets([element.action]);
       if (Array.isArray(element.actions)) collectActionAssets(element.actions);
     });
-    // Hot zone element actions
-    Object.values(screen.hotZoneElements || {}).forEach((el: any) => {
+    // Legacy hot zone action collection (see note above). Unified actions on
+    // the migrated typed elements (HotSpot, ImageMap, draggable images) are
+    // already picked up by the standard `screen.elements` walk a few lines up.
+    Object.values((screen as any).hotZoneElements || {}).forEach((el: any) => {
       if (Array.isArray(el.actions)) collectActionAssets(el.actions);
     });
-    // Hot spot actions
-    Object.values(screen.hotSpots || {}).forEach((spot: any) => {
+    Object.values((screen as any).hotSpots || {}).forEach((spot: any) => {
       if (Array.isArray(spot.actions)) collectActionAssets(spot.actions);
+    });
+    // Image-map region actions (for migrated UIImageMapElement entries)
+    Object.values(screen.elements || {}).forEach((element: any) => {
+      if (element.type === 'ImageMap' && Array.isArray(element.imageMapRegions)) {
+        for (const region of element.imageMapRegions) {
+          if (Array.isArray(region.actions)) collectActionAssets(region.actions);
+        }
+      }
     });
     // Win condition actions
     if (screen.winCondition?.actions) {
@@ -1089,6 +1131,54 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
   });
 
   return assets;
+}
+
+/**
+ * Walks the project tree once and returns a copy with every embedded data URL
+ * replaced by a relative path into the `assets/` folder, using filenames that
+ * match what `collectAllAssets` produced.
+ *
+ * Why this matters: previously the export pipeline inlined the FULL project
+ * (including every data URL) into `window.GAME_PROJECT = ...` AND wrote the
+ * same data out to disk in the `assets/` folder. The HTML therefore ended up
+ * containing roughly all of the project's binary asset weight, doubling the
+ * download/parse cost and — for large projects — bloating the HTML to the
+ * point that browsers and Electron took a long time (or sometimes failed) to
+ * load it. This helper produces a "lean" copy of the project to inline; assets
+ * are loaded lazily from disk on demand by the runtime's standard image /
+ * video / audio resolvers, which just feed `imageUrl` straight into <img src>.
+ */
+export function buildLeanProject(project: VNProject, assetMap: Record<string, string>): VNProject {
+  // Build the reverse lookup: dataURL → "assets/<filename>"
+  const urlToPath = new Map<string, string>();
+  for (const [filename, dataUrl] of Object.entries(assetMap)) {
+    if (dataUrl) urlToPath.set(dataUrl, `assets/${filename}`);
+  }
+  if (urlToPath.size === 0) return project;
+
+  const visit = (value: any): any => {
+    if (typeof value === 'string') {
+      // Hot path: only check strings that look like data URLs
+      if (value.length > 32 && value.startsWith('data:')) {
+        const replaced = urlToPath.get(value);
+        return replaced ?? value;
+      }
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(visit);
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, any> = {};
+      for (const k of Object.keys(value)) {
+        out[k] = visit(value[k]);
+      }
+      return out;
+    }
+    return value;
+  };
+
+  return visit(project) as VNProject;
 }
 
 /**

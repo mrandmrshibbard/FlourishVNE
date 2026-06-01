@@ -12,7 +12,7 @@ export function handleShowCharacter(
   command: ShowCharacterCommand,
   context: CommandContext
 ): CommandResult {
-  const { project, playerState, activeEffectTimeoutsRef, advance } = context;
+  const { project, playerState, activeEffectTimeoutsRef, advance, setPlayerState } = context;
   const charData = project.characters[command.characterId];
   const exprData = charData?.expressions[command.expressionId];
 
@@ -140,6 +140,39 @@ export function handleShowCharacter(
   // Use the requested transition (slide is now supported)
   const requestedTransition = command.transition;
 
+  const currentCharacters = playerState.stageState.characters;
+
+  // Detect a pose change of the SAME character (same id already on stage, visuals differ).
+  // Other (different) characters are left untouched so multiple characters coexist on stage.
+  // To crossfade a pose change in place we keep a transient "ghost" of the old pose that
+  // fades out under a synthetic id while the real slot shows the new pose fading in.
+  const hasShowTransitionFlag = requestedTransition && requestedTransition !== 'instant';
+  const existingSameChar = currentCharacters[command.characterId];
+  const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag &&
+    (existingSameChar.imageUrls.join(',') !== imageUrls.join(',') || existingSameChar.expressionId !== command.expressionId);
+  const ghostKey = isPoseChange ? `__ghost_${command.characterId}_${Date.now()}` : null;
+  const ghostEntry = isPoseChange ? {
+    charId: ghostKey as string,
+    position: existingSameChar!.position,
+    imageUrls: existingSameChar!.imageUrls,
+    videoUrls: existingSameChar!.videoUrls,
+    isVideo: existingSameChar!.isVideo,
+    videoLoop: existingSameChar!.videoLoop,
+    expressionId: existingSameChar!.expressionId,
+    layerVariableBindings: existingSameChar!.layerVariableBindings,
+    sourceCommandId: undefined,
+    scale: existingSameChar!.scale,
+    inverted: existingSameChar!.inverted,
+    visualEffects: undefined,
+    transition: {
+      type: command.transition ?? 'fade',
+      duration: command.duration ?? 0.5,
+      startPosition: undefined,
+      endPosition: undefined,
+      action: 'hide' as const,
+    },
+  } as typeof existingSameChar : null;
+
   console.log(
     `ShowCharacter: ${charData.name}, expression: ${exprData.name}, bindings:`,
     finalBindings,
@@ -157,6 +190,8 @@ export function handleShowCharacter(
     expressionId: command.expressionId,
     layerVariableBindings: finalBindings,
     sourceCommandId: command.id,
+    scale: command.scale,
+    inverted: command.inverted,
     visualEffects: (() => {
         // Support both new visualEffects array and legacy single visualEffect
         const effects: import('../../../features/scene/types').VNCharacterVisualEffect[] = [];
@@ -181,7 +216,7 @@ export function handleShowCharacter(
   // If there's a transition, wait for it to complete before advancing
   if (command.transition && command.transition !== 'instant') {
     const duration = (command.duration ?? 0.5) * 1000 + 100;
-    
+
     return {
       advance: false,
       updates: {
@@ -189,12 +224,22 @@ export function handleShowCharacter(
           ...playerState.stageState,
           characters: {
             ...playerState.stageState.characters,
+            // Old pose ghost (fades out) when changing pose of the same character
+            ...(ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {}),
             [command.characterId]: characterState,
           },
         },
       },
       delay: duration,
       callback: () => {
+        // Remove the fade-out ghost once the crossfade completes
+        if (ghostKey) {
+          setPlayerState((p) => {
+            if (!p) return null;
+            const { [ghostKey]: _removed, ...remaining } = p.stageState.characters;
+            return { ...p, stageState: { ...p.stageState, characters: remaining } };
+          });
+        }
         advance();
       },
     };

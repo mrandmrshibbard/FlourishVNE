@@ -31,6 +31,11 @@ export function useTween(
                     break;
                 }
             }
+            // When no active tween, fall back to resting (post-tween) values so the
+            // element holds its final tweened state instead of snapping back to base.
+            if (found === null) {
+                found = TweenManager.getCurrentValues(targetIdRef.current, targetTypeRef.current);
+            }
             // Only update if values changed or tween ended
             setValues((prev) => {
                 if (found === null && prev === null) return prev;
@@ -41,11 +46,9 @@ export function useTween(
         return unsubscribe;
     }, []);
 
-    // Also clear when no more tweens exist for this target
+    // Re-sync when the target changes (keeps resting values if present)
     useEffect(() => {
-        if (!TweenManager.hasTween(targetId, targetType)) {
-            setValues(null);
-        }
+        setValues(TweenManager.getCurrentValues(targetId, targetType));
     }, [targetId, targetType]);
 
     return values;

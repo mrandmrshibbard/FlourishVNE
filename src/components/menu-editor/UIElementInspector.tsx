@@ -465,6 +465,41 @@ const UIElementInspector: React.FC<{
                     <FormField label="Empty Slot Text"><TextInput value={el.emptySlotText} onChange={e => updateElement({ emptySlotText: e.target.value })} /></FormField>
                     <h3 className="font-bold my-2 text-slate-400">Font Style</h3>
                     <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })}/>
+                    <h3 className="font-bold my-2 text-slate-400">Colors</h3>
+                    <FormField label="Slot Background">
+                        <ColorInput value={el.slotBackgroundColor} onChange={c => updateElement({ slotBackgroundColor: c })} />
+                    </FormField>
+                    <FormField label="Slot Border">
+                        <ColorInput value={el.slotBorderColor} onChange={c => updateElement({ slotBorderColor: c })} />
+                    </FormField>
+                    <FormField label="Slot Hover Border">
+                        <ColorInput value={el.slotHoverBorderColor} onChange={c => updateElement({ slotHoverBorderColor: c })} />
+                    </FormField>
+                    <FormField label="Slot Header">
+                        <ColorInput value={el.slotHeaderColor} onChange={c => updateElement({ slotHeaderColor: c })} />
+                    </FormField>
+                    <FormField label="Slot Text">
+                        <ColorInput value={el.slotTextColor} onChange={c => updateElement({ slotTextColor: c })} />
+                    </FormField>
+                    <FontEditor label="Empty Slot Text Font" font={el.emptySlotFont || { family: 'Arial, sans-serif', size: 14, color: el.emptySlotTextColor || '#a0aec0', weight: 'normal', italic: false }} onFontChange={(prop, value) => updateElement({ emptySlotFont: { ...(el.emptySlotFont || { family: 'Arial, sans-serif', size: 14, color: el.emptySlotTextColor || '#a0aec0', weight: 'normal', italic: false }), [prop]: value } })} />
+                    <h3 className="font-bold my-2 text-slate-400">Info Bar</h3>
+                    <div className="flex items-center gap-4 my-1">
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" checked={el.hideInfoBar === true} onChange={e => updateElement({ hideInfoBar: e.target.checked })} className="accent-purple-500" />
+                            Hide info bar
+                        </label>
+                        {!el.hideInfoBar && (
+                            <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" checked={el.hideSlotLabel === true} onChange={e => updateElement({ hideSlotLabel: e.target.checked })} className="accent-purple-500" />
+                                Hide slot label
+                            </label>
+                        )}
+                    </div>
+                    <h3 className="font-bold my-2 text-slate-400">Navigation Buttons</h3>
+                    <FormField label="Prev Button Text"><TextInput value={el.prevButtonText ?? '◀ Prev'} onChange={e => updateElement({ prevButtonText: e.target.value })} /></FormField>
+                    <FormField label="Next Button Text"><TextInput value={el.nextButtonText ?? 'Next ▶'} onChange={e => updateElement({ nextButtonText: e.target.value })} /></FormField>
+                    <FontEditor label="Nav Button Font" font={el.navButtonFont || { family: 'Arial, sans-serif', size: 12, color: el.slotHeaderColor || '#7dd3fc', weight: 'bold', italic: false }} onFontChange={(prop, value) => updateElement({ navButtonFont: { ...(el.navButtonFont || { family: 'Arial, sans-serif', size: 12, color: el.slotHeaderColor || '#7dd3fc', weight: 'bold', italic: false }), [prop]: value } })} showAlign={false} />
+                    <FontEditor label="Page Indicator Font" font={el.pageIndicatorFont || { family: 'Arial, sans-serif', size: 12, color: '#e2e8f0', weight: 'normal', italic: false }} onFontChange={(prop, value) => updateElement({ pageIndicatorFont: { ...(el.pageIndicatorFont || { family: 'Arial, sans-serif', size: 12, color: '#e2e8f0', weight: 'normal', italic: false }), [prop]: value } })} showAlign={false} />
                 </>
             }
             case UIElementType.SettingsSlider: {

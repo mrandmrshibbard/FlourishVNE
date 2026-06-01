@@ -6,6 +6,7 @@ import { saveProjectToIDB } from '../utils/storage';
 import { createLogger } from '../utils/logger';
 import { WorkflowTracker } from '../features/analytics/WorkflowTracker';
 import { useToast } from './ToastContext';
+import { migrateProjectToUnifiedScreens } from '../utils/unifiedScreenMigration';
 
 interface UndoRedoState {
   past: VNProject[];
@@ -39,11 +40,15 @@ export const ProjectProvider: React.FC<{
   initialProject: VNProject;
 }> = ({ children, initialProject }) => {
   const toast = useToast();
-  const [history, setHistory] = useState<UndoRedoState>({
+  // Run the schema migration on the incoming project before storing it. Projects
+  // loaded from `.flourish` files or auto-saves bypass the reducer's SET_PROJECT
+  // case (ProjectProvider initializes state directly), so we have to migrate here
+  // or stranded hot zone data never makes it into `screen.elements`.
+  const [history, setHistory] = useState<UndoRedoState>(() => ({
     past: [],
-    present: initialProject,
+    present: migrateProjectToUnifiedScreens(initialProject),
     future: []
-  });
+  }));
   const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 

@@ -2,8 +2,8 @@ const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron')
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
 const os = require('os');
+const { spawn } = require('child_process');
 
 // ── Steam Detection ─────────────────────────────────────────────────────────
 // When Flourish is launched through the Steam client, Steam injects several
@@ -17,55 +17,100 @@ if (isRunningUnderSteam) {
   console.log('[startup] Detected Steam environment — GitHub auto-updater disabled. Updates will be handled by Steam.');
 }
 
-/**
- * Run a shell command asynchronously, returning a promise.
- * This keeps the Electron main process responsive during long-running builds.
- */
-function execAsync(command, options = {}) {
-  return new Promise((resolve, reject) => {
-    const proc = exec(command, { ...options, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
-      } else {
-        resolve({ stdout, stderr });
-      }
-    });
-    // Log output in real-time for debugging
-    if (proc.stdout) proc.stdout.on('data', (d) => console.log('[build stdout]', d.toString().trim()));
-    if (proc.stderr) proc.stderr.on('data', (d) => console.log('[build stderr]', d.toString().trim()));
-  });
+/** Write one game file to disk, handling the various shapes that arrive over IPC. */
+function writeGameFile(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  if (content instanceof Buffer) {
+    fs.writeFileSync(filePath, content);
+  } else if (content instanceof ArrayBuffer) {
+    fs.writeFileSync(filePath, Buffer.from(content));
+  } else if (ArrayBuffer.isView(content)) {
+    fs.writeFileSync(filePath, Buffer.from(content.buffer, content.byteOffset, content.byteLength));
+  } else if (content && typeof content === 'object' && content.type === 'Buffer' && Array.isArray(content.data)) {
+    fs.writeFileSync(filePath, Buffer.from(content.data));
+  } else {
+    fs.writeFileSync(filePath, content, 'utf8');
+  }
 }
 
 /**
- * Run a shell command with real-time progress callback for stdout/stderr lines.
+ * Locate the build toolchain that ships bundled with Flourish:
+ *   build-tools/
+ *     node(.exe)                – portable Node runtime used to run the builder
+ *     node_modules/             – electron + electron-builder, pre-installed
+ *     cache/electron            – pre-seeded Electron binaries (offline)
+ *     cache/electron-builder    – pre-seeded NSIS / winCodeSign tools (offline)
+ *
+ * Packaged builds ship this under `resources/build-tools` (electron-builder
+ * extraResources). In development it's staged at `<repo>/build-tools` by
+ * `npm run stage:build-tools`.
  */
-function execAsyncWithProgress(command, options = {}, onLine = () => {}) {
+function getBuildToolchain() {
+  const candidates = [];
+  if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, 'build-tools'));
+  candidates.push(path.join(__dirname, '..', 'build-tools'));
+
+  const toolsDir = candidates.find((d) => fs.existsSync(d));
+  if (!toolsDir) {
+    throw new Error(
+      'The desktop build tools were not found. They should ship inside Flourish ' +
+      '(resources/build-tools). Try reinstalling Flourish Visual Novel Engine.'
+    );
+  }
+  return {
+    toolsDir,
+    nodeExe: path.join(toolsDir, process.platform === 'win32' ? 'node.exe' : 'node'),
+    nodeModules: path.join(toolsDir, 'node_modules'),
+    cacheDir: path.join(toolsDir, 'cache'),
+  };
+}
+
+/** Pick the deliverable that electron-builder produced in dist/. */
+function pickBuiltArtifact(files, platform) {
+  if (platform === 'win') {
+    const setup = files.find((f) => /setup/i.test(f) && f.toLowerCase().endsWith('.exe'));
+    if (setup) return { name: setup, isDir: false };
+    const exe = files.find((f) => f.toLowerCase().endsWith('.exe'));
+    if (exe) return { name: exe, isDir: false };
+    const unpacked = files.find((f) => f.includes('win-unpacked'));
+    if (unpacked) return { name: unpacked, isDir: true };
+  } else if (platform === 'mac') {
+    const dmg = files.find((f) => f.toLowerCase().endsWith('.dmg'));
+    if (dmg) return { name: dmg, isDir: false };
+    const appBundle = files.find((f) => f.endsWith('.app'));
+    if (appBundle) return { name: appBundle, isDir: true };
+  } else {
+    const appImage = files.find((f) => f.endsWith('.AppImage'));
+    if (appImage) return { name: appImage, isDir: false };
+    const deb = files.find((f) => f.endsWith('.deb'));
+    if (deb) return { name: deb, isDir: false };
+    const unpacked = files.find((f) => f.includes('linux-unpacked'));
+    if (unpacked) return { name: unpacked, isDir: true };
+  }
+  return { name: null, isDir: false };
+}
+
+/** Spawn a process, streaming each stdout/stderr line to onLine. Resolves on exit 0. */
+function spawnWithProgress(command, args, options, onLine) {
   return new Promise((resolve, reject) => {
-    const proc = exec(command, { ...options, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
-      } else {
-        resolve({ stdout, stderr });
-      }
-    });
-    if (proc.stdout) proc.stdout.on('data', (d) => {
-      const line = d.toString().trim();
-      console.log('[build stdout]', line);
-      onLine(line);
-    });
-    if (proc.stderr) proc.stderr.on('data', (d) => {
-      const line = d.toString().trim();
-      console.log('[build stderr]', line);
-      onLine(line);
+    const proc = spawn(command, args, { ...options, windowsHide: true });
+    let tail = '';
+    const handle = (buf) => {
+      const text = buf.toString();
+      tail = (tail + text).slice(-4000);
+      text.split(/\r?\n/).forEach((line) => { if (line.trim()) onLine(line.trim()); });
+    };
+    if (proc.stdout) proc.stdout.on('data', handle);
+    if (proc.stderr) proc.stderr.on('data', handle);
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error('electron-builder exited with code ' + code + (tail ? '\n' + tail : '')));
     });
   });
 }
 
-// GPU stability on Windows: use ANGLE's D3D11 backend instead of the native GL
+
 // driver, which crashes on some machines. Keep GPU compositing active so the UI
 // stays smooth at any window size.
 if (process.platform === 'win32') {
@@ -94,9 +139,111 @@ let updateDownloaded = false;
 /** File path passed via CLI / file-association / second-instance. */
 let pendingOpenFilePath = null;
 
+// ── Auto-Updater Logging ────────────────────────────────────────────────────
+// All auto-updater events are written to BOTH the console AND a dedicated
+// log file in the user's Documents folder, where it's easy to find:
+//
+//   Windows:  %USERPROFILE%\Documents\Flourish Visual Novel Engine\Logs\auto-updater.log
+//   macOS:    ~/Documents/Flourish Visual Novel Engine/Logs/auto-updater.log
+//   Linux:    ~/Documents/Flourish Visual Novel Engine/Logs/auto-updater.log
+//
+// We use SYNCHRONOUS file writes (appendFileSync) so logs are guaranteed to
+// land on disk even if the app crashes immediately after the call. The path
+// is resolved lazily so it works whether the logger is invoked before or
+// after app.whenReady().
+let autoUpdaterLogFile = null;
+let autoUpdaterLogFileError = null;
+function getAutoUpdaterLogFile() {
+  if (autoUpdaterLogFile) return autoUpdaterLogFile;
+  // Try Documents first (user-visible). Fall back to userData, then temp.
+  const candidates = [];
+  try { candidates.push(path.join(app.getPath('documents'), 'Flourish Visual Novel Engine', 'Logs')); } catch {}
+  try { candidates.push(path.join(app.getPath('userData'), 'logs')); } catch {}
+  try { candidates.push(path.join(os.tmpdir(), 'flourish-vne-logs')); } catch {}
+
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'auto-updater.log');
+      // Touch the file to ensure we have write permission.
+      fs.appendFileSync(file, '');
+      autoUpdaterLogFile = file;
+      return autoUpdaterLogFile;
+    } catch (err) {
+      autoUpdaterLogFileError = `${dir}: ${err?.message}`;
+      // Try next candidate.
+    }
+  }
+  console.error('[auto-updater] Could not create log file in any candidate location. Last error:', autoUpdaterLogFileError);
+  return null;
+}
+
+/**
+ * Append a structured, timestamped line to the auto-updater log file
+ * AND echo it to the console. Uses SYNCHRONOUS file I/O so messages
+ * are flushed to disk immediately — important when diagnosing crashes
+ * or hangs in the updater pipeline.
+ *
+ * @param {'info'|'warn'|'error'|'debug'} level
+ * @param {string} message
+ * @param {object} [meta]  Optional structured data to JSON-stringify.
+ */
+function logUpdate(level, message, meta) {
+  const ts = new Date().toISOString();
+  const prefix = `[auto-updater] [${level.toUpperCase()}]`;
+  let metaStr = '';
+  if (meta !== undefined) {
+    try {
+      metaStr = ' ' + (typeof meta === 'string' ? meta : JSON.stringify(meta));
+    } catch {
+      metaStr = ' [meta unserializable]';
+    }
+  }
+  const line = `${ts} ${prefix} ${message}${metaStr}`;
+
+  // Console output (visible in `electron .` terminal / packaged app logs).
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+
+  // SYNCHRONOUS file output so logs are durable even if the app crashes.
+  try {
+    const file = getAutoUpdaterLogFile();
+    if (file) {
+      fs.appendFileSync(file, line + '\n');
+    }
+  } catch (err) {
+    console.error('[auto-updater] Logger threw while writing to file:', err?.message);
+  }
+}
+
+// Emit a startup banner as early as possible so the log file is created and
+// you can see immediately whether logging is wired up. This runs at module
+// load, BEFORE app.whenReady().
+(() => {
+  const file = getAutoUpdaterLogFile();
+  try {
+    if (file) {
+      const banner =
+        '\n' +
+        '════════════════════════════════════════════════════════════════════\n' +
+        ` Flourish Visual Novel Engine auto-updater log — process started ${new Date().toISOString()}\n` +
+        ` PID: ${process.pid}   Platform: ${process.platform}   Electron: ${process.versions.electron}\n` +
+        ` Log file: ${file}\n` +
+        '════════════════════════════════════════════════════════════════════\n';
+      fs.appendFileSync(file, banner);
+      console.log(banner.trim());
+    } else {
+      console.error('[auto-updater] WARNING: log file could not be created. Last error:', autoUpdaterLogFileError);
+    }
+  } catch (err) {
+    console.error('[auto-updater] Failed to write startup banner:', err?.message);
+  }
+})();
+
 // ── Default user directories ────────────────────────────────────────────────
 // These are created on first launch so the user always has a sensible place
-// for projects and built games, located in Documents/Flourish VNE.
+// for projects and built games, located in Documents/Flourish Visual Novel Engine.
 const flourishDocsRoot = path.join(app.getPath('documents'), 'Flourish VNE');
 const defaultProjectsDir = path.join(flourishDocsRoot, 'Projects');
 const defaultBuildsWebDir = path.join(flourishDocsRoot, 'Builds', 'Web');
@@ -149,7 +296,7 @@ function createSplashWindow() {
   @keyframes loading { from{width:20%;margin-left:0} to{width:50%;margin-left:50%} }
   p { margin:0; font-size:0.8rem; opacity:0.5; }
 </style></head><body>
-  <div class="brand">Flourish VNE</div>
+  <div class="brand">Flourish Visual Novel Engine</div>
   <div class="bar-wrap"><div class="bar"></div></div>
   <p>Loading editor...</p>
 </body></html>`));
@@ -330,6 +477,43 @@ function createWindow() {
             await shell.openPath(path.join(__dirname, '../docs/index.html'));
           }
         },
+        { type: 'separator' },
+        {
+          label: 'Open Auto-Updater Log',
+          click: async () => {
+            const file = getAutoUpdaterLogFile();
+            if (file) {
+              shell.showItemInFolder(file);
+            } else {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Auto-Updater Log',
+                message: 'Log file is not available.',
+                detail: autoUpdaterLogFileError || 'Could not create a log file in any candidate location.',
+                buttons: ['OK']
+              });
+            }
+          }
+        },
+        {
+          label: 'Open Logs Folder',
+          click: async () => {
+            const file = getAutoUpdaterLogFile();
+            const dir = file ? path.dirname(file) : null;
+            if (dir) {
+              await shell.openPath(dir);
+            } else {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Logs Folder',
+                message: 'Logs folder is not available.',
+                detail: autoUpdaterLogFileError || 'Could not create a logs folder in any candidate location.',
+                buttons: ['OK']
+              });
+            }
+          }
+        },
+        { type: 'separator' },
         {
           label: 'About Flourish',
           click: () => {
@@ -410,7 +594,7 @@ function createWindow() {
 // background while the splash animates, shaving ~200-400ms off perceived
 // startup time.
 app.whenReady().then(() => {
-  // Create default user directories (Documents/Flourish VNE/…)
+  // Create default user directories (Documents/Flourish Visual Novel Engine/…)
   ensureUserDirectories();
 
   // ── File-association / CLI open ──
@@ -430,33 +614,85 @@ app.whenReady().then(() => {
   // Once downloaded, the renderer is notified and shows a restart prompt.
   // SKIPPED entirely when running under Steam — Steam handles its own updates
   // and we don't want two update systems fighting over the same files.
+  logUpdate('info', '=== Auto-updater bootstrap starting ===', {
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    platform: process.platform,
+    arch: process.arch,
+    isPackaged: app.isPackaged,
+    isRunningUnderSteam,
+    logFile: getAutoUpdaterLogFile(),
+  });
+
+  if (isRunningUnderSteam) {
+    logUpdate('info', 'Skipping electron-updater initialization — running under Steam.');
+  } else if (!app.isPackaged) {
+    logUpdate('warn', 'App is not packaged (dev mode). electron-updater normally requires a packaged build; check will likely fail with "dev-app-update.yml" errors.');
+  }
+
   if (!isRunningUnderSteam) {
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = false; // Disable so manual "Restart & Update" is the single trigger — prevents double-spawning the installer.
     autoUpdater.autoRunAppAfterInstall = true;
-    // Use the logger built into electron-updater (logs to ~/AppData/…/logs/)
-    autoUpdater.logger = require('electron-updater').log;
-    if (autoUpdater.logger) {
-      autoUpdater.logger.transports = autoUpdater.logger.transports || {};
+    logUpdate('info', 'electron-updater configured', {
+      autoDownload: autoUpdater.autoDownload,
+      autoInstallOnAppQuit: autoUpdater.autoInstallOnAppQuit,
+      autoRunAppAfterInstall: autoUpdater.autoRunAppAfterInstall,
+    });
+
+    // Wire electron-updater's internal logger into our file logger so we
+    // capture the library's own diagnostic output too (HTTP requests, file
+    // hash checks, signature verification, etc.).
+    autoUpdater.logger = {
+      info: (msg) => logUpdate('info', `[lib] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`),
+      warn: (msg) => logUpdate('warn', `[lib] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`),
+      error: (msg) => logUpdate('error', `[lib] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`),
+      debug: (msg) => logUpdate('debug', `[lib] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`),
+    };
+
+    // Log resolved feed URL so we can verify the publish config is reaching
+    // electron-updater correctly. Wrapped in try/catch because getFeedURL can
+    // throw if no feed is configured yet.
+    try {
+      const feedUrl = autoUpdater.getFeedURL?.();
+      logUpdate('info', 'Feed URL', { feedUrl: feedUrl || '(none / using publish config)' });
+    } catch (err) {
+      logUpdate('warn', 'Could not read feed URL', { error: err?.message });
     }
 
     // Forward update lifecycle events to the renderer so we can show UI.
     autoUpdater.on('checking-for-update', () => {
+      logUpdate('info', 'Event: checking-for-update');
       sendUpdateStatus('checking');
     });
 
     autoUpdater.on('update-available', (info) => {
+      logUpdate('info', 'Event: update-available', {
+        version: info?.version,
+        releaseDate: info?.releaseDate,
+        files: Array.isArray(info?.files) ? info.files.map(f => ({ url: f.url, size: f.size })) : undefined,
+      });
       sendUpdateStatus('available', {
         version: info.version,
         releaseDate: info.releaseDate,
       });
     });
 
-    autoUpdater.on('update-not-available', () => {
+    autoUpdater.on('update-not-available', (info) => {
+      logUpdate('info', 'Event: update-not-available', {
+        currentVersion: app.getVersion(),
+        latestVersion: info?.version,
+      });
       sendUpdateStatus('not-available');
     });
 
     autoUpdater.on('download-progress', (progress) => {
+      logUpdate('info', 'Event: download-progress', {
+        percent: Math.round(progress?.percent ?? 0),
+        bytesPerSecond: progress?.bytesPerSecond,
+        transferred: progress?.transferred,
+        total: progress?.total,
+      });
       sendUpdateStatus('downloading', {
         percent: Math.round(progress.percent),
         transferred: progress.transferred,
@@ -466,6 +702,11 @@ app.whenReady().then(() => {
 
     autoUpdater.on('update-downloaded', (info) => {
       updateDownloaded = true;
+      logUpdate('info', 'Event: update-downloaded', {
+        version: info?.version,
+        releaseDate: info?.releaseDate,
+        downloadedFile: info?.downloadedFile,
+      });
       sendUpdateStatus('downloaded', {
         version: info.version,
         releaseDate: info.releaseDate,
@@ -473,15 +714,31 @@ app.whenReady().then(() => {
     });
 
     autoUpdater.on('error', (err) => {
-      console.error('Auto-update error:', err);
+      logUpdate('error', 'Event: error', {
+        message: err?.message,
+        code: err?.code,
+        stack: err?.stack,
+      });
       sendUpdateStatus('error', { message: err?.message || 'Unknown error' });
     });
 
     // Kick off the check after a short delay so the UI finishes rendering first.
     setTimeout(() => {
-      autoUpdater.checkForUpdates().catch((err) => {
-        console.error('Update check failed:', err);
-      });
+      logUpdate('info', 'Initial auto-check: calling autoUpdater.checkForUpdates()');
+      autoUpdater.checkForUpdates()
+        .then((result) => {
+          logUpdate('info', 'Initial auto-check: checkForUpdates() resolved', {
+            updateInfoVersion: result?.updateInfo?.version,
+            cancellationToken: !!result?.cancellationToken,
+          });
+        })
+        .catch((err) => {
+          logUpdate('error', 'Initial auto-check: checkForUpdates() rejected', {
+            message: err?.message,
+            code: err?.code,
+            stack: err?.stack,
+          });
+        });
     }, 3000); // milliseconds
   }
 
@@ -501,9 +758,13 @@ function sendUpdateStatus(status, data = {}) {
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-status', { status, ...data });
+      logUpdate('debug', `IPC → renderer 'update-status'`, { status, ...data });
+    } else {
+      logUpdate('warn', `IPC → renderer 'update-status' dropped (no main window)`, { status, ...data });
     }
-  } catch {
-    // Window may be mid-creation; ignore.
+  } catch (err) {
+    // Window may be mid-creation; ignore but log.
+    logUpdate('warn', `sendUpdateStatus threw`, { error: err?.message, status });
   }
 }
 
@@ -519,12 +780,15 @@ function sendUpdateStatus(status, data = {}) {
  * The `isQuitting` flag tells our own 'close' handlers to allow it.
  */
 function performQuitAndInstall() {
+  logUpdate('info', 'performQuitAndInstall() invoked — preparing graceful shutdown');
+
   // Signal to our window 'close' listeners that closing is allowed.
   isQuitting = true;
 
   // Remove any custom 'window-all-closed' listener that might interfere
   // with electron-updater's shutdown sequence.
   app.removeAllListeners('window-all-closed');
+  logUpdate('debug', 'Removed window-all-closed listeners; calling autoUpdater.quitAndInstall(false, true)');
 
   // Let electron-updater gracefully close the app and run the installer.
   // isSilent = false → allows the NSIS installer to briefly show its progress
@@ -533,32 +797,40 @@ function performQuitAndInstall() {
   //   oneClick: true in package.json no wizard/prompts appear — just a
   //   small progress bar that vanishes automatically.
   // isForceRunAfter = true → automatically restart the app after installing.
-  autoUpdater.quitAndInstall(false, true);
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    logUpdate('info', 'autoUpdater.quitAndInstall returned (app should be exiting now)');
+  } catch (err) {
+    logUpdate('error', 'autoUpdater.quitAndInstall threw', {
+      message: err?.message,
+      stack: err?.stack,
+    });
+  }
 }
 
 // IPC: renderer requests to install a downloaded update and restart.
 // Uses handle (not on) so the renderer gets a response / error.
 ipcMain.handle('install-update', async () => {
+  logUpdate('info', "IPC ← renderer 'install-update' received", { updateDownloaded, isRunningUnderSteam });
+
   // Steam users should never trigger this path — Steam manages updates
   // independently. If somehow called (e.g. UI button still visible), return
   // a friendly status so the renderer can ignore it gracefully.
   if (isRunningUnderSteam) {
-    console.log('[install-update] Ignored — running under Steam. Updates are managed by the Steam client.');
+    logUpdate('info', "'install-update' ignored — running under Steam");
     return { status: 'managed-externally', message: 'Updates are managed automatically by Steam.' };
   }
 
-  console.log('[install-update] Called. updateDownloaded =', updateDownloaded);
-
   if (updateDownloaded) {
     // Already downloaded — quit and install immediately.
-    console.log('[install-update] Update already downloaded, performing quit-and-install.');
+    logUpdate('info', "'install-update': update already downloaded — performing quit-and-install");
     performQuitAndInstall();
     return { status: 'installing' };
   }
 
   // Not yet downloaded. Trigger check + download, then auto-install
   // once the download completes.
-  console.log('[install-update] Update not yet downloaded, triggering check + download...');
+  logUpdate('info', "'install-update': update not yet downloaded — triggering check + download");
   sendUpdateStatus('downloading', { percent: 0 });
 
   return new Promise((resolve) => {
@@ -566,7 +838,7 @@ ipcMain.handle('install-update', async () => {
     const timeout = setTimeout(() => {
       cleanup();
       const msg = 'Update timed out. Please try downloading manually from GitHub.';
-      console.error('[install-update]', msg);
+      logUpdate('error', "'install-update': timed out after 120s", { msg });
       sendUpdateStatus('error', { message: msg });
       resolve({ status: 'error', message: msg });
     }, 120000); // 2 minutes
@@ -576,27 +848,38 @@ ipcMain.handle('install-update', async () => {
       autoUpdater.removeListener('update-downloaded', onDownloaded);
       autoUpdater.removeListener('error', onError);
       autoUpdater.removeListener('update-not-available', onNotAvailable);
+      logUpdate('debug', "'install-update': cleanup() — listeners removed");
     }
 
-    const onDownloaded = () => {
+    const onDownloaded = (info) => {
       cleanup();
-      console.log('[install-update] Download completed, performing quit-and-install.');
+      logUpdate('info', "'install-update': onDownloaded — performing quit-and-install", {
+        version: info?.version,
+        downloadedFile: info?.downloadedFile,
+      });
       performQuitAndInstall();
       resolve({ status: 'installing' });
     };
 
     const onError = (err) => {
       cleanup();
-      console.error('install-update: download failed:', err);
       const msg = err?.message || 'Download failed';
+      logUpdate('error', "'install-update': onError", {
+        message: msg,
+        code: err?.code,
+        stack: err?.stack,
+      });
       sendUpdateStatus('error', { message: msg });
       resolve({ status: 'error', message: msg });
     };
 
-    const onNotAvailable = () => {
+    const onNotAvailable = (info) => {
       cleanup();
       const msg = 'No update available to download. You may already be on the latest version.';
-      console.log('[install-update]', msg);
+      logUpdate('warn', "'install-update': onNotAvailable", {
+        currentVersion: app.getVersion(),
+        latestVersion: info?.version,
+      });
       sendUpdateStatus('error', { message: msg });
       resolve({ status: 'error', message: msg });
     };
@@ -605,29 +888,80 @@ ipcMain.handle('install-update', async () => {
     autoUpdater.once('error', onError);
     autoUpdater.once('update-not-available', onNotAvailable);
 
-    autoUpdater.checkForUpdates().catch((err) => {
-      cleanup();
-      console.error('[install-update] checkForUpdates failed:', err);
-      const msg = err?.message || 'Failed to check for updates';
-      sendUpdateStatus('error', { message: msg });
-      resolve({ status: 'error', message: msg });
-    });
+    logUpdate('info', "'install-update': calling autoUpdater.checkForUpdates()");
+    autoUpdater.checkForUpdates()
+      .then((result) => {
+        logUpdate('info', "'install-update': checkForUpdates() resolved", {
+          updateInfoVersion: result?.updateInfo?.version,
+          cancellationToken: !!result?.cancellationToken,
+        });
+      })
+      .catch((err) => {
+        cleanup();
+        const msg = err?.message || 'Failed to check for updates';
+        logUpdate('error', "'install-update': checkForUpdates() rejected", {
+          message: msg,
+          code: err?.code,
+          stack: err?.stack,
+        });
+        sendUpdateStatus('error', { message: msg });
+        resolve({ status: 'error', message: msg });
+      });
   });
 });
 
 // IPC: renderer requests a manual update check
 ipcMain.handle('check-for-updates', async () => {
+  logUpdate('info', "IPC ← renderer 'check-for-updates' received", { isRunningUnderSteam });
+
   // Under Steam, return a status indicating updates are externally managed
   // rather than actually hitting GitHub.
   if (isRunningUnderSteam) {
+    logUpdate('info', "'check-for-updates' short-circuited under Steam");
     return { success: true, managedExternally: true, message: 'Updates are managed automatically by Steam.' };
   }
 
   try {
     const result = await autoUpdater.checkForUpdates();
+    logUpdate('info', "'check-for-updates' resolved", {
+      updateInfoVersion: result?.updateInfo?.version,
+      currentVersion: app.getVersion(),
+    });
     return { success: true, version: result?.updateInfo?.version };
   } catch (err) {
+    logUpdate('error', "'check-for-updates' threw", {
+      message: err?.message,
+      code: err?.code,
+      stack: err?.stack,
+    });
     return { success: false, message: err?.message || 'Check failed' };
+  }
+});
+
+// IPC: renderer requests the location of the auto-updater log file.
+// Returns the absolute path so the UI can show it or open it.
+ipcMain.handle('get-update-log-path', async () => {
+  const file = getAutoUpdaterLogFile();
+  return {
+    path: file,
+    folder: file ? path.dirname(file) : null,
+    error: file ? null : autoUpdaterLogFileError,
+  };
+});
+
+// IPC: renderer asks us to reveal the log file in Explorer / Finder.
+ipcMain.handle('open-update-log', async () => {
+  const file = getAutoUpdaterLogFile();
+  if (!file) {
+    return { success: false, message: autoUpdaterLogFileError || 'Log file not available' };
+  }
+  try {
+    // Show the file highlighted in its parent folder (Explorer on Windows,
+    // Finder on macOS, file manager on Linux).
+    shell.showItemInFolder(file);
+    return { success: true, path: file };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Failed to open log file' };
   }
 });
 
@@ -680,336 +1014,139 @@ app.on('will-quit', () => {
   }, 3000);
 });
 
-// IPC Handler: Build Desktop Game with Electron Builder
-// ── Persistent cache for node_modules to avoid re-downloading every build ──
-const buildCacheDir = path.join(app.getPath('userData'), 'build-cache');
-const cachedNodeModules = path.join(buildCacheDir, 'node_modules');
-const cachedPackageJson = path.join(buildCacheDir, 'package.json');
-
+// IPC Handler: Build a desktop game with electron-builder.
+//
+// The build toolchain (Node, electron-builder, Electron + offline caches) ships
+// bundled inside Flourish — see getBuildToolchain(). So this runs with no system
+// Node, no npm install, and no network: the game files are written to a temp
+// folder, the pre-bundled node_modules are linked in, and electron-builder is
+// run by the bundled Node to produce a standalone .exe or an installer.
 ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
+  const send = (step, progress, message) => {
+    try { event.sender.send('build-progress', { step, progress, message }); } catch {}
+  };
+
+  let tempDir;
   try {
-    // Create temporary build directory
-    const tempDir = path.join(os.tmpdir(), 'flourish-game-build-' + Date.now());
+    const { nodeExe, nodeModules, cacheDir } = getBuildToolchain();
+    if (!fs.existsSync(nodeExe)) {
+      throw new Error('The bundled Node runtime is missing (' + path.basename(nodeExe) + '). Try reinstalling Flourish VNE.');
+    }
+    if (!fs.existsSync(nodeModules)) {
+      throw new Error('The bundled build dependencies are missing. Try reinstalling Flourish Visual Novel Engine.');
+    }
+
+    // 1. Write the generated game files into a fresh temp build directory.
+    tempDir = path.join(os.tmpdir(), 'flourish-game-build-' + Date.now());
     fs.mkdirSync(tempDir, { recursive: true });
-
-    // Write all game files
+    send('generate', 28, 'Preparing build files...');
     for (const [filename, content] of Object.entries(gameFiles)) {
-      const filePath = path.join(tempDir, filename);
-      const dir = path.dirname(filePath);
-      
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      
-      if (content instanceof Buffer) {
-        fs.writeFileSync(filePath, content);
-      } else if (content instanceof ArrayBuffer) {
-        fs.writeFileSync(filePath, Buffer.from(content));
-      } else if (ArrayBuffer.isView(content)) {
-        fs.writeFileSync(filePath, Buffer.from(content.buffer));
-      } else if (content && typeof content === 'object' && content.type === 'Buffer' && Array.isArray(content.data)) {
-        // Handle Buffer serialized through JSON (fallback)
-        fs.writeFileSync(filePath, Buffer.from(content.data));
-      } else {
-        fs.writeFileSync(filePath, content, 'utf8');
-      }
+      writeGameFile(path.join(tempDir, filename), content);
     }
 
-    // ── Dependency installation with persistent cache ──
-    // Compare the package.json from the game with the cached one. If they
-    // match we can reuse the cached node_modules and skip `npm install`
-    // entirely, which saves ~30-60 s on subsequent builds.
-    event.sender.send('build-progress', { 
-      step: 'install', 
-      progress: 30, 
-      message: 'Preparing dependencies...' 
-    });
-    
-    const newPkgPath = path.join(tempDir, 'package.json');
-    const newPkgContent = fs.existsSync(newPkgPath) ? fs.readFileSync(newPkgPath, 'utf8') : '';
-    const cachedPkgContent = fs.existsSync(cachedPackageJson) ? fs.readFileSync(cachedPackageJson, 'utf8') : '';
-    const cacheHit = newPkgContent && cachedPkgContent && newPkgContent === cachedPkgContent
-                     && fs.existsSync(cachedNodeModules);
-
-    if (cacheHit) {
-      // Reuse cached node_modules – just copy (or symlink) into the build dir
-      event.sender.send('build-progress', { 
-        step: 'install', 
-        progress: 35, 
-        message: 'Reusing cached dependencies...' 
-      });
-      console.log('[build] Cache hit – reusing node_modules from', buildCacheDir);
-      
-      // Use junction on Windows (fast, no admin rights), symlink elsewhere
-      const targetLink = path.join(tempDir, 'node_modules');
-      try {
-        fs.symlinkSync(cachedNodeModules, targetLink, 'junction');
-      } catch {
-        // Fallback: copy if symlink fails
-        fs.cpSync(cachedNodeModules, targetLink, { recursive: true });
-      }
-    } else {
-      // Fresh install – then persist the result for next time
-      event.sender.send('build-progress', { 
-        step: 'install', 
-        progress: 30, 
-        message: 'Installing dependencies (first build may take a minute)...' 
-      });
-      console.log('[build] Cache miss – running npm install');
-      
-      try {
-        await execAsync('npm install', { cwd: tempDir });
-      } catch (err) {
-        throw new Error('Failed to install dependencies: ' + (err.stderr || err.message));
-      }
-
-      // Save to cache for next time
-      try {
-        fs.mkdirSync(buildCacheDir, { recursive: true });
-        // Remove old cache
-        if (fs.existsSync(cachedNodeModules)) {
-          fs.rmSync(cachedNodeModules, { recursive: true, force: true });
-        }
-        fs.cpSync(path.join(tempDir, 'node_modules'), cachedNodeModules, { recursive: true });
-        fs.writeFileSync(cachedPackageJson, newPkgContent, 'utf8');
-        console.log('[build] Dependencies cached for future builds');
-      } catch (cacheErr) {
-        console.warn('[build] Failed to cache node_modules:', cacheErr.message);
-      }
+    // 2. Link the pre-bundled dependencies into the build dir (no npm install).
+    //    A junction is instant and needs no admin rights on Windows.
+    send('install', 38, 'Linking bundled dependencies...');
+    const nmLink = path.join(tempDir, 'node_modules');
+    try {
+      fs.symlinkSync(nodeModules, nmLink, 'junction');
+    } catch {
+      fs.cpSync(nodeModules, nmLink, { recursive: true });
+    }
+    const ebCli = path.join(nmLink, 'electron-builder', 'out', 'cli', 'cli.js');
+    if (!fs.existsSync(ebCli)) {
+      throw new Error('Bundled electron-builder not found. Try reinstalling Flourish Visual Novel Engine.');
     }
 
-    // Run electron-builder with real-time progress feedback
-    event.sender.send('build-progress', { 
-      step: 'build', 
-      progress: 50, 
-      message: 'Starting executable build...' 
-    });
-    
+    // 3. Run electron-builder via the bundled Node, fully offline. Caches are
+    //    pre-seeded so it never reaches the network.
     const platform = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux';
-    const platformFlag = `--${platform}`;
-    
-    // Use node_modules/.bin/electron-builder directly
-    const builderPath = path.join(tempDir, 'node_modules', '.bin', 'electron-builder');
-    const builderCmd = process.platform === 'win32' ? `"${builderPath}.cmd"` : builderPath;
-    
-    // Track build phases from electron-builder output for granular progress
-    let buildProgress = 50;
-    const progressPhases = {
-      'loaded configuration': { pct: 52, msg: 'Loading build configuration...' },
-      'electron-builder': { pct: 54, msg: 'Initializing electron-builder...' },
-      'downloading': { pct: 58, msg: 'Downloading Electron binary (one-time)...' },
-      'verifying': { pct: 62, msg: 'Verifying Electron binary...' },
-      'packaging': { pct: 66, msg: 'Packaging application files...' },
-      'building': { pct: 72, msg: 'Building executable...' },
-      'packing': { pct: 78, msg: 'Packing into final executable...' },
-      'done': { pct: 84, msg: 'Finalising build output...' },
+    send('build', 50, 'Starting executable build...');
+    let pct = 50;
+    const phases = {
+      'loaded configuration': 54,
+      'packaging': 62,
+      'building': 70,
+      'building embedded': 74,
+      'signing': 78,
+      'building block map': 82,
+    };
+    const env = {
+      ...process.env,
+      ELECTRON_CACHE: path.join(cacheDir, 'electron'),
+      electron_config_cache: path.join(cacheDir, 'electron'),
+      ELECTRON_BUILDER_CACHE: path.join(cacheDir, 'electron-builder'),
+      CI: 'true',
     };
 
     try {
-      await execAsyncWithProgress(`${builderCmd} ${platformFlag}`, { 
-        cwd: tempDir, 
-        env: { ...process.env, CI: 'true' }
-      }, (line) => {
+      await spawnWithProgress(nodeExe, [ebCli, '--' + platform], { cwd: tempDir, env }, (line) => {
+        console.log('[electron-builder]', line);
         const lower = line.toLowerCase();
-        for (const [keyword, info] of Object.entries(progressPhases)) {
-          if (lower.includes(keyword) && info.pct > buildProgress) {
-            buildProgress = info.pct;
-            event.sender.send('build-progress', {
-              step: 'build',
-              progress: buildProgress,
-              message: info.msg
-            });
+        for (const [keyword, target] of Object.entries(phases)) {
+          if (lower.includes(keyword) && target > pct) {
+            pct = target;
+            send('build', pct, 'Building executable...');
           }
         }
-        // Nudge progress up gradually even without keyword matches so the bar
-        // never sits still for too long.
-        if (buildProgress < 84) {
-          buildProgress = Math.min(buildProgress + 0.5, 84);
-          event.sender.send('build-progress', {
-            step: 'build',
-            progress: Math.round(buildProgress),
-            message: 'Building executable... please wait'
-          });
+        if (pct < 84) {
+          pct = Math.min(pct + 0.4, 84);
+          send('build', Math.round(pct), 'Building executable... please wait');
         }
       });
     } catch (err) {
-      console.error('Build error:', err);
-      const stderr = err.stderr || '';
-      const stdout = err.stdout || '';
-      const message = err.message || '';
-      throw new Error('Electron builder failed: ' + (stderr || stdout || message));
+      const msg = (err && err.message) || String(err);
+      throw new Error('The game build failed.\n' + msg.slice(0, 600));
     }
 
-    event.sender.send('build-progress', {
-      step: 'build',
-      progress: 86,
-      message: 'Build complete — locating executable...'
-    });
-
-    // Find the built executable
+    // 4. Locate the artifact electron-builder produced.
+    send('save', 86, 'Locating built game...');
     const distDir = path.join(tempDir, 'dist');
-    
     if (!fs.existsSync(distDir)) {
-      throw new Error('Dist directory not found after build');
+      throw new Error('The build finished but produced no output folder.');
     }
-    
     const files = fs.readdirSync(distDir);
-    console.log('Files in dist directory:', files);
-    
-    let exePath;
-    let fullExePath;
-    let isDirectory = false;
-    
-    if (platform === 'win') {
-      // For NSIS installer builds, look for Setup exe first
-      const setupExe = files.find(f => f.endsWith('.exe') && f.includes('Setup'));
-      if (setupExe) {
-        exePath = setupExe;
-        fullExePath = path.join(distDir, setupExe);
-      } else {
-        // For portable build, look for .exe file directly in dist
-        exePath = files.find(f => f.endsWith('.exe'));
-        if (exePath) {
-          fullExePath = path.join(distDir, exePath);
-        } else {
-          // Look for win-unpacked folder
-          const unpackedDir = files.find(f => f.includes('win-unpacked'));
-          if (unpackedDir) {
-            fullExePath = path.join(distDir, unpackedDir);
-            exePath = unpackedDir;
-            isDirectory = true;
-          }
-        }
-      }
-    } else if (platform === 'mac') {
-      // For mac dir build, look for .app folder
-      exePath = files.find(f => f.endsWith('.app'));
-      if (exePath) {
-        fullExePath = path.join(distDir, exePath);
-        isDirectory = true;
-      }
+    const { name: artifactName, isDir } = pickBuiltArtifact(files, platform);
+    if (!artifactName) {
+      throw new Error('Could not find the built game. Output contained: ' + files.join(', '));
+    }
+    const artifactPath = path.join(distDir, artifactName);
+
+    // 5. Drop it into the user's Desktop builds folder.
+    send('save', 92, 'Saving to your Desktop builds folder...');
+    await new Promise((r) => setTimeout(r, 50));
+    fs.mkdirSync(defaultBuildsDesktopDir, { recursive: true });
+    const destPath = path.join(defaultBuildsDesktopDir, artifactName);
+    if (fs.existsSync(destPath)) {
+      fs.rmSync(destPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+    }
+    if (isDir) {
+      fs.cpSync(artifactPath, destPath, { recursive: true });
     } else {
-      // For linux dir build, look for AppImage or unpacked folder
-      exePath = files.find(f => f.endsWith('.AppImage'));
-      if (exePath) {
-        fullExePath = path.join(distDir, exePath);
-      } else {
-        // Look for unpacked folder
-        const unpackedDir = files.find(f => f.includes('linux-unpacked'));
-        if (unpackedDir) {
-          fullExePath = path.join(distDir, unpackedDir);
-          exePath = unpackedDir;
-          isDirectory = true;
-        }
-      }
+      fs.copyFileSync(artifactPath, destPath);
     }
 
-    if (!fullExePath || !fs.existsSync(fullExePath)) {
-      console.error('Available files:', files);
-      throw new Error('Built executable not found. Available files: ' + files.join(', '));
-    }
+    send('complete', 100, 'Build complete!');
+    try { shell.showItemInFolder(destPath); } catch {}
 
-    // Ask user where to save
-    event.sender.send('build-progress', {
-      step: 'save',
-      progress: 88,
-      message: 'Choose where to save your game...'
-    });
-
-    let savePath;
-    if (isDirectory) {
-      // For directories, use folder selection dialog
-      const result = await dialog.showOpenDialog(mainWindow, {
-        title: 'Choose Where to Save Game Folder',
-        defaultPath: defaultBuildsDesktopDir,
-        properties: ['openDirectory', 'createDirectory']
-      });
-      
-      if (result.filePaths && result.filePaths.length > 0) {
-        savePath = path.join(result.filePaths[0], exePath);
-      }
-    } else {
-      // For single files, use save dialog
-      const result = await dialog.showSaveDialog(mainWindow, {
-        title: 'Save Desktop Game',
-        defaultPath: path.join(defaultBuildsDesktopDir, exePath),
-        filters: [
-          { name: 'Executable', extensions: [exePath.split('.').pop()] }
-        ]
-      });
-      savePath = result.filePath;
-    }
-
-    if (savePath) {
-      event.sender.send('build-progress', {
-        step: 'save',
-        progress: 90,
-        message: 'Saving executable...'
-      });
-
-      // Yield to the event loop so the progress update actually reaches the renderer
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      if (isDirectory) {
-        // Copy entire directory recursively
-        fs.cpSync(fullExePath, savePath, { recursive: true });
-      } else {
-        // Copy single file
-        fs.copyFileSync(fullExePath, savePath);
-      }
-
-      event.sender.send('build-progress', {
-        step: 'save',
-        progress: 94,
-        message: 'Cleaning up temporary files...'
-      });
-
-      // Yield so the UI updates before blocking cleanup
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
-      // Clean up temp directory with retry logic
-      // Remove junction/symlink first so rmSync doesn't follow into cache
-      const nmLink = path.join(tempDir, 'node_modules');
-      try {
-        const stat = fs.lstatSync(nmLink);
-        if (stat.isSymbolicLink()) fs.unlinkSync(nmLink);
-      } catch { /* not a link, fine */ }
-
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
-          break;
-        } catch (err) {
-          retries--;
-          if (retries === 0) {
-            console.warn('Failed to clean up temp directory:', err);
-          } else {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-      }
-      
-      return { success: true, path: savePath };
-    }
-
-    // Clean up temp directory (remove junction first)
-    try {
-      const nmLink2 = path.join(tempDir, 'node_modules');
-      try { const s = fs.lstatSync(nmLink2); if (s.isSymbolicLink()) fs.unlinkSync(nmLink2); } catch {}
-      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
-    } catch (err) {
-      console.warn('Failed to clean up temp directory:', err);
-    }
-    
-    return { success: false, error: 'User cancelled' };
-    
+    return { success: true, path: destPath, folder: defaultBuildsDesktopDir };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error.message,
-      details: error.stack 
+    console.error('[build] Desktop build failed:', error);
+    return {
+      success: false,
+      error: error && error.message ? error.message : String(error),
+      details: error && error.stack,
     };
+  } finally {
+    if (tempDir) {
+      try {
+        const nm = path.join(tempDir, 'node_modules');
+        try { const s = fs.lstatSync(nm); if (s.isSymbolicLink()) fs.unlinkSync(nm); } catch {}
+        fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 });
+      } catch (e) {
+        console.warn('[build] temp cleanup failed:', e && e.message);
+      }
+    }
   }
 });
 

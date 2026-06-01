@@ -28,27 +28,33 @@ export async function buildDesktopGame(
   
   // Check if running in Electron
   if (!isElectron) {
-    throw new Error('Desktop builds are only available in the Electron version of Flourish VNE');
+    throw new Error('Desktop builds are only available in the Electron version of Flourish Visual Novel Engine. Please use the desktop app to create a desktop build.');
   }
   
   onProgress({ step: 'prepare', progress: 10, message: 'Preparing desktop build...' });
-  
+
   // Import the web game bundler functions
-  const { generateStandaloneHTML, collectAllAssets, dataURLToBlob } = await import('./gameBundler');
-  
+  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob } = await import('./gameBundler');
+
   onProgress({ step: 'generate', progress: 20, message: 'Generating game files...' });
-  
+
   // Resolve file-path assets to data URLs before building
   const { resolveProjectAssets } = await import('./gameBundler');
   const resolvedProject = await resolveProjectAssets(project, onProgress);
 
-  // Generate the same HTML as web build
-  const htmlContent = await generateStandaloneHTML(resolvedProject);
-  
-  // Collect all assets
-  onProgress({ step: 'assets', progress: 25, message: 'Collecting assets...' });
-  
+  // Strip data URLs from the project before inlining into HTML. The same
+  // assets get written to disk under `assets/` and loaded lazily by the
+  // runtime — keeps the index.html lean so Electron can parse it quickly
+  // on launch (and avoids the multi-hundred-megabyte HTML files that used
+  // to make large built games fail to open).
   const assetUrls = collectAllAssets(resolvedProject);
+  const leanProject = buildLeanProject(resolvedProject, assetUrls);
+
+  // Generate the same HTML as web build, using the lean project
+  const htmlContent = await generateStandaloneHTML(leanProject);
+
+  // Asset writing follows below — the asset map was already built above
+  onProgress({ step: 'assets', progress: 25, message: 'Collecting assets...' });
   const gameFiles: Record<string, string | ArrayBuffer> = {
     'index.html': htmlContent
   };
@@ -145,12 +151,18 @@ export async function buildDesktopGame(
     author: project.author || 'Unknown',
     license: 'MIT',
     devDependencies: {
-      'electron': '^27.0.0',
+      'electron': '28.3.3',
       'electron-builder': '^24.13.3'
     },
     build: {
       appId: `com.${packageName}.app`,
       productName: appName,
+      // Pin to the Electron version bundled with Flourish so the offline,
+      // pre-seeded Electron binary cache is used (no network at build time).
+      electronVersion: '28.3.3',
+      // The game has no native dependencies — skip electron-builder's rebuild
+      // step so it never tries to invoke npm/node-gyp.
+      npmRebuild: false,
       directories: {
         output: 'dist'
       },

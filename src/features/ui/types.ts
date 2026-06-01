@@ -80,11 +80,20 @@ export interface VNProjectUI {
     inputBoxColor?: string; // background color hex (default '#0f172a')
     inputBoxOpacity?: number; // 0-100 background opacity (default 92)
     inputBoxBorderRadius?: number; // px corner radius (default 8)
-    // Quick menu (skip/auto/log/back buttons)
-    quickMenuPosition?: 'above-dialogue' | 'top-right' | 'bottom-right' | 'hidden'; // default 'above-dialogue'
+    // Quick menu (skip/auto/log/back/save/load buttons)
+    quickMenuPosition?: 'above-dialogue' | 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'hidden'; // default 'above-dialogue'
     quickMenuColor?: string; // button background color hex (default '#0f172a')
     quickMenuOpacity?: number; // 0-100 button opacity (default 75)
     quickMenuBorderRadius?: number; // px button corner radius (default 4)
+    /** If true, quick menu floats above dialogue box instead of reserving space for it */
+    quickMenuFloatOverDialogue?: boolean; // default false
+    // ─── Quick Menu Button Visibility ─── //
+    quickMenuShowSkipBackward?: boolean; // Show Skip Backward button (default true)
+    quickMenuShowLog?: boolean; // Show Log/History button (default true)
+    quickMenuShowAutoAdvance?: boolean; // Show Auto-Advance button (default true)
+    quickMenuShowSkipForward?: boolean; // Show Skip Forward button (default true)
+    quickMenuShowSave?: boolean; // Show Save button (default true)
+    quickMenuShowLoad?: boolean; // Show Load button (default true)
     // ─── Layout positions (percentages of game canvas) ─── //
     // Dialogue box position/size (percentages)
     dialogueBoxX?: number; // default: centre based on dialogueBoxWidth
@@ -187,6 +196,8 @@ export enum UIElementType {
     Checkbox = 'Checkbox',
     AssetCycler = 'AssetCycler',
     CGGallery = 'CGGallery',
+    HotSpot = 'HotSpot',
+    ImageMap = 'ImageMap',
 }
 
 interface BaseUIElement {
@@ -202,6 +213,28 @@ interface BaseUIElement {
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale';
     transitionDuration?: number; // Duration in milliseconds (default 300)
     transitionDelay?: number; // Delay before starting transition in milliseconds (default 0)
+    // ─── Hot zone interactivity (any element can opt in) ─── //
+    /** Marks an element as "born" inside the hot zone system. Migrated hot zone elements,
+     *  quick-added draggable / hot spot / image map entries, and any element the user
+     *  treats as interactive carry this flag. The flag keeps the element pinned to the
+     *  hot zone overlay + inspector even if `draggable` is toggled off — so users can't
+     *  accidentally orphan a hot zone element by unchecking one box. */
+    interactive?: boolean;
+    /** When true, the player can grab and drag this element on the screen */
+    draggable?: boolean;
+    /** Return to original position if not dropped on a hot spot */
+    snapBack?: boolean;
+    /** Snap to a hot spot's center when dropped on it */
+    snapToHotSpot?: boolean;
+    /** Hide the element after snapping to a hot spot (only applies when snapToHotSpot is true) */
+    hideOnDrop?: boolean;
+    /** Actions fired when the element is clicked (when not draggable). For draggable elements,
+     *  these are typically empty — hot spots own the drop logic. */
+    actions?: VNUIAction[];
+    /** Sound effect played when the element is clicked */
+    clickSoundId?: VNID | null;
+    /** Sound effect played when the element is hovered */
+    hoverSoundId?: VNID | null;
 }
 
 export interface UIButtonElement extends BaseUIElement {
@@ -259,6 +292,24 @@ export interface UISaveSlotGridElement extends BaseUIElement {
     slotBorderColor?: string;
     slotHoverBorderColor?: string;
     slotHeaderColor?: string;
+    /** Color for text in empty slots and save metadata */
+    slotTextColor?: string;
+    /** Color for empty slot placeholder text in screenshot area */
+    emptySlotTextColor?: string;
+    /** Full font settings for the empty slot placeholder text (overrides emptySlotTextColor) */
+    emptySlotFont?: VNFontSettings;
+    /** Font settings for the page indicator (e.g., "1/2") */
+    pageIndicatorFont?: VNFontSettings;
+    /** Label for the Previous page button (default "◀ Prev") */
+    prevButtonText?: string;
+    /** Label for the Next page button (default "Next ▶") */
+    nextButtonText?: string;
+    /** Font settings for the Prev/Next navigation buttons */
+    navButtonFont?: VNFontSettings;
+    /** Hide the entire info bar (slot label + save metadata strip) */
+    hideInfoBar?: boolean;
+    /** Hide only the "Slot N" label inside the info bar */
+    hideSlotLabel?: boolean;
 }
 export type GameSetting = 'musicVolume' | 'sfxVolume' | 'voiceVolume' | 'ambientVolume' | 'textSpeed';
 export interface UISettingsSliderElement extends BaseUIElement {
@@ -391,14 +442,37 @@ export interface UICGGalleryElement extends BaseUIElement {
     categoryFilter?: string;
 }
 
-export type VNUIElement = 
+/** Hot spot — a trigger zone that fires actions on click, hover, or drag-drop.
+ *  Lives as a regular UIElement; rendering is just a debug outline (visible? flag) and a hit-test area. */
+export interface UIHotSpotElement extends BaseUIElement {
+    type: UIElementType.HotSpot;
+    shape: HotSpotShape;
+    trigger: HotSpotTrigger;
+    /** For drag-drop hot spots: which draggable element ids are accepted here */
+    acceptedElementIds?: VNID[];
+    /** Sticky visual cue colour (used for debug/edit-time and the visible-flag display) */
+    highlightColor?: string;
+    /** When true, the spot is drawn at runtime; otherwise it's only visible in the editor */
+    visible?: boolean;
+}
+
+/** Image map — an image with clickable polygon/rect/circle regions. */
+export interface UIImageMapElement extends BaseUIElement {
+    type: UIElementType.ImageMap;
+    image: UIAsset | null;
+    /** Optional alternate image rendered, clipped to the currently-hovered region (Ren'Py-style) */
+    hoverImage?: UIAsset | null;
+    imageMapRegions?: ImageMapRegion[];
+}
+
+export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement;
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement
+    | UIHotSpotElement | UIImageMapElement;
 
 export interface VNUIScreen {
     id: VNID;
     name:string;
-    screenType?: 'standard' | 'hotzone'; // defaults to 'standard'
     background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null };
     music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
@@ -410,10 +484,16 @@ export interface VNUIScreen {
     transitionInDuration?: number; // Duration for transition-in in milliseconds (default 300)
     transitionOutDuration?: number; // Duration for transition-out in milliseconds (default 300)
     showDialogue?: boolean; // Whether to show the dialogue box on this screen
-    // Hot Zone fields (only used when screenType === 'hotzone')
-    hotSpots?: Record<VNID, VNHotSpot>;
-    hotZoneElements?: Record<VNID, VNHotZoneElement>;
+    /** Win-condition logic that fires actions when met. Available on any screen. */
     winCondition?: VNHotZoneWinCondition;
+    /** Pre-migration backup of the original hot zone data, written automatically the first time this
+     *  screen is migrated to the unified schema. Lets us rebuild the screen verbatim if migration had
+     *  a bug. Safe to delete by hand once you're confident the migration worked. */
+    _legacyHotZone?: {
+        hotSpots?: Record<VNID, VNHotSpot>;
+        hotZoneElements?: Record<VNID, VNHotZoneElement>;
+        screenType?: 'standard' | 'hotzone';
+    };
 }
 
 // --- Hot Zone Types ---
@@ -462,6 +542,7 @@ export interface VNHotZoneElement {
     draggable?: boolean;
     snapBack?: boolean; // Return to original position if not dropped on valid spot
     snapToHotSpot?: boolean; // Snap to hot spot center when dropped
+    hideOnDrop?: boolean; // Hide element after it snaps to a hot spot (only applies when snapToHotSpot is true)
     conditions?: VNCondition[]; // Only visible when conditions are met
     actions?: VNUIAction[]; // Actions on click (when not dragging)
     clickSoundId?: VNID | null;

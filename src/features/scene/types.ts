@@ -111,11 +111,20 @@ export interface DialogueCommand extends BaseCommand {
     voiceAudioId?: VNID | null;
     /** Per-line text effect override (if not set, uses character default) */
     textEffect?: VNDialogueTextEffect;
+    /** If true, keeps this dialogue box open when the next command is a Choice command */
+    keepOpenDuringChoices?: boolean;
 }
 
 export interface SetBackgroundCommand extends BaseCommand {
     type: CommandType.SetBackground;
+    /** Asset id of the background image/video. Ignored when `backgroundColor` is set. */
     backgroundId: VNID;
+    /**
+     * Optional solid color background (e.g. `#1a102c` or `rgba(...)`).
+     * When defined, the engine renders a solid color instead of resolving
+     * `backgroundId` to an image/video. Use this for color-only scenes.
+     */
+    backgroundColor?: string;
     transition: VNTransition;
     duration: number; // in seconds
 }
@@ -147,6 +156,8 @@ export interface ShowCharacterCommand extends BaseCommand {
     endPosition?: VNPosition; // for slide transitions
     /** Scale multiplier (1 = 100%). Controls character sprite size on stage. */
     scale?: number;
+    /** When true, flips the character sprite horizontally (scaleX = -1) */
+    inverted?: boolean;
     /** Optional visual effects applied to the character while on stage (multiple can stack) */
     visualEffects?: VNCharacterVisualEffect[];
     /** @deprecated Use visualEffects instead — kept for backward compatibility */
@@ -269,7 +280,8 @@ export interface StopMovieCommand extends BaseCommand {
 export interface WaitCommand extends BaseCommand {
     type: CommandType.Wait;
     duration: number; // in seconds
-    waitForInput?: boolean;
+    waitForInput?: boolean; // Allow early advancement via input while still respecting duration
+    waitIndefinitelyForInput?: boolean; // Wait indefinitely until user input (ignores duration)
 }
 export interface ShakeScreenCommand extends BaseCommand {
     type: CommandType.ShakeScreen;
@@ -414,6 +426,13 @@ export interface ShowButtonCommand extends BaseCommand {
     actions?: VNUIAction[]; // Multiple actions support
     clickSound?: VNID | null;
     waitForClick?: boolean; // If true, pause execution until button is clicked
+    /** Quick-menu mode: when true, clicking the button fires its actions WITHOUT
+     *  advancing the dialogue and WITHOUT consuming the click. Useful for
+     *  user-designed Log / Auto / Skip / Settings buttons that should sit on top
+     *  of the dialogue without interrupting it — same behavior as the built-in
+     *  quick menu buttons. The button also stays on screen instead of being
+     *  dismissed (no need to be re-shown). */
+    quickMenuMode?: boolean;
     // Transition
     transition?: VNTransition;
     duration?: number; // in seconds

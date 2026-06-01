@@ -15,7 +15,7 @@ import { VNCharacterLayer } from '../features/character/types';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
-import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles } from '../utils/styleUtils';
 
 /** Convert hex color + opacity (0-100) to rgba string */
 function hexToRgba(hex: string, opacity: number): string {
@@ -108,6 +108,8 @@ interface StageCharacterState {
     imageUrls: string[];
     transition?: VNTransition;
     sourceCommandId?: string;
+    scale?: number;
+    inverted?: boolean;
 }
 
 interface StageState {
@@ -295,7 +297,7 @@ const StagingArea: React.FC<{
                                 if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
                             }
                         });
-                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id };
+                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted };
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -657,7 +659,16 @@ const StagingArea: React.FC<{
     const dialogueHPct = dialogueBoxHeight ? (dialogueBoxHeight * 100 / gameH) : 20;
     const dialogueXPct = project.ui.dialogueBoxX ?? ((100 - dialogueBoxWidth) / 2);
     const bmPct = dialogueBoxBottomMargin * 100 / gameH;
-    const dialogueYPct = project.ui.dialogueBoxY ?? (100 - dialogueHPct - bmPct);
+    // If a bottom Quick Menu preset is active and the user hasn't overridden
+    // the dialogue Y or Quick Menu Y, reserve vertical space at the bottom so
+    // the dialogue is pushed up and the menu can sit cleanly underneath.
+    // Skip reservation if quickMenuFloatOverDialogue is enabled.
+    const _isBottomQmPreset = qmPosition === 'bottom-right' || qmPosition === 'bottom-left';
+    const _shouldFloatQm = project.ui.quickMenuFloatOverDialogue ?? false;
+    const _qmBottomReservePct = (!_shouldFloatQm && _isBottomQmPreset && project.ui.quickMenuY === undefined)
+        ? ((project.ui.quickMenuHeight ?? 4) + 2)
+        : 0;
+    const dialogueYPct = project.ui.dialogueBoxY ?? (100 - dialogueHPct - bmPct - _qmBottomReservePct);
 
     const nameWPct = project.ui.nameboxWidth ?? 15;
     const nameHPct = project.ui.nameboxHeight ?? 5;
@@ -679,9 +690,13 @@ const StagingArea: React.FC<{
     // Quick menu layout rect
     const qmWPct = project.ui.quickMenuWidth ?? 40;
     const qmHPct = project.ui.quickMenuHeight ?? 4;
+    // Bottom presets sit at the screen bottom; the dialogue box has already
+    // been pushed up to make room (see _qmBottomReservePct above).
     const getQmDefaultPos = () => {
         if (qmPosition === 'top-right') return { x: 100 - qmWPct - 1, y: 1 };
+        if (qmPosition === 'top-left') return { x: 1, y: 1 };
         if (qmPosition === 'bottom-right') return { x: 100 - qmWPct - 1, y: 100 - qmHPct - 1 };
+        if (qmPosition === 'bottom-left') return { x: 1, y: 100 - qmHPct - 1 };
         // above-dialogue
         return { x: dialogueXPct, y: dialogueYPct - qmHPct - 1 };
     };
@@ -1028,9 +1043,16 @@ const StagingArea: React.FC<{
                         posStyle = { left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%` };
                     }
                     // For preset positions, anchor to bottom. For custom positions, respect the exact coordinates
+                    // Build transform including scale and inversion
+                    let transformStr = posStyle.transform || '';
+                    if (char.scale && char.scale !== 1 || char.inverted) {
+                        const scaleX = char.inverted ? -1 : 1;
+                        const scaleValue = char.scale ?? 1;
+                        transformStr = `${transformStr} scale(${scaleX * scaleValue}, ${scaleValue})`.trim();
+                    }
                     const finalStyle = isCustomPosition || (isDragging && overlayDragOffset)
-                        ? { ...posStyle, height: '90%' }
-                        : { ...posStyle, height: '90%', bottom: '0', top: 'auto' };
+                        ? { ...posStyle, height: '90%', ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}) }
+                        : { ...posStyle, height: '90%', bottom: '0', top: 'auto', ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}) };
                     return (
                         <div
                             key={char.charId}
@@ -1070,28 +1092,19 @@ const StagingArea: React.FC<{
                         cursor: isDragging ? 'grabbing' : 'grab',
                         zIndex: isDragging ? 50 : undefined,
                      };
-                     if (o.textShadow?.enabled) {
-                         textStyle.textShadow = `${o.textShadow.offsetX}px ${o.textShadow.offsetY}px ${o.textShadow.blur}px ${o.textShadow.color}`;
-                     }
-                     if (o.textBorder?.enabled) {
-                         (textStyle as any).WebkitTextStroke = `${o.textBorder.width}px ${o.textBorder.color}`;
-                     }
-                     let gradientStyle: React.CSSProperties | undefined;
-                     if (o.textGradient?.enabled && o.textGradient.colors.length >= 2) {
-                         const g = o.textGradient;
-                         gradientStyle = {
-                             background: g.type === 'radial'
-                                 ? `radial-gradient(circle, ${g.colors.join(', ')})`
-                                 : `linear-gradient(${g.angle}deg, ${g.colors.join(', ')})`,
-                             WebkitBackgroundClip: 'text',
-                             WebkitTextFillColor: 'transparent',
-                             backgroundClip: 'text',
-                         } as React.CSSProperties;
-                     }
+                     // Apply text shadow / border / gradient via shared helper so editor matches gameplay.
+                     // When a gradient is active the shadow is moved to the gradient span as drop-shadow
+                     // so it renders behind the transparent text instead of on top.
+                     const { containerStyle: effectsContainerStyle, gradientSpanStyle } = buildTextEffectStyles({
+                         textShadow: o.textShadow,
+                         textGradient: o.textGradient,
+                         textBorder: o.textBorder,
+                     });
+                     Object.assign(textStyle, effectsContainerStyle);
                      return (
                          <React.Fragment key={o.id}>
                              <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}>
-                                 <span style={gradientStyle}>{o.text}</span>
+                                 {gradientSpanStyle ? <span style={gradientSpanStyle}>{o.text}</span> : <span>{o.text}</span>}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"

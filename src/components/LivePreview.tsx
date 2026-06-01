@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } 
 import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
+import { deriveHotSpotsFromScreen, deriveHotZoneElementsFromScreen } from '../utils/hotZoneShims';
 import { XMarkIcon, FilmIcon } from './icons';
-import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
@@ -330,29 +331,15 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
         overflow: 'hidden',
     };
 
-    // Apply text shadow
-    if (overlay.textShadow?.enabled) {
-        const s = overlay.textShadow;
-        baseStyle.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
-    }
-
-    // Apply text border (stroke)
-    if (overlay.textBorder?.enabled) {
-        (baseStyle as any).WebkitTextStroke = `${overlay.textBorder.width}px ${overlay.textBorder.color}`;
-    }
-
-    // Apply text gradient (uses background-clip trick)
-    const useGradient = overlay.textGradient?.enabled && overlay.textGradient.colors.length >= 2;
-    if (useGradient) {
-        const g = overlay.textGradient!;
-        const gradientCSS = g.type === 'radial'
-            ? `radial-gradient(circle, ${g.colors.join(', ')})`
-            : `linear-gradient(${g.angle}deg, ${g.colors.join(', ')})`;
-        baseStyle.background = gradientCSS;
-        baseStyle.WebkitBackgroundClip = 'text';
-        (baseStyle as any).WebkitTextFillColor = 'transparent';
-        (baseStyle as any).backgroundClip = 'text';
-    }
+    // Apply text shadow / border / gradient via shared helper so editor & built game match.
+    // When a gradient is active, the shadow is moved to the gradient span as drop-shadow
+    // so it renders behind the transparent text (not on top).
+    const { containerStyle: effectsContainerStyle, gradientSpanStyle } = buildTextEffectStyles({
+        textShadow: overlay.textShadow,
+        textGradient: overlay.textGradient,
+        textBorder: overlay.textBorder,
+    });
+    Object.assign(baseStyle, effectsContainerStyle);
 
     // Only pre-hide if we're showing WITH a transition that hasn't started yet
     if (overlay.action === 'show' && hasTransition && !playTransition) {
@@ -368,7 +355,7 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
 
     return (
         <div className={className} style={style}>
-            {overlay.text}
+            {gradientSpanStyle ? <span style={gradientSpanStyle}>{overlay.text}</span> : overlay.text}
         </div>
     );
 };
@@ -420,8 +407,14 @@ const ButtonOverlayElement: React.FC<{
         };
     }, [overlay.id, overlay.transition, overlay.action]);
 
-    const handleClick = () => {
-        runtimeDebugLog('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0);
+    const handleClick = (e?: React.MouseEvent) => {
+        runtimeDebugLog('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0, 'quickMenuMode:', overlay.quickMenuMode);
+        // Always consume the click so the stage's click-to-advance handler doesn't run
+        // with stale state. The button's own logic (waitForClick / quickMenuMode) decides
+        // whether to advance below.
+        if (e) {
+            e.stopPropagation();
+        }
         if (overlay.clickSound) {
             try {
                 playSound(overlay.clickSound);
@@ -436,20 +429,21 @@ const ButtonOverlayElement: React.FC<{
 
         // Process SetVariable actions first
         setVarActions.forEach(action => onAction(action));
-        
+
         // CRITICAL: Commit variables to playerState BEFORE any navigation
         // This ensures JumpToScene/ReturnToPreviousScreen see the updated values
         if (setVarActions.length > 0 && onCommitVariables) {
             runtimeDebugLog('[Button] Committing', setVarActions.length, 'variable changes before navigation');
             onCommitVariables();
         }
-        
+
         // Now process navigation/other actions with fresh playerState
         otherActions.forEach(action => onAction(action));
-        
+
         // If this button requires click to advance, call the advance function
-        // BUT: Don't advance if primary action is JumpToScene (it handles its own navigation)
-        if (overlay.waitForClick && onAdvance && overlay.onClick.type !== UIActionType.JumpToScene) {
+        // BUT: Don't advance if primary action is JumpToScene (it handles its own navigation),
+        // and never advance for quick-menu buttons (they fire actions but don't consume the click).
+        if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene) {
             onAdvance();
         }
     };
@@ -825,7 +819,10 @@ const ImageMapOverlayElement: React.FC<{
         <div
             ref={containerRef}
             className={applyTransition ? transitionClass : ''}
-            style={{ ...containerStyle, ...(applyTransition ? { animationDuration: animDuration } : {}) }}
+            style={{ ...containerStyle, ...(applyTransition ? { animationDuration: animDuration } : {}),
+                // A forwards-filled entrance animation animates opacity and would override the
+                // inline opacity, so disable it when a tween controls this element's opacity.
+                ...(tweenValues?.opacity !== undefined ? { animationName: 'none' } : {}) }}
         >
             <img src={overlay.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
             {/* Ren'Py-style hover image: full-size overlay clipped to hovered region */}
@@ -1118,7 +1115,17 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const dialogueHPct = dialogueBoxHeight ? (dialogueBoxHeight * 100 / gameH) : 20;
     const dialogueXPct = projectUI.dialogueBoxX ?? ((100 - dialogueBoxWidth) / 2);
     const bmPct = dialogueBoxBottomMargin * 100 / gameH;
-    const dialogueYPct = projectUI.dialogueBoxY ?? (100 - dialogueHPct - bmPct);
+    // If a bottom Quick Menu preset is active and the user hasn't overridden
+    // the dialogue Y or Quick Menu Y, reserve room at the bottom so the
+    // dialogue box sits just above the menu rather than on top of it.
+    // Skip reservation if quickMenuFloatOverDialogue is enabled.
+    const _qmPosForReserve = projectUI.quickMenuPosition ?? 'above-dialogue';
+    const _isBottomQmPreset = _qmPosForReserve === 'bottom-right' || _qmPosForReserve === 'bottom-left';
+    const _shouldFloatQm = projectUI.quickMenuFloatOverDialogue ?? false;
+    const _qmBottomReservePct = (!_shouldFloatQm && _isBottomQmPreset && projectUI.quickMenuY === undefined)
+        ? ((projectUI.quickMenuHeight ?? 4) + 2)
+        : 0;
+    const dialogueYPct = projectUI.dialogueBoxY ?? (100 - dialogueHPct - bmPct - _qmBottomReservePct);
 
     const nameWPct = projectUI.nameboxWidth ?? 15;
     const nameHPct = projectUI.nameboxHeight ?? 5;
@@ -1574,10 +1581,29 @@ const SaveSlotGridComponent: React.FC<{
     const startIndex = currentPage * SLOTS_PER_PAGE;
     const pageSlots = Array.from({ length: SLOTS_PER_PAGE }, (_, k) => startIndex + k).filter(i => i < totalSlots);
 
+    const baseFont = fontSettingsToStyle(el.font);
     const slotBgColor = el.slotBackgroundColor || '#1e293b';
     const slotBorderColor = el.slotBorderColor || '#475569';
     const slotHoverBorderColor = el.slotHoverBorderColor || '#38bdf8';
     const slotHeaderColor = el.slotHeaderColor || '#7dd3fc';
+    const slotTextColor = el.slotTextColor || '#e2e8f0';
+
+    // Empty slot text: use emptySlotFont if configured, otherwise fall back to emptySlotTextColor
+    const emptySlotStyle: React.CSSProperties = el.emptySlotFont
+        ? { ...fontSettingsToStyle(el.emptySlotFont), textAlign: undefined }
+        : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+
+    // Nav buttons: use navButtonFont if configured - exclude textAlign
+    const navBtnStyle: React.CSSProperties = el.navButtonFont
+        ? { ...fontSettingsToStyle(el.navButtonFont), textAlign: undefined, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' }
+        : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
+
+    const pageIndicatorStyle: React.CSSProperties = el.pageIndicatorFont
+        ? { ...fontSettingsToStyle(el.pageIndicatorFont), textAlign: undefined }
+        : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
+
+    const prevLabel = el.prevButtonText ?? '◀ Prev';
+    const nextLabel = el.nextButtonText ?? 'Next ▶';
 
     return (
         <div style={style} className="flex flex-col h-full">
@@ -1597,11 +1623,12 @@ const SaveSlotGridComponent: React.FC<{
                                 onAction(action);
                             }}
                             disabled={!isSaveMode && !slotData}
-                            className="rounded-lg border-2 disabled:opacity-50 text-left transition-colors overflow-hidden flex flex-col"
+                            className="rounded-lg border-2 overflow-hidden flex flex-col"
                             style={{
-                                ...fontSettingsToStyle(el.font),
                                 backgroundColor: slotBgColor,
                                 borderColor: slotBorderColor,
+                                transition: 'border-color 0.15s',
+                                cursor: (!isSaveMode && !slotData) ? 'default' : 'pointer',
                             } as React.CSSProperties}
                             onMouseEnter={(e) => {
                                 if (!e.currentTarget.disabled) {
@@ -1612,8 +1639,8 @@ const SaveSlotGridComponent: React.FC<{
                                 e.currentTarget.style.borderColor = slotBorderColor;
                             }}
                         >
-                            {/* Screenshot area */}
-                            <div className="relative w-full" style={{ aspectRatio: '16/9', flexShrink: 0 }}>
+                            {/* Screenshot area — flex:1 so it fills remaining height, info area always visible */}
+                            <div className="relative w-full overflow-hidden" style={{ flex: '1 1 0', minHeight: 0 }}>
                                 {slotData?.screenshot ? (
                                     <img
                                         src={slotData.screenshot}
@@ -1621,24 +1648,38 @@ const SaveSlotGridComponent: React.FC<{
                                         className="absolute inset-0 w-full h-full object-cover"
                                     />
                                 ) : (
-                                    <div className="absolute inset-0 flex items-center justify-center" style={{ opacity: 0.35, backgroundColor: 'rgba(0,0,0,0.3)' }}>
-                                        {el.emptySlotText}
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '0 8%' }}>
+                                        <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                                            {el.emptySlotText}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Slot label overlay — positioned on top of screenshot */}
+                                {!el.hideSlotLabel && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '4px',
+                                        left: '4px',
+                                        color: slotHeaderColor,
+                                        fontWeight: 'bold',
+                                        fontSize: baseFont.fontSize,
+                                        fontFamily: baseFont.fontFamily,
+                                        textShadow: '0 2px 4px rgba(0,0,0,0.7)',
+                                        zIndex: 10
+                                    }}>
+                                        Slot {i + 1}
                                     </div>
                                 )}
                             </div>
 
-                            {/* Info area below the screenshot */}
-                            <div className="px-2 py-1.5 flex-shrink-0" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
-                                <p className="font-bold text-sm" style={{ color: slotHeaderColor }}>Slot {i + 1}</p>
-                                {slotData ? (
-                                    <>
-                                        <p className="text-xs truncate opacity-90">{slotData.sceneName}</p>
-                                        <p className="text-[10px]" style={{ opacity: 0.6 }}>{new Date(slotData.timestamp).toLocaleString()}</p>
-                                    </>
-                                ) : (
-                                    <p className="text-xs" style={{ opacity: 0.5 }}>Empty</p>
-                                )}
-                            </div>
+                            {/* Info area — compact metadata display */}
+                            {!el.hideInfoBar && slotData && (
+                                <div style={{ flex: '0 0 auto', padding: '2px 4px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                                    <div style={{ color: slotTextColor, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: `calc(0.8 * ${baseFont.fontSize})` }}>{slotData.sceneName}</div>
+                                    <div style={{ color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }}>{new Date(slotData.timestamp).toLocaleString()}</div>
+                                </div>
+                            )}
                         </button>
                     );
                 })}
@@ -1650,21 +1691,21 @@ const SaveSlotGridComponent: React.FC<{
                     <button
                         onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(0, p - 1)); }}
                         disabled={currentPage === 0}
-                        className="px-3 py-1 rounded text-sm font-semibold transition-colors disabled:opacity-30"
-                        style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: slotHeaderColor }}
+                        className="disabled:opacity-30"
+                        style={navBtnStyle}
                     >
-                        ◀ Prev
+                        {prevLabel}
                     </button>
-                    <span className="text-xs" style={{ color: slotHeaderColor, opacity: 0.8 }}>
+                    <span style={pageIndicatorStyle}>
                         Page {currentPage + 1} / {totalPages}
                     </span>
                     <button
                         onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages - 1, p + 1)); }}
                         disabled={currentPage >= totalPages - 1}
-                        className="px-3 py-1 rounded text-sm font-semibold transition-colors disabled:opacity-30"
-                        style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: slotHeaderColor }}
+                        className="disabled:opacity-30"
+                        style={navBtnStyle}
                     >
-                        Next ▶
+                        {nextLabel}
                     </button>
                 </div>
             )}
@@ -2357,8 +2398,13 @@ const HotZoneRuntime: React.FC<{
     playSound: (soundId: VNID | null) => void;
 }> = ({ screen, onAction, variables, onVariableChange, evaluateConditions, assetResolver, playSound }) => {
     const { project } = useProject();
-    const hotSpots = screen.hotSpots || {};
-    const hotZoneElements = screen.hotZoneElements || {};
+    // Derive the legacy hot zone shapes from the unified `screen.elements` map.
+    // Post-Phase-3, screens no longer carry separate `hotSpots` / `hotZoneElements`
+    // maps; hot spots, image maps, and any draggable element are first-class
+    // `VNUIElement` entries that we convert back to the shapes this runtime
+    // expects via a derivation shim.
+    const hotSpots = useMemo(() => deriveHotSpotsFromScreen(screen), [screen]);
+    const hotZoneElements = useMemo(() => deriveHotZoneElementsFromScreen(screen), [screen]);
 
     // Track element positions during drag (runtime-only state)
     const [elementPositions, setElementPositions] = useState<Record<VNID, { x: number; y: number }>>({});
@@ -2378,6 +2424,8 @@ const HotZoneRuntime: React.FC<{
     const [imageOverrides, setImageOverrides] = useState<Record<VNID, VNID>>({});
     // Track active animations
     const [activeAnimations, setActiveAnimations] = useState<Record<VNID, { animation: string; duration: number }>>({});
+    // Track sticky end-states for animations whose final frame should persist (e.g. fadeOut → opacity 0)
+    const [persistentEffects, setPersistentEffects] = useState<Record<VNID, 'fadedOut'>>({});
 
     // Handle ChangeImage / PlayAnimation locally, delegate everything else
     const handleLocalAction = useCallback((action: VNUIAction) => {
@@ -2393,6 +2441,15 @@ const HotZoneRuntime: React.FC<{
             if (a.targetElementId) {
                 const anim = a.animation || 'shake';
                 const dur = a.duration || 500;
+                // fadeIn clears any sticky fadedOut state so the animation can play over a visible element
+                if (anim === 'fadeIn') {
+                    setPersistentEffects(prev => {
+                        if (!prev[a.targetElementId]) return prev;
+                        const next = { ...prev };
+                        delete next[a.targetElementId];
+                        return next;
+                    });
+                }
                 setActiveAnimations(prev => ({ ...prev, [a.targetElementId]: { animation: anim, duration: dur } }));
                 setTimeout(() => {
                     setActiveAnimations(prev => {
@@ -2400,6 +2457,10 @@ const HotZoneRuntime: React.FC<{
                         delete next[a.targetElementId];
                         return next;
                     });
+                    // Persist the final hidden state so the element stays faded out
+                    if (anim === 'fadeOut') {
+                        setPersistentEffects(prev => ({ ...prev, [a.targetElementId]: 'fadedOut' }));
+                    }
                 }, dur);
             }
             return;
@@ -2557,6 +2618,8 @@ const HotZoneRuntime: React.FC<{
             {/* Hot Zone Elements */}
             {(Object.values(hotZoneElements) as VNHotZoneElement[]).map(el => {
                 if (el.conditions && !evaluateConditions(el.conditions, variables)) return null;
+                // Hide-on-drop: when snap-to-center + hide-on-drop are on and element has been placed on a hot spot, omit rendering
+                if (el.snapToHotSpot && el.hideOnDrop && placedElements[el.id]) return null;
                 const isDragging = dragState?.elementId === el.id;
                 const pos = isDragging && dragOffset
                     ? dragOffset
@@ -2573,6 +2636,9 @@ const HotZoneRuntime: React.FC<{
                 const elText = (el as any).text || '';
                 const elFont = (el as any).font;
                 const videoUrl = (el as any).videoId ? assetResolver((el as any).videoId, 'video') : null;
+                // Sticky end-state from a previously-played fadeOut animation. Skipped while an animation
+                // is currently running so the keyframes still drive the visual transition.
+                const isFadedOut = !anim && persistentEffects[el.id] === 'fadedOut';
                 return (
                     <div
                         key={el.id}
@@ -2582,7 +2648,8 @@ const HotZoneRuntime: React.FC<{
                             width: `${el.width}%`, height: `${el.height}%`,
                             cursor: el.draggable ? (isDragging ? 'grabbing' : 'grab') : (elType === 'textInput' ? 'text' : 'pointer'),
                             zIndex: isDragging ? 50 : 10,
-                            pointerEvents: 'auto',
+                            pointerEvents: isFadedOut ? 'none' : 'auto',
+                            opacity: isFadedOut ? 0 : undefined,
                             transition: isDragging ? 'none' : 'left 0.2s, top 0.2s',
                             animation: anim ? `${animationKeyframes[anim.animation] || 'hz-shake'} ${anim.duration}ms ease` : undefined,
                         }}
@@ -3279,13 +3346,27 @@ const UIScreenRenderer: React.FC<{
 
     return (
         <div
-            key={`${screenId}-${isClosing ? 'closing' : 'open'}`}
+            // Key is just the screenId — switching isClosing on the SAME screen must
+            // not unmount/remount this div, or the crossfade will visibly flicker.
+            key={screenId}
             className="absolute inset-0 w-full h-full"
             style={screenTransitionStyle}
         >
             {getBackgroundElement()}
-            {Object.values(screen.elements).map(element => renderElement(element as VNUIElement, variables, project, onCommitVariables))}
-            {screen.screenType === 'hotzone' && (
+            {/* Standard renderer skips interactive types — HotZoneRuntime owns them. */}
+            {Object.values(screen.elements).map(element => {
+                const el = element as any;
+                if (el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true) return null;
+                return renderElement(element as VNUIElement, variables, project, onCommitVariables);
+            })}
+            {/* Hot zone runtime activates whenever the screen has any interactive content
+                (hot spots, image maps, draggable elements) or a win condition. */}
+            {(
+                Object.values(screen.elements || {}).some((el: any) =>
+                    el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true
+                ) ||
+                !!screen.winCondition
+            ) && (
                 <HotZoneRuntime
                     screen={screen}
                     onAction={onAction}
@@ -5388,9 +5469,41 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const cmd = command as any;
                     const durationMs = ((cmd.duration ?? 1) * 1000);
 
-                    // If waitForInput is enabled, allow user input (click or key) to advance early
-                    if (cmd.waitForInput) {
-                        // Track whether we've already advanced to prevent double-advance
+                    // If waitIndefinitelyForInput is enabled, wait only for user input (ignore duration)
+                    if (cmd.waitIndefinitelyForInput) {
+                        let hasAdvanced = false;
+
+                        const onUserAdvance = () => {
+                            if (hasAdvanced) return;
+                            hasAdvanced = true;
+                            advance();
+                            removeListeners();
+                        };
+
+                        const keyHandler = (e: KeyboardEvent) => {
+                            if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onUserAdvance();
+                            }
+                        };
+                        const clickHandler = (e: MouseEvent) => {
+                            // Only respond to clicks within the game stage area
+                            if (stageRef.current && stageRef.current.contains(e.target as Node)) {
+                                onUserAdvance();
+                            }
+                        };
+
+                        const removeListeners = () => {
+                            window.removeEventListener('keydown', keyHandler, true);
+                            window.removeEventListener('click', clickHandler, true);
+                        };
+
+                        // Use capture phase to get events before other handlers
+                        window.addEventListener('keydown', keyHandler, true);
+                        window.addEventListener('click', clickHandler, true);
+                    } else if (cmd.waitForInput) {
+                        // If waitForInput is enabled, allow user input (click or key) to advance early, but still respect duration
                         let hasAdvanced = false;
                         let timeoutId: number | null = window.setTimeout(() => {
                             // timeout elapsed, advance
@@ -5404,7 +5517,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const onUserAdvance = () => {
                             if (hasAdvanced) return; // Prevent double-advance
                             hasAdvanced = true;
-                            
+
                             if (timeoutId) {
                                 clearTimeout(timeoutId);
                                 timeoutId = null;
@@ -5665,6 +5778,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
             
+            // Check if the current dialogue has keepOpenDuringChoices flag
+            // and the next command is a Choice command
+            const scene = project.scenes[p.currentSceneId];
+            const currentCmd = scene?.commands[p.currentIndex];
+            const nextCmd = scene?.commands[p.currentIndex + 1];
+            const shouldKeepDialogueDuringChoices = (currentCmd as DialogueCommand)?.keepOpenDuringChoices 
+                && (nextCmd?.type === CommandType.Choice);
+            
+            // If flag is set and next is a choice, don't clear dialogue yet
+            if (shouldKeepDialogueDuringChoices) {
+                return {
+                    ...p,
+                    currentIndex: p.currentIndex + 1,
+                    uiState: { ...p.uiState, isWaitingForInput: false, isSkipping: false }
+                    // Keep dialogue open!
+                };
+            }
+            
             // Add dialogue to history with full state snapshot for skip-backward
             const historyEntry: HistoryEntry = {
                 timestamp: Date.now(),
@@ -5718,6 +5849,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Save this choice for skip-backward replay
             const inputKey = `${p.currentSceneId}:${p.currentIndex}`;
             newState.savedInputs = { ...newState.savedInputs, [inputKey]: { type: 'choice', choice } };
+            
+            // Clear dialogue and choices after selection
+            newState.uiState = { ...newState.uiState, dialogue: null, choices: null };
             
             const actions = choice.actions || [];
             if (!choice.actions && choice.targetSceneId) {
@@ -5888,22 +6022,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const handleSkipBackward = useCallback(() => {
         updatePlayerState(p => {
             if (!p || p.history.length === 0) return p;
-            
-            // Find the last dialogue entry (skip over choice/textInput entries to find
-            // the previous dialogue to show). We walk backward from end of history.
+
+            // The CURRENT dialogue lives in `uiState.dialogue`, NOT in history — entries
+            // are pushed to history only when the user advances past them. So the most
+            // recent history entry is already the "previous" dialogue we want to step
+            // back to. Walk backward from the end looking for the most recent
+            // dialogue-type entry (we skip choice / textInput entries).
             let targetIdx = p.history.length - 1;
-            
-            // If we're currently showing dialogue, that means the most recent history entry
-            // is the CURRENT dialogue. We need to go back one more to find the PREVIOUS.
-            if (p.uiState.dialogue) {
-                targetIdx = p.history.length - 2;
-            }
-            
-            // Walk backward to find the previous dialogue entry
             while (targetIdx >= 0 && p.history[targetIdx].type !== 'dialogue') {
                 targetIdx--;
             }
-            
+
             if (targetIdx < 0) return p; // No previous dialogue to go back to
             
             const target = p.history[targetIdx];
@@ -5963,6 +6092,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             };
         });
+        // Rewinding to an earlier command index leaves the scheduler's `lastProcessed`
+        // ahead of where we are now — its `alreadyAdvancedPast` guard can then block
+        // commands from running when the user advances forward again. Reset both the
+        // scheduler and the variable cache, mirroring what JumpToScene does.
+        commandSchedulerRef.current.reset();
+        variableStoreRef.current = null;
     }, [project.scenes]);
 
     const handleUIAction = (action: VNUIAction) => {
@@ -6052,25 +6187,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 
                 setHudStack(s => {
-                    // Handle crossfade: mark the departing screen as closing so it fades out
-                    // while the new screen fades in on top
+                    // Mark the departing screen as closing so its transitionOut plays under the new screen.
+                    // Skip only when transitionOut is explicitly 'none'. The departing screen STAYS in
+                    // the stack so ReturnToPreviousScreen can pop back to it — only `closingScreens` is
+                    // cleared once the visual transition has finished.
                     const departingId = s.length > 0 ? s[s.length - 1] : null;
                     if (departingId) {
                         const departingScreen = project.uiScreens[departingId];
                         const depTransOut = departingScreen?.transitionOut || 'fade';
-                        const targetTransIn = targetScreen.transitionIn || 'fade';
-                        if (targetTransIn === 'crossfade' || depTransOut === 'crossfade') {
+                        if (depTransOut !== 'none') {
                             const duration = departingScreen?.transitionOutDuration ?? departingScreen?.transitionDuration ?? 300;
                             setClosingScreens(prev => new Set(prev).add(departingId));
-                            // After fade-in completes, clean up the departing screen from both sets
                             setTimeout(() => {
                                 setClosingScreens(prev => {
                                     const next = new Set(prev);
                                     next.delete(departingId);
                                     return next;
                                 });
-                                // Remove departed screen from the stack to prevent accumulation
-                                setHudStack(prev => prev.filter(id => id !== departingId));
                             }, duration + 100);
                         }
                     }
@@ -6078,23 +6211,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 });
             } else {
                 setScreenStack(stack => {
+                    // Same rule as the hudStack branch: keep the departing screen in the stack so
+                    // ReturnToPreviousScreen can pop back to it. Only `closingScreens` is cleared
+                    // once the visual transition has finished.
                     const departingId = stack.length > 0 ? stack[stack.length - 1] : null;
                     if (departingId) {
                         const departingScreen = project.uiScreens[departingId];
                         const depTransOut = departingScreen?.transitionOut || 'fade';
-                        const targetTransIn = targetScreen.transitionIn || 'fade';
-                        if (targetTransIn === 'crossfade' || depTransOut === 'crossfade') {
+                        if (depTransOut !== 'none') {
                             const duration = departingScreen?.transitionOutDuration ?? departingScreen?.transitionDuration ?? 300;
                             setClosingScreens(prev => new Set(prev).add(departingId));
-                            // After fade-in completes, clean up the departing screen from both sets
                             setTimeout(() => {
                                 setClosingScreens(prev => {
                                     const next = new Set(prev);
                                     next.delete(departingId);
                                     return next;
                                 });
-                                // Remove departed screen from the stack to prevent accumulation
-                                setScreenStack(prev => prev.filter(id => id !== departingId));
                             }, duration + 100);
                         }
                     }
@@ -6223,19 +6355,48 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 audio.src = '';
             }
             stopAllSfx();
-            
-            // Clear player state, uiVariables, and return to title screen
-            updatePlayerState(null);
-            setHudStack([]);
-            // Reset variables to defaults + persistent overrides when quitting to title
-            // This ensures CG unlock status (persistent vars) is still visible on menu screens
-            const resetVars = getInitialVariablesWithPersistent(project.variables, project.id);
-            setUiVariables(resetVars);
-            uiVariablesRef.current = resetVars;
-            setMenuVariables(resetVars);
-            runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
-            uiDirtyVariableIdsRef.current.clear();
-            if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+
+            const performQuit = () => {
+                // Clear player state, uiVariables, and return to title screen
+                updatePlayerState(null);
+                setHudStack([]);
+                // Reset variables to defaults + persistent overrides when quitting to title
+                // This ensures CG unlock status (persistent vars) is still visible on menu screens
+                const resetVars = getInitialVariablesWithPersistent(project.variables, project.id);
+                setUiVariables(resetVars);
+                uiVariablesRef.current = resetVars;
+                setMenuVariables(resetVars);
+                runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
+                uiDirtyVariableIdsRef.current.clear();
+                if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+            };
+
+            // Mark topmost screen(s) as closing so the transitionOut plays before the quit
+            const quitClosingIds: VNID[] = [];
+            const topScreenForQuit = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+            const topHudForQuit = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            if (topScreenForQuit) quitClosingIds.push(topScreenForQuit);
+            if (topHudForQuit) quitClosingIds.push(topHudForQuit);
+            let quitScreenOutDuration = 0;
+            if (quitClosingIds.length > 0) {
+                setClosingScreens(prev => {
+                    const next = new Set(prev);
+                    quitClosingIds.forEach(id => next.add(id));
+                    return next;
+                });
+                for (const id of quitClosingIds) {
+                    const s = project.uiScreens[id];
+                    if (s && s.transitionOut !== 'none') {
+                        const dur = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                        quitScreenOutDuration = Math.max(quitScreenOutDuration, dur);
+                    }
+                }
+            }
+            if (quitScreenOutDuration > 0) {
+                setTimeout(performQuit, quitScreenOutDuration);
+            } else {
+                performQuit();
+            }
         } else if (action.type === UIActionType.ContinueGame) {
             // Continue = load the auto-save from slot 0
             const doLoad = async () => {
@@ -6419,9 +6580,33 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
             };
 
-            // Use scene exit transition if we're in an active scene, otherwise execute immediately
+            // Mark topmost screens as closing so their transitionOut plays while the scene transition runs
+            const jumpClosingIds: VNID[] = [];
+            const topScreenForJump = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+            const topHudForJump = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            if (topScreenForJump) jumpClosingIds.push(topScreenForJump);
+            if (topHudForJump) jumpClosingIds.push(topHudForJump);
+            let jumpScreenOutDuration = 0;
+            if (jumpClosingIds.length > 0) {
+                setClosingScreens(prev => {
+                    const next = new Set(prev);
+                    jumpClosingIds.forEach(id => next.add(id));
+                    return next;
+                });
+                for (const id of jumpClosingIds) {
+                    const s = project.uiScreens[id];
+                    if (s && s.transitionOut !== 'none') {
+                        const dur = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                        jumpScreenOutDuration = Math.max(jumpScreenOutDuration, dur);
+                    }
+                }
+            }
+
+            // Use scene exit transition if we're in an active scene, otherwise honour the screen's own transitionOut
             if (playerState?.currentSceneId) {
                 startSceneExitTransition(playerState.currentSceneId, executeJump);
+            } else if (jumpScreenOutDuration > 0) {
+                setTimeout(executeJump, jumpScreenOutDuration);
             } else {
                 executeJump();
             }
@@ -6617,46 +6802,64 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             
             runtimeDebugLog(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
             runtimeDebugLog('JumpToLabel: Label command at that index:', targetScene.commands[labelIndex]);
-            
-            // Close any open HUD screens
-            setHudStack([]);
-            
-            // Jump to the label by updating the current index and clearing overlays
-            // Also switch back to the target scene if we've moved to a different scene
-            flushSync(() => {
-                updatePlayerState(p => {
-                    if (!p) return null;
-                    runtimeDebugLog('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
-                    runtimeDebugLog('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
-                    runtimeDebugLog('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
-                    runtimeDebugLog('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
-                    const mergedVariables = mergeDirtyUiVariables(p.variables);
-                    runtimeDebugLog('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
-                    return {
-                        ...p,
-                        currentSceneId: targetSceneId,
-                        currentCommands: targetScene.commands,
-                        currentIndex: labelIndex,
-                        variables: mergedVariables, // Merge UI variables into game variables
-                        stageState: {
-                            ...p.stageState,
-                            buttonOverlays: [],
-                            imageMapOverlays: [],
-                            imageOverlays: [],
-                            textOverlays: []
-                        },
-                        uiState: {
-                            ...p.uiState,
-                            dialogue: null,
-                            choices: null,
-                            isWaitingForInput: false,
-                            screenSceneId: null, // Clear the stored scene ID after jumping
-                        }
-                    };
+
+            const performJumpToLabel = () => {
+                // Close any open HUD screens
+                setHudStack([]);
+
+                // Jump to the label by updating the current index and clearing overlays
+                // Also switch back to the target scene if we've moved to a different scene
+                flushSync(() => {
+                    updatePlayerState(p => {
+                        if (!p) return null;
+                        runtimeDebugLog('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
+                        runtimeDebugLog('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                        runtimeDebugLog('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                        runtimeDebugLog('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                        runtimeDebugLog('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                        return {
+                            ...p,
+                            currentSceneId: targetSceneId,
+                            currentCommands: targetScene.commands,
+                            currentIndex: labelIndex,
+                            variables: mergedVariables, // Merge UI variables into game variables
+                            stageState: {
+                                ...p.stageState,
+                                buttonOverlays: [],
+                                imageMapOverlays: [],
+                                imageOverlays: [],
+                                textOverlays: []
+                            },
+                            uiState: {
+                                ...p.uiState,
+                                dialogue: null,
+                                choices: null,
+                                isWaitingForInput: false,
+                                screenSceneId: null, // Clear the stored scene ID after jumping
+                            }
+                        };
+                    });
                 });
-            });
-            runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToLabel');
-            uiDirtyVariableIdsRef.current.clear();
+                runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToLabel');
+                uiDirtyVariableIdsRef.current.clear();
+            };
+
+            // Mark topmost HUD screen as closing so its transitionOut plays before the jump completes
+            const topHudForJTL = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            let jtlScreenOutDuration = 0;
+            if (topHudForJTL) {
+                const s = project.uiScreens[topHudForJTL];
+                if (s && s.transitionOut !== 'none') {
+                    jtlScreenOutDuration = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                    setClosingScreens(prev => new Set(prev).add(topHudForJTL));
+                }
+            }
+            if (jtlScreenOutDuration > 0) {
+                setTimeout(performJumpToLabel, jtlScreenOutDuration);
+            } else {
+                performJumpToLabel();
+            }
         } else if (action.type === UIActionType.OpenURL) {
             const openUrlAction = action as OpenURLAction;
             if (openUrlAction.url) {
@@ -6667,6 +6870,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     window.location.href = openUrlAction.url;
                 }
             }
+        } else if (action.type === UIActionType.ShowLog) {
+            // Open the text history overlay (same as the built-in quick menu's "Log" button).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: true } } : null);
+        } else if (action.type === UIActionType.ToggleAutoAdvance) {
+            // Toggle auto-advance on/off (same as the built-in quick menu's "Auto" button).
+            setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance }));
+        } else if (action.type === UIActionType.ToggleSkip) {
+            // Toggle fast-forward / skip mode (same as the built-in quick menu's "Skip" button).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: !p.uiState.isSkipping } } : null);
+        } else if (action.type === UIActionType.SkipBackward) {
+            // Rewind to the previous entry (same as the built-in quick menu's "Back" button).
+            handleSkipBackward();
         }
     };
 
@@ -6924,7 +7139,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 style={{ cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default' }}
             >
                 <div style={panZoomStyle}>
-                    <div className={`w-full h-full ${shakeClass} z-10`} style={shakeIntensityStyle}>
+                    <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: state.backgroundColor }}>
                         {state.backgroundUrl && (
                             state.backgroundIsVideo ? (
                                 <video 
@@ -6987,7 +7202,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // Pre-compute arranged positions when auto-arrange is on
                             const allChars = Object.values(state.characters) as StageCharacterState[];
                             const arranged = project.autoArrangeCharacters
-                                ? computeArrangedPositions(allChars.map(c => ({ id: c.charId, position: c.position })))
+                                ? computeArrangedPositions(allChars.filter(c => !c.charId.startsWith('__ghost')).map(c => ({ id: c.charId, position: c.position })))
                                 : null;
                             return allChars.map((char: StageCharacterState) => {
                             let transitionClass = '';
@@ -7240,15 +7455,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             // Apply tween scale and opacity to character container
                             const charScale = charTween?.scale ?? (char as any).scale ?? 1;
                             const charOpacity = charTween?.opacity;
+                            const charInverted = (char as any).inverted ?? false;
+
+                            // Build transform: combine position, scale, and inversion
+                            let transformStr = positionStyle.transform || '';
+                            if (charScale !== 1 || charInverted) {
+                                const scaleX = charInverted ? -1 : 1;
+                                transformStr = `${transformStr} scale(${scaleX * charScale}, ${charScale})`.trim();
+                            }
 
                             return (
                                 <div
-                                    key={char.charId}
+                                    key={`${char.charId}-${char.expressionId}-${char.imageUrls.join(',')}-${char.transition?.action ?? 'none'}`}
                                     className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
                                     style={{
                                         ...positionStyle, animationDuration, ...slideStyle, zIndex: 5,
-                                        ...(charScale !== 1 ? { transform: `${positionStyle.transform || ''} scale(${charScale})`.trim(), transformOrigin: 'center bottom' } : {}),
-                                        ...(charOpacity !== undefined ? { opacity: charOpacity } : {}),
+                                        ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}),
+                                        // A running/forwards-filled entrance animation animates opacity and would
+                                        // override inline opacity, so disable it when a tween controls opacity.
+                                        ...(charOpacity !== undefined ? { opacity: charOpacity, animationName: 'none' } : {}),
                                     }}
                                 >
                                     {wrappedContent}
@@ -7793,21 +8018,35 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const dlgH = project.ui.dialogueBoxHeight ? (project.ui.dialogueBoxHeight * 100 / lpGameH) : 20;
                         const dlgX = project.ui.dialogueBoxX ?? ((100 - dlgW) / 2);
                         const dlgBm = (project.ui.dialogueBoxBottomMargin ?? 20) * 100 / lpGameH;
-                        const dlgY = project.ui.dialogueBoxY ?? (100 - dlgH - dlgBm);
-
                         const qmWPct = project.ui.quickMenuWidth ?? 40;
                         const qmHPct = project.ui.quickMenuHeight ?? 4;
+                        // Mirror the reservation logic from the dialogue-box renderer:
+                        // a bottom Quick Menu preset pushes the dialogue up so the menu
+                        // can sit at the screen edge without being covered.
+                        // Skip reservation if quickMenuFloatOverDialogue is enabled.
+                        const isBottomQmPreset = qmPosition === 'bottom-right' || qmPosition === 'bottom-left';
+                        const shouldFloatQm = project.ui.quickMenuFloatOverDialogue ?? false;
+                        const qmBottomReservePct = (!shouldFloatQm && isBottomQmPreset && project.ui.quickMenuY === undefined)
+                            ? (qmHPct + 2)
+                            : 0;
+                        const dlgY = project.ui.dialogueBoxY ?? (100 - dlgH - dlgBm - qmBottomReservePct);
+
                         const getDefaultPos = () => {
                             if (qmPosition === 'top-right') return { x: 100 - qmWPct - 1, y: 1 };
+                            if (qmPosition === 'top-left') return { x: 1, y: 1 };
                             if (qmPosition === 'bottom-right') return { x: 100 - qmWPct - 1, y: 100 - qmHPct - 1 };
+                            if (qmPosition === 'bottom-left') return { x: 1, y: 100 - qmHPct - 1 };
                             return { x: dlgX, y: dlgY - qmHPct - 1 };
                         };
                         const defPos = getDefaultPos();
                         const qmX = project.ui.quickMenuX ?? defPos.x;
                         const qmY = project.ui.quickMenuY ?? defPos.y;
+                        
+                        // Increase z-index when float is enabled or for bottom presets to ensure visibility above dialogue
+                        const qmZIndex = shouldFloatQm || isBottomQmPreset ? 50 : 25;
 
                         return (
-                            <div className="z-25 flex items-center justify-center gap-2" 
+                            <div className="flex items-center justify-center gap-2" 
                                 style={{
                                     position: 'absolute' as const,
                                     left: `${qmX}%`,
@@ -7815,10 +8054,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     width: `${qmWPct}%`,
                                     height: `${qmHPct}%`,
                                     pointerEvents: 'none',
+                                    zIndex: qmZIndex,
                                 }}
                             >
                                 <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
                                     {/* Skip Backward button */}
+                                    {(project.ui.quickMenuShowSkipBackward !== false) && (
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleSkipBackward(); }}
                                         disabled={playerState.history.length === 0}
@@ -7840,8 +8081,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         </svg>
                                         Back
                                     </button>
-                                    
+                                    )}
+
                                     {/* History button */}
+                                    {(project.ui.quickMenuShowLog !== false) && (
                                     <button
                                         onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); }}
                                         className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
@@ -7861,8 +8104,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         </svg>
                                         Log
                                     </button>
-                                    
+                                    )}
+
                                     {/* Auto-advance toggle */}
+                                    {(project.ui.quickMenuShowAutoAdvance !== false) && (
                                     <button
                                         onClick={(e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); }}
                                         className="flex items-center gap-1 font-medium transition-all"
@@ -7883,9 +8128,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         </svg>
                                         Auto
                                     </button>
-                                    
+                                    )}
+
                                     {/* Skip Forward button */}
-                                    {settings.enableSkip && (
+                                    {settings.enableSkip && (project.ui.quickMenuShowSkipForward !== false) && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); }}
                                             className="flex items-center gap-1 font-medium transition-all"
@@ -7905,6 +8151,52 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             </svg>
                                             Skip
                                         </button>
+                                    )}
+
+                                    {/* Save button */}
+                                    {(project.ui.quickMenuShowSave !== false) && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.SaveGame, slotNumber: 1 }); }}
+                                        className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
+                                        style={{
+                                            borderRadius: scalePx(qmRadius),
+                                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                                            fontSize: scalePx(12),
+                                            background: qmBg,
+                                            border: '1px solid rgba(148,163,184,0.2)',
+                                            color: 'rgba(255,255,255,0.8)',
+                                            backdropFilter: 'blur(4px)',
+                                        }}
+                                        title="Save Game"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" />
+                                        </svg>
+                                        Save
+                                    </button>
+                                    )}
+
+                                    {/* Load button */}
+                                    {(project.ui.quickMenuShowLoad !== false) && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.LoadGame, slotNumber: 1 }); }}
+                                        className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
+                                        style={{
+                                            borderRadius: scalePx(qmRadius),
+                                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                                            fontSize: scalePx(12),
+                                            background: qmBg,
+                                            border: '1px solid rgba(148,163,184,0.2)',
+                                            color: 'rgba(255,255,255,0.8)',
+                                            backdropFilter: 'blur(4px)',
+                                        }}
+                                        title="Load Game"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" />
+                                        </svg>
+                                        Load
+                                    </button>
                                     )}
                                 </div>
                             </div>
@@ -8242,49 +8534,27 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             <div ref={playContainerRef} className="relative overflow-hidden" style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, maxWidth: '100%', maxHeight: '100%', width: '100%', '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
-                {/* Render closing screens underneath current screen for crossfade transitions */}
-                {screenStack.filter(id => id !== currentScreenId && closingScreens.has(id)).map(closingId => (
-                    <UIScreenRenderer
-                        key={`closing-${closingId}`}
-                        screenId={closingId}
-                        onAction={handleUIAction}
-                        settings={settings}
-                        onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
-                        assetResolver={assetResolver}
-                        gameSaves={gameSaves}
-                        playSound={playSound}
-                        variables={screenVariables}
-                        onVariableChange={handleVariableChange}
-                        isClosing={true}
-                        evaluateConditions={evaluateConditions}
-                        onCommitVariables={commitUiVariablesToPlayerState}
-                    />
-                ))}
-                {currentScreenId && (
-                    <UIScreenRenderer
-                        screenId={currentScreenId}
-                        onAction={handleUIAction}
-                        settings={settings}
-                        onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
-                        assetResolver={assetResolver}
-                        gameSaves={gameSaves}
-                        playSound={playSound}
-                        variables={screenVariables}
-                        onVariableChange={handleVariableChange}
-                        isClosing={closingScreens.has(currentScreenId)}
-                        evaluateConditions={evaluateConditions}
-                        onCommitVariables={commitUiVariablesToPlayerState}
-                    />
-                )}
-                {
-                    // Render closing HUD screens for crossfade transitions
-                    playerState?.mode === 'playing' && hudStack.filter(id => {
-                        const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
-                        return id !== topHud && closingScreens.has(id);
-                    }).map(closingId => (
+                {/* Render closing + current menu screens together so a screen transitioning
+                    from current → closing stays mounted (only its isClosing prop flips and the
+                    CSS animation switches). Splitting them into two separate JSX blocks used to
+                    force React to unmount the old screen and remount it under the "closing"
+                    block, causing a one-frame gap that looked like flicker during crossfades. */}
+                {(() => {
+                    const ordered: { id: VNID; isClosing: boolean }[] = [];
+                    // Closing screens first (rendered below — earlier in DOM = lower stacking)
+                    for (const id of screenStack) {
+                        if (id !== currentScreenId && closingScreens.has(id)) {
+                            ordered.push({ id, isClosing: true });
+                        }
+                    }
+                    // Current screen last (rendered above)
+                    if (currentScreenId) {
+                        ordered.push({ id: currentScreenId, isClosing: closingScreens.has(currentScreenId) });
+                    }
+                    return ordered.map(({ id, isClosing }) => (
                         <UIScreenRenderer
-                            key={`hud-closing-${closingId}`}
-                            screenId={closingId}
+                            key={id}
+                            screenId={id}
                             onAction={handleUIAction}
                             settings={settings}
                             onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
@@ -8293,36 +8563,44 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             playSound={playSound}
                             variables={screenVariables}
                             onVariableChange={handleVariableChange}
-                            isClosing={true}
+                            isClosing={isClosing}
                             evaluateConditions={evaluateConditions}
                             onCommitVariables={commitUiVariablesToPlayerState}
                         />
-                    ))
-                }
-                {
-                    // Render HUD screens while in playing mode. Priority: explicit hudStack top, then project.ui.gameHudScreenId
-                    playerState?.mode === 'playing' && (
-                        (() => {
-                            const hudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
-                            return hudScreenId ? (
-                                <UIScreenRenderer
-                                    screenId={hudScreenId}
-                                    onAction={handleUIAction}
-                                    settings={settings}
-                                    onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
-                                    assetResolver={assetResolver}
-                                    gameSaves={gameSaves}
-                                    playSound={playSound}
-                                    variables={screenVariables}
-                                    onVariableChange={handleVariableChange}
-                                    isClosing={closingScreens.has(hudScreenId)}
-                                    evaluateConditions={evaluateConditions}
-                                    onCommitVariables={commitUiVariablesToPlayerState}
-                                />
-                            ) : null;
-                        })()
-                    )
-                }
+                    ));
+                })()}
+                {/* Render closing + current HUD screens together. Same unmount/remount fix as
+                    the menu-screen block above. */}
+                {playerState?.mode === 'playing' && (() => {
+                    const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+                    const activeHudId = topHud ?? project.ui.gameHudScreenId ?? null;
+                    const ordered: { id: VNID; isClosing: boolean }[] = [];
+                    for (const id of hudStack) {
+                        if (id !== topHud && closingScreens.has(id)) {
+                            ordered.push({ id, isClosing: true });
+                        }
+                    }
+                    if (activeHudId) {
+                        ordered.push({ id: activeHudId, isClosing: closingScreens.has(activeHudId) });
+                    }
+                    return ordered.map(({ id, isClosing }) => (
+                        <UIScreenRenderer
+                            key={id}
+                            screenId={id}
+                            onAction={handleUIAction}
+                            settings={settings}
+                            onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
+                            assetResolver={assetResolver}
+                            gameSaves={gameSaves}
+                            playSound={playSound}
+                            variables={screenVariables}
+                            onVariableChange={handleVariableChange}
+                            isClosing={isClosing}
+                            evaluateConditions={evaluateConditions}
+                            onCommitVariables={commitUiVariablesToPlayerState}
+                        />
+                    ));
+                })()}
 
                 {activeOverlayEffects.length > 0 && (
                     <ScreenOverlayEffects

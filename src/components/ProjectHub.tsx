@@ -890,7 +890,7 @@ export const ProjectHub: React.FC<{
                  <footer className="text-center mt-8 pb-4 text-[var(--text-muted)] text-sm">
                     {isElectron ? (
                         <>
-                            <p className="opacity-70">Projects are saved to your <strong>Documents/Flourish VNE/Projects</strong> folder.</p>
+                            <p className="opacity-70">Projects are saved to your <strong>Documents//Projects</strong> folder.</p>
                             <div className="flex items-center justify-center gap-4 mt-3">
                                 <button
                                     onClick={handleRevealProjectsFolder}

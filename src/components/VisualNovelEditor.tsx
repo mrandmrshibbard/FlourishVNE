@@ -12,6 +12,9 @@ import UIManager from './UIManager';
 import ErrorBoundary from './ErrorBoundary';
 import ScreenInspector from './menu-editor/ScreenInspector';
 import UIElementInspector from './menu-editor/UIElementInspector';
+import { HotSpotProperties, HotZoneElementProperties } from './hot-zone/HotZoneInspectors';
+import { isHotSpotElement, isInteractiveElement, deriveHotZoneElementsFromScreen } from '../utils/hotZoneShims';
+import { VNUIElement } from '../features/ui/types';
 const AssetManager = React.lazy(() => import('./AssetManager'));
 const VariableManager = React.lazy(() => import('./VariableManager'));
 const SettingsManager = React.lazy(() => import('./SettingsManager'));
@@ -201,10 +204,43 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             return null;
         }
         if (activeMenuScreenId) {
-            // HotZoneEditor has its own built-in properties panel
-            if (project.uiScreens[activeMenuScreenId]?.screenType === 'hotzone') return null;
-            if (selectedUIElementIds.length > 0) {
+            const activeScreen = project.uiScreens[activeMenuScreenId];
+            if (selectedUIElementIds.length > 0 && activeScreen) {
                 const lastId = selectedUIElementIds[selectedUIElementIds.length - 1];
+                const selectedElement = activeScreen.elements[lastId] as VNUIElement | undefined;
+
+                // Dispatch on element type. Hot spots → HotSpotProperties.
+                // Image maps + draggable elements → HotZoneElementProperties.
+                // Everything else → the standard UIElementInspector.
+                if (selectedElement) {
+                    const targetable = Object.values(deriveHotZoneElementsFromScreen(activeScreen)).map(el => ({ id: el.id, name: el.name }));
+                    if (isHotSpotElement(selectedElement)) {
+                        return (
+                            <HotSpotProperties
+                                spot={selectedElement}
+                                project={project}
+                                targetableElements={targetable}
+                                onUpdate={(patch) => dispatch({
+                                    type: 'UPDATE_UI_ELEMENT',
+                                    payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch as Partial<VNUIElement> },
+                                })}
+                            />
+                        );
+                    }
+                    if (isInteractiveElement(selectedElement)) {
+                        return (
+                            <HotZoneElementProperties
+                                element={selectedElement}
+                                project={project}
+                                targetableElements={targetable}
+                                onUpdate={(patch) => dispatch({
+                                    type: 'UPDATE_UI_ELEMENT',
+                                    payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch },
+                                })}
+                            />
+                        );
+                    }
+                }
                 return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} />;
             }
             return <ScreenInspector screenId={activeMenuScreenId} />;

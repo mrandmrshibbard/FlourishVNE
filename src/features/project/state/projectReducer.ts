@@ -1,4 +1,5 @@
 import { VNProject } from '../../../types/project';
+import { migrateProjectToUnifiedScreens } from '../../../utils/unifiedScreenMigration';
 
 export type ProjectAction_Project =
   | { type: 'SET_PROJECT'; payload: VNProject }
@@ -8,7 +9,9 @@ export type ProjectAction_Project =
 export const projectReducer = (state: VNProject, action: ProjectAction_Project): VNProject => {
   switch (action.type) {
     case 'SET_PROJECT':
-      return action.payload;
+      // Every project that enters the store is migrated to the unified-screens schema.
+      // The migration is idempotent, so already-migrated projects pass through cheaply.
+      return migrateProjectToUnifiedScreens(action.payload);
 
     case 'UPDATE_PROJECT': {
         return {

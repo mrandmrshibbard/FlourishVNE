@@ -257,7 +257,7 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
                 type,
                 entries: [
                     { kind: 'heading' as const, label: 'Credits' },
-                    { kind: 'credit' as const, label: 'Created with', value: 'Flourish VNE' },
+                    { kind: 'credit' as const, label: 'Created with', value: 'Flourish Visual Novel Engine' },
                 ],
                 duration: 15,
                 scrollSpeed: 60,

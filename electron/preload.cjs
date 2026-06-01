@@ -62,6 +62,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () =>
     ipcRenderer.invoke('check-for-updates'),
 
+  getUpdateLogPath: () =>
+    ipcRenderer.invoke('get-update-log-path'),
+
+  openUpdateLog: () =>
+    ipcRenderer.invoke('open-update-log'),
+
   // ── File System / Project Management ──
   getUserDataPaths: () =>
     ipcRenderer.invoke('get-user-data-paths'),

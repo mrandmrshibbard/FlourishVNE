@@ -333,7 +333,7 @@ const archive = archiver('zip', { zlib: { level: 9 } });
 
 output.on('close', () => {
   console.log(`✓ Created character_customization_sample_export.zip (${archive.pointer()} bytes)`);
-  console.log('✓ Import this file in Flourish VNE to test the character customization system');
+  console.log('✓ Import this file in Flourish Visual Novel Engine to test the character customization system');
 });
 
 archive.on('error', (err) => {

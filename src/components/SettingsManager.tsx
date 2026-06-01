@@ -1249,14 +1249,34 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Position</label>
                             <select
                                 value={project.ui.quickMenuPosition ?? 'above-dialogue'}
-                                onChange={(e) => onUpdate({ quickMenuPosition: e.target.value as any })}
+                                onChange={(e) => onUpdate({
+                                    quickMenuPosition: e.target.value as any,
+                                    // Clear explicit drag-set coordinates so the new preset's defaults take effect.
+                                    // Otherwise saved X/Y/W/H from a prior drag override the preset and nothing visibly changes.
+                                    quickMenuX: undefined,
+                                    quickMenuY: undefined,
+                                    quickMenuWidth: undefined,
+                                    quickMenuHeight: undefined,
+                                })}
                                 className="w-full bg-[var(--bg-primary)] text-white p-3 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                             >
                                 <option value="above-dialogue">Above Dialogue Box</option>
                                 <option value="top-right">Top Right</option>
-                                <option value="bottom-right">Bottom Right</option>
+                                <option value="top-left">Top Left</option>
+                                <option value="bottom-right">Bottom Right (pushes dialogue up)</option>
+                                <option value="bottom-left">Bottom Left (pushes dialogue up)</option>
                                 <option value="hidden">Hidden</option>
                             </select>
+                            {(project.ui.quickMenuX !== undefined || project.ui.quickMenuY !== undefined || project.ui.quickMenuWidth !== undefined || project.ui.quickMenuHeight !== undefined) && (
+                                <button
+                                    type="button"
+                                    onClick={() => onUpdate({ quickMenuX: undefined, quickMenuY: undefined, quickMenuWidth: undefined, quickMenuHeight: undefined })}
+                                    className="mt-2 text-xs px-3 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+                                    title="Discard custom drag position and snap the Quick Menu back to the selected preset."
+                                >
+                                    Reset to Preset Position
+                                </button>
+                            )}
                         </div>
                         {(project.ui.quickMenuPosition ?? 'above-dialogue') !== 'hidden' && (
                             <>

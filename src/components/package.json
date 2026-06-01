@@ -2,7 +2,7 @@
   "name": "flourish-visual-novel-engine",
   "private": true,
   "version": "release.2.4.0",
-  "description": "Flourish VNE",
+  "description": "Flourish Visual Novel Engine",
   "author": "Your Name",
   "type": "module",
   "main": "electron/main.cjs",
@@ -78,7 +78,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Flourish VNE"
+      "shortcutName": "Flourish Visual Novel Engine"
     },
     "mac": {
       "target": [

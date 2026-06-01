@@ -296,6 +296,7 @@ export function handleShowButton(
     actions: command.actions, // Multiple actions support
     clickSound: command.clickSound,
     waitForClick: command.waitForClick,
+    quickMenuMode: command.quickMenuMode,
     transition: command.transition !== 'instant' ? command.transition : undefined,
     duration: command.duration || 0.3,
     action: 'show',

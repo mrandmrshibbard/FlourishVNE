@@ -93,12 +93,36 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
 /*  Default layout helpers  (%)                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * When the Quick Menu sits at the bottom of the screen (bottom-right / bottom-left
+ * presets) AND the user hasn't manually positioned the menu, reserve vertical
+ * space at the bottom of the screen so the dialogue box is pushed up above it.
+ *
+ * Returns the extra Y-axis reservation in PERCENT of game height.
+ * Returns 0 if quickMenuFloatOverDialogue is enabled (no reservation needed).
+ */
+function getQuickMenuBottomReservePct(ui: VNProjectUI): number {
+    // If float-over is enabled, don't reserve any space
+    if (ui.quickMenuFloatOverDialogue) return 0;
+    
+    const pos = ui.quickMenuPosition ?? 'above-dialogue';
+    const isBottomPreset = pos === 'bottom-right' || pos === 'bottom-left';
+    // If the user dragged the quick menu manually, respect that position and
+    // don't shove the dialogue around.
+    if (!isBottomPreset || ui.quickMenuY !== undefined) return 0;
+    const qmHPct = ui.quickMenuHeight ?? 4;
+    // qmHPct = quick-menu height, +1 % for its own bottom margin from screen,
+    // +1 % gap between the quick menu and the dialogue box above it.
+    return qmHPct + 2;
+}
+
 function getDialogueRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     const w = ui.dialogueBoxWidth ?? 100;
     const h = ui.dialogueBoxHeight ? (ui.dialogueBoxHeight * 100 / gameH) : 20;
     const x = ui.dialogueBoxX ?? ((100 - w) / 2);
     const bm = ui.dialogueBoxBottomMargin ?? 20;
-    const y = ui.dialogueBoxY ?? (100 - h - (bm * 100 / gameH));
+    const qmReserve = getQuickMenuBottomReservePct(ui);
+    const y = ui.dialogueBoxY ?? (100 - h - (bm * 100 / gameH) - qmReserve);
     return { x, y, width: w, height: h };
 }
 
@@ -130,15 +154,20 @@ function getInputRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
 function getQuickMenuRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     const w = ui.quickMenuWidth ?? 40;
     const h = ui.quickMenuHeight ?? 4;
-    let x = ui.quickMenuX ?? 30;
-    let y = ui.quickMenuY ?? 73;
-    if (!ui.quickMenuX && !ui.quickMenuY) {
-        const pos = ui.quickMenuPosition ?? 'above-dialogue';
-        const dRect = getDialogueRect(ui, gameW, gameH);
-        if (pos === 'top-right') { x = 75; y = 2; }
-        else if (pos === 'bottom-right') { x = 75; y = 92; }
-        else if (pos === 'above-dialogue') { x = dRect.x + dRect.width / 2 - w / 2; y = dRect.y - h - 1; }
-    }
+    const pos = ui.quickMenuPosition ?? 'above-dialogue';
+    const dRect = getDialogueRect(ui, gameW, gameH);
+    // Top presets sit just below the top of the screen. Bottom presets sit at
+    // the bottom of the screen — getDialogueRect() reserves space for them so
+    // the dialogue box is pushed up and never overlaps.
+    const defaultPos = (() => {
+        if (pos === 'top-right') return { x: 100 - w - 1, y: 1 };
+        if (pos === 'top-left') return { x: 1, y: 1 };
+        if (pos === 'bottom-right') return { x: 100 - w - 1, y: 100 - h - 1 };
+        if (pos === 'bottom-left') return { x: 1, y: 100 - h - 1 };
+        return { x: dRect.x, y: dRect.y - h - 1 };
+    })();
+    const x = ui.quickMenuX ?? defaultPos.x;
+    const y = ui.quickMenuY ?? defaultPos.y;
     return { x, y, width: w, height: h };
 }
 
@@ -352,12 +381,23 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
 const QuickMenuPreview: React.FC<{ ui: VNProjectUI }> = ({ ui }) => {
     const bgColor = hexToRgba(ui.quickMenuColor ?? '#0f172a', ui.quickMenuOpacity ?? 75);
     const br = ui.quickMenuBorderRadius ?? 4;
-    const buttons = ['Skip', 'Auto', 'Log', 'Back'];
+
+    // Define all buttons with their visibility flags
+    const buttonDefs = [
+        { label: 'Back', show: ui.quickMenuShowSkipBackward !== false },
+        { label: 'Log', show: ui.quickMenuShowLog !== false },
+        { label: 'Auto', show: ui.quickMenuShowAutoAdvance !== false },
+        { label: 'Skip', show: ui.quickMenuShowSkipForward !== false },
+        { label: 'Save', show: ui.quickMenuShowSave !== false },
+        { label: 'Load', show: ui.quickMenuShowLoad !== false },
+    ];
+
+    const visibleButtons = buttonDefs.filter(b => b.show);
 
     return (
         <div className="w-full h-full flex items-center justify-center gap-[2%]">
-            {buttons.map(lbl => (
-                <div key={lbl} style={{
+            {visibleButtons.map(btn => (
+                <div key={btn.label} style={{
                     backgroundColor: bgColor,
                     borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
                     fontSize: 'calc(var(--font-scale,1) * 12px)',
@@ -365,7 +405,7 @@ const QuickMenuPreview: React.FC<{ ui: VNProjectUI }> = ({ ui }) => {
                     color: 'rgba(255,255,255,0.8)',
                     border: '1px solid rgba(148,163,184,0.2)',
                 }}>
-                    {lbl}
+                    {btn.label}
                 </div>
             ))}
         </div>
@@ -827,13 +867,102 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                 </div>
                 <NumInput label="Border Radius (px)" value={ui.quickMenuBorderRadius} fallback={4} min={0} onChange={v => onUpdate({ quickMenuBorderRadius: v })} />
                 <Field label="Position Preset">
-                    <select className={inputCls} value={ui.quickMenuPosition ?? 'above-dialogue'} onChange={e => onUpdate({ quickMenuPosition: e.target.value as any })}>
+                    <select className={inputCls} value={ui.quickMenuPosition ?? 'above-dialogue'} onChange={e => onUpdate({
+                        quickMenuPosition: e.target.value as any,
+                        // Clear explicit drag-set coordinates so the new preset's defaults take effect.
+                        // Otherwise saved X/Y/W/H from a prior drag override the preset and nothing visibly changes.
+                        quickMenuX: undefined,
+                        quickMenuY: undefined,
+                        quickMenuWidth: undefined,
+                        quickMenuHeight: undefined,
+                    })}>
                         <option value="above-dialogue">Above Dialogue</option>
                         <option value="top-right">Top Right</option>
-                        <option value="bottom-right">Bottom Right</option>
+                        <option value="top-left">Top Left</option>
+                        <option value="bottom-right">Bottom Right (pushes dialogue up)</option>
+                        <option value="bottom-left">Bottom Left (pushes dialogue up)</option>
                         <option value="hidden">Hidden</option>
                     </select>
                 </Field>
+                {(ui.quickMenuX !== undefined || ui.quickMenuY !== undefined || ui.quickMenuWidth !== undefined || ui.quickMenuHeight !== undefined) && (
+                    <button
+                        type="button"
+                        onClick={() => onUpdate({ quickMenuX: undefined, quickMenuY: undefined, quickMenuWidth: undefined, quickMenuHeight: undefined })}
+                        className="w-full text-xs px-2 py-1 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                        title="Discard custom drag position and snap the Quick Menu back to the selected preset."
+                    >
+                        Reset to Preset Position
+                    </button>
+                )}
+                <Field label="Float Over Dialogue">
+                    <input
+                        type="checkbox"
+                        checked={ui.quickMenuFloatOverDialogue ?? false}
+                        onChange={e => onUpdate({ quickMenuFloatOverDialogue: e.target.checked })}
+                        className="cursor-pointer"
+                    />
+                    <span className="text-xs text-[var(--text-secondary)] ml-2">When enabled, quick menu floats over the dialogue box instead of pushing it up.</span>
+                </Field>
+
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-3">Button Visibility</h4>
+                <p className="text-[10px] text-[var(--text-muted)]">Toggle which buttons appear in the quick menu.</p>
+
+                <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={ui.quickMenuShowSkipBackward !== false}
+                            onChange={e => onUpdate({ quickMenuShowSkipBackward: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">Back / Skip Backward</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={ui.quickMenuShowLog !== false}
+                            onChange={e => onUpdate({ quickMenuShowLog: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">Log / History</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={ui.quickMenuShowAutoAdvance !== false}
+                            onChange={e => onUpdate({ quickMenuShowAutoAdvance: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">Auto-Advance</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={ui.quickMenuShowSkipForward !== false}
+                            onChange={e => onUpdate({ quickMenuShowSkipForward: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">Skip / Skip Forward</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={ui.quickMenuShowSave !== false}
+                            onChange={e => onUpdate({ quickMenuShowSave: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">Save</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={ui.quickMenuShowLoad !== false}
+                            onChange={e => onUpdate({ quickMenuShowLoad: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">Load</span>
+                    </label>
+                </div>
             </div>
         );
     }

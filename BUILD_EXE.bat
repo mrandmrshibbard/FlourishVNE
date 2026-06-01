@@ -5,7 +5,7 @@ setlocal
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     echo ====================================
-    echo  Flourish VNE - Build Desktop App
+    echo  Flourish Visual Novel Engine - Build Desktop App
     echo ====================================
     echo.
     echo This script needs to run as Administrator.
@@ -25,7 +25,7 @@ if "%~1"=="" (
 )
 
 echo ====================================
-echo  Flourish VNE - Build Desktop App
+echo  Flourish Visual Novel Engine - Build Desktop App
 echo ====================================
 echo.
 echo Running with Administrator privileges.

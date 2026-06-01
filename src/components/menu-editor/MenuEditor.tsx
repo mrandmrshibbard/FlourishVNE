@@ -12,6 +12,8 @@ import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/style
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustomizationWizard';
 import CGGalleryWizard, { CGGalleryGeneratedConfig } from './CGGalleryWizard';
+import { HotSpotOverlay, HotZoneElementOverlay } from '../hot-zone/HotZoneOverlays';
+import { isHotSpotElement, isInteractiveElement } from '../../utils/hotZoneShims';
 
 // Safe wrapper for element rendering to prevent crashes.
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
@@ -122,21 +124,50 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const slotBgColor = slotEl.slotBackgroundColor || '#1e293b';
             const slotBorderColor = slotEl.slotBorderColor || '#475569';
             const slotHeaderColor = slotEl.slotHeaderColor || '#7dd3fc';
+            const baseFont = fontSettingsToStyle(slotEl.font);
+            const emptySlotStyle = slotEl.emptySlotFont
+                ? fontSettingsToStyle(slotEl.emptySlotFont)
+                : { color: slotEl.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+            const emptySlotTextAlign = (emptySlotStyle as any).textAlign ?? 'center';
+            const emptySlotJustify = emptySlotTextAlign === 'right' ? 'flex-end' : emptySlotTextAlign === 'left' ? 'flex-start' : 'center';
+            const navBtnStyle: React.CSSProperties = slotEl.navButtonFont
+                ? { ...fontSettingsToStyle(slotEl.navButtonFont), backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' }
+                : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
+            const pageIndicatorStyle: React.CSSProperties = slotEl.pageIndicatorFont
+                ? fontSettingsToStyle(slotEl.pageIndicatorFont)
+                : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
+            const totalPages = Math.max(1, Math.ceil(slotEl.slotCount / 4));
+            const prevLabel = slotEl.prevButtonText ?? '◀ Prev';
+            const nextLabel = slotEl.nextButtonText ?? 'Next ▶';
             return (
-                <div className="w-full h-full grid grid-cols-2 gap-2 p-2 overflow-hidden">
-                    {Array.from({ length: Math.min(slotEl.slotCount, 4) }).map((_, i) => (
-                        <div 
-                            key={i} 
-                            className="rounded-md border-2 p-2 flex flex-col"
-                            style={{ 
-                                backgroundColor: slotBgColor,
-                                borderColor: slotBorderColor,
-                            }}
-                        >
-                            <span className="text-xs font-bold" style={{ color: slotHeaderColor }}>Slot {i + 1}</span>
-                            <span className="text-[10px] opacity-50" style={{...fontSettingsToStyle(slotEl.font), ...(extractTextGradientStyle(slotEl.font) || {})}}>{slotEl.emptySlotText}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3%', padding: '2%', flex: '1 1 0', minHeight: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
+                        {Array.from({ length: Math.min(slotEl.slotCount, 4) }).map((_, i) => (
+                            <div
+                                key={i}
+                                style={{ backgroundColor: slotBgColor, borderColor: slotBorderColor, borderWidth: 2, borderStyle: 'solid', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                            >
+                                <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
+                                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: emptySlotJustify, padding: '0 8%' }}>
+                                        <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{slotEl.emptySlotText}</span>
+                                    </div>
+                                    {!slotEl.hideSlotLabel && (
+                                        <div style={{ position: 'absolute', top: '4px', left: '4px', ...baseFont, color: slotHeaderColor, fontWeight: 'bold', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.7)', zIndex: 10 }}>Slot {i + 1}</div>
+                                    )}
+                                </div>
+                                {!slotEl.hideInfoBar && (
+                                    <div style={{ flex: '0 0 auto', padding: '4px 8px 6px', backgroundColor: 'rgba(0,0,0,0.35)' }} />
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    {totalPages > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '0.5rem 0', flexShrink: 0 }}>
+                            <span style={{ ...navBtnStyle, opacity: 0.3 }}>{prevLabel}</span>
+                            <span style={pageIndicatorStyle}>Page 1 / {totalPages}</span>
+                            <span style={navBtnStyle}>{nextLabel}</span>
                         </div>
-                    ))}
+                    )}
                 </div>
             );
         }
@@ -506,6 +537,16 @@ const MenuEditor: React.FC<{
     const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
         dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
     };
+
+    /** Hot spots / draggable elements / image maps are all `VNUIElement` entries
+     *  in `screen.elements`. The overlay components emit geometric patches
+     *  (`{x, y, width, height}`) which apply identically to all element types. */
+    const handleUpdateInteractive = useCallback((elementId: VNID, updates: { x?: number; y?: number; width?: number; height?: number }) => {
+        dispatch({
+            type: 'UPDATE_UI_ELEMENT',
+            payload: { screenId: activeScreenId, elementId, updates: updates as Partial<VNUIElement> },
+        });
+    }, [dispatch, activeScreenId]);
     
     const handleAddElement = (type: UIElementType) => {
         const newElement = createUIElement(type, project);
@@ -676,24 +717,67 @@ const MenuEditor: React.FC<{
                         '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1,
                     } as React.CSSProperties}
                 >
-                    {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => (
-                        <ResizableDraggable
-                            key={element.id}
-                            x={element.x} y={element.y}
-                            width={element.width} height={element.height}
-                            anchorX={element.anchorX} anchorY={element.anchorY}
-                            parentSize={stageSize}
-                            isSelected={selectedElementIds.includes(element.id)}
-                            onSelect={(e) => {
-                                e.stopPropagation();
-                                handleSelectElement(element.id, e);
-                            }}
-                            onUpdate={updates => handleUpdateElement(element.id, updates)}
-                            snapGrid={1}
-                        >
-                            <SafeUIElementRenderer element={element} project={project} />
-                        </ResizableDraggable>
-                    ))}
+                    {/* Standard UI elements (non-interactive). Hot spots, image maps, and any
+                        draggable element are skipped here — they render via the dedicated hot zone
+                        overlays below using shapes derived from `screen.elements`. */}
+                    {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => {
+                        if (isInteractiveElement(element)) return null;
+                        return (
+                            <ResizableDraggable
+                                key={element.id}
+                                x={element.x} y={element.y}
+                                width={element.width} height={element.height}
+                                anchorX={element.anchorX} anchorY={element.anchorY}
+                                parentSize={stageSize}
+                                isSelected={selectedElementIds.includes(element.id)}
+                                onSelect={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectElement(element.id, e);
+                                }}
+                                onUpdate={updates => handleUpdateElement(element.id, updates)}
+                                snapGrid={1}
+                            >
+                                <SafeUIElementRenderer element={element} project={project} />
+                            </ResizableDraggable>
+                        );
+                    })}
+
+                    {/* Hot zone overlays. Hot spots, image maps, and draggables are typed
+                        entries in screen.elements — the overlay components consume them directly. */}
+                    {isReady && stageSize.width > 0 && Object.values(screen.elements).map((el: VNUIElement) => {
+                        if (isHotSpotElement(el)) {
+                            return (
+                                <HotSpotOverlay
+                                    key={el.id}
+                                    spot={el}
+                                    isSelected={selectedElementIds.includes(el.id)}
+                                    parentSize={stageSize}
+                                    onSelect={(e) => {
+                                        e.stopPropagation();
+                                        handleSelectElement(el.id, e);
+                                    }}
+                                    onUpdate={updates => handleUpdateInteractive(el.id, updates)}
+                                />
+                            );
+                        }
+                        if (isInteractiveElement(el)) {
+                            return (
+                                <HotZoneElementOverlay
+                                    key={el.id}
+                                    element={el}
+                                    project={project}
+                                    isSelected={selectedElementIds.includes(el.id)}
+                                    parentSize={stageSize}
+                                    onSelect={(e) => {
+                                        e.stopPropagation();
+                                        handleSelectElement(el.id, e);
+                                    }}
+                                    onUpdate={updates => handleUpdateInteractive(el.id, updates)}
+                                />
+                            );
+                        }
+                        return null;
+                    })}
                 </div>
             </Panel>
             

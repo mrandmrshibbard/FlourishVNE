@@ -34,6 +34,15 @@ export enum UIActionType {
     PlayAnimation = 'PlayAnimation',
     ChangeImage = 'ChangeImage',
     ContinueGame = 'ContinueGame',
+    // ─── Quick-menu equivalents (let any user-designed button drive these features) ─── //
+    /** Opens the text history / log overlay. */
+    ShowLog = 'ShowLog',
+    /** Toggles auto-advance mode on / off. */
+    ToggleAutoAdvance = 'ToggleAutoAdvance',
+    /** Toggles fast-forward / skip mode on / off. */
+    ToggleSkip = 'ToggleSkip',
+    /** Rewinds to the previous dialogue entry (history pop). */
+    SkipBackward = 'SkipBackward',
 }
 
 export interface BaseUIAction { type: UIActionType; }

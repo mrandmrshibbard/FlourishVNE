@@ -1,15 +1,32 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
-import { VNUIScreen } from '../features/ui/types';
+import { VNUIScreen, VNUIElement, VNHotZoneElement, VNHotSpot, UIElementType } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
 import InGameUIEditor from './InGameUIEditor';
-import HotZoneEditor from './HotZoneEditor';
-import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon, ChatBubbleIcon } from './icons';
+import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon, ChatBubbleIcon, ChevronRightIcon, ChevronDownIcon } from './icons';
 import ConfirmationModal from './ui/ConfirmationModal';
 import UIScreenThemeSelector from './UIScreenThemeSelector';
+
+const EXPANDED_SCREENS_STORAGE_KEY = 'flourish.uiManager.expandedScreens';
+
+// Short type label shown next to each child element in the screen tree
+const ELEMENT_TYPE_LABEL: Record<string, string> = {
+    [UIElementType.Button]: 'BTN',
+    [UIElementType.Text]: 'TXT',
+    [UIElementType.Image]: 'IMG',
+    [UIElementType.SaveSlotGrid]: 'SAV',
+    [UIElementType.SettingsSlider]: 'SLI',
+    [UIElementType.SettingsToggle]: 'TGL',
+    [UIElementType.CharacterPreview]: 'CHR',
+    [UIElementType.TextInput]: 'INP',
+    [UIElementType.Dropdown]: 'DRP',
+    [UIElementType.Checkbox]: 'CHK',
+    [UIElementType.AssetCycler]: 'AST',
+    [UIElementType.CGGallery]: 'CG',
+};
 
 type UIEditorMode = 'screens' | 'ingame';
 
@@ -39,6 +56,46 @@ const UIManager: React.FC<UIManagerProps> = ({
     const [pendingRestore, setPendingRestore] = useState(false);
     const [restoreModalOpen, setRestoreModalOpen] = useState(false);
 
+    // Expansion state for the screen tree — persisted so it survives reloads
+    const [expandedScreens, setExpandedScreens] = useState<Set<VNID>>(() => {
+        try {
+            const raw = localStorage.getItem(EXPANDED_SCREENS_STORAGE_KEY);
+            if (!raw) return new Set();
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? new Set(parsed as VNID[]) : new Set();
+        } catch {
+            return new Set();
+        }
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(EXPANDED_SCREENS_STORAGE_KEY, JSON.stringify(Array.from(expandedScreens)));
+        } catch { /* ignore storage failures */ }
+    }, [expandedScreens]);
+
+    const toggleScreenExpanded = useCallback((screenId: VNID) => {
+        setExpandedScreens(prev => {
+            const next = new Set(prev);
+            if (next.has(screenId)) next.delete(screenId);
+            else next.add(screenId);
+            return next;
+        });
+    }, []);
+
+    const handleSelectChildElement = useCallback((screenId: VNID, elementId: VNID, isHotZoneChild: boolean) => {
+        setActiveMenuScreenId(screenId);
+        // For standard screens we can drive selection through the existing prop;
+        // hot zone editors carry their own internal selection state, so navigation
+        // is the value here — drill-in selection across the boundary will come
+        // when we unify the two screen types.
+        if (!isHotZoneChild) {
+            setSelectedUIElementIds([elementId]);
+        } else {
+            setSelectedUIElementIds([]);
+        }
+    }, [setActiveMenuScreenId, setSelectedUIElementIds]);
+
     const uiScreensArray = useMemo(() => Object.values(project.uiScreens) as VNUIScreen[], [project.uiScreens]);
 
     const specialScreenIds = useMemo(
@@ -58,10 +115,9 @@ const UIManager: React.FC<UIManagerProps> = ({
         ]
     );
 
-    const addUIScreen = (screenType?: 'standard' | 'hotzone') => {
-        const prefix = screenType === 'hotzone' ? 'Hot Zone' : 'New Screen';
-        const name = `${prefix} ${Object.keys(project.uiScreens).length + 1}`;
-        dispatch({ type: 'ADD_UI_SCREEN', payload: { name, screenType } });
+    const addUIScreen = () => {
+        const name = `New Screen ${Object.keys(project.uiScreens).length + 1}`;
+        dispatch({ type: 'ADD_UI_SCREEN', payload: { name } });
     };
 
     const handleDeleteUIScreen = (screenId: VNID) => {
@@ -160,7 +216,11 @@ const UIManager: React.FC<UIManagerProps> = ({
                                             isSelected={activeMenuScreenId === screen.id}
                                             isSpecial={isSpecial}
                                             isRenaming={renamingId === screen.id}
+                                            isExpanded={expandedScreens.has(screen.id)}
+                                            selectedElementIds={activeMenuScreenId === screen.id ? selectedUIElementIds : []}
+                                            onToggleExpanded={() => toggleScreenExpanded(screen.id)}
                                             onSelect={() => setActiveMenuScreenId(screen.id)}
+                                            onSelectChild={(elementId, isHotZoneChild) => handleSelectChildElement(screen.id, elementId, isHotZoneChild)}
                                             onStartRenaming={() => setRenamingId(screen.id)}
                                             onCommitRename={(name) => handleRenameUIScreen(screen.id, name)}
                                             onDelete={() => handleDeleteUIScreen(screen.id)}
@@ -178,13 +238,6 @@ const UIManager: React.FC<UIManagerProps> = ({
                                     <PlusIcon className="w-4 h-4" />
                                     Add UI Screen
                                 </button>
-                                <button
-                                    onClick={() => addUIScreen('hotzone')}
-                                    className="w-full bg-purple-500 hover:bg-purple-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
-                                >
-                                    <PlusIcon className="w-4 h-4" />
-                                    Add Hot Zone Screen
-                                </button>
                                 <UIScreenThemeSelector label="Apply Theme to All" className="w-full [&>button]:w-full [&>button]:justify-center" />
                                 <button
                                     onClick={openRestoreModal}
@@ -195,18 +248,16 @@ const UIManager: React.FC<UIManagerProps> = ({
                             </div>
                         </div>
 
-                        {/* UI Editor */}
+                        {/* UI Editor — MenuEditor handles every screen. Hot spots, draggable
+                            elements, and image maps render as overlays on the canvas; the inspector
+                            dispatcher routes selection to the right panel via the hot zone shim. */}
                         <div className="flex-1 flex flex-col min-w-0">
                             {activeMenuScreenId ? (
-                                project.uiScreens[activeMenuScreenId]?.screenType === 'hotzone' ? (
-                                    <HotZoneEditor screenId={activeMenuScreenId} />
-                                ) : (
-                                    <MenuEditor
-                                        activeScreenId={activeMenuScreenId}
-                                        selectedElementIds={selectedUIElementIds}
-                                        setSelectedElementIds={setSelectedUIElementIds}
-                                    />
-                                )
+                                <MenuEditor
+                                    activeScreenId={activeMenuScreenId}
+                                    selectedElementIds={selectedUIElementIds}
+                                    setSelectedElementIds={setSelectedUIElementIds}
+                                />
                             ) : (
                                 <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
                                     <div className="text-center">
@@ -238,7 +289,11 @@ interface UIScreenItemProps {
     isSelected: boolean;
     isSpecial: boolean;
     isRenaming: boolean;
+    isExpanded: boolean;
+    selectedElementIds: VNID[];
+    onToggleExpanded: () => void;
     onSelect: () => void;
+    onSelectChild: (elementId: VNID, isHotZoneChild: boolean) => void;
     onStartRenaming: () => void;
     onCommitRename: (name: string) => void;
     onDelete: () => void;
@@ -250,7 +305,11 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
     isSelected,
     isSpecial,
     isRenaming,
+    isExpanded,
+    selectedElementIds,
+    onToggleExpanded,
     onSelect,
+    onSelectChild,
     onStartRenaming,
     onCommitRename,
     onDelete,
@@ -258,70 +317,164 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 }) => {
     const { inputProps: renameInputProps } = useInlineRename(screen.name, onCommitRename);
 
+    const isHotZone = screen.screenType === 'hotzone';
+    const standardElements = !isHotZone ? (Object.values(screen.elements || {}) as VNUIElement[]) : [];
+    const hotZoneElements = isHotZone ? (Object.values(screen.hotZoneElements || {}) as VNHotZoneElement[]) : [];
+    const hotSpots = isHotZone ? (Object.values(screen.hotSpots || {}) as VNHotSpot[]) : [];
+    const childCount = isHotZone
+        ? hotZoneElements.length + hotSpots.length + (screen.winCondition ? 1 : 0)
+        : standardElements.length;
+    const hasChildren = childCount > 0;
+
     return (
-        <div
-            onClick={onSelect}
-            onDoubleClick={!isSpecial ? onStartRenaming : undefined}
-            className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
-                isSelected
-                    ? 'bg-sky-500/20 border border-sky-500/50'
-                    : 'hover:bg-[var(--bg-secondary)]'
-            }`}
-        >
-            <BookmarkSquareIcon className="w-4 h-4 text-[var(--text-secondary)] flex-shrink-0" />
-
-            <div className="flex-grow truncate">
-                {isRenaming && !isSpecial ? (
-                    <input
-                        type="text"
-                        {...renameInputProps}
-                        className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
-                    />
-                ) : (
-                    <span className="text-sm flex items-center gap-1">
-                        {screen.name}
-                        {screen.screenType === 'hotzone' && (
-                            <span className="text-[10px] bg-purple-500/30 text-purple-300 px-1 rounded">HZ</span>
-                        )}
-                    </span>
-                )}
-            </div>
-
-            <div className="flex items-center gap-1 flex-shrink-0">
-                {isSpecial && (
-                    <LockClosedIcon className="w-4 h-4 text-[var(--text-muted)]" title="This screen is essential and cannot be deleted or renamed." />
-                )}
-
+        <div>
+            <div
+                onClick={onSelect}
+                onDoubleClick={!isSpecial ? onStartRenaming : undefined}
+                className={`group flex items-center gap-1.5 p-2 rounded-md cursor-pointer transition-colors ${
+                    isSelected
+                        ? 'bg-sky-500/20 border border-sky-500/50'
+                        : 'hover:bg-[var(--bg-secondary)]'
+                }`}
+            >
                 <button
-                    onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-                    className="p-1 text-sky-400 hover:text-sky-300 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-                    title="Duplicate"
+                    onClick={(e) => { e.stopPropagation(); onToggleExpanded(); }}
+                    className={`p-0.5 rounded flex-shrink-0 transition-colors ${
+                        hasChildren ? 'text-[var(--text-secondary)] hover:text-white' : 'text-[var(--text-muted)] opacity-30 cursor-default'
+                    }`}
+                    title={hasChildren ? (isExpanded ? 'Collapse' : 'Expand') : 'No elements'}
+                    disabled={!hasChildren}
                 >
-                    <DuplicateIcon className="w-3 h-3" />
+                    {isExpanded
+                        ? <ChevronDownIcon className="w-3 h-3" />
+                        : <ChevronRightIcon className="w-3 h-3" />}
                 </button>
 
-                {!isSpecial && (
-                    <>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
-                            className="p-1 text-[var(--text-secondary)] hover:text-sky-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-                            title="Rename"
-                        >
-                            <PencilIcon className="w-3 h-3" />
-                        </button>
+                <BookmarkSquareIcon className="w-4 h-4 text-[var(--text-secondary)] flex-shrink-0" />
 
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                            className="p-1 text-[var(--text-secondary)] hover:text-red-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-                            title="Delete"
-                        >
-                            <TrashIcon className="w-3 h-3" />
-                        </button>
-                    </>
-                )}
+                <div className="flex-grow truncate">
+                    {isRenaming && !isSpecial ? (
+                        <input
+                            type="text"
+                            {...renameInputProps}
+                            className="w-full bg-[var(--bg-primary)] text-white p-1 rounded text-sm outline-none ring-1 ring-sky-500"
+                        />
+                    ) : (
+                        <span className="text-sm flex items-center gap-1">
+                            {screen.name}
+                            {isHotZone && (
+                                <span className="text-[10px] bg-purple-500/30 text-purple-300 px-1 rounded">HZ</span>
+                            )}
+                            {hasChildren && (
+                                <span className="text-[10px] text-[var(--text-muted)] ml-1">{childCount}</span>
+                            )}
+                        </span>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {isSpecial && (
+                        <LockClosedIcon className="w-4 h-4 text-[var(--text-muted)]" title="This screen is essential and cannot be deleted or renamed." />
+                    )}
+
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+                        className="p-1 text-sky-400 hover:text-sky-300 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+                        title="Duplicate"
+                    >
+                        <DuplicateIcon className="w-3 h-3" />
+                    </button>
+
+                    {!isSpecial && (
+                        <>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
+                                className="p-1 text-[var(--text-secondary)] hover:text-sky-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+                                title="Rename"
+                            >
+                                <PencilIcon className="w-3 h-3" />
+                            </button>
+
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                className="p-1 text-[var(--text-secondary)] hover:text-red-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+                                title="Delete"
+                            >
+                                <TrashIcon className="w-3 h-3" />
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
+
+            {isExpanded && hasChildren && (
+                <div className="ml-6 mt-0.5 mb-1 border-l border-[var(--border-subtle)] pl-2 space-y-0.5">
+                    {!isHotZone && standardElements.map(el => (
+                        <ScreenChildRow
+                            key={el.id}
+                            name={el.name || '(unnamed)'}
+                            typeLabel={ELEMENT_TYPE_LABEL[el.type] || el.type.slice(0, 3).toUpperCase()}
+                            badgeClass="bg-sky-500/20 text-sky-300"
+                            isSelected={selectedElementIds.includes(el.id)}
+                            onClick={() => onSelectChild(el.id, false)}
+                        />
+                    ))}
+                    {isHotZone && hotZoneElements.map(el => (
+                        <ScreenChildRow
+                            key={el.id}
+                            name={el.name || '(unnamed)'}
+                            typeLabel={(el.elementType || 'image').slice(0, 3).toUpperCase()}
+                            badgeClass="bg-purple-500/20 text-purple-300"
+                            isSelected={false}
+                            onClick={() => onSelectChild(el.id, true)}
+                        />
+                    ))}
+                    {isHotZone && hotSpots.map(spot => (
+                        <ScreenChildRow
+                            key={spot.id}
+                            name={spot.name || '(unnamed)'}
+                            typeLabel="HOT"
+                            badgeClass="bg-emerald-500/20 text-emerald-300"
+                            isSelected={false}
+                            onClick={() => onSelectChild(spot.id, true)}
+                        />
+                    ))}
+                    {isHotZone && screen.winCondition && (
+                        <ScreenChildRow
+                            key="__winCondition"
+                            name={`Win: ${screen.winCondition.type === 'allPlaced' ? 'All Placed' : 'Variable Check'}`}
+                            typeLabel="WIN"
+                            badgeClass="bg-amber-500/20 text-amber-300"
+                            isSelected={false}
+                            onClick={onSelect}
+                        />
+                    )}
+                </div>
+            )}
         </div>
     );
 };
+
+interface ScreenChildRowProps {
+    name: string;
+    typeLabel: string;
+    badgeClass: string;
+    isSelected: boolean;
+    onClick: () => void;
+}
+
+const ScreenChildRow: React.FC<ScreenChildRowProps> = ({ name, typeLabel, badgeClass, isSelected, onClick }) => (
+    <div
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded cursor-pointer text-xs transition-colors ${
+            isSelected
+                ? 'bg-sky-500/20 text-sky-200'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white'
+        }`}
+    >
+        <span className={`text-[9px] font-mono px-1 rounded ${badgeClass}`}>{typeLabel}</span>
+        <span className="truncate flex-grow">{name}</span>
+    </div>
+);
 
 export default React.memo(UIManager);

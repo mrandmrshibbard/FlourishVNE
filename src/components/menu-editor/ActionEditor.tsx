@@ -58,6 +58,10 @@ const ActionEditor: React.FC<{
                         <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
                         <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
                         <option value={UIActionType.OpenURL}>Open URL</option>
+                        <option value={UIActionType.ShowLog}>Show Log / History</option>
+                        <option value={UIActionType.ToggleAutoAdvance}>Toggle Auto-Advance</option>
+                        <option value={UIActionType.ToggleSkip}>Toggle Skip</option>
+                        <option value={UIActionType.SkipBackward}>Skip Backward (Rewind)</option>
                     </Select>
                 </FormField>
             </div>
@@ -384,6 +388,10 @@ const ActionEditor: React.FC<{
                     <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
                     <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
                     <option value={UIActionType.OpenURL}>Open URL</option>
+                    <option value={UIActionType.ShowLog}>Show Log / History</option>
+                    <option value={UIActionType.ToggleAutoAdvance}>Toggle Auto-Advance</option>
+                    <option value={UIActionType.ToggleSkip}>Toggle Skip</option>
+                    <option value={UIActionType.SkipBackward}>Skip Backward (Rewind)</option>
                 </Select>
             </FormField>
             {renderActionFields()}

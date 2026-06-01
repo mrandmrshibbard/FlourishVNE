@@ -5,6 +5,7 @@ import { CommandContext, CommandResult } from './types';
 /**
  * Handles background changes with transitions
  * Supports various transition effects: cross-fade, fade, dissolve, slide, iris, wipe
+ * If `backgroundColor` is set, renders a solid color instead of an image.
  */
 export async function handleSetBackground(
   command: SetBackgroundCommand,
@@ -12,6 +13,178 @@ export async function handleSetBackground(
 ): Promise<CommandResult> {
   const { assetResolver, getAssetMetadata, setPlayerState, playerState, advance } = context;
   
+  // If backgroundColor is set, use that instead of resolving an image
+  if (command.backgroundColor) {
+    const duration = command.duration ?? 1;
+
+    // For instant transitions, update immediately
+    if (command.transition === 'instant' || !command.transition) {
+      return {
+        advance: true,
+        updates: {
+          stageState: {
+            ...playerState.stageState,
+            backgroundUrl: null,
+            backgroundIsVideo: false,
+            backgroundColor: command.backgroundColor,
+          },
+        },
+      };
+    }
+
+    // For transitions with color background, use visual overlays
+    setPlayerState((p) => {
+      if (!p) return null;
+      return { ...p, uiState: { ...p.uiState, isTransitioning: true } };
+    });
+
+    // Fade: two-phase — fade to black, then switch color and fade from black
+    if (command.transition === 'fade') {
+      const phase1 = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0 bg-black"
+          style={{ animation: `dissolve-in ${duration / 2}s forwards` }}
+        />
+      );
+      setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, transitionElement: phase1 } } : null);
+
+      setTimeout(() => {
+        setPlayerState((p) => {
+          if (!p) return null;
+          const phase2 = (
+            <div
+              key={Date.now() + 1}
+              className="absolute inset-0 z-0 bg-black"
+              style={{ animation: `fade-out ${duration / 2}s forwards` }}
+            />
+          );
+          return {
+            ...p,
+            stageState: {
+              ...p.stageState,
+              backgroundUrl: null,
+              backgroundIsVideo: false,
+              backgroundColor: command.backgroundColor,
+            },
+            uiState: { ...p.uiState, transitionElement: phase2 },
+          };
+        });
+      }, duration * 500);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          setPlayerState((p) =>
+            p ? { ...p, uiState: { ...p.uiState, isTransitioning: false, transitionElement: null } } : null
+          );
+          resolve();
+        }, duration * 1000 + 100);
+      });
+
+      advance();
+      return { advance: false };
+    }
+
+    let transitionElement = null;
+
+    if (command.transition === 'cross-fade') {
+      transitionElement = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundColor: command.backgroundColor,
+            animation: `dissolve-in ${duration}s ease-in-out forwards`,
+          }}
+        />
+      );
+    } else if (command.transition === 'dissolve') {
+      transitionElement = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundColor: command.backgroundColor,
+            animation: `dissolve-in ${duration}s forwards`,
+          }}
+        />
+      );
+    } else if (command.transition === 'slide') {
+      transitionElement = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundColor: command.backgroundColor,
+            animation: `slide-in-right ${duration}s forwards`,
+          }}
+        />
+      );
+    } else if (command.transition === 'iris-in') {
+      transitionElement = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundColor: command.backgroundColor,
+            animation: `iris-in ${duration}s forwards`,
+          }}
+        />
+      );
+    } else if (command.transition === 'wipe-right') {
+      transitionElement = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundColor: command.backgroundColor,
+            animation: `wipe-right ${duration}s forwards`,
+          }}
+        />
+      );
+    } else {
+      // Default to fade for unknown transitions
+      transitionElement = (
+        <div
+          key={Date.now()}
+          className="absolute inset-0 z-0 bg-black"
+          style={{ animation: `dissolve-in ${duration / 2}s forwards` }}
+        />
+      );
+    }
+
+    setPlayerState((p) => {
+      if (!p) return null;
+      return {
+        ...p,
+        uiState: { ...p.uiState, transitionElement },
+      };
+    });
+
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        setPlayerState((p) => {
+          if (!p) return null;
+          return {
+            ...p,
+            stageState: {
+              ...p.stageState,
+              backgroundUrl: null,
+              backgroundIsVideo: false,
+              backgroundColor: command.backgroundColor,
+            },
+            uiState: { ...p.uiState, isTransitioning: false, transitionElement: null },
+          };
+        });
+        resolve();
+      }, duration * 1000 + 100);
+    });
+
+    advance();
+    return { advance: false };
+  }
+
+  // Original image/video background logic
   const newUrl = assetResolver(command.backgroundId, 'image');
   const { isVideo, loop } = getAssetMetadata(command.backgroundId, 'image');
   const duration = command.duration ?? 1;

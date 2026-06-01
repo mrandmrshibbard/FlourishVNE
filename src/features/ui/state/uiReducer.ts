@@ -84,15 +84,18 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
     case 'ADD_UI_SCREEN': {
         const { name, id, screenType } = action.payload;
         const newId = id || `screen-${generateId()}`;
-        const newScreen: VNUIScreen = { 
-            id: newId, 
-            name, 
-            background: { type: 'color', value: '#0f172a' }, 
+        // After unification every screen uses the same editor; the "hotzone" label just
+        // pre-seeds empty maps so the user finds the hot zone tooling already initialized.
+        // No more `screenType: 'hotzone'` flag — that's reserved for legacy projects only.
+        const newScreen: VNUIScreen = {
+            id: newId,
+            name,
+            background: { type: 'color', value: '#0f172a' },
             music: { audioId: null, policy: 'continue', volume: 0.8 },
             ambientNoise: { audioId: null, policy: 'continue', volume: 0.8 },
             elements: {},
             effects: [],
-            ...(screenType === 'hotzone' ? { screenType: 'hotzone' as const, hotSpots: {}, hotZoneElements: {} } : {}),
+            ...(screenType === 'hotzone' ? { hotSpots: {}, hotZoneElements: {} } : {}),
         };
         return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen }};
     }

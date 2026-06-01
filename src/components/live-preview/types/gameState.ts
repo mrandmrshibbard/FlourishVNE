@@ -74,6 +74,9 @@ export interface ButtonOverlay {
     actions?: import('../../../types/shared').VNUIAction[]; // Multiple actions support
     clickSound: VNID | null;
     waitForClick?: boolean;
+    /** Quick-menu mode — when true, clicks fire actions but never advance the
+     *  dialogue and never consume the click. See ShowButtonCommand.quickMenuMode. */
+    quickMenuMode?: boolean;
     transition?: VNTransition;
     duration?: number;
     action?: 'show' | 'hide';
@@ -129,12 +132,18 @@ export interface StageCharacterState {
     visualEffects?: VNCharacterVisualEffect[];
     /** The ShowCharacter command ID that placed this character on stage (for drag-to-position) */
     sourceCommandId?: string;
+    /** Character scale (1 = 100% original size) */
+    scale?: number;
+    /** When true, character sprite is flipped horizontally */
+    inverted?: boolean;
 }
 
 export interface StageState {
     backgroundUrl: string | null;
     backgroundIsVideo?: boolean;
     backgroundLoop?: boolean;
+    /** Solid color background (used when backgroundColor is set on the SetBackground command) */
+    backgroundColor?: string;
     characters: Record<VNID, StageCharacterState>;
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];

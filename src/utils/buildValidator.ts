@@ -145,7 +145,8 @@ function validateCommand(
             break;
         }
         case CommandType.SetBackground: {
-            if (!project.backgrounds[cmd.backgroundId] && !project.images?.[cmd.backgroundId]) {
+            // Skip asset check when using solid color background
+            if (!cmd.backgroundColor && !project.backgrounds[cmd.backgroundId] && !project.images?.[cmd.backgroundId]) {
                 errors.push({
                     severity: 'error',
                     message: `SetBackground references missing background asset (ID: ${cmd.backgroundId}).`,

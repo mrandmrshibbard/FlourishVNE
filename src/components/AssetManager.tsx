@@ -88,22 +88,55 @@ function getAssetUrl(asset: any): string | null {
     return asset.imageUrl || asset.videoUrl || asset.audioUrl || null;
 }
 
-/** Detects the best asset category for a File object. */
-function detectCategoryFromFile(file: File): AssetCategory {
+/** Returns the broad media kind for a File. Used to decide whether a file is
+ *  compatible with the currently-selected asset category. */
+function detectMediaKind(file: File): 'image' | 'video' | 'audio' | 'unknown' {
     const mime = file.type.toLowerCase();
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma'].includes(ext)) return 'audio';
-    if (mime.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'videos';
-    if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'images';
+    if (mime.startsWith('video/') || ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+    if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'image';
+    return 'unknown';
+}
+
+/** Detects the best asset category for a File object. When `preferredCategory`
+ *  is given (the tab the user is currently viewing) and the file is compatible
+ *  with it, the file is routed there — e.g. dropping a PNG on the Backgrounds
+ *  tab puts it in Backgrounds rather than always defaulting to Images. */
+function detectCategoryFromFile(file: File, preferredCategory?: AssetCategory): AssetCategory {
+    const kind = detectMediaKind(file);
+    if (preferredCategory) {
+        const fits =
+            (preferredCategory === 'backgrounds' && (kind === 'image' || kind === 'video')) ||
+            (preferredCategory === 'images' && (kind === 'image' || kind === 'video')) ||
+            (preferredCategory === 'audio' && kind === 'audio') ||
+            (preferredCategory === 'videos' && kind === 'video');
+        if (fits) return preferredCategory;
+    }
+    if (kind === 'audio') return 'audio';
+    if (kind === 'video') return 'videos';
     return 'images';
 }
 
-/** Detects category from a filename extension. */
-function detectCategoryFromFilename(filename: string): AssetCategory {
+/** Detects category from a filename extension. Honors `preferredCategory`
+ *  when the file is compatible — same rule as `detectCategoryFromFile`. */
+function detectCategoryFromFilename(filename: string, preferredCategory?: AssetCategory): AssetCategory {
     const ext = filename.split('.').pop()?.toLowerCase() || '';
-    if (['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma'].includes(ext)) return 'audio';
-    if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'videos';
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'images';
+    const kind: 'image' | 'video' | 'audio' | 'unknown' =
+        ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma'].includes(ext) ? 'audio'
+        : ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext) ? 'video'
+        : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext) ? 'image'
+        : 'unknown';
+    if (preferredCategory) {
+        const fits =
+            (preferredCategory === 'backgrounds' && (kind === 'image' || kind === 'video')) ||
+            (preferredCategory === 'images' && (kind === 'image' || kind === 'video')) ||
+            (preferredCategory === 'audio' && kind === 'audio') ||
+            (preferredCategory === 'videos' && kind === 'video');
+        if (fits) return preferredCategory;
+    }
+    if (kind === 'audio') return 'audio';
+    if (kind === 'video') return 'videos';
     return 'images';
 }
 
@@ -303,7 +336,9 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
         let ok = 0, fail = 0;
         const categorized = new Map<AssetCategory, File[]>();
         for (const f of files) {
-            const cat = detectCategoryFromFile(f);
+            // Honor the user's currently-viewed category when the file fits there.
+            // Image dropped on Backgrounds tab → Backgrounds; image dropped on Audio → Images (fallback).
+            const cat = detectCategoryFromFile(f, selectedCategory);
             if (!categorized.has(cat)) categorized.set(cat, []);
             categorized.get(cat)!.push(f);
         }
@@ -321,7 +356,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             const cats = Array.from(categorized.keys());
             toast.success(`Uploaded ${ok} file${ok > 1 ? 's' : ''}${cats.length > 1 ? ` across ${cats.join(', ')}` : ''}`);
         }
-    }, [addAsset, currentPath, toast]);
+    }, [addAsset, currentPath, toast, selectedCategory]);
 
     const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -610,7 +645,9 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                         <UploadButton
                             accept={ASSET_CATEGORIES[selectedCategory].accept}
                             onUpload={(name, url, filename) => {
-                                const cat = detectCategoryFromFilename(filename);
+                                // Route to the currently-viewed category when the file fits — drop a PNG on
+                                // the Backgrounds tab and it lands in Backgrounds instead of Images.
+                                const cat = detectCategoryFromFilename(filename, selectedCategory);
                                 addAsset(cat, name, url, currentPath);
                             }}
                         />

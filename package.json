@@ -1,8 +1,8 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.4.4",
-  "description": "Flourish VNE",
+  "version": "2.7.0",
+  "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",
   "main": "electron/main.cjs",
@@ -12,16 +12,17 @@
     "preview": "vite preview",
     "build:standalone": "vite build --config vite.config.standalone.ts",
     "generate:engine-bundle": "node scripts/generate-engine-bundle.js",
+    "stage:build-tools": "node scripts/stage-build-tools.cjs",
     "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
     "build:player": "node scripts/build-player.js",
     "build:full": "npm run build:engine && npm run build",
     "electron:dev": "npm run build:full && electron .",
     "electron:dev:nogpu": "npm run build:full && electron . --disable-gpu --disable-gpu-compositing",
-    "electron:build": "npm run build:full && electron-builder",
-    "electron:build:win": "npm run build:full && electron-builder --win",
-    "electron:build:mac": "npm run build:full && electron-builder --mac",
-    "electron:build:linux": "npm run build:full && electron-builder --linux",
-    "dist": "npm run build:full && electron-builder --win --x64",
+    "electron:build": "npm run stage:build-tools && npm run build:full && electron-builder",
+    "electron:build:win": "npm run stage:build-tools && npm run build:full && electron-builder --win",
+    "electron:build:mac": "npm run stage:build-tools && npm run build:full && electron-builder --mac",
+    "electron:build:linux": "npm run stage:build-tools && npm run build:full && electron-builder --linux",
+    "dist": "npm run stage:build-tools && npm run build:full && electron-builder --win --x64",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -60,6 +61,15 @@
       "public/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build-tools",
+        "to": "build-tools",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "win": {
       "target": [
         {
@@ -77,7 +87,7 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Flourish VNE",
+      "shortcutName": "Flourish Visual Novel Engine",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
       "installerIcon": "public/Flourish.png",
@@ -87,7 +97,7 @@
     "fileAssociations": [
       {
         "ext": "flourish",
-        "name": "Flourish VNE Project",
+        "name": "Flourish Visual Novel Engine Project",
         "description": "Flourish Visual Novel Engine Project",
         "mimeType": "application/x-flourish-project",
         "icon": "public/Flourish.png",

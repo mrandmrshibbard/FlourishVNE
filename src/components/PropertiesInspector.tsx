@@ -476,11 +476,21 @@ const PropertiesInspector: React.FC<{
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.intensity ?? 1).toFixed(1)}x</span>
                         </FormField>
                     </>}
+                    <FormField label="Keep Open During Choices">
+                        <input 
+                            type="checkbox" 
+                            checked={cmd.keepOpenDuringChoices ?? false} 
+                            onChange={e => updateCommand({ keepOpenDuringChoices: e.target.checked })}
+                            className="cursor-pointer"
+                        />
+                    </FormField>
                 </>;
             }
             case CommandType.SetBackground: {
                 const cmd = command as SetBackgroundCommand;
                 const backgroundOptions: { value: string; label: string; group?: string }[] = [];
+                const useColor = !!cmd.backgroundColor;
+                
                 if (Object.keys(project.backgrounds).length > 0) {
                     Object.values(project.backgrounds).forEach((b: VNBackground) => {
                         backgroundOptions.push({ value: b.id, label: b.name, group: 'Backgrounds' });
@@ -492,14 +502,41 @@ const PropertiesInspector: React.FC<{
                     });
                 }
                 return <>
-                    <FormField label="Background">
-                        <SearchableSelect 
-                            options={backgroundOptions}
-                            value={cmd.backgroundId} 
-                            onChange={(value) => updateCommand({ backgroundId: value })}
-                            placeholder={backgroundOptions.length === 0 ? "No backgrounds or images uploaded" : "Select background..."}
-                        />
+                    <FormField label="Background Type">
+                        <select 
+                            value={useColor ? 'color' : 'image'} 
+                            onChange={(e) => {
+                                if (e.target.value === 'color') {
+                                    updateCommand({ backgroundColor: '#1a102c', backgroundId: cmd.backgroundId });
+                                } else {
+                                    updateCommand({ backgroundColor: undefined, backgroundId: cmd.backgroundId });
+                                }
+                            }}
+                            className="w-full px-2 py-1 rounded bg-[var(--bg-primary)] text-white border border-[var(--border-default)]"
+                        >
+                            <option value="image">Image/Video</option>
+                            <option value="color">Solid Color</option>
+                        </select>
                     </FormField>
+                    {useColor ? (
+                        <FormField label="Color">
+                            <input 
+                                type="color" 
+                                value={cmd.backgroundColor} 
+                                onChange={(e) => updateCommand({ backgroundColor: e.target.value })}
+                                className="w-full h-10 rounded cursor-pointer"
+                            />
+                        </FormField>
+                    ) : (
+                        <FormField label="Background">
+                            <SearchableSelect 
+                                options={backgroundOptions}
+                                value={cmd.backgroundId} 
+                                onChange={(value) => updateCommand({ backgroundId: value })}
+                                placeholder={backgroundOptions.length === 0 ? "No backgrounds or images uploaded" : "Select background..."}
+                            />
+                        </FormField>
+                    )}
                     <TransitionFields 
                         transition={cmd.transition} 
                         duration={cmd.duration} 
@@ -581,6 +618,19 @@ const PropertiesInspector: React.FC<{
                             />
                         </div>
                         <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>1 = 100% original size</p>
+                    </FormField>
+
+                    {/* Flip Horizontally */}
+                    <FormField label="Flip Horizontally">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={cmd.inverted ?? false}
+                                onChange={e => updateCommand({ inverted: e.target.checked })}
+                                className="w-4 h-4"
+                            />
+                            <span className="text-sm">Mirror sprite horizontally</span>
+                        </label>
                     </FormField>
 
                     {/* Per-Character Visual Effects — multiple stacking */}
@@ -1045,12 +1095,22 @@ const PropertiesInspector: React.FC<{
             case CommandType.Wait: {
                 const cmd = command as WaitCommand;
                 return <>
-                    <FormField label="Duration (s)"><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/></FormField>
-                    <FormField label="Allow input to advance">
-                        <label className="flex items-center gap-1">
-                            <input type="checkbox" checked={!!cmd.waitForInput} onChange={e => updateCommand({ waitForInput: e.target.checked })} />
-                            <span className="text-xs text-[var(--text-primary)]">User input (click / Enter / Space) will advance early</span>
-                        </label>
+                    <FormField label="Duration (s)"><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} disabled={cmd.waitIndefinitelyForInput}/></FormField>
+                    <FormField label="Wait Mode">
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-1">
+                                <input type="checkbox" checked={!cmd.waitIndefinitelyForInput && !cmd.waitForInput} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false })} />
+                                <span className="text-xs text-[var(--text-primary)]">Timed wait</span>
+                            </label>
+                            <label className="flex items-center gap-1">
+                                <input type="checkbox" checked={!!cmd.waitForInput && !cmd.waitIndefinitelyForInput} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false })} />
+                                <span className="text-xs text-[var(--text-primary)]">Allow click advance</span>
+                            </label>
+                            <label className="flex items-center gap-1">
+                                <input type="checkbox" checked={!!cmd.waitIndefinitelyForInput} onChange={e => updateCommand({ waitIndefinitelyForInput: e.target.checked, waitForInput: false })} />
+                                <span className="text-xs text-[var(--text-primary)]">Wait indefinitely for user input</span>
+                            </label>
+                        </div>
                     </FormField>
                 </>;
             }
@@ -1489,16 +1549,28 @@ const PropertiesInspector: React.FC<{
                     
                     <FormField label="Wait for Click">
                         <div className="flex items-center gap-1">
-                            <input 
-                                type="checkbox" 
-                                checked={cmd.waitForClick || false} 
-                                onChange={e => updateCommand({ waitForClick: e.target.checked })} 
+                            <input
+                                type="checkbox"
+                                checked={cmd.waitForClick || false}
+                                onChange={e => updateCommand({ waitForClick: e.target.checked })}
                                 className="w-4 h-4"
                             />
                             <span className="text-xs text-[var(--text-secondary)]">Pause scene execution until this button is clicked</span>
                         </div>
                     </FormField>
-                    
+
+                    <FormField label="Quick Menu Mode">
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="checkbox"
+                                checked={cmd.quickMenuMode || false}
+                                onChange={e => updateCommand({ quickMenuMode: e.target.checked })}
+                                className="w-4 h-4"
+                            />
+                            <span className="text-xs text-[var(--text-secondary)]">Behave like a quick-menu button — fires its actions on click but never advances the dialogue or consumes the click.</span>
+                        </div>
+                    </FormField>
+
                     <h4 className="font-bold text-xs mb-2 mt-2 text-[var(--text-secondary)]">Primary Action</h4>
                     <ActionEditor action={cmd.onClick} onActionChange={action => updateCommand({ onClick: action })} />
                     

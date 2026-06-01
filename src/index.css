@@ -709,6 +709,30 @@ h1, h2, h3, h4, h5, h6 {
   to { opacity: 1; }
 }
 
+/* VN scene transition keyframes (used by backgroundHandler and character transitions in LivePreview) */
+@keyframes dissolve-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes iris-in {
+  from { clip-path: circle(0%); }
+  to { clip-path: circle(150%); }
+}
+@keyframes iris-out {
+  from { clip-path: circle(150%); }
+  to { clip-path: circle(0%); }
+}
+@keyframes wipe-right {
+  from { clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%); }
+  to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+}
+.transition-base { animation-duration: 1s; animation-fill-mode: forwards; }
+.transition-dissolve { animation-name: dissolve-in; }
+.transition-dissolve-out { animation-name: fade-out; }
+.transition-fade-out { animation-name: fade-out; }
+.transition-iris-in { animation-name: iris-in; }
+.transition-iris-out { animation-name: iris-out; }
+.transition-wipe-right { animation-name: wipe-right; }
+.transition-slide-in-right { animation-name: slide-in-right; }
+
 @keyframes modal-enter {
   from {
     opacity: 0;

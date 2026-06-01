@@ -2,10 +2,15 @@ import React from 'react';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
-import { VNUIScreen } from '../../features/ui/types';
+import { VNUIScreen, VNHotZoneWinCondition, VNHotZoneElement, UIElementType, UIHotSpotElement, UIImageElement, UIImageMapElement } from '../../features/ui/types';
 import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
+import WinConditionEditor from '../ui/WinConditionEditor';
+import { deriveHotZoneElementsFromScreen } from '../../utils/hotZoneShims';
 import { upsertOverlayEffect, type VNScreenOverlayEffectType, type VNEffectParams } from '../../types';
+
+const newInteractiveId = (prefix: string): VNID =>
+    `${prefix}-${Math.random().toString(36).substring(2, 9)}` as VNID;
 
 /** Small reusable slider for 0..1 effect params */
 const ParamSlider: React.FC<{ label: string; value: number; onChange: (v: number) => void }> = ({ label, value, onChange }) => (
@@ -351,6 +356,109 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </div>
                     );
                 })}
+            </div>
+
+            {/* Interactivity — quick-add buttons that drop a default hot spot / draggable
+                element / image map onto the screen. As soon as one is added, the editor
+                routes to HotZoneEditor for detail editing (until Phase 3 brings overlays
+                directly into MenuEditor). */}
+            <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
+                <h3 className="text-sm font-bold text-purple-300 mb-2">Interactivity</h3>
+                <p className="text-[10px] text-[var(--text-muted)] mb-2">
+                    Hot spots, draggable elements, and image maps work on any screen. Adding one switches
+                    the editor into Hot Zone mode for detail editing.
+                </p>
+                <div className="space-y-1">
+                    <button
+                        onClick={() => {
+                            const id = newInteractiveId('hs');
+                            const existingCount = Object.values(screen.elements).filter(
+                                (e: any) => e.type === UIElementType.HotSpot
+                            ).length;
+                            const newSpot: UIHotSpotElement = {
+                                id,
+                                name: `Hot Spot ${existingCount + 1}`,
+                                type: UIElementType.HotSpot,
+                                shape: 'rect',
+                                trigger: 'click',
+                                x: 40, y: 40, width: 20, height: 20,
+                                anchorX: 0, anchorY: 0,
+                                interactive: true,
+                                actions: [],
+                            };
+                            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: newSpot } });
+                        }}
+                        className="w-full text-left text-xs bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 px-2 py-1.5 rounded transition-colors"
+                    >
+                        + Add Hot Spot
+                    </button>
+                    <button
+                        onClick={() => {
+                            const id = newInteractiveId('hze');
+                            const draggableCount = Object.values(screen.elements).filter(
+                                (e: any) => e.draggable === true
+                            ).length;
+                            // Draggable image — stored as a `UIImageElement` with `interactive: true`
+                            // plus `draggable: true` and snap-back. The `interactive` flag keeps the
+                            // element in the hot zone editor even if `draggable` is toggled off later.
+                            const newEl: UIImageElement = {
+                                id,
+                                name: `Draggable ${draggableCount + 1}`,
+                                type: UIElementType.Image,
+                                background: { type: 'color', value: '#00000000' },
+                                image: null,
+                                objectFit: 'contain',
+                                x: 10, y: 10, width: 10, height: 10,
+                                anchorX: 0, anchorY: 0,
+                                interactive: true,
+                                draggable: true,
+                                snapBack: true,
+                            };
+                            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: newEl } });
+                        }}
+                        className="w-full text-left text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 px-2 py-1.5 rounded transition-colors"
+                    >
+                        + Add Draggable Element
+                    </button>
+                    <button
+                        onClick={() => {
+                            const id = newInteractiveId('hze');
+                            const mapCount = Object.values(screen.elements).filter(
+                                (e: any) => e.type === UIElementType.ImageMap
+                            ).length;
+                            const newEl: UIImageMapElement = {
+                                id,
+                                name: `Image Map ${mapCount + 1}`,
+                                type: UIElementType.ImageMap,
+                                image: null,
+                                imageMapRegions: [],
+                                x: 10, y: 10, width: 60, height: 40,
+                                anchorX: 0, anchorY: 0,
+                                interactive: true,
+                            };
+                            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: newEl } });
+                        }}
+                        className="w-full text-left text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 px-2 py-1.5 rounded transition-colors"
+                    >
+                        + Add Image Map
+                    </button>
+                </div>
+            </div>
+
+            {/* Win Condition — available on any screen. Setting one promotes the screen to
+                "interactive" without forcing a switch to the legacy hot zone editor. */}
+            <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
+                <WinConditionEditor
+                    winCondition={screen.winCondition}
+                    project={project}
+                    targetableElements={
+                        Object.values(deriveHotZoneElementsFromScreen(screen)).map((el: VNHotZoneElement) => ({
+                            id: el.id,
+                            name: el.name,
+                        }))
+                    }
+                    onChange={(next: VNHotZoneWinCondition | undefined) => updateScreen({ winCondition: next })}
+                />
             </div>
         </Panel>
     );
