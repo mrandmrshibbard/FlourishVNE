@@ -75,7 +75,7 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
             return command;
         }
         case CommandType.StopSoundEffect: {
-            const command = { type };
+            const command = { type, audioId: '', fadeDuration: 0 };
             return command;
         }
         case CommandType.PlayMovie: {
@@ -277,7 +277,10 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
         case CommandType.SpawnParticles: {
             return {
                 type,
-                particleTag: 'particles_1',
+                // Empty by default so the runtime derives a unique tag per command
+                // (`particles_<id>`). A hardcoded shared tag made multiple emitters
+                // collide and made Stop Particles ambiguous. Users can still name it.
+                particleTag: '',
                 config: {
                     preset: 'fireflies',
                     shape: 'circle' as const,
@@ -311,28 +314,28 @@ export const createCommand = (type: CommandType, project: VNProject, options: Cr
                 fadeDuration: 1,
             };
         }
-        case CommandType.ShowImageMap: {
+        case CommandType.ShowHotSpot: {
             return {
                 type,
-                imageId: firstImageId || '',
-                hoverImageId: undefined,
-                regions: [],
-                x: 0,
-                y: 0,
-                width: 100,
-                height: 100,
-                opacity: 1,
-                waitForClick: true,
-                transition: 'fade' as const,
-                duration: 0.5,
+                name: 'Hot Spot',
+                x: 40,
+                y: 40,
+                width: 20,
+                height: 20,
+                shape: 'rect' as const,
+                trigger: 'click' as const,
+                actions: [],
+                conditions: [],
+                acceptedTag: '',
+                highlightColor: 'rgba(99,102,241,0.35)',
+                visible: false,
+                advanceOnTrigger: false,
             } as Omit<VNCommand, 'id'>;
         }
-        case CommandType.HideImageMap: {
+        case CommandType.HideHotSpot: {
             return {
                 type,
                 targetCommandId: '',
-                transition: 'fade' as const,
-                duration: 0.5,
             } as Omit<VNCommand, 'id'>;
         }
         case CommandType.CallCommonEvent: {

@@ -7,11 +7,13 @@
  * other places that edit action lists.
  */
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import {
     VNUIAction,
     UIActionType,
+    RESET_ALL_VARIABLES,
 } from '../../types/shared';
 import { VNVariable, VNSetVariableOperator } from '../../features/variables/types';
 import { PlusIcon, TrashIcon } from '../icons';
@@ -31,38 +33,22 @@ interface UIActionsListEditorProps {
     label?: string;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-    [UIActionType.None]: '(No Action)',
-    [UIActionType.StartNewGame]: 'Start New Game',
-    [UIActionType.ContinueGame]: 'Continue Game',
-    [UIActionType.GoToScreen]: 'Go To Screen',
-    [UIActionType.LoadGame]: 'Load Game',
-    [UIActionType.SaveGame]: 'Save Game',
-    [UIActionType.ReturnToGame]: 'Return To Game',
-    [UIActionType.ReturnToPreviousScreen]: 'Return To Previous Screen',
-    [UIActionType.QuitToTitle]: 'Quit To Title',
-    [UIActionType.ExitGame]: 'Exit Game',
-    [UIActionType.JumpToScene]: 'Jump To Scene',
-    [UIActionType.JumpToLabel]: 'Jump To Label',
-    [UIActionType.SetVariable]: 'Set Variable',
-    [UIActionType.CycleLayerAsset]: 'Cycle Layer Asset',
-    [UIActionType.ToggleScreen]: 'Toggle Screen',
-    [UIActionType.OpenURL]: 'Open URL',
-    [UIActionType.PlayAnimation]: 'Play Animation',
-    [UIActionType.ChangeImage]: 'Change Image',
-    [UIActionType.ShowLog]: 'Show Log / History',
-    [UIActionType.ToggleAutoAdvance]: 'Toggle Auto-Advance',
-    [UIActionType.ToggleSkip]: 'Toggle Skip',
-    [UIActionType.SkipBackward]: 'Skip Backward (Rewind)',
-};
-
 const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
     actions,
     project,
     targetableElements,
     onChange,
-    label = 'Actions',
+    label,
 }) => {
+    const { t } = useTranslation('ui');
+    // Translated label for an action type. Maps the enum value (e.g. 'StartNewGame') to the
+    // ui.actions.* key (e.g. 'startNewGame'), falling back to the raw type if missing.
+    const actionLabel = (type: string): string => {
+        const key = 'actions.' + (type.charAt(0).toLowerCase() + type.slice(1));
+        const translated = t(key);
+        return translated === key ? type : translated;
+    };
+    const listLabel = label ?? t('actionsList.actions');
     const addAction = () => {
         onChange([...actions, { type: UIActionType.None }]);
     };
@@ -80,6 +66,8 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
     const changeActionType = (index: number, newType: UIActionType) => {
         const defaults: Record<string, any> = {
             [UIActionType.SetVariable]: { variableId: '' as VNID, operator: 'set' as VNSetVariableOperator, value: '' },
+            [UIActionType.ResetVariable]: { variableId: '' as VNID },
+            [UIActionType.PlaySound]: { audioId: '' as VNID, volume: 1, loop: false },
             [UIActionType.GoToScreen]: { targetScreenId: '' as VNID },
             [UIActionType.JumpToScene]: { targetSceneId: '' as VNID },
             [UIActionType.JumpToLabel]: { targetLabel: '' },
@@ -106,31 +94,31 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30 space-y-1">
                         <select value={a.variableId || ''} onChange={e => updateAction(index, { variableId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- Variable --</option>
+                            <option value="">{t('actionsList.selectVariable')}</option>
                             {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
                         </select>
                         <div className="flex gap-1">
                             <select value={a.operator || 'set'} onChange={e => updateAction(index, { operator: e.target.value as VNSetVariableOperator } as any)} className={inputCls}>
-                                <option value="set">Set to</option>
-                                <option value="add">Add</option>
-                                <option value="subtract">Subtract</option>
-                                <option value="random">Random</option>
+                                <option value="set">{t('actionsList.setTo')}</option>
+                                <option value="add">{t('actionsList.addOp')}</option>
+                                <option value="subtract">{t('actionsList.subtract')}</option>
+                                <option value="random">{t('actionsList.random')}</option>
                             </select>
                             {a.operator === 'random' ? (
                                 <div className="flex gap-1 flex-1">
-                                    <input type="number" value={a.randomMin ?? 0} placeholder="Min" onChange={e => updateAction(index, { randomMin: Number(e.target.value) } as any)} className={inputCls} />
-                                    <input type="number" value={a.randomMax ?? 100} placeholder="Max" onChange={e => updateAction(index, { randomMax: Number(e.target.value) } as any)} className={inputCls} />
+                                    <input type="number" value={a.randomMin ?? 0} placeholder={t('actionsList.min')} onChange={e => updateAction(index, { randomMin: Number(e.target.value) } as any)} className={inputCls} />
+                                    <input type="number" value={a.randomMax ?? 100} placeholder={t('actionsList.max')} onChange={e => updateAction(index, { randomMax: Number(e.target.value) } as any)} className={inputCls} />
                                 </div>
                             ) : variable?.type === 'boolean' ? (
                                 <select value={String(a.value ?? '')} onChange={e => updateAction(index, { value: e.target.value === 'true' } as any)} className={inputCls}>
-                                    <option value="true">True</option>
-                                    <option value="false">False</option>
+                                    <option value="true">{t('actionsList.true')}</option>
+                                    <option value="false">{t('actionsList.false')}</option>
                                 </select>
                             ) : (
                                 <input
                                     type={variable?.type === 'number' ? 'number' : 'text'}
                                     value={String(a.value ?? '')}
-                                    placeholder="Value"
+                                    placeholder={t('actionsList.value')}
                                     onChange={e => updateAction(index, { value: variable?.type === 'number' ? Number(e.target.value) : e.target.value } as any)}
                                     className={inputCls}
                                 />
@@ -139,11 +127,40 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                     </div>
                 );
             }
+            case UIActionType.ResetVariable:
+                return (
+                    <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
+                        <select value={a.variableId || ''} onChange={e => updateAction(index, { variableId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value={RESET_ALL_VARIABLES}>{t('actionsList.allVariables')}</option>
+                            <option value="">{t('actionsList.selectVariable')}</option>
+                            {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
+                        </select>
+                    </div>
+                );
+            case UIActionType.PlaySound:
+                return (
+                    <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-purple-500/30 space-y-1">
+                        <select value={a.audioId || ''} onChange={e => updateAction(index, { audioId: e.target.value as VNID } as any)} className={inputCls}>
+                            <option value="">{t('actionsList.selectAudio')}</option>
+                            {Object.values(project.audio).map((au: any) => <option key={au.id} value={au.id}>{au.name}</option>)}
+                        </select>
+                        <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.volume')}</span>
+                            <input type="range" min={0} max={1} step={0.01} value={a.volume ?? 1}
+                                onChange={e => updateAction(index, { volume: parseFloat(e.target.value) } as any)} className="flex-1 accent-[var(--accent-lavender)]" />
+                        </div>
+                        <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                            <input type="checkbox" checked={a.loop ?? false}
+                                onChange={e => updateAction(index, { loop: e.target.checked } as any)} />
+                            {t('actionsList.loop')}
+                        </label>
+                    </div>
+                );
             case UIActionType.GoToScreen:
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
                         <select value={a.targetScreenId || ''} onChange={e => updateAction(index, { targetScreenId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- Target Screen --</option>
+                            <option value="">{t('actionsList.selectScreen')}</option>
                             {Object.values(project.uiScreens).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                     </div>
@@ -152,7 +169,7 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
                         <select value={a.targetScreenId || ''} onChange={e => updateAction(index, { targetScreenId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- Target Screen --</option>
+                            <option value="">{t('actionsList.selectScreen')}</option>
                             {Object.values(project.uiScreens).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                     </div>
@@ -161,7 +178,7 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
                         <select value={a.targetSceneId || ''} onChange={e => updateAction(index, { targetSceneId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- Target Scene --</option>
+                            <option value="">{t('actionsList.selectScene')}</option>
                             {Object.values(project.scenes).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                     </div>
@@ -169,19 +186,19 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
             case UIActionType.JumpToLabel:
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
-                        <input type="text" value={a.targetLabel || ''} placeholder="Label name..."
+                        <input type="text" value={a.targetLabel || ''} placeholder={t('actionsList.labelName')}
                             onChange={e => updateAction(index, { targetLabel: e.target.value } as any)} className={inputCls} />
                     </div>
                 );
             case UIActionType.OpenURL:
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30 space-y-1">
-                        <input type="text" value={a.url || ''} placeholder="https://..."
+                        <input type="text" value={a.url || ''} placeholder={t('actionsList.url')}
                             onChange={e => updateAction(index, { url: e.target.value } as any)} className={inputCls} />
                         <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
                             <input type="checkbox" checked={a.newTab ?? true}
                                 onChange={e => updateAction(index, { newTab: e.target.checked } as any)} />
-                            Open in new tab
+                            {t('actionsList.openNewTab')}
                         </label>
                     </div>
                 );
@@ -189,19 +206,19 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-purple-500/30 space-y-1">
                         <select value={a.targetElementId || ''} onChange={e => updateAction(index, { targetElementId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- Target Element --</option>
+                            <option value="">{t('actionsList.selectElement')}</option>
                             {targetChoices.map(el => <option key={el.id} value={el.id}>{el.name}</option>)}
                         </select>
                         <div className="flex gap-1">
                             <select value={a.animation || 'shake'} onChange={e => updateAction(index, { animation: e.target.value } as any)} className={inputCls}>
-                                <option value="shake">Shake</option>
-                                <option value="bounce">Bounce</option>
-                                <option value="pulse">Pulse</option>
-                                <option value="spin">Spin</option>
-                                <option value="fadeIn">Fade In</option>
-                                <option value="fadeOut">Fade Out</option>
-                                <option value="slideIn">Slide In</option>
-                                <option value="glow">Glow</option>
+                                <option value="shake">{t('actionsList.anim.shake')}</option>
+                                <option value="bounce">{t('actionsList.anim.bounce')}</option>
+                                <option value="pulse">{t('actionsList.anim.pulse')}</option>
+                                <option value="spin">{t('actionsList.anim.spin')}</option>
+                                <option value="fadeIn">{t('actionsList.anim.fadeIn')}</option>
+                                <option value="fadeOut">{t('actionsList.anim.fadeOut')}</option>
+                                <option value="slideIn">{t('actionsList.anim.slideIn')}</option>
+                                <option value="glow">{t('actionsList.anim.glow')}</option>
                             </select>
                             <input type="number" value={a.duration ?? 500} min={100} step={100} placeholder="ms"
                                 onChange={e => updateAction(index, { duration: Number(e.target.value) } as any)} className={inputCls} />
@@ -214,11 +231,11 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-purple-500/30 space-y-1">
                         <select value={a.targetElementId || ''} onChange={e => updateAction(index, { targetElementId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- Target Element --</option>
+                            <option value="">{t('actionsList.selectElement')}</option>
                             {targetChoices.map(el => <option key={el.id} value={el.id}>{el.name}</option>)}
                         </select>
                         <select value={a.newImageId || ''} onChange={e => updateAction(index, { newImageId: e.target.value as VNID } as any)} className={inputCls}>
-                            <option value="">-- New Image --</option>
+                            <option value="">{t('actionsList.selectImage')}</option>
                             {imageAssets.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                         </select>
                     </div>
@@ -229,7 +246,7 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
                         <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-[var(--text-secondary)]">Slot:</span>
+                            <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.slot')}</span>
                             <input type="number" value={a.slotNumber ?? 1} min={1} max={99}
                                 onChange={e => updateAction(index, { slotNumber: Number(e.target.value) } as any)} className={inputCls + ' w-16'} />
                         </div>
@@ -243,13 +260,13 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
     return (
         <div>
             <div className="flex items-center justify-between mb-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">{label}</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{listLabel}</span>
                 <button onClick={addAction} className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-0.5">
-                    <PlusIcon className="w-3 h-3" /> Add
+                    <PlusIcon className="w-3 h-3" /> {t('actionsList.add')}
                 </button>
             </div>
             {actions.length === 0 && (
-                <p className="text-[10px] text-slate-500 italic">No actions configured</p>
+                <p className="text-[10px] text-slate-500 italic">{t('actionsList.noActions')}</p>
             )}
             {actions.map((action, i) => (
                 <React.Fragment key={i}>
@@ -259,8 +276,8 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                             onChange={e => changeActionType(i, e.target.value as UIActionType)}
                             className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
                         >
-                            {Object.values(UIActionType).map(t => (
-                                <option key={t} value={t}>{ACTION_LABELS[t] || t}</option>
+                            {Object.values(UIActionType).map(at => (
+                                <option key={at} value={at}>{actionLabel(at)}</option>
                             ))}
                         </select>
                         <button onClick={() => removeAction(i)} className="text-red-400 hover:text-red-300 p-0.5">

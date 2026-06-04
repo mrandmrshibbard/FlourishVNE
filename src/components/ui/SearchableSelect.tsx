@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SearchableSelectOption {
     value: string;
@@ -24,11 +25,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     value,
     onChange,
     options,
-    placeholder = 'Select...',
-    emptyMessage = 'No options available',
+    placeholder,
+    emptyMessage,
     className = '',
     disabled = false,
 }) => {
+    const { t } = useTranslation('components');
+    const placeholderText = placeholder ?? t('searchableSelect.placeholder');
+    const emptyMessageText = emptyMessage ?? t('searchableSelect.emptyMessage');
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -38,7 +42,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
     // Find current selection label
     const selectedOption = options.find(opt => opt.value === value);
-    const displayLabel = selectedOption?.label || placeholder;
+    const displayLabel = selectedOption?.label || placeholderText;
 
     // Filter options based on search
     const filteredOptions = useMemo(() => {
@@ -184,7 +188,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                 type="text"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder="Type to search..."
+                                placeholder={t('searchableSelect.search')}
                                 className="searchable-select__search-input"
                                 onClick={e => e.stopPropagation()}
                             />
@@ -195,7 +199,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     <div ref={listRef} className="searchable-select__list" role="listbox">
                         {filteredOptions.length === 0 ? (
                             <div className="searchable-select__empty">
-                                {search ? 'No matches found' : emptyMessage}
+                                {search ? t('searchableSelect.noMatches') : emptyMessageText}
                             </div>
                         ) : (
                             <>

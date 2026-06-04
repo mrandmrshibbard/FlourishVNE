@@ -1,19 +1,38 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNUIScreen } from '../../features/ui/types';
-import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, CycleLayerAssetAction, OpenURLAction } from '../../types/shared';
+import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, RESET_ALL_VARIABLES } from '../../types/shared';
 import { VNSetVariableOperator } from '../../features/variables/types';
 import { VNScene, CommandType, LabelCommand } from '../../features/scene/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter } from '../../features/character/types';
 import { useProject } from '../../contexts/ProjectContext';
 import { FormField, Select, TextInput } from '../ui/Form';
+import ConditionsEditor from '../ui/ConditionsEditor';
+
+/** Action types offered by the menu/screen ActionEditor dropdown, in display order.
+ *  (Intentionally excludes PlayAnimation / ChangeImage, which are hot-zone-only.) */
+const MENU_ACTION_TYPES: UIActionType[] = [
+    UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
+    UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
+    UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
+    UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
+    UIActionType.ShowLog, UIActionType.ToggleAutoAdvance, UIActionType.ToggleSkip, UIActionType.SkipBackward,
+];
 
 const ActionEditor: React.FC<{
     action: VNUIAction;
     onActionChange: (newAction: VNUIAction) => void;
 }> = ({ action, onActionChange }) => {
     const { project } = useProject();
+    const { t } = useTranslation('ui');
+    // Translated action-type label (reuses the shared ui.actions.* keys).
+    const actionLabel = (type: string): string => {
+        const key = 'actions.' + (type.charAt(0).toLowerCase() + type.slice(1));
+        const translated = t(key);
+        return translated === key ? type : translated;
+    };
 
     const allLabels = React.useMemo(() => {
         const labels: Array<{ labelId: string; sceneName: string; sceneId: string }> = [];
@@ -40,28 +59,9 @@ const ActionEditor: React.FC<{
         const defaultAction: VNUIAction = { type: UIActionType.None };
         return (
             <div>
-                <FormField label="Action Type">
+                <FormField label={t('actionEditor.actionType')}>
                     <Select value={UIActionType.None} onChange={e => onActionChange({ type: e.target.value as UIActionType })}>
-                        <option value={UIActionType.None}>None</option>
-                        <option value={UIActionType.StartNewGame}>Start New Game</option>
-                        <option value={UIActionType.ContinueGame}>Continue Game</option>
-                        <option value={UIActionType.GoToScreen}>Go To Screen</option>
-                        <option value={UIActionType.LoadGame}>Load Game</option>
-                        <option value={UIActionType.SaveGame}>Save Game</option>
-                        <option value={UIActionType.ReturnToGame}>Return To Game</option>
-                        <option value={UIActionType.ReturnToPreviousScreen}>Return To Previous Screen</option>
-                        <option value={UIActionType.QuitToTitle}>Quit To Title</option>
-                        <option value={UIActionType.ExitGame}>Exit Game</option>
-                        <option value={UIActionType.JumpToScene}>Jump To Scene</option>
-                        <option value={UIActionType.JumpToLabel}>Jump To Label</option>
-                        <option value={UIActionType.SetVariable}>Set Variable</option>
-                        <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
-                        <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
-                        <option value={UIActionType.OpenURL}>Open URL</option>
-                        <option value={UIActionType.ShowLog}>Show Log / History</option>
-                        <option value={UIActionType.ToggleAutoAdvance}>Toggle Auto-Advance</option>
-                        <option value={UIActionType.ToggleSkip}>Toggle Skip</option>
-                        <option value={UIActionType.SkipBackward}>Skip Backward (Rewind)</option>
+                        {MENU_ACTION_TYPES.map(at => <option key={at} value={at}>{actionLabel(at)}</option>)}
                     </Select>
                 </FormField>
             </div>
@@ -73,6 +73,9 @@ const ActionEditor: React.FC<{
         switch(type) {
             case UIActionType.GoToScreen:
                 newAction = { ...newAction, targetScreenId: Object.keys(project.uiScreens)[0] || '' } as GoToScreenAction;
+                break;
+            case UIActionType.ToggleScreen:
+                newAction = { ...newAction, targetScreenId: Object.keys(project.uiScreens)[0] || '' } as ToggleScreenAction;
                 break;
             case UIActionType.JumpToScene:
                 newAction = { ...newAction, targetSceneId: project.startSceneId } as JumpToSceneAction;
@@ -92,6 +95,12 @@ const ActionEditor: React.FC<{
             }
             case UIActionType.SetVariable:
                 newAction = { ...newAction, variableId: Object.keys(project.variables)[0] || '', operator: 'set', value: '' } as SetVariableAction;
+                break;
+            case UIActionType.ResetVariable:
+                newAction = { ...newAction, variableId: Object.keys(project.variables)[0] || '' } as ResetVariableAction;
+                break;
+            case UIActionType.PlaySound:
+                newAction = { ...newAction, audioId: Object.keys(project.audio)[0] || '', volume: 1, loop: false } as PlaySoundAction;
                 break;
             case UIActionType.CycleLayerAsset:
                 const firstCharId = Object.keys(project.characters)[0] || '';
@@ -210,8 +219,21 @@ const ActionEditor: React.FC<{
             case UIActionType.GoToScreen: {
                 const goToScreen = action as GoToScreenAction;
                 return (
-                    <FormField label="Target Screen">
+                    <FormField label={t('actionEditor.targetScreen')}>
                         <Select value={goToScreen.targetScreenId} onChange={e => onActionChange({ ...goToScreen, targetScreenId: e.target.value })}>
+                            {Object.values(project.uiScreens).map((s: VNUIScreen) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                );
+            }
+            case UIActionType.ToggleScreen: {
+                const toggleScreen = action as ToggleScreenAction;
+                return (
+                    <FormField label={t('actionEditor.screenToToggle')}>
+                        <Select value={toggleScreen.targetScreenId} onChange={e => onActionChange({ ...toggleScreen, targetScreenId: e.target.value })}>
+                            <option value="">{t('actionEditor.selectScreen')}</option>
                             {Object.values(project.uiScreens).map((s: VNUIScreen) => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
@@ -222,7 +244,7 @@ const ActionEditor: React.FC<{
             case UIActionType.JumpToScene: {
                 const jumpToScene = action as JumpToSceneAction;
                 return (
-                    <FormField label="Target Scene">
+                    <FormField label={t('actionEditor.targetScene')}>
                         <Select value={jumpToScene.targetSceneId} onChange={e => onActionChange({ ...jumpToScene, targetSceneId: e.target.value })}>
                             {Object.values(project.scenes).map((s: VNScene) => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -234,12 +256,12 @@ const ActionEditor: React.FC<{
             case UIActionType.JumpToLabel: {
                 const jumpToLabel = action as JumpToLabelAction;
                 return (
-                    <FormField label="Target Label">
+                    <FormField label={t('actionEditor.targetLabel')}>
                         <Select value={jumpToLabel.targetLabel} onChange={e => onActionChange({ ...jumpToLabel, targetLabel: e.target.value })}>
-                            {allLabels.length === 0 && <option value="">No labels found</option>}
+                            {allLabels.length === 0 && <option value="">{t('actionEditor.noLabels')}</option>}
                             {allLabels.map((labelInfo, idx) => (
                                 <option key={idx} value={labelInfo.labelId}>
-                                    {labelInfo.labelId} (in {labelInfo.sceneName})
+                                    {t('actionEditor.labelInScene', { label: labelInfo.labelId, scene: labelInfo.sceneName })}
                                 </option>
                             ))}
                         </Select>
@@ -251,7 +273,7 @@ const ActionEditor: React.FC<{
                 const variable = project.variables[setVariable.variableId];
                 return (
                     <div className="space-y-2 p-2 border border-slate-700 rounded">
-                        <FormField label="Variable"><Select value={setVariable.variableId} onChange={e => {
+                        <FormField label={t('actionEditor.variable')}><Select value={setVariable.variableId} onChange={e => {
                             const newVarId = e.target.value;
                             const newVar = project.variables[newVarId];
                             let newOperator = setVariable.operator;
@@ -260,36 +282,71 @@ const ActionEditor: React.FC<{
                             }
                             onActionChange({ ...setVariable, variableId: newVarId, operator: newOperator });
                         }}>
-                             {Object.keys(project.variables).length === 0 && <option disabled>No variables defined</option>}
+                             {Object.keys(project.variables).length === 0 && <option disabled>{t('actionEditor.noVariables')}</option>}
                             {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </Select></FormField>
 
-                        <FormField label="Operator"><Select value={setVariable.operator} onChange={e => onActionChange({ ...setVariable, operator: e.target.value as VNSetVariableOperator })}>
-                            <option value="set">Set (=)</option>
-                            {project.variables[setVariable.variableId]?.type === 'number' && <option value="add">Add (+)</option>}
-                            {project.variables[setVariable.variableId]?.type === 'number' && <option value="subtract">Subtract (-)</option>}
-                            {project.variables[setVariable.variableId]?.type === 'number' && <option value="random">Random (Range)</option>}
+                        <FormField label={t('actionEditor.operator')}><Select value={setVariable.operator} onChange={e => onActionChange({ ...setVariable, operator: e.target.value as VNSetVariableOperator })}>
+                            <option value="set">{t('actionEditor.opSet')}</option>
+                            {project.variables[setVariable.variableId]?.type === 'number' && <option value="add">{t('actionEditor.opAdd')}</option>}
+                            {project.variables[setVariable.variableId]?.type === 'number' && <option value="subtract">{t('actionEditor.opSubtract')}</option>}
+                            {project.variables[setVariable.variableId]?.type === 'number' && <option value="random">{t('actionEditor.opRandom')}</option>}
                         </Select></FormField>
 
                         {setVariable.operator === 'random' && project.variables[setVariable.variableId]?.type === 'number' ? (
                             <div className="grid grid-cols-2 gap-2">
-                                <FormField label="Min">
+                                <FormField label={t('actionEditor.min')}>
                                     <TextInput type="number" value={String(setVariable.randomMin ?? 0)} onChange={e => onActionChange({ ...setVariable, randomMin: parseFloat(e.target.value) || 0 })}/>
                                 </FormField>
-                                <FormField label="Max">
+                                <FormField label={t('actionEditor.max')}>
                                     <TextInput type="number" value={String(setVariable.randomMax ?? 100)} onChange={e => onActionChange({ ...setVariable, randomMax: parseFloat(e.target.value) || 100 })}/>
                                 </FormField>
                             </div>
                         ) : project.variables[setVariable.variableId]?.type === 'boolean' ? (
-                            <FormField label="Value">
+                            <FormField label={t('actionEditor.value')}>
                                 <Select value={String(setVariable.value)} onChange={e => onActionChange({ ...setVariable, value: e.target.value === 'true' })}>
-                                    <option value="true">True</option>
-                                    <option value="false">False</option>
+                                    <option value="true">{t('actionEditor.true')}</option>
+                                    <option value="false">{t('actionEditor.false')}</option>
                                 </Select>
                             </FormField>
                         ) : (
-                            <FormField label="Value"><TextInput value={String(setVariable.value)} onChange={e => onActionChange({ ...setVariable, value: e.target.value })}/></FormField>
+                            <FormField label={t('actionEditor.value')}><TextInput value={String(setVariable.value)} onChange={e => onActionChange({ ...setVariable, value: e.target.value })}/></FormField>
                         )}
+                    </div>
+                );
+            }
+            case UIActionType.ResetVariable: {
+                const resetAction = action as ResetVariableAction;
+                return (
+                    <FormField label={t('actionEditor.variableToReset')}>
+                        <Select value={resetAction.variableId} onChange={e => onActionChange({ ...resetAction, variableId: e.target.value as VNID })}>
+                            <option value={RESET_ALL_VARIABLES}>{t('actionEditor.allVariables')}</option>
+                            {Object.keys(project.variables).length === 0 && <option disabled>{t('actionEditor.noVariables')}</option>}
+                            {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        </Select>
+                    </FormField>
+                );
+            }
+            case UIActionType.PlaySound: {
+                const playSoundAction = action as PlaySoundAction;
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label={t('actionEditor.audio')}>
+                            <Select value={playSoundAction.audioId} onChange={e => onActionChange({ ...playSoundAction, audioId: e.target.value as VNID })}>
+                                {Object.keys(project.audio).length === 0 && <option value="">{t('actionEditor.noAudio')}</option>}
+                                {Object.values(project.audio).map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </Select>
+                        </FormField>
+                        <FormField label={t('actionEditor.volume', { value: Math.round((playSoundAction.volume ?? 1) * 100) })}>
+                            <input type="range" min="0" max="1" step="0.01" value={playSoundAction.volume ?? 1}
+                                onChange={e => onActionChange({ ...playSoundAction, volume: parseFloat(e.target.value) })}
+                                className="w-full accent-[var(--accent-lavender)]" />
+                        </FormField>
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" checked={playSoundAction.loop || false}
+                                onChange={e => onActionChange({ ...playSoundAction, loop: e.target.checked })} />
+                            {t('actionEditor.loopSound')}
+                        </label>
                     </div>
                 );
             }
@@ -299,43 +356,43 @@ const ActionEditor: React.FC<{
                 const availableLayers = character ? Object.values(character.layers) : [];
                 return (
                     <div className="space-y-2 p-2 border border-slate-700 rounded">
-                        <FormField label="Character">
+                        <FormField label={t('actionEditor.character')}>
                             <Select value={cycleAction.characterId} onChange={e => {
                                 const newCharId = e.target.value;
                                 const newChar = project.characters[newCharId];
                                 const firstLayerId = newChar ? Object.keys(newChar.layers)[0] || '' : '';
                                 onActionChange({ ...cycleAction, characterId: newCharId, layerId: firstLayerId });
                             }}>
-                                {Object.keys(project.characters).length === 0 && <option disabled>No characters defined</option>}
+                                {Object.keys(project.characters).length === 0 && <option disabled>{t('actionEditor.noCharacters')}</option>}
                                 {Object.values(project.characters).map((c: VNCharacter) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </Select>
                         </FormField>
 
                         {cycleAction.characterId && (
-                            <FormField label="Layer">
+                            <FormField label={t('actionEditor.layer')}>
                                 <Select value={cycleAction.layerId} onChange={e => onActionChange({ ...cycleAction, layerId: e.target.value })}>
-                                    {availableLayers.length === 0 && <option disabled>No layers in character</option>}
+                                    {availableLayers.length === 0 && <option disabled>{t('actionEditor.noLayers')}</option>}
                                     {availableLayers.map((layer: any) => {
                                         const assetCount = layer.assets ? Object.keys(layer.assets).length : 0;
                                         return (
-                                            <option key={layer.id} value={layer.id}>{layer.name} ({assetCount} assets)</option>
+                                            <option key={layer.id} value={layer.id}>{t('actionEditor.layerAssets', { name: layer.name, count: assetCount })}</option>
                                         );
                                     })}
                                 </Select>
                             </FormField>
                         )}
 
-                        <FormField label="Index Variable (to track position)">
+                        <FormField label={t('actionEditor.indexVariable')}>
                             <Select value={cycleAction.variableId} onChange={e => onActionChange({ ...cycleAction, variableId: e.target.value })}>
-                                {Object.keys(project.variables).length === 0 && <option disabled>No variables defined</option>}
+                                {Object.keys(project.variables).length === 0 && <option disabled>{t('actionEditor.noVariables')}</option>}
                                 {numericVariables.map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
                             </Select>
                         </FormField>
 
-                        <FormField label="Direction">
+                        <FormField label={t('actionEditor.direction')}>
                             <Select value={cycleAction.direction} onChange={e => onActionChange({ ...cycleAction, direction: e.target.value as 'next' | 'prev' })}>
-                                <option value="next">Next (forward)</option>
-                                <option value="prev">Previous (backward)</option>
+                                <option value="next">{t('actionEditor.dirNext')}</option>
+                                <option value="prev">{t('actionEditor.dirPrev')}</option>
                             </Select>
                         </FormField>
                     </div>
@@ -345,11 +402,11 @@ const ActionEditor: React.FC<{
                 const openUrlAction = action as OpenURLAction;
                 return (
                     <div className="space-y-2 p-2 border border-slate-700 rounded">
-                        <FormField label="URL">
+                        <FormField label={t('actionEditor.url')}>
                             <TextInput
                                 value={openUrlAction.url || ''}
                                 onChange={e => onActionChange({ ...openUrlAction, url: e.target.value })}
-                                placeholder="https://example.com"
+                                placeholder={t('actionEditor.urlPlaceholder')}
                             />
                         </FormField>
                         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
@@ -358,7 +415,7 @@ const ActionEditor: React.FC<{
                                 checked={openUrlAction.newTab !== false}
                                 onChange={e => onActionChange({ ...openUrlAction, newTab: e.target.checked })}
                             />
-                            Open in new tab
+                            {t('actionEditor.openNewTab')}
                         </label>
                     </div>
                 );
@@ -370,31 +427,22 @@ const ActionEditor: React.FC<{
     
     return (
         <div>
-            <FormField label="Action Type">
+            <FormField label={t('actionEditor.actionType')}>
                 <Select value={action.type} onChange={e => handleTypeChange(e.target.value as UIActionType)}>
-                    <option value={UIActionType.None}>None</option>
-                    <option value={UIActionType.StartNewGame}>Start New Game</option>
-                    <option value={UIActionType.ContinueGame}>Continue Game</option>
-                    <option value={UIActionType.GoToScreen}>Go To Screen</option>
-                    <option value={UIActionType.LoadGame}>Load Game</option>
-                    <option value={UIActionType.SaveGame}>Save Game</option>
-                    <option value={UIActionType.ReturnToGame}>Return To Game</option>
-                    <option value={UIActionType.ReturnToPreviousScreen}>Return To Previous Screen</option>
-                    <option value={UIActionType.QuitToTitle}>Quit To Title</option>
-                    <option value={UIActionType.ExitGame}>Exit Game</option>
-                    <option value={UIActionType.JumpToScene}>Jump To Scene</option>
-                    <option value={UIActionType.JumpToLabel}>Jump To Label</option>
-                    <option value={UIActionType.SetVariable}>Set Variable</option>
-                    <option value={UIActionType.CycleLayerAsset}>Cycle Layer Asset</option>
-                    <option value={UIActionType.ToggleScreen}>Toggle Screen</option>
-                    <option value={UIActionType.OpenURL}>Open URL</option>
-                    <option value={UIActionType.ShowLog}>Show Log / History</option>
-                    <option value={UIActionType.ToggleAutoAdvance}>Toggle Auto-Advance</option>
-                    <option value={UIActionType.ToggleSkip}>Toggle Skip</option>
-                    <option value={UIActionType.SkipBackward}>Skip Backward (Rewind)</option>
+                    {MENU_ACTION_TYPES.map(at => <option key={at} value={at}>{actionLabel(at)}</option>)}
                 </Select>
             </FormField>
             {renderActionFields()}
+            {action.type !== UIActionType.None && (
+                <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
+                    <p className="text-xs text-[var(--text-secondary)] mb-1">{t('actionEditor.runOnlyIf')}</p>
+                    <ConditionsEditor
+                        conditions={action.conditions}
+                        project={project}
+                        onChange={newConditions => onActionChange({ ...action, conditions: newConditions })}
+                    />
+                </div>
+            )}
         </div>
     );
 };

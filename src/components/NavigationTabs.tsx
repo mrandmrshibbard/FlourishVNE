@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
@@ -37,6 +38,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     commonEventCount
 }) => {
     const isChildWindow = isManagerWindow();
+    const { t } = useTranslation('nav');
 
     type TabConfig = {
         id: NavigationTab;
@@ -235,10 +237,12 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
             />
             
             {tabs.map((tab, index) => {
+                const label = t(`tabs.${tab.id}`);
+                const description = t(`desc.${tab.id}`);
                 const shortcut = getShortcutLabel(tab.id);
-                const baseTooltip = shortcut ? `${tab.description} (${shortcut})` : tab.description;
+                const baseTooltip = shortcut ? `${description} (${shortcut})` : description;
                 const rightClickHint = isMultiWindowSupported() && !isChildWindow && tab.id !== 'settings'
-                    ? ' | Right-click to focus manager window'
+                    ? t('rightClickHint')
                     : '';
                 const tooltip = `${baseTooltip}${rightClickHint}`;
                 const colors = tabColors[tab.id];
@@ -291,7 +295,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                             </span>
                             
                             {/* Label */}
-                            <span className="relative z-10">{tab.label}</span>
+                            <span className="relative z-10">{label}</span>
                             
                             {/* Count badge with fun styling */}
                             {tab.count > 0 && (
@@ -333,7 +337,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                                     boxShadow: `0 2px 12px color-mix(in srgb, ${colors.base} 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.3)`,
                                     border: '1px solid rgba(255, 255, 255, 0.2)'
                                 }}
-                                title={`Open or focus ${tab.label} in separate window`}
+                                title={t('openInWindow', { label })}
                             >
                                 ⧉
                             </button>

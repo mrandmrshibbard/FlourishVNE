@@ -17,10 +17,30 @@ import enCommon from './locales/en/common.json';
 import enHeader from './locales/en/header.json';
 import enSettings from './locales/en/settings.json';
 import enHub from './locales/en/hub.json';
+import enNav from './locales/en/nav.json';
+import enScenes from './locales/en/scenes.json';
+import enCharacters from './locales/en/characters.json';
+import enVariables from './locales/en/variables.json';
+import enCommonEvents from './locales/en/commonEvents.json';
+import enCommands from './locales/en/commands.json';
+import enProperties from './locales/en/properties.json';
+import enAssets from './locales/en/assets.json';
+import enUi from './locales/en/ui.json';
+import enComponents from './locales/en/components.json';
 import ptCommon from './locales/pt/common.json';
 import ptHeader from './locales/pt/header.json';
 import ptSettings from './locales/pt/settings.json';
 import ptHub from './locales/pt/hub.json';
+import ptNav from './locales/pt/nav.json';
+import ptScenes from './locales/pt/scenes.json';
+import ptCharacters from './locales/pt/characters.json';
+import ptVariables from './locales/pt/variables.json';
+import ptCommonEvents from './locales/pt/commonEvents.json';
+import ptCommands from './locales/pt/commands.json';
+import ptProperties from './locales/pt/properties.json';
+import ptAssets from './locales/pt/assets.json';
+import ptUi from './locales/pt/ui.json';
+import ptComponents from './locales/pt/components.json';
 
 /** Languages offered in the editor's Language selector. `en` is the source of truth. */
 export const SUPPORTED_LANGUAGES = [
@@ -33,8 +53,8 @@ export type LanguageCode = typeof SUPPORTED_LANGUAGES[number]['code'];
 const LANGUAGE_STORAGE_KEY = 'flourish-editor-language';
 
 const resources = {
-    en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub },
-    pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub },
+    en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub, nav: enNav, scenes: enScenes, characters: enCharacters, variables: enVariables, commonEvents: enCommonEvents, commands: enCommands, properties: enProperties, assets: enAssets, ui: enUi, components: enComponents },
+    pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub, nav: ptNav, scenes: ptScenes, characters: ptCharacters, variables: ptVariables, commonEvents: ptCommonEvents, commands: ptCommands, properties: ptProperties, assets: ptAssets, ui: ptUi, components: ptComponents },
 } as const;
 
 function getInitialLanguage(): string {
@@ -54,7 +74,7 @@ i18n.use(initReactI18next).init({
     lng: getInitialLanguage(),
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'header', 'settings', 'hub'],
+    ns: ['common', 'header', 'settings', 'hub', 'nav', 'scenes', 'characters', 'variables', 'commonEvents', 'commands', 'properties', 'assets', 'ui', 'components'],
     interpolation: { escapeValue: false }, // React already escapes
     returnNull: false,
 });

@@ -5,10 +5,12 @@
 
 import { VNCondition } from '../../../types/shared';
 import { VNID } from '../../../types';
+import { combineConditions } from '../../../utils/conditionLogic';
 
 /**
- * Evaluate an array of conditions against current variable values
- * All conditions must be met (AND logic)
+ * Evaluate an array of conditions against current variable values.
+ * Conditions combine via their per-row `connector` (AND/OR), evaluated
+ * left-to-right; a missing connector defaults to AND (legacy behaviour).
  */
 export const evaluateConditions = (
     conditions: VNCondition[] | undefined,
@@ -16,7 +18,7 @@ export const evaluateConditions = (
 ): boolean => {
     if (!conditions || conditions.length === 0) return true;
 
-    return conditions.every(condition => {
+    return combineConditions(conditions, condition => {
         const varValue = variables[condition.variableId];
         if (varValue === undefined) return false;
 

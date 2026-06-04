@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
@@ -48,6 +49,7 @@ const UIManager: React.FC<UIManagerProps> = ({
     onEditorModeChange
 }) => {
     const { dispatch } = useProject();
+    const { t } = useTranslation('ui');
     const [editorMode, setEditorModeLocal] = useState<UIEditorMode>('screens');
     // Keep parent in sync when component mounts/remounts
     useEffect(() => { onEditorModeChange?.(editorMode); }, []);
@@ -116,7 +118,7 @@ const UIManager: React.FC<UIManagerProps> = ({
     );
 
     const addUIScreen = () => {
-        const name = `New Screen ${Object.keys(project.uiScreens).length + 1}`;
+        const name = t('manager.newScreenName', { n: Object.keys(project.uiScreens).length + 1 });
         dispatch({ type: 'ADD_UI_SCREEN', payload: { name } });
     };
 
@@ -176,7 +178,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                     }`}
                 >
                     <BookmarkSquareIcon className="w-4 h-4" />
-                    UI Screens
+                    {t('manager.uiScreens')}
                 </button>
                 <button
                     onClick={() => { setEditorMode('ingame'); }}
@@ -187,7 +189,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                     }`}
                 >
                     <ChatBubbleIcon className="w-4 h-4" />
-                    In-Game UI
+                    {t('manager.inGameUi')}
                 </button>
             </div>
 
@@ -202,7 +204,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                             <div className="p-4 border-b border-[var(--border-subtle)]">
                                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                     <BookmarkSquareIcon className="w-5 h-5" />
-                                    UI Screens
+                                    {t('manager.uiScreens')}
                                 </h2>
                             </div>
 
@@ -236,14 +238,14 @@ const UIManager: React.FC<UIManagerProps> = ({
                                     className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
                                 >
                                     <PlusIcon className="w-4 h-4" />
-                                    Add UI Screen
+                                    {t('manager.addScreen')}
                                 </button>
-                                <UIScreenThemeSelector label="Apply Theme to All" className="w-full [&>button]:w-full [&>button]:justify-center" />
+                                <UIScreenThemeSelector label={t('manager.applyThemeAll')} className="w-full [&>button]:w-full [&>button]:justify-center" />
                                 <button
                                     onClick={openRestoreModal}
                                     className="w-full bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-red-300 hover:text-red-200 p-2 rounded-md flex items-center justify-center gap-2 text-sm transition-colors border border-red-500/30"
                                 >
-                                    Restore Default Screens
+                                    {t('manager.restoreDefaults')}
                                 </button>
                             </div>
                         </div>
@@ -262,7 +264,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                                 <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
                                     <div className="text-center">
                                         <BookmarkSquareIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                                        <p className="text-lg">Select a UI screen to edit</p>
+                                        <p className="text-lg">{t('manager.selectScreenToEdit')}</p>
                                     </div>
                                 </div>
                             )}
@@ -272,10 +274,10 @@ const UIManager: React.FC<UIManagerProps> = ({
                             isOpen={restoreModalOpen}
                             onClose={() => setRestoreModalOpen(false)}
                             onConfirm={handleConfirmRestore}
-                            title="Restore Default Screens"
-                            confirmLabel="Restore"
+                            title={t('manager.restoreDefaults')}
+                            confirmLabel={t('manager.restoreConfirm')}
                         >
-                            Restoring defaults will add brand-new versions of the title, pause, save, load, and settings screens. Your existing custom screens will remain untouched, but the new defaults will become the active selections. Continue?
+                            {t('manager.restoreBody')}
                         </ConfirmationModal>
                     </div>
                 )}
@@ -315,6 +317,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
     onDelete,
     onDuplicate
 }) => {
+    const { t } = useTranslation('ui');
     const { inputProps: renameInputProps } = useInlineRename(screen.name, onCommitRename);
 
     const isHotZone = screen.screenType === 'hotzone';
@@ -342,7 +345,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     className={`p-0.5 rounded flex-shrink-0 transition-colors ${
                         hasChildren ? 'text-[var(--text-secondary)] hover:text-white' : 'text-[var(--text-muted)] opacity-30 cursor-default'
                     }`}
-                    title={hasChildren ? (isExpanded ? 'Collapse' : 'Expand') : 'No elements'}
+                    title={hasChildren ? (isExpanded ? t('manager.collapse') : t('manager.expand')) : t('manager.noElements')}
                     disabled={!hasChildren}
                 >
                     {isExpanded
@@ -374,13 +377,13 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 
                 <div className="flex items-center gap-1 flex-shrink-0">
                     {isSpecial && (
-                        <LockClosedIcon className="w-4 h-4 text-[var(--text-muted)]" title="This screen is essential and cannot be deleted or renamed." />
+                        <LockClosedIcon className="w-4 h-4 text-[var(--text-muted)]" title={t('manager.essentialScreen')} />
                     )}
 
                     <button
                         onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
                         className="p-1 text-sky-400 hover:text-sky-300 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-                        title="Duplicate"
+                        title={t('manager.duplicate')}
                     >
                         <DuplicateIcon className="w-3 h-3" />
                     </button>
@@ -390,7 +393,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                             <button
                                 onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
                                 className="p-1 text-[var(--text-secondary)] hover:text-sky-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-                                title="Rename"
+                                title={t('manager.rename')}
                             >
                                 <PencilIcon className="w-3 h-3" />
                             </button>
@@ -398,7 +401,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                             <button
                                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                                 className="p-1 text-[var(--text-secondary)] hover:text-red-400 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-                                title="Delete"
+                                title={t('manager.delete')}
                             >
                                 <TrashIcon className="w-3 h-3" />
                             </button>
@@ -412,7 +415,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     {!isHotZone && standardElements.map(el => (
                         <ScreenChildRow
                             key={el.id}
-                            name={el.name || '(unnamed)'}
+                            name={el.name || t('manager.unnamed')}
                             typeLabel={ELEMENT_TYPE_LABEL[el.type] || el.type.slice(0, 3).toUpperCase()}
                             badgeClass="bg-sky-500/20 text-sky-300"
                             isSelected={selectedElementIds.includes(el.id)}
@@ -422,7 +425,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     {isHotZone && hotZoneElements.map(el => (
                         <ScreenChildRow
                             key={el.id}
-                            name={el.name || '(unnamed)'}
+                            name={el.name || t('manager.unnamed')}
                             typeLabel={(el.elementType || 'image').slice(0, 3).toUpperCase()}
                             badgeClass="bg-purple-500/20 text-purple-300"
                             isSelected={false}
@@ -432,7 +435,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     {isHotZone && hotSpots.map(spot => (
                         <ScreenChildRow
                             key={spot.id}
-                            name={spot.name || '(unnamed)'}
+                            name={spot.name || t('manager.unnamed')}
                             typeLabel="HOT"
                             badgeClass="bg-emerald-500/20 text-emerald-300"
                             isSelected={false}
@@ -442,7 +445,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     {isHotZone && screen.winCondition && (
                         <ScreenChildRow
                             key="__winCondition"
-                            name={`Win: ${screen.winCondition.type === 'allPlaced' ? 'All Placed' : 'Variable Check'}`}
+                            name={t('manager.win', { type: screen.winCondition.type === 'allPlaced' ? t('manager.winAllPlaced') : t('manager.winVariableCheck') })}
                             typeLabel="WIN"
                             badgeClass="bg-amber-500/20 text-amber-300"
                             isSelected={false}

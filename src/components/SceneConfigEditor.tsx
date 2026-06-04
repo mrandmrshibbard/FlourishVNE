@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
 import { VNScene } from '../features/scene/types';
@@ -11,13 +12,14 @@ const SceneConfigEditor: React.FC<{
     onCloseSceneConfig?: () => void;
 }> = ({ activeSceneId, onCloseSceneConfig }) => {
     const { project, dispatch } = useProject();
+    const { t } = useTranslation('scenes');
     const activeScene = project.scenes[activeSceneId];
 
     if (!activeScene) {
         return (
-            <Panel title="Scene Config" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
+            <Panel title={t('config.title')} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
                 <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-xs italic">
-                    <p>Scene not found.</p>
+                    <p>{t('config.notFound')}</p>
                 </div>
             </Panel>
         );
@@ -28,30 +30,30 @@ const SceneConfigEditor: React.FC<{
     };
 
     return (
-        <Panel title={`Scene Config: ${activeScene.name}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
+        <Panel title={t('config.titleNamed', { name: activeScene.name })} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
             <div className="flex flex-col h-full">
                 <div className="flex-grow overflow-y-auto pr-1">
                     {/* Exit Transition Settings */}
                     <div className="mb-4">
-                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Exit Transition</h3>
+                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">{t('config.exitTransition')}</h3>
                         <p className="text-xs text-[var(--text-secondary)] mb-3">
-                            How the screen transitions out when leaving this scene.
+                            {t('config.exitTransitionDesc')}
                         </p>
-                        <FormField label="Transition Style">
+                        <FormField label={t('config.transitionStyle')}>
                             <Select
                                 value={activeScene.outTransition || 'fade'}
                                 onChange={e => updateScene({ outTransition: (e.target.value as VNScene['outTransition']) || undefined })}
                             >
-                                <option value="fade">Fade to Black</option>
-                                <option value="dissolve">Dissolve</option>
-                                <option value="iris-out">Iris Out</option>
-                                <option value="wipe-right">Wipe Right</option>
-                                <option value="slide-left">Slide Left</option>
-                                <option value="instant">Instant (No Transition)</option>
+                                <option value="fade">{t('config.transitions.fade')}</option>
+                                <option value="dissolve">{t('config.transitions.dissolve')}</option>
+                                <option value="iris-out">{t('config.transitions.iris-out')}</option>
+                                <option value="wipe-right">{t('config.transitions.wipe-right')}</option>
+                                <option value="slide-left">{t('config.transitions.slide-left')}</option>
+                                <option value="instant">{t('config.transitions.instant')}</option>
                             </Select>
                         </FormField>
                         {(activeScene.outTransition || 'fade') !== 'instant' && (
-                            <FormField label="Duration (s)">
+                            <FormField label={t('config.duration')}>
                                 <TextInput
                                     type="number"
                                     min={0.1}
@@ -72,9 +74,9 @@ const SceneConfigEditor: React.FC<{
                     <hr className="border-[var(--border-subtle)] mb-4" />
 
                     <div className="mb-4">
-                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Scene Conditions</h3>
+                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">{t('config.sceneConditions')}</h3>
                         <p className="text-xs text-[var(--text-secondary)] mb-3">
-                            This scene will only play if all conditions are met. If conditions fail, the scene will be skipped.
+                            {t('config.sceneConditionsDesc')}
                         </p>
                         <ConditionsEditor 
                             conditions={activeScene.conditions} 
@@ -85,15 +87,15 @@ const SceneConfigEditor: React.FC<{
                     
                     {activeScene.conditions && activeScene.conditions.length > 0 && (
                         <div className="mt-4">
-                            <FormField label="Fallback Scene">
+                            <FormField label={t('config.fallbackScene')}>
                                 <p className="text-xs text-[var(--text-secondary)] mb-2">
-                                    If conditions fail, jump to this scene instead:
+                                    {t('config.fallbackDesc')}
                                 </p>
-                                <Select 
-                                    value={activeScene.fallbackSceneId || ''} 
+                                <Select
+                                    value={activeScene.fallbackSceneId || ''}
                                     onChange={e => updateScene({ fallbackSceneId: e.target.value || undefined })}
                                 >
-                                    <option value="">Skip to next scene in sequence</option>
+                                    <option value="">{t('config.skipToNext')}</option>
                                     {Object.values(project.scenes).filter((s: VNScene) => s.id !== activeSceneId).map((s: VNScene) => (
                                         <option key={s.id} value={s.id}>{s.name}</option>
                                     ))}
@@ -107,7 +109,7 @@ const SceneConfigEditor: React.FC<{
                         onClick={onCloseSceneConfig} 
                         className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-black font-bold py-1 px-2 rounded-lg transition-colors"
                     >
-                        Done
+                        {t('config.done')}
                     </button>
                 </div>
             </div>

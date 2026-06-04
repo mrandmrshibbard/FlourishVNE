@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CommandType } from '../features/scene/types';
 import { ChevronDownIcon, ChevronRightIcon } from './icons';
 
@@ -37,7 +38,7 @@ export const COMMAND_CATEGORIES = {
     'UI Elements': {
         color: 'bg-cyan-500/20 border-cyan-500 text-cyan-300',
         headerColor: 'bg-cyan-600/30 text-cyan-200',
-        commands: [CommandType.ShowText, CommandType.HideText, CommandType.ShowImage, CommandType.HideImage, CommandType.ShowButton, CommandType.HideButton, CommandType.ShowImageMap, CommandType.HideImageMap, CommandType.ShowScreen]
+        commands: [CommandType.ShowText, CommandType.HideText, CommandType.ShowImage, CommandType.HideImage, CommandType.ShowButton, CommandType.HideButton, CommandType.ShowHotSpot, CommandType.HideHotSpot, CommandType.ShowScreen]
     },
     'Media': {
         color: 'bg-red-500/20 border-red-500 text-red-300',
@@ -64,19 +65,15 @@ export const getCommandColor = (commandType: CommandType): string => {
     return 'bg-slate-500/20 border-[var(--border-default)] text-[var(--text-primary)]'; // default
 };
 
-// Helper function to format command display name
-const formatCommandName = (commandType: CommandType): string => {
-    if (commandType === CommandType.BranchStart) {
-        return 'Branch';
-    }
-    return commandType.replace(/([A-Z])/g, ' $1').trim();
-};
-
 interface CommandPaletteProps {
     onDragStart: (commandType: CommandType) => void;
 }
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
+    const { t } = useTranslation('commands');
+    // Localized command display name, falling back to a camelCase-split of the type.
+    const formatCommandName = (commandType: CommandType): string =>
+        t(`names.${commandType}`, { defaultValue: commandType.replace(/([A-Z])/g, ' $1').trim() });
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set(Object.keys(COMMAND_CATEGORIES)));
 
     const toggleCategory = (category: string) => {
@@ -100,7 +97,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
     return (
         <div className="flex flex-col h-full overflow-hidden">
             <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0">
-                <h2 className="text-xs font-bold text-white">Events</h2>
+                <h2 className="text-xs font-bold text-white">{t('paletteTitle')}</h2>
             </div>
             
             <div className="flex-1 overflow-y-auto px-1 py-1 space-y-1">
@@ -119,7 +116,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                                 ) : (
                                     <ChevronDownIcon className="w-3 h-3" />
                                 )}
-                                {categoryName}
+                                {t(`categories.${categoryName}`)}
                             </button>
 
                             {/* Commands in Category */}
@@ -133,7 +130,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                                                 draggable
                                                 onDragStart={(e) => handleDragStart(e, commandType)}
                                                 className={`px-1.5 py-0.5 rounded text-xs border cursor-move ${category.color} hover:opacity-80 transition-opacity`}
-                                                title={`Drag to add ${formatCommandName(commandType)} event`}
+                                                title={t('dragToAdd', { name: formatCommandName(commandType) })}
                                             >
                                                 {formatCommandName(commandType)}
                                             </div>

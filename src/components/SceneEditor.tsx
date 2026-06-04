@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 // FIX: VNID is not exported from scene/types. Imported from ../types instead.
@@ -41,6 +42,7 @@ const CommandItem: React.FC<{
     onRename?: (newName: string) => void,
     collapsedBranches?: Set<string>
 }> = ({ command, project, isSelected, isInMultiSelection, depth, onToggleCollapse, onRename, collapsedBranches }) => {
+    const { t } = useTranslation('commands');
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState('');
     const leftPadding = depth > 0 ? `${depth * 20 + 8}px` : '8px';
@@ -282,7 +284,7 @@ const CommandItem: React.FC<{
                                 color: isBranch ? branchColor : undefined
                             }}
                         >
-                            {command.type === CommandType.BranchStart ? 'Branch' : command.type.replace(/([A-Z])/g, ' $1').trim()}
+                            {t(`names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() })}
                         </p>
                         <p className="text-xs text-[var(--text-secondary)] truncate flex-1">{getCommandSummary()}</p>
                     </>
@@ -293,6 +295,7 @@ const CommandItem: React.FC<{
 };
 
 const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAdd }) => {
+    const { t } = useTranslation(['commands', 'common']);
     const [isOpen, setIsOpen] = useState(false);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -345,12 +348,10 @@ const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAd
         >
             {Object.values(CommandType).filter(type => type !== CommandType.Group && type !== CommandType.BranchEnd).map((type: CommandType) => {
                 // Rename "Branch Start" to just "Branch" in the menu
-                const displayName = type === CommandType.BranchStart 
-                    ? 'Branch' 
-                    : type.replace(/([A-Z])/g, ' $1').trim();
-                
+                const displayName = t(`names.${type}`, { defaultValue: type.replace(/([A-Z])/g, ' $1').trim() });
+
                 return (
-                    <button key={type} onClick={() => handleSelect(type)} className="block w-full text-left px-2 py-1 hover:bg-[var(--accent-purple)] capitalize text-[10px]">
+                    <button key={type} onClick={() => handleSelect(type)} className="block w-full text-left px-2 py-1 hover:bg-[var(--accent-purple)] text-[10px]">
                         {displayName}
                     </button>
                 );
@@ -366,7 +367,7 @@ const AddCommandMenu: React.FC<{ onAdd: (type: CommandType) => void }> = ({ onAd
                     onClick={handleButtonClick}
                     className="btn-primary-gradient w-full text-white font-bold py-1 px-2 rounded text-[10px] flex items-center justify-center gap-1"
                 >
-                    <PlusIcon className="w-3 h-3" /> Add
+                    <PlusIcon className="w-3 h-3" /> {t('common:add')}
                 </button>
             </div>
             {ReactDOM.createPortal(dropdownContent, document.body)}
@@ -387,6 +388,7 @@ const SceneEditor: React.FC<{
 }> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, setSelectedVariableId, onConfigureScene, className, isCollapsed, onToggleCollapse }) => {
     const { project, dispatch } = useProject();
     const toast = useToast();
+    const { t } = useTranslation(['scenes', 'common']);
     const activeScene = project.scenes[activeSceneId];
     const dragItem = useRef<{ id: string; index: number; groupId?: string } | null>(null);
     const dragOverItem = useRef<number | null>(null);
@@ -529,7 +531,7 @@ const SceneEditor: React.FC<{
 
                 if (commandsToCopy.length > 0) {
                     setClipboard(commandsToCopy.map(cloneCommand));
-                    toast.success(`Copied ${commandsToCopy.length} command${commandsToCopy.length > 1 ? 's' : ''}`);
+                    toast.success(t('editor.copied', { count: commandsToCopy.length }));
                 }
             }
 
@@ -580,7 +582,7 @@ const SceneEditor: React.FC<{
                 setSelectedCommands(new Set(insertedCommands.map(cmd => cmd.id)));
                 setLastSelectedIndex(lastInsertedIndex);
                 setSelectedVariableId(null);
-                toast.success(`Pasted ${insertedCommands.length} command${insertedCommands.length > 1 ? 's' : ''}`);
+                toast.success(t('editor.pasted', { count: insertedCommands.length }));
             }
 
             // Delete selected commands (Delete key)
@@ -598,7 +600,7 @@ const SceneEditor: React.FC<{
                 });
                 setSelectedCommands(new Set());
                 setSelectedCommandIndex(null);
-                toast.info(`Deleted ${deleteCount} command${deleteCount > 1 ? 's' : ''}`);
+                toast.info(t('editor.deleted', { count: deleteCount }));
             }
 
             // Select All (Ctrl+A)
@@ -832,7 +834,7 @@ const SceneEditor: React.FC<{
                 const validation = canStackCommands(commandsToStack);
                 
                 if (!validation.canStack) {
-                    setWarningModal({ message: validation.reason || 'Cannot stack these commands' });
+                    setWarningModal({ message: validation.reason || t('editor.cannotStackDefault') });
                     return;
                 }
 
@@ -987,13 +989,13 @@ const SceneEditor: React.FC<{
     };
 
     if (!activeScene) return (
-        <Panel 
-            title="Scene Editor" 
+        <Panel
+            title={t('editor.title')}
             className={className}
-            isCollapsed={isCollapsed} 
+            isCollapsed={isCollapsed}
             onToggleCollapse={onToggleCollapse}
         >
-            <p>Select a scene to start.</p>
+            <p>{t('editor.selectToStart')}</p>
         </Panel>
     );
 
@@ -1004,8 +1006,8 @@ const SceneEditor: React.FC<{
 
     return (
         <Panel 
-            title={`Scene: ${activeScene.name}`} 
-            className={`flex-grow min-h-0 ${className || ''}`} 
+            title={t('editor.titleNamed', { name: activeScene.name })}
+            className={`flex-grow min-h-0 ${className || ''}`}
             isCollapsed={isCollapsed} 
             onToggleCollapse={onToggleCollapse}
             rightHeaderContent={
@@ -1016,10 +1018,10 @@ const SceneEditor: React.FC<{
                             ? 'bg-[var(--accent-cyan)]/15 text-[var(--accent-cyan)] border border-[var(--accent-cyan)]/30 hover:bg-[var(--accent-cyan)]/25'
                             : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/40'
                     }`}
-                    title="Configure Scene Settings"
+                    title={t('editor.configureSettings')}
                 >
                     <AdjustmentsIcon className="w-4 h-4" />
-                    <span>Settings</span>
+                    <span>{t('editor.settings')}</span>
                 </button>
             }
         >
@@ -1029,7 +1031,7 @@ const SceneEditor: React.FC<{
                         <div className="flex items-center gap-1">
                             <AdjustmentsIcon className="w-4 h-4 text-[var(--accent-cyan)]" />
                             <span className="text-[var(--text-secondary)]">
-                                This scene has {activeScene.conditions.length} condition{activeScene.conditions.length !== 1 ? 's' : ''}
+                                {t('editor.hasConditions', { count: activeScene.conditions.length })}
                             </span>
                         </div>
                     </div>
@@ -1784,13 +1786,13 @@ const SceneEditor: React.FC<{
                         className="bg-[var(--bg-secondary)] border-2 border-[var(--accent-cyan)] rounded-lg p-6 max-w-md mx-4"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">Cannot Stack Commands</h3>
+                        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">{t('editor.cannotStackTitle')}</h3>
                         <p className="text-[var(--text-secondary)] mb-6">{warningModal.message}</p>
                         <button
                             onClick={() => setWarningModal(null)}
                             className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-white font-bold py-2 px-4 rounded-lg transition-opacity"
                         >
-                            OK
+                            {t('common:ok')}
                         </button>
                     </div>
                 </div>

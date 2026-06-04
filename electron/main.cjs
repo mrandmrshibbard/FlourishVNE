@@ -1181,8 +1181,10 @@ ipcMain.on('open-manager-window', (event, config) => {
     skipTaskbar: false
   });
   
-  // Load the same app
-  managerWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  // Load the same app. Pass ?manager=<type> so the renderer can detect a
+  // popped-out window *synchronously* on mount (before the async 'window-type'
+  // message arrives) — otherwise it would auto-start its own hub music.
+  managerWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query: { manager: type } });
 
   hardenWebContents(managerWindow.webContents);
   

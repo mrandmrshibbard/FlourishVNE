@@ -28,8 +28,10 @@ export interface CommandContext {
     getAssetMetadata: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => { isVideo: boolean; loop: boolean };
     musicAudioRef: React.RefObject<HTMLAudioElement>;
     fadeAudio: (audio: HTMLAudioElement, targetVolume: number, duration?: number, onComplete?: () => void) => void;
-    playSound: (soundId: VNID | null, volume?: number) => void;
+    playSound: (soundId: VNID | null, volume?: number, loop?: boolean) => HTMLAudioElement | null | void;
     stopAllSfx: () => void;
+    /** Stop sound effects: all when audioId is omitted/null, else just that sound; optional fade-out (seconds). */
+    stopSfx: (audioId?: VNID | null, fadeDuration?: number) => void;
     settings: {
         textSpeed: number;
         musicVolume: number;

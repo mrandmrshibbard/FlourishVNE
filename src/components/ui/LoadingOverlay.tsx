@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LoadingOverlayProps {
     isVisible: boolean;
@@ -7,13 +8,15 @@ interface LoadingOverlayProps {
     subMessage?: string;
 }
 
-const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ 
-    isVisible, 
-    message = 'Processing...', 
+const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
+    isVisible,
+    message,
     progress,
-    subMessage 
+    subMessage
 }) => {
+    const { t } = useTranslation('components');
     if (!isVisible) return null;
+    const displayMessage = message ?? t('loadingOverlay.processing');
 
     return (
         <div 
@@ -113,7 +116,7 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                         WebkitTextFillColor: 'transparent'
                     }}
                 >
-                    {message}
+                    {displayMessage}
                 </p>
 
                 {/* Progress bar (if progress is provided) */}

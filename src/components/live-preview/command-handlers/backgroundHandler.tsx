@@ -12,7 +12,33 @@ export async function handleSetBackground(
   context: CommandContext
 ): Promise<CommandResult> {
   const { assetResolver, getAssetMetadata, setPlayerState, playerState, advance } = context;
-  
+
+  // Live (reactive) background: register/replace a conditional layer instead of
+  // committing a single background. The renderer picks the last layer whose conditions
+  // match (over the base background). Live backgrounds swap instantly (no transition).
+  if (command.liveConditions) {
+    const url = command.backgroundColor ? null : assetResolver(command.backgroundId, 'image');
+    const meta = command.backgroundColor ? { isVideo: false, loop: false } : getAssetMetadata(command.backgroundId, 'image');
+    const layer = {
+      commandId: command.id,
+      conditions: command.conditions,
+      url: url || null,
+      color: command.backgroundColor,
+      isVideo: meta.isVideo,
+      loop: meta.loop,
+    };
+    const existing = playerState.stageState.backgroundLayers || [];
+    return {
+      advance: true,
+      updates: {
+        stageState: {
+          ...playerState.stageState,
+          backgroundLayers: [...existing.filter(l => l.commandId !== command.id), layer],
+        },
+      },
+    };
+  }
+
   // If backgroundColor is set, use that instead of resolving an image
   if (command.backgroundColor) {
     const duration = command.duration ?? 1;

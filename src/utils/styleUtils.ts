@@ -2,6 +2,23 @@ import React from 'react';
 import { VNFontSettings } from "../features/ui/types";
 
 /**
+ * Build a CSS transform fragment for an element's orientation (rotation + flips).
+ * Returns an empty string when nothing is set, so callers can safely compose it with
+ * other transforms: `transform: \`translate(...) ${buildOrientationTransform(o)}\`.trim()`.
+ *
+ * flipX/flipY are applied as scale(-1); rotation is in degrees (positive = clockwise).
+ */
+export const buildOrientationTransform = (o?: { rotation?: number; flipX?: boolean; flipY?: boolean }): string => {
+    if (!o) return '';
+    const parts: string[] = [];
+    if (o.rotation) parts.push(`rotate(${o.rotation}deg)`);
+    const sx = o.flipX ? -1 : 1;
+    const sy = o.flipY ? -1 : 1;
+    if (sx !== 1 || sy !== 1) parts.push(`scale(${sx}, ${sy})`);
+    return parts.join(' ');
+};
+
+/**
  * Convert VNFontSettings to a React CSSProperties object.
  * All pixel values are wrapped with `calc(var(--font-scale, 1) * Npx)` so
  * that containers can set the `--font-scale` CSS custom-property to
@@ -64,6 +81,9 @@ export const extractTextGradientStyle = (settings: VNFontSettings): React.CSSPro
         WebkitBackgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
         backgroundClip: 'text',
+        // inline-block gives the gradient a proper box to clip against; without it an inline
+        // span mis-clips/repaints the gradient (paints the line box) when colors change.
+        display: 'inline-block',
     };
     
     // Use CSS filter drop-shadow (not text-shadow) for proper layering behind transparent text.
@@ -121,6 +141,9 @@ export const buildTextEffectStyles = (
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
+            // inline-block gives the gradient a proper box to clip against (fixes the
+            // canvas mis-render when adjusting gradient colors).
+            display: 'inline-block',
         } as React.CSSProperties;
         if (effects.textShadow?.enabled) {
             const ts = effects.textShadow;

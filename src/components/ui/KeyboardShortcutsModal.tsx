@@ -1,51 +1,10 @@
 import React from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 
 interface ShortcutCategory {
     title: string;
     shortcuts: { keys: string; description: string }[];
 }
-
-const shortcutCategories: ShortcutCategory[] = [
-    {
-        title: 'Navigation',
-        shortcuts: [
-            { keys: 'Shift + 1', description: 'Go to Scenes tab' },
-            { keys: 'Shift + 2', description: 'Go to Characters tab' },
-            { keys: 'Shift + 3', description: 'Go to UI Screens tab' },
-            { keys: 'Shift + 4', description: 'Go to Assets tab' },
-            { keys: 'Shift + 5', description: 'Go to Variables tab' },
-            { keys: 'Shift + 6', description: 'Go to Settings tab' },
-            { keys: 'Esc', description: 'Deselect / Close panels' },
-        ]
-    },
-    {
-        title: 'Events (Scene Editor)',
-        shortcuts: [
-            { keys: 'Ctrl + C', description: 'Copy selected events' },
-            { keys: 'Ctrl + V', description: 'Paste events' },
-            { keys: 'Ctrl + A', description: 'Select all events' },
-            { keys: 'Delete', description: 'Delete selected events' },
-            { keys: 'Click', description: 'Select single event' },
-            { keys: 'Shift + Click', description: 'Select range of events' },
-            { keys: 'Ctrl + Click', description: 'Add/remove from selection' },
-        ]
-    },
-    {
-        title: 'History',
-        shortcuts: [
-            { keys: 'Ctrl + Z', description: 'Undo last action' },
-            { keys: 'Ctrl + Shift + Z', description: 'Redo action' },
-            { keys: 'Ctrl + Y', description: 'Redo action (alternate)' },
-        ]
-    },
-    {
-        title: 'General',
-        shortcuts: [
-            { keys: '?', description: 'Show this help panel' },
-            { keys: 'Ctrl + D', description: 'Duplicate character (in Character Editor)' },
-        ]
-    }
-];
 
 interface KeyboardShortcutsModalProps {
     isOpen: boolean;
@@ -53,6 +12,50 @@ interface KeyboardShortcutsModalProps {
 }
 
 const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ isOpen, onClose }) => {
+    const { t } = useTranslation('components');
+
+    const shortcutCategories: ShortcutCategory[] = [
+        {
+            title: t('keyboardShortcuts.categories.navigation'),
+            shortcuts: [
+                { keys: 'Shift + 1', description: t('keyboardShortcuts.items.goScenes') },
+                { keys: 'Shift + 2', description: t('keyboardShortcuts.items.goCharacters') },
+                { keys: 'Shift + 3', description: t('keyboardShortcuts.items.goUiScreens') },
+                { keys: 'Shift + 4', description: t('keyboardShortcuts.items.goAssets') },
+                { keys: 'Shift + 5', description: t('keyboardShortcuts.items.goVariables') },
+                { keys: 'Shift + 6', description: t('keyboardShortcuts.items.goSettings') },
+                { keys: 'Esc', description: t('keyboardShortcuts.items.deselect') },
+            ]
+        },
+        {
+            title: t('keyboardShortcuts.categories.events'),
+            shortcuts: [
+                { keys: 'Ctrl + C', description: t('keyboardShortcuts.items.copyEvents') },
+                { keys: 'Ctrl + V', description: t('keyboardShortcuts.items.pasteEvents') },
+                { keys: 'Ctrl + A', description: t('keyboardShortcuts.items.selectAllEvents') },
+                { keys: 'Delete', description: t('keyboardShortcuts.items.deleteEvents') },
+                { keys: 'Click', description: t('keyboardShortcuts.items.selectSingle') },
+                { keys: 'Shift + Click', description: t('keyboardShortcuts.items.selectRange') },
+                { keys: 'Ctrl + Click', description: t('keyboardShortcuts.items.addRemoveSelection') },
+            ]
+        },
+        {
+            title: t('keyboardShortcuts.categories.history'),
+            shortcuts: [
+                { keys: 'Ctrl + Z', description: t('keyboardShortcuts.items.undo') },
+                { keys: 'Ctrl + Shift + Z', description: t('keyboardShortcuts.items.redo') },
+                { keys: 'Ctrl + Y', description: t('keyboardShortcuts.items.redoAlt') },
+            ]
+        },
+        {
+            title: t('keyboardShortcuts.categories.general'),
+            shortcuts: [
+                { keys: '?', description: t('keyboardShortcuts.items.showHelp') },
+                { keys: 'Ctrl + D', description: t('keyboardShortcuts.items.duplicateCharacter') },
+            ]
+        }
+    ];
+
     if (!isOpen) return null;
 
     const handleBackdropClick = (e: React.MouseEvent) => {
@@ -69,7 +72,7 @@ const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ isOpen,
             <div className="bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg shadow-xl w-full max-w-2xl p-6 m-4 max-h-[85vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold flex items-center gap-2">
-                        <span>⌨️</span> Keyboard Shortcuts
+                        <span>⌨️</span> {t('keyboardShortcuts.title')}
                     </h2>
                     <button 
                         onClick={onClose}
@@ -106,7 +109,7 @@ const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ isOpen,
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-[var(--border-color)] text-center text-sm text-[var(--text-secondary)]">
-                    Press <kbd className="px-2 py-0.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs">?</kbd> anytime to show this panel
+                    <Trans i18nKey="keyboardShortcuts.footer" t={t} components={{ k: <kbd className="px-2 py-0.5 rounded bg-[var(--bg-tertiary)] font-mono text-xs" /> }} />
                 </div>
             </div>
         </div>

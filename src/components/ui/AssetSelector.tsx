@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { useProject } from '../../contexts/ProjectContext';
 import { FormField, Select } from './Form';
@@ -12,6 +13,7 @@ const AssetSelector: React.FC<{
     onChange: (id: VNID | null) => void;
     allowVideo?: boolean;
 }> = ({ label, assetType, value, onChange, allowVideo }) => {
+    const { t } = useTranslation('components');
     const { project } = useProject();
     const assets = project[assetType];
     
@@ -24,25 +26,25 @@ const AssetSelector: React.FC<{
     return (
         <FormField label={label}>
             <Select value={value || ''} onChange={e => onChange(e.target.value || null)}>
-                <option value="">None</option>
+                <option value="">{t('assetSelector.none')}</option>
                 {showAllImageTypes ? (
                     <>
                         {hasBackgrounds && (
-                            <optgroup label="Backgrounds">
+                            <optgroup label={t('assetSelector.backgrounds')}>
                                 {Object.values(project.backgrounds || {}).map((asset: any) => (
                                     <option key={asset.id} value={asset.id}>{asset.name}</option>
                                 ))}
                             </optgroup>
                         )}
                         {hasImages && (
-                            <optgroup label="Images">
+                            <optgroup label={t('assetSelector.images')}>
                                 {Object.values(assets || {}).map((asset: any) => (
                                     <option key={asset.id} value={asset.id}>{asset.name}</option>
                                 ))}
                             </optgroup>
                         )}
                         {hasVideos && (
-                            <optgroup label="Videos">
+                            <optgroup label={t('assetSelector.videos')}>
                                 {Object.values(project.videos || {}).map((asset: any) => (
                                     <option key={asset.id} value={asset.id}>{asset.name}</option>
                                 ))}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Update status events forwarded from the Electron main process via IPC.
@@ -30,6 +31,7 @@ interface UpdateEvent {
  * it never interrupts normal workflow.
  */
 const AutoUpdateBanner: React.FC = () => {
+    const { t } = useTranslation('components');
     const [status, setStatus] = useState<UpdateStatus | null>(null);
     const [newVersion, setNewVersion] = useState('');
     const [downloadPercent, setDownloadPercent] = useState(0);
@@ -46,7 +48,7 @@ const AutoUpdateBanner: React.FC = () => {
 
             if (event.version) setNewVersion(event.version);
             if (typeof event.percent === 'number') setDownloadPercent(event.percent);
-            if (event.status === 'error') setErrorMessage(event.message || 'Update failed');
+            if (event.status === 'error') setErrorMessage(event.message || t('autoUpdate.updateFailed'));
 
             // Reset dismissed when a new download completes
             if (event.status === 'downloaded') {
@@ -65,12 +67,12 @@ const AutoUpdateBanner: React.FC = () => {
                 const result = await api.installUpdate();
                 if (result?.status === 'error') {
                     setInstalling(false);
-                    setErrorMessage(result.message || 'Update failed');
+                    setErrorMessage(result.message || t('autoUpdate.updateFailed'));
                     setStatus('error');
                 }
             } catch (err: any) {
                 setInstalling(false);
-                setErrorMessage(err?.message || 'Update failed');
+                setErrorMessage(err?.message || t('autoUpdate.updateFailed'));
                 setStatus('error');
             }
         }
@@ -104,7 +106,7 @@ const AutoUpdateBanner: React.FC = () => {
                 }}
             >
                 <span style={{ fontWeight: 500 }}>
-                    ⚠️ Update error: {errorMessage || 'Unknown error'}
+                    ⚠️ {t('autoUpdate.updateError', { message: errorMessage || t('autoUpdate.unknownError') })}
                 </span>
 
                 <button
@@ -125,7 +127,7 @@ const AutoUpdateBanner: React.FC = () => {
                         cursor: 'pointer',
                     }}
                 >
-                    Retry
+                    {t('autoUpdate.retry')}
                 </button>
 
                 <button
@@ -139,8 +141,8 @@ const AutoUpdateBanner: React.FC = () => {
                         padding: '0 4px',
                         lineHeight: 1,
                     }}
-                    title="Dismiss"
-                    aria-label="Dismiss error"
+                    title={t('autoUpdate.dismiss')}
+                    aria-label={t('autoUpdate.dismissErrorAria')}
                 >
                     ✕
                 </button>
@@ -208,7 +210,7 @@ const AutoUpdateBanner: React.FC = () => {
                 `}</style>
 
                 <span style={{ fontWeight: 500 }}>
-                    ✨ Flourish {newVersion ? `v${newVersion}` : 'update'} is ready
+                    ✨ {newVersion ? t('autoUpdate.readyNamed', { version: newVersion }) : t('autoUpdate.readyGeneric')}
                 </span>
 
                 <button
@@ -233,7 +235,7 @@ const AutoUpdateBanner: React.FC = () => {
                         (e.target as HTMLButtonElement).style.background = 'rgba(255,255,255,0.2)';
                     }}
                 >
-                    {installing ? '⏳ Installing...' : 'Restart & Update'}
+                    {installing ? `⏳ ${t('autoUpdate.installing')}` : t('autoUpdate.restart')}
                 </button>
 
                 <button
@@ -247,8 +249,8 @@ const AutoUpdateBanner: React.FC = () => {
                         padding: '0 4px',
                         lineHeight: 1,
                     }}
-                    title="Dismiss — update will apply next time you close the app"
-                    aria-label="Dismiss update notification"
+                    title={t('autoUpdate.dismissUpdate')}
+                    aria-label={t('autoUpdate.dismissUpdateAria')}
                 >
                     ✕
                 </button>

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
@@ -36,6 +37,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
 }) => {
     const { dispatch } = useProject();
     const toast = useToast();
+    const { t } = useTranslation(['scenes', 'common']);
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sceneId: VNID } | null>(null);
     const [draggedSceneId, setDraggedSceneId] = useState<VNID | null>(null);
@@ -44,13 +46,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     const scenesArray = useMemo(() => Object.values(project.scenes) as VNScene[], [project.scenes]);
 
     const addScene = () => {
-        const name = `New Scene ${Object.keys(project.scenes).length + 1}`;
+        const name = t('newSceneName', { n: Object.keys(project.scenes).length + 1 });
         dispatch({ type: 'ADD_SCENE', payload: { name } });
     };
 
     const handleDeleteScene = (sceneId: VNID) => {
         if (Object.keys(project.scenes).length <= 1) {
-            toast.warning("You cannot delete the last scene.");
+            toast.warning(t('cannotDeleteLast'));
             return;
         }
         dispatch({ type: 'DELETE_SCENE', payload: { sceneId } });
@@ -121,7 +123,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                     <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0">
                         <h2 className="text-xs font-bold text-white flex items-center gap-1">
                             <BookOpenIcon className="w-3 h-3" />
-                            Scenes
+                            {t('listTitle')}
                         </h2>
                     </div>
 
@@ -156,7 +158,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                             className="w-full bg-sky-500 hover:bg-sky-600 text-white py-1 px-1.5 rounded text-xs flex items-center justify-center gap-1 font-bold transition-colors"
                         >
                             <PlusIcon className="w-3 h-3" />
-                            Add
+                            {t('common:add')}
                         </button>
                     </div>
                 </div>
@@ -175,26 +177,26 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                     onClose={() => setContextMenu(null)}
                     options={[
                         {
-                            label: 'Rename',
+                            label: t('common:rename'),
                             icon: <PencilIcon className="w-4 h-4" />,
                             onClick: () => setRenamingId(contextMenu.sceneId)
                         },
                         {
-                            label: 'Duplicate',
+                            label: t('common:duplicate'),
                             icon: <DuplicateIcon className="w-4 h-4" />,
                             onClick: () => handleDuplicateScene(contextMenu.sceneId)
                         },
                         {
-                            label: project.startSceneId === contextMenu.sceneId ? 'Start Scene ✓' : 'Set as Start Scene',
+                            label: project.startSceneId === contextMenu.sceneId ? t('startSceneMarked') : t('setAsStartScene'),
                             icon: <SparkleIcon className="w-4 h-4" />,
                             onClick: () => handleSetStartScene(contextMenu.sceneId)
                         },
                         {
-                            label: 'Delete',
+                            label: t('common:delete'),
                             icon: <TrashIcon className="w-4 h-4" />,
                             onClick: () => handleDeleteScene(contextMenu.sceneId),
                             disabled: Object.keys(project.scenes).length <= 1,
-                            warning: Object.keys(project.scenes).length <= 1 ? 'Cannot delete the last scene' : undefined
+                            warning: Object.keys(project.scenes).length <= 1 ? t('cannotDeleteLastShort') : undefined
                         }
                     ]}
                 />
@@ -274,6 +276,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
     onDrop,
     onContextMenu
 }) => {
+    const { t } = useTranslation(['scenes', 'common']);
     const { inputProps: renameInputProps } = useInlineRename(scene.name, onCommitRename);
 
     return (
@@ -312,13 +315,13 @@ const SceneItem: React.FC<SceneItemProps> = ({
 
             <div className="flex items-center gap-0.5 flex-shrink-0">
                 {isStartScene && (
-                    <SparkleIcon className="w-3 h-3 text-yellow-400" title="Start Scene" />
+                    <SparkleIcon className="w-3 h-3 text-yellow-400" title={t('startScene')} />
                 )}
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
                     className="p-0.5 text-[var(--text-muted)] hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Duplicate Scene"
+                    title={t('duplicateScene')}
                 >
                     <DuplicateIcon className="w-3 h-3" />
                 </button>
@@ -330,7 +333,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
                             ? 'text-yellow-400 hover:text-yellow-300'
                             : 'text-[var(--text-muted)] hover:text-yellow-400 opacity-0 group-hover:opacity-100'
                     }`}
-                    title="Set as Start Scene"
+                    title={t('setAsStartScene')}
                 >
                     <SparkleIcon className="w-3 h-3" />
                 </button>
@@ -338,7 +341,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
                     className="p-0.5 text-[var(--text-muted)] hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Rename"
+                    title={t('common:rename')}
                 >
                     <PencilIcon className="w-3 h-3" />
                 </button>
@@ -346,7 +349,7 @@ const SceneItem: React.FC<SceneItemProps> = ({
                 <button
                     onClick={(e) => { e.stopPropagation(); onDelete(); }}
                     className="p-0.5 text-[var(--text-muted)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Delete"
+                    title={t('common:delete')}
                 >
                     <TrashIcon className="w-3 h-3" />
                 </button>

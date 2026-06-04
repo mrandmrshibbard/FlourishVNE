@@ -2,30 +2,31 @@ import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } 
 import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
+import { combineConditions } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveHotZoneElementsFromScreen } from '../utils/hotZoneShims';
 import { XMarkIcon, FilmIcon } from './icons';
-import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, RESET_ALL_VARIABLES
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, GameSetting, GameToggleSetting, UIElementType,
-    VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings
+    VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey
 } from '../features/ui/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
-    ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand,
+    ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
-    ShowImageMapCommand, HideImageMapCommand,
-    TweenElementCommand,
+    ShowImageMapCommand, HideImageMapCommand, ShowHotSpotCommand, HideHotSpotCommand,
+    TweenElementCommand, REACTIVE_VISUAL_TYPES,
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
@@ -33,6 +34,7 @@ import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
 import { ScreenOverlayEffects } from './live-preview/ScreenOverlayEffects';
 import { ParticleSystem } from './live-preview/ParticleSystem';
+import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
 import { 
     normalizeSetVariableOperator as normalizeOperator,
@@ -191,6 +193,7 @@ import {
     ImageOverlay,
     ButtonOverlay,
     ImageMapOverlay,
+    HotSpotOverlay,
     StageCharacterState,
     StageState,
     MusicState,
@@ -311,10 +314,11 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
     const tWidth = tweenValues?.width ?? overlay.width;
     const tHeight = tweenValues?.height ?? overlay.height;
 
+    const _orient = buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY });
     const baseStyle: React.CSSProperties = {
         left: `${tx}%`,
         top: `${ty}%`,
-        ...(isSlideTransition ? {} : { transform: 'translate(-50%, -50%)' }),
+        ...(isSlideTransition ? (_orient ? { transform: _orient } : {}) : { transform: `translate(-50%, -50%) ${_orient}`.trim() }),
         fontSize: `calc(var(--font-scale, 1) * ${tFontSize}px)`,
         fontFamily: overlay.fontFamily,
         color: tColor,
@@ -355,7 +359,11 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
 
     return (
         <div className={className} style={style}>
-            {gradientSpanStyle ? <span style={gradientSpanStyle}>{overlay.text}</span> : overlay.text}
+            {gradientSpanStyle
+                // Key the gradient span to its colors so Chromium re-clips -webkit-background-clip:text
+                // (it otherwise paints the box, not the text, when the gradient changes on a live node).
+                ? <span key={`grad-${overlay.textGradient?.type}-${overlay.textGradient?.angle}-${(overlay.textGradient?.colors || []).join(',')}`} style={gradientSpanStyle}>{overlay.text}</span>
+                : overlay.text}
         </div>
     );
 };
@@ -424,8 +432,9 @@ const ButtonOverlayElement: React.FC<{
         }
 
         const allActions: VNUIAction[] = [overlay.onClick, ...(overlay.actions || [])];
-        const setVarActions = allActions.filter(action => action.type === UIActionType.SetVariable);
-        const otherActions = allActions.filter(action => action.type !== UIActionType.SetVariable);
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+        const setVarActions = allActions.filter(isVarMutation);
+        const otherActions = allActions.filter(a => !isVarMutation(a));
 
         // Process SetVariable actions first
         setVarActions.forEach(action => onAction(action));
@@ -462,13 +471,17 @@ const ButtonOverlayElement: React.FC<{
     const bBorderRadius = tweenValues?.borderRadius ?? overlay.borderRadius;
     const bBgColor = tweenValues?.backgroundColor ?? overlay.backgroundColor;
 
+    const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
+
     const containerStyle: React.CSSProperties = {
         position: 'absolute',
         left: `${bx}%`,
         top: `${by}%`,
         width: `${bw}%`,
-        height: `${bh}%`,
-        transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%)`,
+        // When an image is the button, let the height follow the image's aspect ratio so the
+        // box conforms to the art (no cropping, no distortion). Otherwise use the set height.
+        height: displayImage ? 'auto' : `${bh}%`,
+        transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%) ${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}`.trim(),
         pointerEvents: 'auto',
     };
 
@@ -477,32 +490,55 @@ const ButtonOverlayElement: React.FC<{
         containerStyle.opacity = 0;
     }
 
-    const buttonStyle: React.CSSProperties = {
-        width: '100%',
-        height: '100%',
-        backgroundColor: bBgColor,
-        color: overlay.textColor,
-        fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
-        fontWeight: overlay.fontWeight,
-        borderRadius: `${bBorderRadius}px`,
-        border: 'none',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'transform 0.1s, box-shadow 0.1s',
-        boxShadow: isHovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
-        transform: isHovered ? 'translateY(-2px)' : 'none',
-        opacity: bOpacity ?? 1,
-    };
-
-    const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
+    const buttonStyle: React.CSSProperties = displayImage
+        ? {
+            // Image button: box conforms to the image; text (if any) layers on top.
+            position: 'relative',
+            width: '100%',
+            height: 'auto',
+            display: 'block',
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            lineHeight: 0,
+            color: overlay.textColor,
+            fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
+            fontWeight: overlay.fontWeight,
+            transition: 'transform 0.1s',
+            transform: isHovered ? 'translateY(-2px)' : 'none',
+            opacity: bOpacity ?? 1,
+        }
+        : {
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            backgroundColor: bBgColor,
+            color: overlay.textColor,
+            fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
+            fontWeight: overlay.fontWeight,
+            borderRadius: `${bBorderRadius}px`,
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.1s, box-shadow 0.1s',
+            boxShadow: isHovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
+            transform: isHovered ? 'translateY(-2px)' : 'none',
+            opacity: bOpacity ?? 1,
+        };
 
     return (
         <div
             key={overlay.id}
             style={{...containerStyle, ...(hasTransition ? { animationDuration: animDuration } : {})}}
             className={`${transitionClass}`}
+            // Quick-menu buttons must never trigger a Wait command's click-to-advance.
+            // The Wait handler is a capture-phase window listener (fires before this
+            // button's stopPropagation), so it checks for this marker to ignore the click.
+            {...(overlay.quickMenuMode ? { 'data-vn-no-advance': 'true' } : {})}
         >
             <button
                 onClick={handleClick}
@@ -510,13 +546,86 @@ const ButtonOverlayElement: React.FC<{
                 onMouseLeave={() => setIsHovered(false)}
                 style={buttonStyle}
             >
-                {displayImage ? (
-                    <img src={displayImage} alt={overlay.text} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: `${overlay.borderRadius}px` }} />
-                ) : (
-                    <span>{overlay.text}</span>
+                {/* Image drives the button size (width 100%, height auto = aspect-correct). */}
+                {displayImage && (
+                    <img
+                        src={displayImage}
+                        alt={overlay.text}
+                        draggable={false}
+                        style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'contain', borderRadius: `${overlay.borderRadius}px` }}
+                    />
+                )}
+                {overlay.text && (
+                    <span style={displayImage
+                        ? { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 'normal', zIndex: 1 }
+                        : { position: 'relative', zIndex: 1 }}>
+                        {overlay.text}
+                    </span>
                 )}
             </button>
         </div>
+    );
+};
+
+/**
+ * A single quick-menu button. Renders custom art (with hover swap) when assigned,
+ * otherwise the default styled pill. The art path keeps the click area tight to the
+ * image and preserves aspect ratio (no distortion) via the caller-supplied artImgStyle.
+ */
+const QuickMenuButtonEl: React.FC<{
+    label: string;
+    title: string;
+    icon: React.ReactNode;
+    onClick: (e: React.MouseEvent) => void;
+    disabled?: boolean;
+    config?: QuickMenuButtonConfig;
+    assetResolver: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    /** Style for the <img> when custom art is used (mode-dependent sizing). */
+    artImgStyle: React.CSSProperties;
+    /** Extra style for the art <button> wrapper (mode-dependent sizing). */
+    artButtonStyle?: React.CSSProperties;
+    /** className/style for the default (no-art) pill button. */
+    pillClassName: string;
+    pillStyle: React.CSSProperties;
+}> = ({ label, title, icon, onClick, disabled, config, assetResolver, artImgStyle, artButtonStyle, pillClassName, pillStyle }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const img = config?.image ? assetResolver(config.image.id, config.image.type) : null;
+    const hoverImg = config?.hoverImage ? assetResolver(config.hoverImage.id, config.hoverImage.type) : null;
+    const displayImg = (isHovered && hoverImg) ? hoverImg : img;
+
+    if (displayImg) {
+        return (
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                title={title}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                style={{
+                    padding: 0, margin: 0, border: 'none', background: 'transparent', lineHeight: 0,
+                    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1,
+                    display: 'block',
+                    ...artButtonStyle,
+                }}
+            >
+                <img src={displayImg} alt={label} draggable={false} style={artImgStyle} />
+            </button>
+        );
+    }
+
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            title={title}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className={pillClassName}
+            style={pillStyle}
+        >
+            {icon}
+            {label}
+        </button>
     );
 };
 
@@ -589,10 +698,13 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
         containerStyle.opacity = 0;
     }
 
+    // Orientation flips compose with the existing scaleX/scaleY.
+    const iFlipX = overlay.flipX ? -1 : 1;
+    const iFlipY = overlay.flipY ? -1 : 1;
     const imageStyle: React.CSSProperties = {
         width: '100%',
         height: '100%',
-        transform: `rotate(${iRotation}deg) scale(${iScaleX}, ${iScaleY})`,
+        transform: `rotate(${iRotation}deg) scale(${iScaleX * iFlipX}, ${iScaleY * iFlipY})`,
         transformOrigin: 'center center',
         opacity: iOpacity,
     };
@@ -649,8 +761,9 @@ const ImageMapRegionElement: React.FC<{
     }
 
     const handleClick = () => {
-        const setVarActions = region.actions.filter(a => a.type === UIActionType.SetVariable);
-        const otherActions = region.actions.filter(a => a.type !== UIActionType.SetVariable);
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+        const setVarActions = region.actions.filter(isVarMutation);
+        const otherActions = region.actions.filter(a => !isVarMutation(a));
         setVarActions.forEach(a => onAction(a));
         if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
         otherActions.forEach(a => onAction(a));
@@ -864,6 +977,66 @@ const ImageMapOverlayElement: React.FC<{
                 />
             ))}
         </div>
+    );
+};
+
+/** Interactive scene hot spot (ShowHotSpot). A click/hover island that fires actions,
+ *  and (for drag-drop) a registry-published drop target reachable from any surface. */
+const HotSpotOverlayElement: React.FC<{
+    overlay: HotSpotOverlay;
+    onAction: (action: VNUIAction) => void;
+    onAdvance?: () => void;
+    evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
+    variables: Record<VNID, string | number | boolean>;
+    /** Editor preview (not exported game): show a faint outline even when invisible. */
+    editTime?: boolean;
+}> = ({ overlay, onAction, onAdvance, evaluateConditions, variables, editTime }) => {
+    const active = !overlay.conditions || overlay.conditions.length === 0 || evaluateConditions(overlay.conditions, variables);
+
+    // Publish drag-drop spots to the global registry so draggables from any surface
+    // (HUD / screens) can be dropped here.
+    useEffect(() => {
+        if (!active || overlay.trigger !== 'drag-drop') return;
+        return registerDropTarget({
+            id: `scene-${overlay.commandId}`,
+            rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
+            acceptTag: overlay.acceptedTag || undefined,
+            onDrop: () => { overlay.actions.forEach(a => onAction(a)); },
+        });
+    }, [active, overlay, onAction]);
+
+    if (!active) return null;
+
+    const fire = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        overlay.actions.forEach(a => onAction(a));
+        if (overlay.advanceOnTrigger && onAdvance) onAdvance();
+    };
+
+    const style: React.CSSProperties = {
+        position: 'absolute',
+        left: `${overlay.x}%`, top: `${overlay.y}%`,
+        width: `${overlay.width}%`, height: `${overlay.height}%`,
+        borderRadius: overlay.shape === 'circle' ? '50%' : 6,
+        zIndex: 8, // above characters (z-5), below dialogue (z-20)
+        // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
+        // so empty/drag clicks still reach the stage. click/hover spots capture.
+        pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
+        cursor: overlay.trigger === 'click' ? 'pointer' : 'default',
+        background: overlay.visible
+            ? (overlay.highlightColor || 'rgba(99,102,241,0.35)')
+            : (editTime ? 'rgba(99,102,241,0.08)' : 'transparent'),
+        border: overlay.visible
+            ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}`
+            : (editTime ? '2px dashed rgba(99,102,241,0.7)' : undefined),
+    };
+
+    return (
+        <div
+            style={style}
+            onClick={overlay.trigger === 'click' ? fire : undefined}
+            onMouseEnter={overlay.trigger === 'hover' ? () => overlay.actions.forEach(a => onAction(a)) : undefined}
+        />
     );
 };
 
@@ -1732,7 +1905,7 @@ const ButtonElement: React.FC<{
     
     const handleClick = () => {
         try { playSound(element.clickSoundId); } catch(e) {}
-        
+
         // Collect all actions (primary + additional)
         const allActions: VNUIAction[] = [];
         if (element.action) {
@@ -1743,9 +1916,10 @@ const ButtonElement: React.FC<{
         }
         
         // Process SetVariable actions FIRST to ensure variables are updated before navigation/screen changes
-        const setVarActions = allActions.filter(a => a.type === UIActionType.SetVariable);
-        const otherActions = allActions.filter(a => a.type !== UIActionType.SetVariable);
-        
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+        const setVarActions = allActions.filter(isVarMutation);
+        const otherActions = allActions.filter(a => !isVarMutation(a));
+
         // Execute SetVariable actions first
         setVarActions.forEach(action => onAction(action));
         
@@ -2497,6 +2671,23 @@ const HotZoneRuntime: React.FC<{
         }
     }, [placedElements, variables, screen.winCondition, hotZoneElements, handleLocalAction, evaluateConditions]);
 
+    // Publish this screen's drag-drop hot spots to the global registry so draggables
+    // from ANY surface (scene, HUD, other screens) can be dropped on them.
+    useEffect(() => {
+        const unregs: Array<() => void> = [];
+        for (const spot of Object.values(hotSpots) as VNHotSpot[]) {
+            if (spot.trigger !== 'drag-drop') continue;
+            if (spot.conditions && spot.conditions.length > 0 && !evaluateConditions(spot.conditions, variables)) continue;
+            unregs.push(registerDropTarget({
+                id: `screen-${screen.id}-${spot.id}`,
+                rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
+                acceptedElementIds: spot.acceptedElementIds,
+                onDrop: () => { spot.actions.forEach(a => handleLocalAction(a)); },
+            }));
+        }
+        return () => unregs.forEach(u => u());
+    }, [hotSpots, screen.id, variables, evaluateConditions, handleLocalAction]);
+
     // Drag handlers
     const handleElementMouseDown = useCallback((e: React.MouseEvent, el: VNHotZoneElement) => {
         if (!el.draggable) {
@@ -2541,29 +2732,23 @@ const HotZoneRuntime: React.FC<{
             const el = hotZoneElements[dragState.elementId] as VNHotZoneElement | undefined;
             if (!el) { setDragState(null); setDragOffset(null); return; }
 
-            // Check if dropped on a valid hot spot
-            let droppedOnSpot: VNHotSpot | null = null;
-            for (const spot of Object.values(hotSpots) as VNHotSpot[]) {
-                if (spot.trigger !== 'drag-drop') continue;
-                if (spot.acceptedElementIds && !spot.acceptedElementIds.includes(el.id)) continue;
-                // Check overlap: element center inside spot
-                const cx = dragOffset.x + el.width / 2;
-                const cy = dragOffset.y + el.height / 2;
-                if (cx >= spot.x && cx <= spot.x + spot.width && cy >= spot.y && cy <= spot.y + spot.height) {
-                    droppedOnSpot = spot;
-                    break;
-                }
-            }
+            // Hit-test the GLOBAL registry (this screen's spots, other screens', and the
+            // scene's ShowHotSpot targets all register there), using the dragged element's
+            // centre. Top-most matching target wins.
+            const cx = dragOffset.x + el.width / 2;
+            const cy = dragOffset.y + el.height / 2;
+            const target = hitTestDropTarget({ x: cx, y: cy }, el.id);
 
-            if (droppedOnSpot) {
-                // Snap to hot spot center if configured
+            if (target) {
+                // Snap to the target's centre if configured (works for local or remote targets).
+                const r = target.rectPct;
                 const finalPos = el.snapToHotSpot
-                    ? { x: droppedOnSpot.x + (droppedOnSpot.width - el.width) / 2, y: droppedOnSpot.y + (droppedOnSpot.height - el.height) / 2 }
+                    ? { x: r.x + (r.width - el.width) / 2, y: r.y + (r.height - el.height) / 2 }
                     : { x: dragOffset.x, y: dragOffset.y };
                 setElementPositions(prev => ({ ...prev, [el.id]: finalPos }));
-                setPlacedElements(prev => ({ ...prev, [el.id]: droppedOnSpot!.id }));
-                // Fire hot spot actions
-                droppedOnSpot.actions.forEach(a => handleLocalAction(a));
+                setPlacedElements(prev => ({ ...prev, [el.id]: target.id }));
+                // Fire the target's actions (in its own surface's context).
+                target.onDrop(el.id);
             } else if (el.snapBack) {
                 // Snap back to original position
                 setElementPositions(prev => ({ ...prev, [el.id]: { x: el.x, y: el.y } }));
@@ -2751,6 +2936,10 @@ const UIScreenRenderer: React.FC<{
     
     if (!screen) return <div className="text-red-500">Error: Screen {screenId} not found.</div>;
 
+    // Pass-through (transparent HUD) screens let clicks fall through empty areas to the
+    // scene; only visible elements capture input. Defaults to on for the Game HUD screen.
+    const isPassThrough = screen.passThrough ?? (screenId === project.ui.gameHudScreenId);
+
     const getBackgroundElement = () => {
         if (screen.background.type === 'color') {
             return <div className="absolute inset-0" style={{ backgroundColor: screen.background.value }} />;
@@ -2782,14 +2971,24 @@ const UIScreenRenderer: React.FC<{
         }
         
         const transitionStyle = getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay);
-        
+
+        // "Disabled When" gating: when disabledConditions are met, the element is shown
+        // greyed-out and non-interactive (e.g. a Buy button you can't yet afford). This is
+        // folded into the shared style so every element that spreads `style` honours it.
+        const isDisabled = !!(element.disabledConditions && element.disabledConditions.length > 0
+            && evaluateConditions(element.disabledConditions, variables));
+
         const style: React.CSSProperties = {
             position: 'absolute',
             left: `${element.x}%`, top: `${element.y}%`,
             width: `${element.width}%`, height: `${element.height}%`,
             transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)`,
             overflow: 'hidden', // Prevent content overflow when using cover
-            opacity: element.opacity ?? 1,
+            opacity: (element.opacity ?? 1) * (isDisabled ? 0.45 : 1),
+            // On a pass-through screen the wrapper is pointer-events:none, so each visible
+            // element must opt back in to remain clickable.
+            ...(isPassThrough && !isDisabled ? { pointerEvents: 'auto' as const } : {}),
+            ...(isDisabled ? { pointerEvents: 'none' as const, filter: 'grayscale(0.6)', cursor: 'not-allowed' } : {}),
             ...transitionStyle,
         };
 
@@ -3353,9 +3552,12 @@ const UIScreenRenderer: React.FC<{
             // not unmount/remount this div, or the crossfade will visibly flicker.
             key={screenId}
             className="absolute inset-0 w-full h-full"
-            style={screenTransitionStyle}
+            // Pass-through screens don't intercept clicks on empty areas — the scene
+            // beneath stays interactive (dialogue advance, scene hot spots).
+            style={{ ...screenTransitionStyle, ...(isPassThrough ? { pointerEvents: 'none' } : {}) }}
         >
-            {getBackgroundElement()}
+            {/* Pass-through (HUD) screens skip their opaque background so the scene shows through. */}
+            {!isPassThrough && getBackgroundElement()}
             {/* Standard renderer skips interactive types — HotZoneRuntime owns them. */}
             {Object.values(screen.elements).map(element => {
                 const el = element as any;
@@ -3595,6 +3797,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
     const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
     const [sceneTransitionDuration, setSceneTransitionDuration] = useState(0.5);
+    // New-game transition: fade the title out to black, load the scene, then fade in.
+    const [gameStartFade, setGameStartFade] = useState<'none' | 'toBlack' | 'fromBlack'>('none');
     const [settings, setSettings] = useState<GameSettings>(() => {
         const projectDefaults = project.ui?.defaultGameSettings;
         if (projectDefaults) {
@@ -3726,6 +3930,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const sfxCompressorRef = useRef<DynamicsCompressorNode | null>(null);
     const sfxProcessingCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
     const MAX_SIMULTANEOUS_SFX = 8;
+    // Live (reactive) sound effects: a PlaySoundEffect with `liveConditions` registers here when
+    // reached. An effect re-evaluates each entry's conditions as variables change — playing while
+    // met (looping) / firing once on a false→true edge (non-loop), and stopping when no longer met.
+    const liveSfxRef = useRef<Map<string, { audioId: VNID; conditions?: VNCondition[]; loop: boolean; volume?: number; audio: HTMLAudioElement | null; lastMet: boolean }>>(new Map());
+    const [liveSfxTick, setLiveSfxTick] = useState(0);
 
     // In-memory saves fallback when localStorage is unavailable or full
     const savesPersistentRef = useRef<boolean>(true); // assume persistent until proven otherwise
@@ -3735,8 +3944,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const queuedMusicRef = useRef<{ url: string; loop: boolean; fadeDuration: number } | null>(null);
     const userGestureDetectedRef = useRef<boolean>(false);
 
-    // Track active one-shot SFX so we can stop them when a scene ends
-    const sfxPoolRef = useRef<HTMLAudioElement[]>([]);
+    // Track active one-shot SFX (tagged with their audioId so Stop Sound Effect can
+    // target a specific sound) so we can stop them when a scene ends or on command.
+    const sfxPoolRef = useRef<{ audio: HTMLAudioElement; audioId: VNID }[]>([]);
     const commandSchedulerRef = useRef(new CommandScheduler());
     const hasRenderedSceneRef = useRef(false);
     const runtimeDiagnosticsRef = useRef(new RuntimeDiagnostics());
@@ -4140,7 +4350,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         
         // Check if start scene has conditions that fail
         if (startScene && startScene.conditions && startScene.conditions.length > 0) {
-            const conditionsMet = startScene.conditions.every(condition => {
+            const conditionsMet = combineConditions(startScene.conditions, condition => {
                 const varValue = initialVariables[condition.variableId];
                 if (varValue === undefined) return false;
                 
@@ -4187,6 +4397,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         setScreenStack([]);
         setHudStack([]);
     }, [project, stopAndResetMusic, menuVariables]);
+
+    // Start a new game with a fade: title fades to black (≈400ms), the scene loads behind the
+    // black, then the black fades out — revealing the first scene background (fade-in).
+    const startNewGameWithFade = useCallback(() => {
+        setGameStartFade('toBlack');
+        window.setTimeout(() => {
+            startNewGame();
+            setGameStartFade('fromBlack');
+            window.setTimeout(() => setGameStartFade('none'), 450);
+        }, 400);
+    }, [startNewGame]);
 
     // Helper function to get asset name from ID
     const getAssetNameFromId = useCallback((assetId: string): string | null => {
@@ -4248,8 +4469,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (!conditions || conditions.length === 0) {
             return true;
         }
-    
-        return conditions.every(condition => {
+
+        return combineConditions(conditions, condition => {
             const varValue = variables[condition.variableId];
             const projectVar = project.variables[condition.variableId];
             // Use default value if runtime value is not set
@@ -4828,41 +5049,86 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         } catch (e) {}
         sfxSourceNodesRef.current = [];
         // Clear HTMLAudio fallbacks if any
-        sfxPoolRef.current.forEach(a => { try { a.pause(); a.currentTime = 0; a.src = ''; } catch (e) {} });
+        sfxPoolRef.current.forEach(({ audio }) => { try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {} });
         sfxPoolRef.current = [];
+        // Clear live (reactive) SFX too so loops don't survive a quit / return to title.
+        liveSfxRef.current.forEach(entry => { entry.audio = null; entry.lastMet = false; });
+        liveSfxRef.current.clear();
         // Optionally clear buffer cache to free memory
         sfxBufferCacheRef.current.clear();
     }, []);
 
-    const playSound = useCallback((soundId: VNID | null, volume?: number) => {
-        runtimeDebugLog('[SFX] playSound called with soundId:', soundId, 'volume:', volume);
-        if (!soundId) return;
-        
+    /**
+     * Stop sound effects on demand (the Stop Sound Effect command).
+     * - `audioId` omitted/null → stop ALL currently-playing sound effects.
+     * - `audioId` given → stop only instances of that sound.
+     * - `fadeDuration` (seconds) > 0 → fade the matched sounds out instead of cutting them.
+     */
+    const stopSfx = useCallback((audioId?: VNID | null, fadeDuration?: number) => {
+        const fade = typeof fadeDuration === 'number' && fadeDuration > 0 ? fadeDuration : 0;
+        const matched = sfxPoolRef.current.filter(e => !audioId || e.audioId === audioId);
+        // Drop matched entries from the pool immediately so they aren't targeted twice.
+        sfxPoolRef.current = sfxPoolRef.current.filter(e => !matched.includes(e));
+
+        if (fade <= 0) {
+            matched.forEach(({ audio }) => { try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {} });
+            // When stopping everything, also halt any WebAudio buffer sources.
+            if (!audioId) {
+                try { sfxSourceNodesRef.current.forEach(src => { try { src.stop(); } catch (e) {} }); } catch (e) {}
+                sfxSourceNodesRef.current = [];
+            }
+            return;
+        }
+
+        // Per-sound volume ramp (local interval — fadeAudio's shared refs would clobber
+        // concurrent sfx fades).
+        matched.forEach(({ audio }) => {
+            const startVol = audio.volume;
+            const startTime = Date.now();
+            const iv = window.setInterval(() => {
+                const progress = Math.min((Date.now() - startTime) / (fade * 1000), 1);
+                audio.volume = Math.max(0, startVol * (1 - progress));
+                if (progress >= 1) {
+                    clearInterval(iv);
+                    try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {}
+                }
+            }, 30);
+        });
+    }, []);
+
+    const playSound = useCallback((soundId: VNID | null, volume?: number, loop?: boolean): HTMLAudioElement | null => {
+        runtimeDebugLog('[SFX] playSound called with soundId:', soundId, 'volume:', volume, 'loop:', loop);
+        if (!soundId) return null;
+
         try {
             const url = assetResolver(soundId, 'audio');
             runtimeDebugLog('[SFX] assetResolver returned URL:', url, 'for soundId:', soundId);
             if (!url) {
                 runtimeDebugWarn(`[SFX] No audio URL found for soundId: ${soundId}`);
-                return;
+                return null;
             }
 
-            // Use HTMLAudio for SFX - more reliable in packaged environments
+            // Use HTMLAudio for SFX - more reliable in packaged environments. Each call creates an
+            // independent element, so multiple distinct sounds layer/overlap (pooled up to MAX).
             runtimeDebugLog('[SFX] Creating HTMLAudio element for playback');
             const audio = new Audio(url);
+            audio.loop = !!loop;
             audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
-            
-            // Limit simultaneous SFX
-            if (sfxPoolRef.current.length >= MAX_SIMULTANEOUS_SFX) {
-                const oldest = sfxPoolRef.current.shift();
-                try { 
-                    oldest?.pause(); 
-                    oldest!.currentTime = 0; 
-                } catch (e) {}
+
+            // Limit simultaneous one-shot SFX. Looping sounds are excluded from eviction so a
+            // sustained ambient isn't cut off by a burst of one-shots.
+            if (!loop) {
+                const oneShots = sfxPoolRef.current.filter(e => !e.audio.loop);
+                if (oneShots.length >= MAX_SIMULTANEOUS_SFX) {
+                    const oldest = oneShots[0];
+                    sfxPoolRef.current = sfxPoolRef.current.filter(e => e !== oldest);
+                    try { oldest?.audio.pause(); if (oldest) oldest.audio.currentTime = 0; } catch (e) {}
+                }
             }
-            
-            sfxPoolRef.current.push(audio);
+
+            sfxPoolRef.current.push({ audio, audioId: soundId });
             runtimeDebugLog('[SFX] Playing audio, volume:', audio.volume);
-            
+
             audio.play()
                 .then(() => {
                     runtimeDebugLog('[SFX] Audio playback started successfully');
@@ -4870,16 +5136,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 .catch(e => {
                     console.error('[SFX] Audio playback failed:', e);
                 });
-            
-            // Remove from pool when ended
+
+            // Remove from pool when ended (looping sounds never fire 'ended').
             audio.addEventListener('ended', () => {
                 runtimeDebugLog('[SFX] Audio playback ended');
-                sfxPoolRef.current = sfxPoolRef.current.filter(a => a !== audio);
+                sfxPoolRef.current = sfxPoolRef.current.filter(e => e.audio !== audio);
             }, { once: true });
-                
+
+            return audio;
         } catch (outerError) {
             console.error('[SFX] Critical error in playSound:', outerError);
             console.error('[SFX] Error stack:', outerError instanceof Error ? outerError.stack : 'N/A');
+            return null;
         }
     }, [assetResolver, settings.sfxVolume]);
 
@@ -5067,8 +5335,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         // Check conditions for all other commands
     const conditionsMet = evaluateConditions(command.conditions, getRuntimeVariables());
-    runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'Variables:', getRuntimeVariables());
-        if (!conditionsMet) {
+    // Live commands are NEVER skipped on a false condition — they register/create their
+    // reactive state and let the renderer (visuals) or the live-SFX manager re-check the
+    // condition as variables change (show/hide or play/stop live). Without this, a live
+    // command reached while its condition is false would be skipped and never react.
+    const isLiveReactive = !!(command as any).liveConditions
+        && (REACTIVE_VISUAL_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
+    runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'live:', isLiveReactive, 'Variables:', getRuntimeVariables());
+        if (!conditionsMet && !isLiveReactive) {
             runtimeDebugLog('[DEBUG] Skipping command due to failed conditions');
             updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
             return;
@@ -5182,6 +5456,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             fadeAudio,
             playSound,
             stopAllSfx,
+            stopSfx,
             settings,
             advance,
             setPlayerState: updatePlayerState,
@@ -5393,12 +5668,28 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.PlaySoundEffect: {
-                    const result = handlePlaySoundEffect(command as PlaySoundEffectCommand, commandContext);
-                    applyResult(result);
+                    const sfxCmd = command as PlaySoundEffectCommand;
+                    if (sfxCmd.liveConditions) {
+                        // Register as a live (reactive) sound — the effect below plays/stops it as
+                        // its conditions change, instead of firing once here.
+                        liveSfxRef.current.set(sfxCmd.id, {
+                            audioId: sfxCmd.audioId,
+                            conditions: sfxCmd.conditions,
+                            loop: !!sfxCmd.loop,
+                            volume: sfxCmd.volume,
+                            audio: null,
+                            lastMet: false,
+                        });
+                        setLiveSfxTick(t => t + 1); // kick the manager effect to evaluate now
+                        applyResult({ advance: true });
+                    } else {
+                        const result = handlePlaySoundEffect(sfxCmd, commandContext);
+                        applyResult(result);
+                    }
                     break;
                 }
                 case CommandType.StopSoundEffect: {
-                    const result = handleStopSoundEffect(commandContext);
+                    const result = handleStopSoundEffect(command as StopSoundEffectCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -5491,6 +5782,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                         };
                         const clickHandler = (e: MouseEvent) => {
+                            // Quick-menu buttons fire their own actions and must not advance the story.
+                            if ((e.target as Element)?.closest?.('[data-vn-no-advance]')) return;
                             // Only respond to clicks within the game stage area
                             if (stageRef.current && stageRef.current.contains(e.target as Node)) {
                                 onUserAdvance();
@@ -5537,6 +5830,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                         };
                         const clickHandler = (e: MouseEvent) => {
+                            // Quick-menu buttons fire their own actions and must not advance the story.
+                            if ((e.target as Element)?.closest?.('[data-vn-no-advance]')) return;
                             // Only respond to clicks within the game stage area
                             if (stageRef.current && stageRef.current.contains(e.target as Node)) {
                                 onUserAdvance();
@@ -5714,6 +6009,38 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                case CommandType.ShowHotSpot: {
+                    const cmd = command as ShowHotSpotCommand;
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            hotSpotOverlays: [
+                                ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
+                                {
+                                    id: cmd.id, commandId: cmd.id, name: cmd.name,
+                                    x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
+                                    shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions,
+                                    conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
+                                    highlightColor: cmd.highlightColor, visible: cmd.visible,
+                                    advanceOnTrigger: cmd.advanceOnTrigger,
+                                },
+                            ],
+                        },
+                    } : null);
+                    break;
+                }
+                case CommandType.HideHotSpot: {
+                    const cmd = command as HideHotSpotCommand;
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.targetCommandId),
+                        },
+                    } : null);
+                    break;
+                }
                 case CommandType.CreditRoll: {
                     const cmd = command as CreditRollCommand;
                     setActiveCreditRoll(cmd);
@@ -5774,7 +6101,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 advance();
             }
         })();
-    }, [playerState, project, assetResolver, playSound, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, hudStack]);
+    }, [playerState, project, assetResolver, playSound, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
 
     // --- Input & Action Handlers ---
     const handleDialogueAdvance = () => {
@@ -6105,7 +6432,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     const handleUIAction = (action: VNUIAction) => {
         runtimeDebugLog('handleUIAction called with:', action.type, action);
-        
+
+        // Per-action conditions: skip this action if its conditions aren't currently met.
+        // Evaluate against the freshest variables (merged uncommitted UI edits), so a button
+        // can branch — e.g. several actions each gated on `selected_item == "key"`.
+        if (action.conditions && action.conditions.length > 0) {
+            const vars = playerState ? mergeDirtyUiVariables(playerState.variables) : menuVariables;
+            if (!evaluateConditions(action.conditions, vars)) {
+                runtimeDebugLog('[UIAction] Skipped — conditions not met:', action.type, action.conditions);
+                return;
+            }
+        }
+
         // Intercept actions that need confirmation dialogs
         if (action.type === UIActionType.QuitToTitle && playerState) {
             // Show quit confirmation when a game is in progress
@@ -6123,7 +6461,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     const executeUIAction = (action: VNUIAction) => {
         if (!playerState && action.type === UIActionType.StartNewGame) {
-            startNewGame();
+            startNewGameWithFade();
         } else if (!playerState && action.type === UIActionType.ContinueGame) {
             // Continue from title screen: load auto-save (slot 0), fallback to new game
             const doLoad = async () => {
@@ -6132,21 +6470,60 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     loadGame(0);
                 } else {
                     runtimeDebugLog('[ContinueGame] No auto-save found, starting new game instead');
-                    startNewGame();
+                    startNewGameWithFade();
                 }
             };
             void doLoad();
-        } else if (playerState?.mode === 'paused' && action.type === UIActionType.ReturnToGame) {
-             updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
-             setScreenStack([]);
-             // Resume music if it was paused
-             if (musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
-                 musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
+        } else if (playerState && action.type === UIActionType.ReturnToGame) {
+             // Return to gameplay from ANY screen layered over the game — the pause menu
+             // (mode 'paused', screenStack) OR a screen opened during play via GoToScreen
+             // (mode 'playing', hudStack). Previously this was gated on mode === 'paused',
+             // so a Return-to-Game button on a non-pause screen silently did nothing.
+             const wasPaused = playerState.mode === 'paused';
+             // Play the closing screen's transitionOut before tearing the stacks down — otherwise
+             // the screen vanishes instantly (it "fades in but not out"). ReturnToPreviousScreen
+             // already does this; ReturnToGame used to clear the stacks immediately.
+             const closingId = screenStack.length > 0 ? screenStack[screenStack.length - 1]
+                 : (hudStack.length > 0 ? hudStack[hudStack.length - 1] : null);
+             const closingScreen = closingId ? project.uiScreens[closingId] : null;
+             const transOut = closingScreen?.transitionOut || 'fade';
+             const transDur = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+             const finishReturn = () => {
+                 updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                 setScreenStack([]);
+                 setHudStack([]);
+                 // Resume music if it was paused while the menu was open
+                 if (wasPaused && musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
+                     musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
+                 }
+             };
+             if (closingId && transOut !== 'none') {
+                 // Keep the screen mounted + flagged closing so its out-animation plays, then tear down.
+                 setClosingScreens(prev => new Set(prev).add(closingId));
+                 setTimeout(() => {
+                     setClosingScreens(prev => { const next = new Set(prev); next.delete(closingId); return next; });
+                     finishReturn();
+                 }, transDur + 50);
+             } else {
+                 finishReturn();
              }
+        } else if (action.type === UIActionType.ToggleScreen) {
+            // Toggle a screen open/closed (e.g. an inventory overlay). During gameplay it
+            // lives on the HUD stack (so it overlays the scene); otherwise the screen stack.
+            const targetId = (action as ToggleScreenAction).targetScreenId;
+            if (!targetId || !project.uiScreens[targetId]) {
+                runtimeDebugWarn(`ToggleScreen failed: Screen with ID ${targetId} not found`);
+                return;
+            }
+            if (playerState && playerState.mode === 'playing') {
+                setHudStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
+            } else {
+                setScreenStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
+            }
         } else if (action.type === UIActionType.GoToScreen) {
             const targetId = (action as GoToScreenAction).targetScreenId;
             const targetScreen = project.uiScreens[targetId];
-            
+
             if (!targetScreen) {
                 runtimeDebugWarn(`GoToScreen failed: Screen with ID ${targetId} not found`);
                 return;
@@ -6408,7 +6785,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     loadGame(0);
                 } else {
                     runtimeDebugLog('[ContinueGame] No auto-save found, starting new game instead');
-                    startNewGame();
+                    startNewGameWithFade();
                 }
             };
             void doLoad();
@@ -6692,6 +7069,54 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const prevPersistent = loadPersistentVariables(project.id);
                 savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: currentVars[setVarAction.variableId] });
                 runtimeDebugLog('[Variable Scope] Saved persistent variable from UI action:', variable.name);
+            }
+        } else if (action.type === UIActionType.ResetVariable) {
+            const resetAction = action as ResetVariableAction;
+            const targetIds: VNID[] = resetAction.variableId === RESET_ALL_VARIABLES
+                ? (Object.keys(project.variables) as VNID[])
+                : [resetAction.variableId];
+            const validTargets = targetIds.filter(id => !!project.variables[id]);
+            if (validTargets.length === 0) {
+                runtimeDebugWarn(`ResetVariable action: no valid variables to reset (${resetAction.variableId}).`);
+                return;
+            }
+            runtimeDebugLog('[ResetVariable] Resetting to defaults:', validTargets);
+            flushSync(() => {
+                if (playerState) {
+                    // In-game UI screens: reset uiVariables (separate from game variables)
+                    setUiVariables(prev => {
+                        const next = { ...prev };
+                        for (const id of validTargets) {
+                            uiDirtyVariableIdsRef.current.add(id);
+                            next[id] = project.variables[id].defaultValue;
+                        }
+                        uiVariablesRef.current = next;
+                        return next;
+                    });
+                } else {
+                    setMenuVariables(prev => {
+                        const next = { ...prev };
+                        for (const id of validTargets) {
+                            next[id] = project.variables[id].defaultValue;
+                        }
+                        return next;
+                    });
+                }
+            });
+            // Persist any persistent-scope variables (default values are known, so write them directly)
+            const persistentTargets = validTargets.filter(id => (project.variables[id] as any).scope === 'persistent');
+            if (persistentTargets.length > 0) {
+                const prevPersistent = loadPersistentVariables(project.id);
+                const merged = { ...prevPersistent };
+                for (const id of persistentTargets) merged[id] = project.variables[id].defaultValue;
+                savePersistentVariables(project.id, merged);
+                runtimeDebugLog('[Variable Scope] Saved reset persistent variables:', persistentTargets);
+            }
+        } else if (action.type === UIActionType.PlaySound) {
+            const soundAction = action as PlaySoundAction;
+            if (soundAction.audioId) {
+                runtimeDebugLog('[PlaySound] action triggered:', soundAction.audioId, 'volume:', soundAction.volume, 'loop:', soundAction.loop);
+                playSound(soundAction.audioId, soundAction.volume, soundAction.loop);
             }
         } else if (action.type === UIActionType.CycleLayerAsset) {
             runtimeDebugLog('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
@@ -6977,7 +7402,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
         return base;
     }, [playerState, playerState?.variables, menuVariables, uiVariables]);
-    
+
+    // ── Live (reactive) sound effects manager ──────────────────────────────────────────────
+    // Re-evaluates each registered live SFX as variables change: looping sounds play while their
+    // conditions hold and stop when they fail; non-looping live sounds fire once on a false→true edge.
+    useEffect(() => {
+        if (!playerState) return;
+        liveSfxRef.current.forEach((entry) => {
+            const met = !entry.conditions || entry.conditions.length === 0 || evaluateConditions(entry.conditions, screenVariables);
+            if (entry.loop) {
+                if (met && !entry.audio) {
+                    entry.audio = (playSound(entry.audioId, entry.volume, true) as HTMLAudioElement | null) || null;
+                } else if (!met && entry.audio) {
+                    try { entry.audio.pause(); entry.audio.currentTime = 0; entry.audio.src = ''; } catch (e) {}
+                    sfxPoolRef.current = sfxPoolRef.current.filter(e => e.audio !== entry.audio);
+                    entry.audio = null;
+                }
+            } else if (met && !entry.lastMet) {
+                // One-shot: fire once each time the condition transitions to true.
+                playSound(entry.audioId, entry.volume, false);
+            }
+            entry.lastMet = met;
+        });
+    }, [screenVariables, liveSfxTick, evaluateConditions, playSound, playerState]);
+
+    // Stop & clear live SFX on scene change (the new scene re-registers its own when reached).
+    useEffect(() => {
+        return () => {
+            liveSfxRef.current.forEach(entry => {
+                if (entry.audio) { try { entry.audio.pause(); entry.audio.src = ''; } catch (e) {} }
+            });
+            liveSfxRef.current.clear();
+        };
+    }, [playerState?.currentSceneId]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!playerState) return;
@@ -7089,6 +7547,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const renderStage = () => {
         if (!playerState) return null;
         const state = playerState.stageState;
+        // Reactive scene visuals (live overlays, hot spots, backgrounds) must evaluate
+        // against the SAME variables that HUD/screen actions write to. During gameplay
+        // those actions update `uiVariables` (separate from the committed game variables),
+        // so merge them here — otherwise a HUD click/drop that sets a variable wouldn't
+        // affect the live scene until a navigation event flushed it.
+        const liveVars = mergeDirtyUiVariables(playerState.variables);
+        // Reactive background: a live Set Background registers conditional layers; the last
+        // layer whose conditions currently match overrides the base background.
+        const matchedBgLayer = (state.backgroundLayers || [])
+            .filter(l => !l.conditions || evaluateConditions(l.conditions, liveVars))
+            .slice(-1)[0];
+        const effBgUrl = matchedBgLayer ? matchedBgLayer.url : state.backgroundUrl;
+        const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
+        const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state.backgroundIsVideo;
+        const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state.backgroundLoop;
         const getPositionStyle = (position: VNPosition): React.CSSProperties => {
             if (typeof position === 'object') {
                 // Custom coordinates
@@ -7142,19 +7615,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 style={{ cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default' }}
             >
                 <div style={panZoomStyle}>
-                    <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: state.backgroundColor }}>
-                        {state.backgroundUrl && (
-                            state.backgroundIsVideo ? (
-                                <video 
-                                    src={state.backgroundUrl} 
-                                    autoPlay 
-                                    muted 
-                                    loop={state.backgroundLoop} 
+                    <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
+                        {effBgUrl && (
+                            effBgIsVideo ? (
+                                <video
+                                    src={effBgUrl}
+                                    autoPlay
+                                    muted
+                                    loop={effBgLoop}
                                     playsInline
                                     className="absolute w-full h-full object-cover"
                                 />
                             ) : (
-                                <img src={state.backgroundUrl} alt="background" className="absolute w-full h-full object-cover"/>
+                                <img src={effBgUrl} alt="background" className="absolute w-full h-full object-cover"/>
                             )
                         )}
                         {/* render background transition visuals here so characters render above them */}
@@ -7202,8 +7675,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             );
                         })}
                         {(() => {
-                            // Pre-compute arranged positions when auto-arrange is on
-                            const allChars = Object.values(state.characters) as StageCharacterState[];
+                            // Pre-compute arranged positions when auto-arrange is on.
+                            // Live characters are hidden while their conditions aren't met.
+                            const allChars = (Object.values(state.characters) as StageCharacterState[])
+                                .filter(c => !c.live || !c.conditions || evaluateConditions(c.conditions, liveVars));
                             const arranged = project.autoArrangeCharacters
                                 ? computeArrangedPositions(allChars.filter(c => !c.charId.startsWith('__ghost')).map(c => ({ id: c.charId, position: c.position })))
                                 : null;
@@ -7459,12 +7934,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const charScale = charTween?.scale ?? (char as any).scale ?? 1;
                             const charOpacity = charTween?.opacity;
                             const charInverted = (char as any).inverted ?? false;
+                            const charFlipY = (char as any).flipY ?? false;
+                            const charRotation = (char as any).rotation ?? 0;
 
-                            // Build transform: combine position, scale, and inversion
+                            // Build transform: combine position, rotation, scale, and flips
                             let transformStr = positionStyle.transform || '';
-                            if (charScale !== 1 || charInverted) {
-                                const scaleX = charInverted ? -1 : 1;
-                                transformStr = `${transformStr} scale(${scaleX * charScale}, ${charScale})`.trim();
+                            if (charRotation) {
+                                transformStr = `${transformStr} rotate(${charRotation}deg)`.trim();
+                            }
+                            if (charScale !== 1 || charInverted || charFlipY) {
+                                const scaleX = (charInverted ? -1 : 1) * charScale;
+                                const scaleY = (charFlipY ? -1 : 1) * charScale;
+                                transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
                             }
 
                             return (
@@ -7500,22 +7981,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                             return null;
                         })()}
-                        {state.textOverlays.map((overlay: TextOverlay) => (
-                            <TextOverlayElement
-                                key={overlay.id}
-                                overlay={overlay}
-                                stageSize={stageSize}
-                            />
-                        ))}
-                        {state.imageOverlays.map((overlay: ImageOverlay) => (
+                        {state.textOverlays.filter((o: TextOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: TextOverlay) => {
+                            // Live text re-interpolates its {variable} tokens against current
+                            // variables each render, so values shown in the text update live.
+                            const liveText = (overlay.live && overlay.rawText !== undefined)
+                                ? interpolateVariables(overlay.rawText, liveVars, project)
+                                : overlay.text;
+                            return (
+                                <TextOverlayElement
+                                    key={overlay.id}
+                                    overlay={liveText !== overlay.text ? { ...overlay, text: liveText } : overlay}
+                                    stageSize={stageSize}
+                                />
+                            );
+                        })}
+                        {state.imageOverlays.filter((o: ImageOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ImageOverlay) => (
                             <ImageOverlayElement
                                 key={overlay.id}
                                 overlay={overlay}
                                 stageSize={stageSize}
                             />
                         ))}
-                        {state.buttonOverlays.map((overlay: ButtonOverlay) => (
-                            <ButtonOverlayElement 
+                        {state.buttonOverlays.filter((o: ButtonOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ButtonOverlay) => (
+                            <ButtonOverlayElement
                                 key={overlay.id}
                                 overlay={overlay} 
                                 onAction={handleUIAction} 
@@ -7540,7 +8028,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 onAction={handleUIAction}
                                 onCommitVariables={commitUiVariablesToPlayerState}
                                 evaluateConditions={evaluateConditions}
-                                variables={playerState?.variables || {}}
+                                variables={liveVars}
                                 onAdvance={overlay.waitForClick ? () => {
                                     updatePlayerState(p => {
                                         if (!p) return null;
@@ -7551,6 +8039,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         };
                                     });
                                 } : undefined}
+                            />
+                        ))}
+                        {(state.hotSpotOverlays || []).map((overlay: HotSpotOverlay) => (
+                            <HotSpotOverlayElement
+                                key={overlay.id}
+                                overlay={overlay}
+                                onAction={handleUIAction}
+                                evaluateConditions={evaluateConditions}
+                                variables={liveVars}
+                                editTime={!hideCloseButton}
+                                onAdvance={() => updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null)}
                             />
                         ))}
                     </div>
@@ -7941,7 +8440,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Check if current HUD screen has showDialogue enabled
         const currentHudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
         const currentHudScreen = currentHudScreenId ? project.uiScreens[currentHudScreenId] : null;
-        const shouldShowDialogueOnHud = currentHudScreen?.showDialogue;
+        // A pass-through HUD (e.g. an inventory bar) is a transparent overlay, not a full
+        // screen — it must NOT hide the dialogue box. Only an opaque HUD without showDialogue
+        // suppresses dialogue.
+        const isHudPassThrough = currentHudScreen ? (currentHudScreen.passThrough ?? (currentHudScreenId === project.ui.gameHudScreenId)) : false;
+        const shouldShowDialogueOnHud = currentHudScreen?.showDialogue || isHudPassThrough;
         
         return <>
             {uiState.showHistory && (
@@ -8044,12 +8547,107 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const defPos = getDefaultPos();
                         const qmX = project.ui.quickMenuX ?? defPos.x;
                         const qmY = project.ui.quickMenuY ?? defPos.y;
-                        
+
                         // Increase z-index when float is enabled or for bottom presets to ensure visibility above dialogue
                         const qmZIndex = shouldFloatQm || isBottomQmPreset ? 50 : 25;
 
+                        // ── Per-button descriptors (shared by grouped + independent layouts) ── //
+                        const pillBase = 'flex items-center gap-1 font-medium transition-all';
+                        const defBorder = '1px solid rgba(148,163,184,0.2)';
+                        const commonPill: React.CSSProperties = {
+                            borderRadius: scalePx(qmRadius),
+                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                            fontSize: scalePx(12),
+                            backdropFilter: 'blur(4px)',
+                        };
+                        const hasHistory = playerState.history.length > 0;
+                        const qmButtonCfgs = project.ui.quickMenuButtons || {};
+                        const iconCls = 'w-3.5 h-3.5';
+                        type QmDesc = { key: QuickMenuButtonKey; show: boolean; onClick: (e: React.MouseEvent) => void; disabled?: boolean; title: string; label: string; icon: React.ReactNode; pillClassName: string; pillStyle: React.CSSProperties };
+                        const descriptors: QmDesc[] = [
+                            {
+                                key: 'skipBackward', show: project.ui.quickMenuShowSkipBackward !== false,
+                                onClick: (e) => { e.stopPropagation(); handleSkipBackward(); },
+                                disabled: !hasHistory, title: 'Skip Backward (Arrow Up)', label: 'Back',
+                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>,
+                                pillClassName: pillBase,
+                                pillStyle: { ...commonPill, background: hasHistory ? qmBg : qmBgDisabled, border: defBorder, color: hasHistory ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)', cursor: hasHistory ? 'pointer' : 'default' },
+                            },
+                            {
+                                key: 'log', show: project.ui.quickMenuShowLog !== false,
+                                onClick: (e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); },
+                                title: 'Text History (H)', label: 'Log',
+                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'autoAdvance', show: project.ui.quickMenuShowAutoAdvance !== false,
+                                onClick: (e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); },
+                                title: 'Auto-Advance', label: 'Auto',
+                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                                pillClassName: pillBase,
+                                pillStyle: { ...commonPill, background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : qmBg, border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`, color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'skipForward', show: !!settings.enableSkip && project.ui.quickMenuShowSkipForward !== false,
+                                onClick: (e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); },
+                                title: 'Skip Forward (Ctrl)', label: 'Skip',
+                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>,
+                                pillClassName: pillBase,
+                                pillStyle: { ...commonPill, background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : qmBg, border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`, color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'save', show: project.ui.quickMenuShowSave !== false,
+                                onClick: (e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.SaveGame, slotNumber: 1 }); },
+                                title: 'Save Game', label: 'Save',
+                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" /></svg>,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'load', show: project.ui.quickMenuShowLoad !== false,
+                                onClick: (e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.LoadGame, slotNumber: 1 }); },
+                                title: 'Load Game', label: 'Load',
+                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" /></svg>,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            },
+                        ];
+                        const visible = descriptors.filter(d => d.show);
+
+                        // ── Independent layout: each button placed/sized on its own ── //
+                        if (project.ui.quickMenuIndependentLayout) {
+                            const count = visible.length || 1;
+                            const slotW = qmWPct / count;
+                            return (
+                                <div className="absolute inset-0" style={{ pointerEvents: 'none', zIndex: qmZIndex }}>
+                                    {visible.map((d, i) => {
+                                        const cfg = qmButtonCfgs[d.key] || {};
+                                        const bx = cfg.x ?? (qmX + i * slotW);
+                                        const by = cfg.y ?? qmY;
+                                        const bw = cfg.width ?? Math.max(4, slotW - 1);
+                                        const bh = cfg.height ?? qmHPct;
+                                        return (
+                                            <div key={d.key} style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto' }}>
+                                                <QuickMenuButtonEl
+                                                    label={d.label} title={d.title} icon={d.icon} onClick={d.onClick} disabled={d.disabled}
+                                                    config={cfg} assetResolver={assetResolver}
+                                                    artButtonStyle={{ width: '100%', height: '100%' }}
+                                                    artImgStyle={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                                                    pillClassName={d.pillClassName}
+                                                    pillStyle={{ ...d.pillStyle, width: '100%', height: '100%', justifyContent: 'center' }}
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        }
+
+                        // ── Grouped layout (default): single centered bar ── //
                         return (
-                            <div className="flex items-center justify-center gap-2" 
+                            <div className="flex items-center justify-center gap-2"
                                 style={{
                                     position: 'absolute' as const,
                                     left: `${qmX}%`,
@@ -8061,146 +8659,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 }}
                             >
                                 <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
-                                    {/* Skip Backward button */}
-                                    {(project.ui.quickMenuShowSkipBackward !== false) && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleSkipBackward(); }}
-                                        disabled={playerState.history.length === 0}
-                                        className="flex items-center gap-1 font-medium transition-all"
-                                        style={{
-                                            borderRadius: scalePx(qmRadius),
-                                            padding: `${scalePx(4)} ${scalePx(10)}`,
-                                            fontSize: scalePx(12),
-                                            background: playerState.history.length > 0 ? qmBg : qmBgDisabled,
-                                            border: '1px solid rgba(148,163,184,0.2)',
-                                            color: playerState.history.length > 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)',
-                                            backdropFilter: 'blur(4px)',
-                                            cursor: playerState.history.length > 0 ? 'pointer' : 'default',
-                                        }}
-                                        title="Skip Backward (Arrow Up)"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                                        </svg>
-                                        Back
-                                    </button>
-                                    )}
-
-                                    {/* History button */}
-                                    {(project.ui.quickMenuShowLog !== false) && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); }}
-                                        className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
-                                        style={{
-                                            borderRadius: scalePx(qmRadius),
-                                            padding: `${scalePx(4)} ${scalePx(10)}`,
-                                            fontSize: scalePx(12),
-                                            background: qmBg,
-                                            border: '1px solid rgba(148,163,184,0.2)',
-                                            color: 'rgba(255,255,255,0.8)',
-                                            backdropFilter: 'blur(4px)',
-                                        }}
-                                        title="Text History (H)"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Log
-                                    </button>
-                                    )}
-
-                                    {/* Auto-advance toggle */}
-                                    {(project.ui.quickMenuShowAutoAdvance !== false) && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); }}
-                                        className="flex items-center gap-1 font-medium transition-all"
-                                        style={{
-                                            borderRadius: scalePx(qmRadius),
-                                            padding: `${scalePx(4)} ${scalePx(10)}`,
-                                            fontSize: scalePx(12),
-                                            background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : qmBg,
-                                            border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`,
-                                            color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)',
-                                            backdropFilter: 'blur(4px)',
-                                        }}
-                                        title="Auto-Advance"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Auto
-                                    </button>
-                                    )}
-
-                                    {/* Skip Forward button */}
-                                    {settings.enableSkip && (project.ui.quickMenuShowSkipForward !== false) && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); }}
-                                            className="flex items-center gap-1 font-medium transition-all"
-                                            style={{
-                                                borderRadius: scalePx(qmRadius),
-                                                padding: `${scalePx(4)} ${scalePx(10)}`,
-                                                fontSize: scalePx(12),
-                                                background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : qmBg,
-                                                border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`,
-                                                color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)',
-                                                backdropFilter: 'blur(4px)',
-                                            }}
-                                            title="Skip Forward (Ctrl)"
-                                        >
-                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                                            </svg>
-                                            Skip
-                                        </button>
-                                    )}
-
-                                    {/* Save button */}
-                                    {(project.ui.quickMenuShowSave !== false) && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.SaveGame, slotNumber: 1 }); }}
-                                        className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
-                                        style={{
-                                            borderRadius: scalePx(qmRadius),
-                                            padding: `${scalePx(4)} ${scalePx(10)}`,
-                                            fontSize: scalePx(12),
-                                            background: qmBg,
-                                            border: '1px solid rgba(148,163,184,0.2)',
-                                            color: 'rgba(255,255,255,0.8)',
-                                            backdropFilter: 'blur(4px)',
-                                        }}
-                                        title="Save Game"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" />
-                                        </svg>
-                                        Save
-                                    </button>
-                                    )}
-
-                                    {/* Load button */}
-                                    {(project.ui.quickMenuShowLoad !== false) && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.LoadGame, slotNumber: 1 }); }}
-                                        className="flex items-center gap-1 font-medium transition-all hover:brightness-125"
-                                        style={{
-                                            borderRadius: scalePx(qmRadius),
-                                            padding: `${scalePx(4)} ${scalePx(10)}`,
-                                            fontSize: scalePx(12),
-                                            background: qmBg,
-                                            border: '1px solid rgba(148,163,184,0.2)',
-                                            color: 'rgba(255,255,255,0.8)',
-                                            backdropFilter: 'blur(4px)',
-                                        }}
-                                        title="Load Game"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" />
-                                        </svg>
-                                        Load
-                                    </button>
-                                    )}
+                                    {visible.map(d => (
+                                        <QuickMenuButtonEl
+                                            key={d.key}
+                                            label={d.label} title={d.title} icon={d.icon} onClick={d.onClick} disabled={d.disabled}
+                                            config={qmButtonCfgs[d.key]} assetResolver={assetResolver}
+                                            artButtonStyle={{ width: 'auto', height: 'auto' }}
+                                            artImgStyle={{ height: scalePx(28), width: 'auto', objectFit: 'contain', display: 'block' }}
+                                            pillClassName={d.pillClassName}
+                                            pillStyle={d.pillStyle}
+                                        />
+                                    ))}
                                 </div>
                             </div>
                         );
@@ -8394,6 +8863,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     to { opacity: 1; }
                 }
                 
+                /* New-game title→scene fade (defined here so exported games have it too) */
+                @keyframes vnGameStartToBlack { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes vnGameStartFromBlack { from { opacity: 1; } to { opacity: 0; } }
+
                 /* Screen OUT transitions */
                 @keyframes screenTransitionfadeOut {
                     from { opacity: 1; }
@@ -8544,19 +9017,33 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     block, causing a one-frame gap that looked like flicker during crossfades. */}
                 {(() => {
                     const ordered: { id: VNID; isClosing: boolean }[] = [];
-                    // Closing screens first (rendered below — earlier in DOM = lower stacking)
-                    for (const id of screenStack) {
-                        if (id !== currentScreenId && closingScreens.has(id)) {
-                            ordered.push({ id, isClosing: true });
+                    const topClosingMenu = !!currentScreenId && closingScreens.has(currentScreenId);
+                    if (topClosingMenu && screenStack.length >= 2) {
+                        // Pop close (e.g. Return To Previous Screen): render the LEAVING screen below
+                        // and the revealed previous screen ON TOP, entering. This mirrors a forward
+                        // GoToScreen, so crossfade (incoming fades in over the static outgoing) works
+                        // the same in both directions instead of fading to black / not animating.
+                        ordered.push({ id: currentScreenId as VNID, isClosing: true });
+                        ordered.push({ id: screenStack[screenStack.length - 2], isClosing: false });
+                    } else {
+                        // Closing screens first (rendered below — earlier in DOM = lower stacking)
+                        for (const id of screenStack) {
+                            if (id !== currentScreenId && closingScreens.has(id)) {
+                                ordered.push({ id, isClosing: true });
+                            }
                         }
-                    }
-                    // Current screen last (rendered above)
-                    if (currentScreenId) {
-                        ordered.push({ id: currentScreenId, isClosing: closingScreens.has(currentScreenId) });
+                        // Current screen last (rendered above)
+                        if (currentScreenId) {
+                            ordered.push({ id: currentScreenId, isClosing: closingScreens.has(currentScreenId) });
+                        }
                     }
                     return ordered.map(({ id, isClosing }) => (
                         <UIScreenRenderer
-                            key={id}
+                            // Key on isClosing so a screen remounts when it starts closing — a fresh
+                            // mount reliably plays the transitionOut animation (changing the CSS
+                            // animation-name on the SAME element doesn't restart it after the IN
+                            // animation finished, which made fade-out "cut to black" instead).
+                            key={`${id}-${isClosing ? 'closing' : 'open'}`}
                             screenId={id}
                             onAction={handleUIAction}
                             settings={settings}
@@ -8578,17 +9065,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
                     const activeHudId = topHud ?? project.ui.gameHudScreenId ?? null;
                     const ordered: { id: VNID; isClosing: boolean }[] = [];
-                    for (const id of hudStack) {
-                        if (id !== topHud && closingScreens.has(id)) {
-                            ordered.push({ id, isClosing: true });
+                    const topClosingHud = !!activeHudId && closingScreens.has(activeHudId);
+                    if (topClosingHud && hudStack.length >= 2) {
+                        // Pop close: leaving HUD screen below, revealed screen on top entering
+                        // (mirrors a forward GoToScreen so crossfade works in both directions).
+                        ordered.push({ id: activeHudId as VNID, isClosing: true });
+                        ordered.push({ id: hudStack[hudStack.length - 2], isClosing: false });
+                    } else {
+                        for (const id of hudStack) {
+                            if (id !== topHud && closingScreens.has(id)) {
+                                ordered.push({ id, isClosing: true });
+                            }
                         }
-                    }
-                    if (activeHudId) {
-                        ordered.push({ id: activeHudId, isClosing: closingScreens.has(activeHudId) });
+                        if (activeHudId) {
+                            ordered.push({ id: activeHudId, isClosing: closingScreens.has(activeHudId) });
+                        }
                     }
                     return ordered.map(({ id, isClosing }) => (
                         <UIScreenRenderer
-                            key={id}
+                            // Key on isClosing so a screen remounts when it starts closing — a fresh
+                            // mount reliably plays the transitionOut animation (changing the CSS
+                            // animation-name on the SAME element doesn't restart it after the IN
+                            // animation finished, which made fade-out "cut to black" instead).
+                            key={`${id}-${isClosing ? 'closing' : 'open'}`}
                             screenId={id}
                             onAction={handleUIAction}
                             settings={settings}
@@ -8615,6 +9114,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 )}
                 {renderPlayerUI()}
                 
+                {/* New-game transition: fade to black over the title, then fade the scene in. */}
+                {gameStartFade !== 'none' && (
+                    <div
+                        className="absolute inset-0 pointer-events-none z-[60] bg-black"
+                        style={{ animation: `${gameStartFade === 'toBlack' ? 'vnGameStartToBlack' : 'vnGameStartFromBlack'} 0.4s ease-in-out forwards` }}
+                    />
+                )}
+
                 {/* Scene exit transition overlay */}
                 {sceneTransitionFading && (
                     <div 

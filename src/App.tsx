@@ -11,6 +11,20 @@ import { NavigationTab } from './components/NavigationTabs';
 import { toggleBackgroundMusic, getCurrentSongName } from './utils/hubAudio';
 import { importProject } from './utils/projectPackager';
 
+// Detect a popped-out manager/child window *synchronously* at module load.
+// Electron loads these with ?manager=<type> (see electron/main.cjs). Marking it
+// here — before React mounts — ensures the auto-play effect and the Hub-only
+// MusicPlayer never start a second chiptune AudioContext in the child window.
+try {
+    if (new URLSearchParams(window.location.search).has('manager')) {
+        (window as any).__IS_MANAGER_WINDOW__ = true;
+    }
+} catch { /* location unavailable */ }
+
+function isManagerWindow(): boolean {
+    return !!(window as any).__IS_MANAGER_WINDOW__;
+}
+
 function isEditorDebugEnabled(): boolean {
     try {
         return window.localStorage.getItem('flourish:editorDebug') === '1';
@@ -39,6 +53,9 @@ const App = () => {
         if (typeof (window as any).__dismissSplash === 'function') {
             (window as any).__dismissSplash();
         }
+
+        // Popped-out manager windows must not start their own hub music.
+        if (isManagerWindow()) return;
 
         const tryAutoPlay = () => {
             try {
@@ -136,12 +153,14 @@ const App = () => {
             <ToastProvider>
                 <AutoUpdateBanner />
                 <ProjectHub onProjectSelect={handleProjectSelect} />
-                <MusicPlayer
-                    isPlaying={isMusicPlaying}
-                    onPlayingChange={handleMusicPlayingChange}
-                    currentSong={currentSongName}
-                    onSongChange={handleSongChange}
-                />
+                {!isManagerWindow() && (
+                    <MusicPlayer
+                        isPlaying={isMusicPlaying}
+                        onPlayingChange={handleMusicPlayingChange}
+                        currentSong={currentSongName}
+                        onSongChange={handleSongChange}
+                    />
+                )}
             </ToastProvider>
         );
     }

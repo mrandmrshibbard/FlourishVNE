@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUIScreenTheme, UIScreenThemeName } from '../contexts/UIScreenThemeContext';
 import { SwatchIcon } from './icons';
 
@@ -11,12 +12,14 @@ interface UIScreenThemeSelectorProps {
   className?: string;
 }
 
-const UIScreenThemeSelector: React.FC<UIScreenThemeSelectorProps> = ({ 
-  screenId, 
-  label = 'Apply Theme', 
-  className = '' 
+const UIScreenThemeSelector: React.FC<UIScreenThemeSelectorProps> = ({
+  screenId,
+  label,
+  className = ''
 }) => {
+  const { t } = useTranslation('components');
   const { availableThemes, applyThemeToAllScreens, applyThemeToScreen } = useUIScreenTheme();
+  const displayLabel = label ?? t('uiScreenTheme.applyTheme');
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -44,10 +47,10 @@ const UIScreenThemeSelector: React.FC<UIScreenThemeSelectorProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-md transition-colors border border-slate-600"
-        title={screenId ? 'Apply theme to this screen' : 'Apply theme to all UI screens'}
+        title={screenId ? t('uiScreenTheme.applyToThisTitle') : t('uiScreenTheme.applyToAllTitle')}
       >
         <SwatchIcon className="w-4 h-4" />
-        <span>{label}</span>
+        <span>{displayLabel}</span>
         <svg className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -56,7 +59,7 @@ const UIScreenThemeSelector: React.FC<UIScreenThemeSelectorProps> = ({
       {isOpen && (
         <div className="absolute bottom-full left-0 mb-1 w-64 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
           <div className="p-2 border-b border-slate-700 text-xs text-slate-400">
-            {screenId ? 'Apply to this screen' : 'Apply to all UI screens'}
+            {screenId ? t('uiScreenTheme.applyToThis') : t('uiScreenTheme.applyToAll')}
           </div>
           <div className="max-h-80 overflow-y-auto">
             {availableThemes.map((theme) => (
@@ -70,18 +73,18 @@ const UIScreenThemeSelector: React.FC<UIScreenThemeSelectorProps> = ({
                   <div
                     className="w-8 h-8 rounded border border-slate-500"
                     style={{ backgroundColor: theme.colors.background }}
-                    title="Background"
+                    title={t('uiScreenTheme.swatchBackground')}
                   />
                   <div className="flex gap-0.5">
                     <div
                       className="w-4 h-4 rounded-sm border border-slate-500"
                       style={{ backgroundColor: theme.colors.buttonBg }}
-                      title="Button"
+                      title={t('uiScreenTheme.swatchButton')}
                     />
                     <div
                       className="w-4 h-4 rounded-sm border border-slate-500"
                       style={{ backgroundColor: theme.colors.sliderThumb }}
-                      title="Accent"
+                      title={t('uiScreenTheme.swatchAccent')}
                     />
                   </div>
                 </div>

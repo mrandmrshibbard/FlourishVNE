@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "release.2.7.1",
+  "version": "release.2.7.3",
   "description": "Flourish Visual Novel Engine",
   "author": "Your Name",
   "type": "module",

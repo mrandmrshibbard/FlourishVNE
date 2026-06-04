@@ -131,26 +131,30 @@ export function handlePlaySoundEffect(
   context: CommandContext
 ): CommandResult {
   const { playSound } = context;
-  
+
   try {
-    playSound(command.audioId, command.volume);
+    playSound(command.audioId, command.volume, command.loop);
   } catch (e) {
     console.error('Failed to play sound effect:', e);
   }
-  
+
   return { advance: true };
 }
 
 /**
- * Handles stopping all currently playing sound effects
+ * Handles stopping sound effects.
+ * - No target → stops all currently playing sound effects.
+ * - A target audioId → stops only instances of that sound.
+ * - fadeDuration (seconds) > 0 → fades the matched sounds out instead of cutting them.
  */
 export function handleStopSoundEffect(
+  command: StopSoundEffectCommand,
   context: CommandContext
 ): CommandResult {
-  const { stopAllSfx } = context;
-  
-  console.log('[StopSoundEffect] Stopping all sound effects');
-  stopAllSfx();
-  
+  const { stopSfx } = context;
+
+  console.log('[StopSoundEffect] Stopping sound effects', { audioId: command.audioId || '(all)', fadeDuration: command.fadeDuration || 0 });
+  stopSfx(command.audioId || null, command.fadeDuration);
+
   return { advance: true };
 }

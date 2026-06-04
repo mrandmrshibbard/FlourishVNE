@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
 import { VNProjectUI } from '../features/ui/types';
@@ -1340,7 +1340,8 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
     const { dispatch } = useProject();
-    
+    const { t } = useTranslation('settings');
+
     const projectFontsArray = Object.values((project as any).fonts || {}) as VNProjectFont[];
     
     const addProjectFont = async () => {
@@ -1401,23 +1402,23 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-6">Font Settings</h3>
+            <h3 className="text-xl font-bold text-white mb-6">{t('fonts.heading')}</h3>
 
             {/* Project Font Library */}
             <div className="border border-[var(--border-subtle)] rounded-lg p-4 mb-6">
                 <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-white">Project Font Library (TTF/OTF)</h4>
+                    <h4 className="text-lg font-semibold text-white">{t('fonts.library')}</h4>
                     <button
                         onClick={addProjectFont}
                         className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded font-medium transition-colors"
                     >
-                        Upload Font
+                        {t('fonts.upload')}
                     </button>
                 </div>
-                
+
                 {projectFontsArray.length === 0 ? (
                     <div className="text-[var(--text-secondary)] text-sm bg-[var(--bg-primary)]/50 p-4 rounded">
-                        No custom fonts uploaded yet. Upload a .ttf or .otf file to make it available in all font pickers throughout your project.
+                        {t('fonts.empty')}
                     </div>
                 ) : (
                     <div className="space-y-2">
@@ -1432,7 +1433,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
                                 <button
                                     onClick={() => deleteProjectFont(f.id)}
                                     className="ml-4 text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded transition-colors"
-                                    title="Delete font"
+                                    title={t('fonts.deleteFont')}
                                 >
                                     <TrashIcon className="w-4 h-4" />
                                 </button>
@@ -1444,7 +1445,7 @@ const FontSettings: React.FC<FontSettingsProps> = ({ project, onUpdate }) => {
 
             <div className="space-y-6">
                 <div className="text-sm text-[var(--text-secondary)] bg-[var(--bg-primary)]/50 p-4 rounded border border-[var(--border-default)]">
-                    Font settings for dialogue text, name box, choice buttons, and input boxes are configured in the <strong className="text-white">In-Game UI</strong> editor. Select an element there to edit its font properties.
+                    <Trans i18nKey="fonts.note" t={t} components={{ b: <strong className="text-white" /> }} />
                 </div>
             </div>
         </div>
@@ -1457,29 +1458,30 @@ interface ScreenSettingsProps {
 }
 
 const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) => {
+    const { t } = useTranslation('settings');
     const allScreens = Object.values(project.uiScreens || {}) as any[];
 
     const screenSlots: { key: keyof VNProjectUI; label: string; description: string }[] = [
-        { key: 'titleScreenId', label: 'Title Screen', description: 'Shown when the game first launches. Typically contains New Game, Continue, Settings, and Quit buttons.' },
-        { key: 'settingsScreenId', label: 'Settings Screen', description: 'In-game settings menu where players adjust text speed, volume, and other preferences.' },
-        { key: 'saveScreenId', label: 'Save Screen', description: 'Screen shown when the player saves their progress. Displays available save slots.' },
-        { key: 'loadScreenId', label: 'Load Screen', description: 'Screen shown when the player loads a previous save. Can share a layout with the Save Screen.' },
-        { key: 'pauseScreenId', label: 'Pause Screen', description: 'Shown when the player presses Escape during gameplay. Usually offers Resume, Save, Load, Settings, and Quit.' },
-        { key: 'gameHudScreenId', label: 'Game HUD Screen', description: 'Persistent overlay displayed on top of gameplay, e.g. custom button bars, status indicators, or affection meters.' },
+        { key: 'titleScreenId', label: t('screens.slots.titleScreen'), description: t('screens.slots.titleScreenDesc') },
+        { key: 'settingsScreenId', label: t('screens.slots.settingsScreen'), description: t('screens.slots.settingsScreenDesc') },
+        { key: 'saveScreenId', label: t('screens.slots.saveScreen'), description: t('screens.slots.saveScreenDesc') },
+        { key: 'loadScreenId', label: t('screens.slots.loadScreen'), description: t('screens.slots.loadScreenDesc') },
+        { key: 'pauseScreenId', label: t('screens.slots.pauseScreen'), description: t('screens.slots.pauseScreenDesc') },
+        { key: 'gameHudScreenId', label: t('screens.slots.gameHud'), description: t('screens.slots.gameHudDesc') },
     ];
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-2">Special Screens</h3>
+            <h3 className="text-xl font-bold text-white mb-2">{t('screens.heading')}</h3>
             <p className="text-sm text-[var(--text-secondary)] mb-6">
-                Assign UI screens you've built in the Menu Editor to serve as your game's system menus. Each slot controls when and where a screen appears during gameplay.
+                {t('screens.intro')}
             </p>
 
             {allScreens.length === 0 && (
                 <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                    <p className="text-sm text-amber-300 font-medium mb-1">No UI Screens Created Yet</p>
+                    <p className="text-sm text-amber-300 font-medium mb-1">{t('screens.noScreensTitle')}</p>
                     <p className="text-xs text-amber-300/70">
-                        Create screens in the Menu Editor tab first, then return here to assign them. The Menu Editor lets you visually design title screens, settings menus, save/load screens, and more.
+                        {t('screens.noScreensDesc')}
                     </p>
                 </div>
             )}
@@ -1494,7 +1496,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                             onChange={(e) => onUpdate({ [key]: e.target.value || null })}
                             className="w-full bg-[var(--bg-secondary)] text-white p-2.5 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)] text-sm"
                         >
-                            <option value="">None</option>
+                            <option value="">{t('screens.none')}</option>
                             {allScreens.map((screen: any) => (
                                 <option key={screen.id} value={screen.id}>
                                     {screen.name}
@@ -1502,7 +1504,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
                             ))}
                         </select>
                         {(project.ui[key] as string) && !allScreens.find((s: any) => s.id === project.ui[key]) && (
-                            <p className="mt-1 text-xs text-amber-400">⚠ Assigned screen no longer exists</p>
+                            <p className="mt-1 text-xs text-amber-400">{t('screens.missing')}</p>
                         )}
                     </div>
                 ))}
@@ -1517,6 +1519,7 @@ interface CGGallerySettingsProps {
 }
 
 const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate }) => {
+    const { t } = useTranslation('settings');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
     const gallery: CGGalleryConfig = project.cgGallery ?? {
@@ -1559,26 +1562,26 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
     const allImages = Object.values(project.images || {}) as { id: string; name: string; imageUrl?: string; videoUrl?: string }[];
     const allBackgrounds = Object.values(project.backgrounds || {}) as { id: string; name: string; imageUrl?: string; videoUrl?: string }[];
     const allAssets = [
-        ...allImages.map((img) => ({ id: img.id, name: img.name, type: 'Image' })),
-        ...allBackgrounds.map((bg) => ({ id: bg.id, name: bg.name, type: 'Background' })),
+        ...allImages.map((img) => ({ id: img.id, name: img.name, type: t('cgGallery.typeImage') })),
+        ...allBackgrounds.map((bg) => ({ id: bg.id, name: bg.name, type: t('cgGallery.typeBackground') })),
     ];
 
     const booleanVariables = Object.values(project.variables || {}).filter((v: any) => v.type === 'boolean') as { id: string; name: string; type: string }[];
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-2">CG Gallery</h3>
+            <h3 className="text-xl font-bold text-white mb-2">{t('cgGallery.heading')}</h3>
             <p className="text-sm text-[var(--text-secondary)] mb-6">
-                Manage the CG (Computer Graphics) gallery entries that players can unlock and view. Add images from your project assets and optionally tie them to boolean variables to create unlockable gallery items.
+                {t('cgGallery.intro')}
             </p>
 
             {/* Gallery-Level Settings */}
             <div className="space-y-4 max-w-lg mb-8">
-                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">Gallery Settings</h4>
+                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">{t('cgGallery.gallerySettings')}</h4>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Columns</label>
+                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('cgGallery.columns')}</label>
                         <input
                             type="number"
                             min={2}
@@ -1589,26 +1592,26 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Unlock Scope</label>
+                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('cgGallery.unlockScope')}</label>
                         <select
                             value={gallery.unlockScope}
                             onChange={(e) => updateGallery({ unlockScope: e.target.value as 'global' | 'per-save' })}
                             className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         >
-                            <option value="global">Global (all saves)</option>
-                            <option value="per-save">Per Save Slot</option>
+                            <option value="global">{t('cgGallery.scopeGlobal')}</option>
+                            <option value="per-save">{t('cgGallery.scopePerSave')}</option>
                         </select>
                     </div>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Locked Placeholder Image</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('cgGallery.lockedPlaceholder')}</label>
                     <select
                         value={gallery.lockedPlaceholderAssetId ?? ''}
                         onChange={(e) => updateGallery({ lockedPlaceholderAssetId: (e.target.value || null) as VNID | null })}
                         className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                     >
-                        <option value="">Default (lock icon)</option>
+                        <option value="">{t('cgGallery.lockedDefault')}</option>
                         {allAssets.map((a) => (
                             <option key={a.id} value={a.id}>[{a.type}] {a.name}</option>
                         ))}
@@ -1616,7 +1619,7 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Viewer Background Color</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('cgGallery.viewerBgColor')}</label>
                     <div className="flex gap-2 items-center">
                         <input
                             type="color"
@@ -1637,19 +1640,19 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
 
             {/* Entries Section */}
             <div className="mb-4 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">Gallery Entries ({entries.length})</h4>
+                <h4 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">{t('cgGallery.entriesHeading', { count: entries.length })}</h4>
                 <button
                     onClick={addEntry}
                     className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-sm rounded-md transition-colors"
                 >
-                    + Add Entry
+                    {t('cgGallery.addEntry')}
                 </button>
             </div>
 
             {entries.length === 0 ? (
                 <div className="text-center py-12 bg-[var(--bg-primary)]/50 rounded-lg border border-[var(--border-subtle)] border-dashed">
-                    <p className="text-[var(--text-secondary)] mb-2">No gallery entries yet</p>
-                    <p className="text-xs text-[var(--text-muted)]">Click "Add Entry" to create your first CG gallery item</p>
+                    <p className="text-[var(--text-secondary)] mb-2">{t('cgGallery.noEntries')}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{t('cgGallery.noEntriesHint')}</p>
                 </div>
             ) : (
                 <div className="space-y-2 max-w-2xl">
@@ -1670,15 +1673,15 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                                     <span className="text-[var(--text-muted)] text-xs font-mono w-6 text-center">{(entry.order ?? 0) + 1}</span>
                                     <span className="flex-1 text-white text-sm font-medium truncate">{entry.name}</span>
                                     <span className="text-xs text-[var(--text-secondary)]">
-                                        {assetInfo ? `${assetInfo.type}: ${assetInfo.name}` : 'No asset'}
+                                        {assetInfo ? `${assetInfo.type}: ${assetInfo.name}` : t('cgGallery.noAsset')}
                                     </span>
                                     {entry.unlockable && (
-                                        <span className="text-xs bg-amber-600/30 text-amber-400 px-2 py-0.5 rounded flex items-center gap-1"><LockClosedIcon className="w-3 h-3" /> Unlockable</span>
+                                        <span className="text-xs bg-amber-600/30 text-amber-400 px-2 py-0.5 rounded flex items-center gap-1"><LockClosedIcon className="w-3 h-3" /> {t('cgGallery.unlockable')}</span>
                                     )}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); removeEntry(entry.id as VNID); }}
                                         className="text-red-400 hover:text-red-300 p-1"
-                                        title="Remove entry"
+                                        title={t('cgGallery.removeEntry')}
                                     >
                                         <TrashIcon className="w-4 h-4" />
                                     </button>
@@ -1689,7 +1692,7 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                                 {isEditing && (
                                     <div className="px-4 pb-4 pt-2 border-t border-[var(--border-subtle)] space-y-3">
                                         <div>
-                                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Name</label>
+                                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.name')}</label>
                                             <input
                                                 type="text"
                                                 value={entry.name}
@@ -1700,22 +1703,22 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Asset</label>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.asset')}</label>
                                                 <select
                                                     value={entry.assetId ?? ''}
                                                     onChange={(e) => updateEntry(entry.id as VNID, { assetId: (e.target.value || null) as VNID | null })}
                                                     className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                                                 >
-                                                    <option value="">-- Select Asset --</option>
+                                                    <option value="">{t('cgGallery.selectAsset')}</option>
                                                     {allImages.length > 0 && (
-                                                        <optgroup label="Images">
+                                                        <optgroup label={t('cgGallery.images')}>
                                                             {allImages.map((img) => (
                                                                 <option key={img.id} value={img.id}>{img.name}</option>
                                                             ))}
                                                         </optgroup>
                                                     )}
                                                     {allBackgrounds.length > 0 && (
-                                                        <optgroup label="Backgrounds">
+                                                        <optgroup label={t('cgGallery.backgrounds')}>
                                                             {allBackgrounds.map((bg) => (
                                                                 <option key={bg.id} value={bg.id}>{bg.name}</option>
                                                             ))}
@@ -1725,13 +1728,13 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Thumbnail Override</label>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.thumbnailOverride')}</label>
                                                 <select
                                                     value={entry.thumbnailAssetId ?? ''}
                                                     onChange={(e) => updateEntry(entry.id as VNID, { thumbnailAssetId: (e.target.value || null) as VNID | null })}
                                                     className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                                                 >
-                                                    <option value="">Same as asset</option>
+                                                    <option value="">{t('cgGallery.sameAsAsset')}</option>
                                                     {allAssets.map((a) => (
                                                         <option key={a.id} value={a.id}>[{a.type}] {a.name}</option>
                                                     ))}
@@ -1741,17 +1744,17 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Category</label>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.category')}</label>
                                                 <input
                                                     type="text"
                                                     value={entry.category ?? ''}
                                                     onChange={(e) => updateEntry(entry.id as VNID, { category: e.target.value || undefined })}
                                                     className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
-                                                    placeholder="e.g. Chapter 1"
+                                                    placeholder={t('cgGallery.categoryPlaceholder')}
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Sort Order</label>
+                                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.sortOrder')}</label>
                                                 <input
                                                     type="number"
                                                     value={entry.order ?? 0}
@@ -1774,29 +1777,29 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                                                 >
                                                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${entry.unlockable ? 'translate-x-4' : 'translate-x-0.5'}`} />
                                                 </button>
-                                                <label className="text-sm text-[var(--text-primary)]">Requires Unlocking</label>
+                                                <label className="text-sm text-[var(--text-primary)]">{t('cgGallery.requiresUnlocking')}</label>
                                             </div>
 
                                             {entry.unlockable && (
                                                 <div>
-                                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Unlock Variable (boolean)</label>
+                                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">{t('cgGallery.unlockVariable')}</label>
                                                     <select
                                                         value={entry.unlockVariableId ?? ''}
                                                         onChange={(e) => updateEntry(entry.id as VNID, { unlockVariableId: (e.target.value || null) as VNID | null })}
                                                         className="w-full bg-[var(--bg-primary)] text-white p-2 rounded border border-[var(--border-default)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                                                     >
-                                                        <option value="">-- Select Variable --</option>
+                                                        <option value="">{t('cgGallery.selectVariable')}</option>
                                                         {booleanVariables.map((v) => (
                                                             <option key={v.id} value={v.id}>{v.name}</option>
                                                         ))}
                                                     </select>
                                                     {booleanVariables.length === 0 && (
                                                         <p className="text-xs text-amber-400 mt-1">
-                                                            No boolean variables found. Create a boolean variable in the Variables panel to use as an unlock trigger.
+                                                            {t('cgGallery.noBooleanVars')}
                                                         </p>
                                                     )}
                                                     {entry.unlockVariableId && !booleanVariables.find((v) => v.id === entry.unlockVariableId) && (
-                                                        <p className="text-xs text-amber-400 mt-1">⚠ Selected variable not found</p>
+                                                        <p className="text-xs text-amber-400 mt-1">{t('cgGallery.varNotFound')}</p>
                                                     )}
                                                 </div>
                                             )}
@@ -1813,6 +1816,7 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
 };
 
 const AccessibilitySettings: React.FC = () => {
+    const { t } = useTranslation('settings');
     const a11yManager = AccessibilityManager.getInstance();
     const [preferences, setPreferences] = useState<A11yPreferences>(a11yManager.getPreferences());
 
@@ -1823,18 +1827,18 @@ const AccessibilitySettings: React.FC = () => {
     };
 
     const toggleItems: { key: keyof A11yPreferences; label: string; description: string }[] = [
-        { key: 'highContrast', label: 'High Contrast Mode', description: 'Increases border thickness and contrast throughout the editor UI for better visibility.' },
-        { key: 'reducedMotion', label: 'Reduced Motion', description: 'Disables all CSS animations and transitions. Recommended for motion-sensitive users.' },
-        { key: 'largeText', label: 'Large Text', description: 'Scales up all editor text by 20% for improved readability on high-DPI screens.' },
-        { key: 'keyboardOnly', label: 'Force Keyboard Focus Rings', description: 'Always shows prominent focus outlines on interactive elements. Automatically activates when Tab is pressed.' },
-        { key: 'screenReaderMode', label: 'Screen Reader Mode', description: 'Adds ARIA landmarks and labels for better screen reader navigation. Enable if using NVDA, JAWS, or VoiceOver.' },
+        { key: 'highContrast', label: t('accessibility.items.highContrast'), description: t('accessibility.items.highContrastDesc') },
+        { key: 'reducedMotion', label: t('accessibility.items.reducedMotion'), description: t('accessibility.items.reducedMotionDesc') },
+        { key: 'largeText', label: t('accessibility.items.largeText'), description: t('accessibility.items.largeTextDesc') },
+        { key: 'keyboardOnly', label: t('accessibility.items.keyboardOnly'), description: t('accessibility.items.keyboardOnlyDesc') },
+        { key: 'screenReaderMode', label: t('accessibility.items.screenReaderMode'), description: t('accessibility.items.screenReaderModeDesc') },
     ];
 
     return (
         <div className="p-6">
-            <h3 className="text-xl font-bold text-white mb-2">Accessibility Settings</h3>
+            <h3 className="text-xl font-bold text-white mb-2">{t('accessibility.heading')}</h3>
             <p className="text-sm text-[var(--text-secondary)] mb-6">
-                These settings affect the <strong className="text-[var(--text-primary)]">editor</strong> interface only, not your exported game. Settings are saved to your browser and persist across sessions.
+                <Trans i18nKey="accessibility.intro" t={t} components={{ b: <strong className="text-[var(--text-primary)]" /> }} />
             </p>
 
             <div className="space-y-3 max-w-md">
@@ -1870,12 +1874,12 @@ const AccessibilitySettings: React.FC = () => {
             </div>
 
             <div className="mt-6 p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] max-w-md">
-                <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2">Keyboard Shortcuts</h4>
+                <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2">{t('accessibility.shortcuts')}</h4>
                 <div className="space-y-1 text-xs text-[var(--text-secondary)]">
-                    <div className="flex justify-between"><span>Undo</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+Z</kbd></div>
-                    <div className="flex justify-between"><span>Redo</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+Y</kbd></div>
-                    <div className="flex justify-between"><span>Save Project</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+S</kbd></div>
-                    <div className="flex justify-between"><span>Command Palette</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+K</kbd></div>
+                    <div className="flex justify-between"><span>{t('accessibility.undo')}</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+Z</kbd></div>
+                    <div className="flex justify-between"><span>{t('accessibility.redo')}</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+Y</kbd></div>
+                    <div className="flex justify-between"><span>{t('accessibility.saveProject')}</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+S</kbd></div>
+                    <div className="flex justify-between"><span>{t('accessibility.commandPalette')}</span><kbd className="bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--text-primary)] font-mono">Ctrl+K</kbd></div>
                 </div>
             </div>
         </div>
@@ -1883,6 +1887,7 @@ const AccessibilitySettings: React.FC = () => {
 };
 
 const AnalyticsSettings: React.FC = () => {
+    const { t } = useTranslation('settings');
     const tracker = WorkflowTracker.getInstance();
     const [stats, setStats] = useState<WorkflowStats>(tracker.getStatistics());
     const [sessionElapsed, setSessionElapsed] = useState(0);
@@ -1915,38 +1920,9 @@ const AnalyticsSettings: React.FC = () => {
 
     // Make raw dispatch action names human-readable
     const humanizeAction = (raw: string): string => {
-        const map: Record<string, string> = {
-            'UPDATE_PROJECT': 'Update Project',
-            'UPDATE_UI': 'Update UI Settings',
-            'ADD_COMMAND': 'Add Command',
-            'UPDATE_COMMAND': 'Edit Command',
-            'DELETE_COMMAND': 'Delete Command',
-            'REORDER_COMMANDS': 'Reorder Commands',
-            'ADD_SCENE': 'Create Scene',
-            'UPDATE_SCENE': 'Edit Scene',
-            'DELETE_SCENE': 'Delete Scene',
-            'ADD_CHARACTER': 'Create Character',
-            'UPDATE_CHARACTER': 'Edit Character',
-            'DELETE_CHARACTER': 'Delete Character',
-            'ADD_VARIABLE': 'Create Variable',
-            'UPDATE_VARIABLE': 'Edit Variable',
-            'DELETE_VARIABLE': 'Delete Variable',
-            'ADD_BACKGROUND': 'Add Background',
-            'DELETE_BACKGROUND': 'Remove Background',
-            'ADD_IMAGE': 'Add Image',
-            'DELETE_IMAGE': 'Remove Image',
-            'ADD_AUDIO': 'Add Audio',
-            'DELETE_AUDIO': 'Remove Audio',
-            'ADD_VIDEO': 'Add Video',
-            'DELETE_VIDEO': 'Remove Video',
-            'UNDO': 'Undo',
-            'REDO': 'Redo',
-            'SET_PROJECT': 'Load Project',
-            'ADD_UI_SCREEN': 'Create UI Screen',
-            'UPDATE_UI_SCREEN': 'Edit UI Screen',
-            'DELETE_UI_SCREEN': 'Delete UI Screen',
-        };
-        return map[raw] || raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/^\w/, c => c.toUpperCase());
+        const known = t(`analytics.actions.${raw}`, { defaultValue: '' });
+        if (known) return known;
+        return raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/^\w/, c => c.toUpperCase());
     };
 
     const suggestions = tracker.getOptimizationSuggestions();
@@ -1963,14 +1939,14 @@ const AnalyticsSettings: React.FC = () => {
     return (
         <div className="p-6">
             <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xl font-bold text-white">Session Analytics</h3>
+                <h3 className="text-xl font-bold text-white">{t('analytics.heading')}</h3>
                 <div className="flex items-center gap-2">
                     {!showClearConfirm ? (
                         <button
                             onClick={() => setShowClearConfirm(true)}
                             className="px-3 py-1.5 text-xs rounded-md border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-red-400 hover:border-red-500/50 transition-colors"
                         >
-                            Clear Data
+                            {t('analytics.clearData')}
                         </button>
                     ) : (
                         <div className="flex items-center gap-1">
@@ -1978,44 +1954,44 @@ const AnalyticsSettings: React.FC = () => {
                                 onClick={handleClear}
                                 className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors"
                             >
-                                Confirm
+                                {t('analytics.confirm')}
                             </button>
                             <button
                                 onClick={() => setShowClearConfirm(false)}
                                 className="px-2 py-1 text-xs rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
                             >
-                                Cancel
+                                {t('analytics.cancel')}
                             </button>
                         </div>
                     )}
                 </div>
             </div>
             <p className="text-sm text-[var(--text-secondary)] mb-6">
-                Tracks your editing activity during this session. Data is stored in memory and resets when you close the editor.
+                {t('analytics.intro')}
             </p>
 
             <div className="space-y-6 max-w-lg">
                 {/* Stats Grid */}
                 <div className="grid grid-cols-3 gap-3">
                     <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] text-center">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Session Time</span>
+                        <span className="block text-xs text-[var(--text-secondary)] mb-1">{t('analytics.sessionTime')}</span>
                         <span className="text-xl font-bold text-white">{formatSessionDuration(sessionElapsed)}</span>
                     </div>
                     <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] text-center">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Total Actions</span>
+                        <span className="block text-xs text-[var(--text-secondary)] mb-1">{t('analytics.totalActions')}</span>
                         <span className="text-xl font-bold text-white">{stats.totalActions}</span>
                     </div>
                     <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)] text-center">
-                        <span className="block text-xs text-[var(--text-secondary)] mb-1">Actions/min</span>
+                        <span className="block text-xs text-[var(--text-secondary)] mb-1">{t('analytics.actionsPerMin')}</span>
                         <span className="text-xl font-bold text-white">{apm}</span>
                     </div>
                 </div>
 
                 {/* Most Common Actions — bar chart style */}
                 <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                    <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">Most Used Actions</h4>
+                    <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">{t('analytics.mostUsed')}</h4>
                     {stats.mostCommonActions.length === 0 ? (
-                        <p className="text-xs text-[var(--text-secondary)]">No actions tracked yet. Start editing your project to see analytics here.</p>
+                        <p className="text-xs text-[var(--text-secondary)]">{t('analytics.noActions')}</p>
                     ) : (
                         <div className="space-y-2">
                             {stats.mostCommonActions.map((item, index) => {
@@ -2046,8 +2022,8 @@ const AnalyticsSettings: React.FC = () => {
                 {/* Workflow Patterns */}
                 {stats.commonPatterns.length > 0 && (
                     <div className="p-4 bg-[var(--bg-primary)] rounded-md border border-[var(--border-subtle)]">
-                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">Repeated Patterns</h4>
-                        <p className="text-xs text-[var(--text-secondary)] mb-2">Action sequences you perform frequently — consider templates or shortcuts for these.</p>
+                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3">{t('analytics.repeatedPatterns')}</h4>
+                        <p className="text-xs text-[var(--text-secondary)] mb-2">{t('analytics.patternsDesc')}</p>
                         <div className="space-y-2">
                             {stats.commonPatterns.slice(0, 3).map((pattern) => (
                                 <div key={pattern.id} className="p-2 bg-[var(--bg-secondary)] rounded border border-[var(--border-subtle)]">
@@ -2059,7 +2035,7 @@ const AnalyticsSettings: React.FC = () => {
                                             </React.Fragment>
                                         ))}
                                     </div>
-                                    <span className="text-xs text-[var(--text-secondary)] mt-1 block">{pattern.frequency}x repeated</span>
+                                    <span className="text-xs text-[var(--text-secondary)] mt-1 block">{t('analytics.repeated', { count: pattern.frequency })}</span>
                                 </div>
                             ))}
                         </div>
@@ -2069,7 +2045,7 @@ const AnalyticsSettings: React.FC = () => {
                 {/* Optimization Suggestions */}
                 {suggestions.length > 0 && (
                     <div className="p-4 bg-amber-500/10 rounded-md border border-amber-500/30">
-                        <h4 className="text-sm font-medium text-amber-300 mb-2">Optimization Suggestions</h4>
+                        <h4 className="text-sm font-medium text-amber-300 mb-2">{t('analytics.optimizationSuggestions')}</h4>
                         <ul className="space-y-1">
                             {suggestions.map((s, i) => (
                                 <li key={i} className="text-xs text-amber-200/80 flex items-start gap-2">
@@ -2084,8 +2060,8 @@ const AnalyticsSettings: React.FC = () => {
                 {/* Avg Action Time */}
                 {stats.totalActions > 0 && (
                     <div className="text-xs text-[var(--text-secondary)] flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
-                        <span>Average time between actions: {formatDuration(stats.averageActionTime)}</span>
-                        <span>Data resets on reload</span>
+                        <span>{t('analytics.avgTime', { time: formatDuration(stats.averageActionTime) })}</span>
+                        <span>{t('analytics.dataResets')}</span>
                     </div>
                 )}
             </div>

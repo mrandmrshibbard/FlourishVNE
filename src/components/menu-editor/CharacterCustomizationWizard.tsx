@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { VNProject } from '../../types/project';
 import { VNID } from '../../types';
@@ -94,8 +95,9 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
     onClose, 
     project, 
     screenId,
-    onGenerate 
+    onGenerate
 }) => {
+    const { t } = useTranslation('ui');
     const [step, setStep] = useState<'select-character' | 'configure-layers' | 'review'>('select-character');
     const [selectedCharacterId, setSelectedCharacterId] = useState<VNID | null>(null);
     
@@ -282,14 +284,14 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                 return (
                     <div className="space-y-4">
                         <p className="text-slate-400 text-sm">
-                            Select a character to create a customization screen for. The wizard will analyze their layers and assets.
+                            {t('charWizard.selectCharIntro')}
                         </p>
                         
                         {characters.length === 0 ? (
                             <div className="p-8 text-center text-slate-500">
                                 <PhotoIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                                <p>No characters found in this project.</p>
-                                <p className="text-sm mt-1">Create a character with layers first.</p>
+                                <p>{t('charWizard.noCharacters')}</p>
+                                <p className="text-sm mt-1">{t('charWizard.createCharFirst')}</p>
                             </div>
                         ) : (
                             <div className="grid gap-2">
@@ -305,9 +307,7 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                                     >
                                         <div className="font-semibold">{char.name}</div>
                                         <div className="text-sm text-slate-400 mt-1">
-                                            {Object.keys(char.layers).length} layers • {
-                                                Object.values(char.layers).reduce((sum, l) => sum + Object.keys(l.assets).length, 0)
-                                            } total assets
+                                            {t('charWizard.layersAssets', { layers: Object.keys(char.layers).length, assets: Object.values(char.layers).reduce((sum, l) => sum + Object.keys(l.assets).length, 0) })}
                                         </div>
                                     </button>
                                 ))}
@@ -316,14 +316,14 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                         
                         <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
                             <button onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">
-                                Cancel
+                                {t('charWizard.cancel')}
                             </button>
                             <button 
                                 onClick={() => setStep('configure-layers')}
                                 disabled={!selectedCharacterId}
                                 className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                             >
-                                Next <ChevronRightIcon className="w-4 h-4" />
+                                {t('charWizard.next')} <ChevronRightIcon className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -333,8 +333,7 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                 return (
                     <div className="space-y-4">
                         <p className="text-slate-400 text-sm">
-                            Configure how each layer should be customized. Simple layers let users cycle through options directly. 
-                            Conditional layers filter based on other selections.
+                            {t('charWizard.configureIntro')}
                         </p>
                         
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
@@ -369,7 +368,7 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                                                 />
                                             </div>
                                             <span className="text-sm text-slate-500">
-                                                {Object.keys(layer.assets).length} assets
+                                                {t('charWizard.assetsCount', { count: Object.keys(layer.assets).length })}
                                             </span>
                                         </div>
                                         
@@ -386,7 +385,7 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                                                             }))}
                                                             className="w-4 h-4"
                                                         />
-                                                        <span className="text-sm">Simple (cycle all)</span>
+                                                        <span className="text-sm">{t('charWizard.simpleCycleAll')}</span>
                                                     </label>
                                                     <label className="flex items-center gap-2 cursor-pointer">
                                                         <input
@@ -398,13 +397,13 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                                                             }))}
                                                             className="w-4 h-4"
                                                         />
-                                                        <span className="text-sm">Conditional (filtered)</span>
+                                                        <span className="text-sm">{t('charWizard.conditionalFiltered')}</span>
                                                     </label>
                                                 </div>
                                                 
                                                 {config.mode === 'conditional' && otherLayers.length > 0 && (
                                                     <div className="bg-slate-900/50 p-3 rounded-lg">
-                                                        <p className="text-xs text-slate-400 mb-2">This layer depends on:</p>
+                                                        <p className="text-xs text-slate-400 mb-2">{t('charWizard.dependsOn')}</p>
                                                         <div className="flex flex-wrap gap-2">
                                                             {otherLayers.map(otherLayer => (
                                                                 <label key={otherLayer.id} className="flex items-center gap-1.5 bg-slate-700 px-2 py-1 rounded text-sm cursor-pointer">
@@ -432,7 +431,7 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                                                 {analysis?.isCombinedLayer && config.mode === 'simple' && (
                                                     <p className="text-xs text-amber-400/80 flex items-center gap-1">
                                                         <SparklesIcon className="w-3 h-3" />
-                                                        This layer appears to combine multiple attributes. Consider using conditional mode.
+                                                        {t('charWizard.combinedWarn')}
                                                     </p>
                                                 )}
                                             </div>
@@ -444,13 +443,13 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                         
                         <div className="flex justify-between gap-3 pt-4 border-t border-slate-700">
                             <button onClick={() => setStep('select-character')} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">
-                                Back
+                                {t('charWizard.back')}
                             </button>
                             <button 
                                 onClick={() => setStep('review')}
                                 className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 flex items-center gap-2"
                             >
-                                Next <ChevronRightIcon className="w-4 h-4" />
+                                {t('charWizard.next')} <ChevronRightIcon className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -461,25 +460,25 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                 return (
                     <div className="space-y-4">
                         <p className="text-slate-400 text-sm">
-                            Review what will be generated. You can customize everything after generation.
+                            {t('charWizard.reviewIntro')}
                         </p>
                         
                         <div className="bg-slate-900 rounded-lg p-4 space-y-3">
                             <div className="flex items-center gap-2 text-green-400">
                                 <CheckIcon className="w-5 h-5" />
-                                <span className="font-medium">{enabledLayers.length} variables will be created</span>
+                                <span className="font-medium">{t('charWizard.varsCreated', { count: enabledLayers.length })}</span>
                             </div>
                             <div className="flex items-center gap-2 text-blue-400">
                                 <CheckIcon className="w-5 h-5" />
-                                <span className="font-medium">{enabledLayers.length} asset cyclers will be created</span>
+                                <span className="font-medium">{t('charWizard.cyclersCreated', { count: enabledLayers.length })}</span>
                             </div>
                             <div className="flex items-center gap-2 text-purple-400">
                                 <CheckIcon className="w-5 h-5" />
-                                <span className="font-medium">1 character preview will be created</span>
+                                <span className="font-medium">{t('charWizard.previewCreated')}</span>
                             </div>
                             
                             <div className="border-t border-slate-700 pt-3 mt-3">
-                                <p className="text-sm text-slate-400 mb-2">Layer configuration:</p>
+                                <p className="text-sm text-slate-400 mb-2">{t('charWizard.layerConfiguration')}</p>
                                 <ul className="text-sm space-y-1">
                                     {enabledLayers.map(([layerId, config]) => (
                                         <li key={layerId} className="flex items-center gap-2">
@@ -487,8 +486,8 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                                             <span className="text-slate-500">•</span>
                                             <span className={config.mode === 'conditional' ? 'text-amber-400' : 'text-slate-400'}>
                                                 {config.mode === 'conditional' 
-                                                    ? `Filtered by ${config.dependsOnLayers.length} layer(s)` 
-                                                    : 'Simple cycling'}
+                                                    ? t('charWizard.filteredByLayers', { count: config.dependsOnLayers.length })
+                                                    : t('charWizard.simpleCycling')}
                                             </span>
                                         </li>
                                     ))}
@@ -498,14 +497,14 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                         
                         <div className="flex justify-between gap-3 pt-4 border-t border-slate-700">
                             <button onClick={() => setStep('configure-layers')} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">
-                                Back
+                                {t('charWizard.back')}
                             </button>
                             <button 
                                 onClick={handleGenerate}
                                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 flex items-center gap-2 font-semibold"
                             >
                                 <SparklesIcon className="w-4 h-4" />
-                                Generate Customization Screen
+                                {t('charWizard.generate')}
                             </button>
                         </div>
                     </div>
@@ -529,11 +528,11 @@ const CharacterCustomizationWizard: React.FC<WizardProps> = ({
                             <SparklesIcon className="w-6 h-6 text-purple-400" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-white">Character Customization Wizard</h2>
+                            <h2 className="text-lg font-semibold text-white">{t('charWizard.title')}</h2>
                             <p className="text-sm text-slate-400">
-                                {step === 'select-character' && 'Step 1: Select Character'}
-                                {step === 'configure-layers' && 'Step 2: Configure Layers'}
-                                {step === 'review' && 'Step 3: Review & Generate'}
+                                {step === 'select-character' && t('charWizard.step1')}
+                                {step === 'configure-layers' && t('charWizard.step2')}
+                                {step === 'review' && t('charWizard.step3')}
                             </p>
                         </div>
                     </div>

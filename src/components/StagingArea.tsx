@@ -10,12 +10,14 @@ import {
 import { useProject } from '../contexts/ProjectContext';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
+import { combineConditions } from '../utils/conditionLogic';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
-import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles } from '../utils/styleUtils';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
+import { GradientText } from './ui/GradientText';
 
 /** Convert hex color + opacity (0-100) to rgba string */
 function hexToRgba(hex: string, opacity: number): string {
@@ -71,6 +73,9 @@ interface TextOverlay {
     textBorder?: { enabled: boolean; width: number; color: string };
     textAlign?: 'left' | 'center' | 'right';
     verticalAlign?: 'top' | 'middle' | 'bottom';
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
 }
 
 interface ImageOverlay {
@@ -84,6 +89,8 @@ interface ImageOverlay {
     opacity: number;
     scaleX: number;
     scaleY: number;
+    flipX?: boolean;
+    flipY?: boolean;
 }
 
 interface ButtonOverlay {
@@ -100,6 +107,9 @@ interface ButtonOverlay {
     borderRadius: number;
     imageUrl?: string;
     hoverImageUrl?: string;
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
 }
 
 interface StageCharacterState {
@@ -110,6 +120,8 @@ interface StageCharacterState {
     sourceCommandId?: string;
     scale?: number;
     inverted?: boolean;
+    rotation?: number;
+    flipY?: boolean;
 }
 
 interface StageState {
@@ -118,6 +130,7 @@ interface StageState {
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
+    hotSpotOverlays: { id: string; name: string; x: number; y: number; width: number; height: number; shape: 'rect' | 'circle'; trigger: string; visible?: boolean; highlightColor?: string }[];
     screen: {
         shake: { active: boolean; intensity: number };
         tint: string;
@@ -169,6 +182,7 @@ const StagingArea: React.FC<{
         textOverlays: [],
         imageOverlays: [],
         buttonOverlays: [],
+        hotSpotOverlays: [],
         screen: {
             shake: { active: false, intensity: 0 },
             tint: 'transparent',
@@ -217,7 +231,7 @@ const StagingArea: React.FC<{
         const scene = project.scenes[activeSceneId];
         if (!scene) {
             setStageState({
-                backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [],
+                backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], hotSpotOverlays: [],
                 screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, overlayEffects: [] },
                 dialogue: null, movie: null, flash: null, choices: null, textInput: null, commandIndicator: null, variables: {},
             });
@@ -226,7 +240,7 @@ const StagingArea: React.FC<{
 
         const evaluateConditions = (conditions: VNCondition[] | undefined, currentVariables: StageState['variables']): boolean => {
             if (!conditions || conditions.length === 0) return true;
-            return conditions.every(condition => {
+            return combineConditions(conditions, condition => {
                 const varValue = currentVariables[condition.variableId];
                 const projectVar = project.variables[condition.variableId];
                 const effectiveVarValue = varValue !== undefined ? varValue : (projectVar ? projectVar.defaultValue : undefined);
@@ -253,6 +267,7 @@ const StagingArea: React.FC<{
         let textOverlays: TextOverlay[] = [];
         let imageOverlays: ImageOverlay[] = [];
         let buttonOverlays: ButtonOverlay[] = [];
+        let hotSpotOverlays: StageState['hotSpotOverlays'] = [];
         let screen = { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, overlayEffects: [] as VNScreenOverlayEffect[] };
         let dialogue: StageState['dialogue'] = null;
         let movie: StageState['movie'] = null;
@@ -297,7 +312,7 @@ const StagingArea: React.FC<{
                                 if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
                             }
                         });
-                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted };
+                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY };
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -332,6 +347,7 @@ const StagingArea: React.FC<{
                         width: command.width, height: command.height, textAlign: command.textAlign, verticalAlign: command.verticalAlign,
                         fontWeight: command.fontWeight, fontStyle: command.fontStyle, letterSpacing: command.letterSpacing,
                         textShadow: command.textShadow, textGradient: command.textGradient, textBorder: command.textBorder,
+                        rotation: command.rotation, flipX: command.flipX, flipY: command.flipY,
                     });
                     break;
                 case CommandType.HideText:
@@ -344,6 +360,7 @@ const StagingArea: React.FC<{
                             id: command.id, imageUrl, x: command.x, y: command.y,
                             width: command.width, height: command.height, rotation: command.rotation, opacity: command.opacity,
                             scaleX: command.scaleX ?? 1, scaleY: command.scaleY ?? 1,
+                            flipX: command.flipX, flipY: command.flipY,
                         });
                     }
                     break;
@@ -353,29 +370,54 @@ const StagingArea: React.FC<{
                 case CommandType.ShowButton:
                     if (evaluateConditions(command.showConditions, currentVariables)) {
                         const buttonCmd = command as ShowButtonCommand;
-                        const imageUrl = buttonCmd.image?.type === 'image' ? project.images[buttonCmd.image.id]?.imageUrl :
-                                       buttonCmd.image?.type === 'video' ? project.videos[buttonCmd.image.id]?.videoUrl : undefined;
-                        const hoverImageUrl = buttonCmd.hoverImage?.type === 'image' ? project.images[buttonCmd.hoverImage.id]?.imageUrl :
-                                            buttonCmd.hoverImage?.type === 'video' ? project.videos[buttonCmd.hoverImage.id]?.videoUrl : undefined;
+                        // Resolve the button image the SAME way the runtime assetResolver does
+                        // (backgrounds first, then images, then videos, with video/image url
+                        // fallbacks). The old code only checked project.images, so a button
+                        // image stored under backgrounds never showed on the canvas.
+                        const resolveBtnAsset = (asset?: { type: 'image' | 'video'; id: VNID } | null): string | undefined => {
+                            if (!asset?.id) return undefined;
+                            const id = asset.id;
+                            return project.backgrounds[id]?.videoUrl || project.backgrounds[id]?.imageUrl ||
+                                   project.images?.[id]?.videoUrl || project.images?.[id]?.imageUrl ||
+                                   project.videos[id]?.videoUrl || undefined;
+                        };
+                        const imageUrl = resolveBtnAsset(buttonCmd.image);
+                        const hoverImageUrl = resolveBtnAsset(buttonCmd.hoverImage);
                         buttonOverlays.push({
                             id: buttonCmd.id,
                             text: buttonCmd.text,
                             x: buttonCmd.x,
                             y: buttonCmd.y,
-                            width: buttonCmd.width,
-                            height: buttonCmd.height,
-                            backgroundColor: buttonCmd.backgroundColor,
-                            textColor: buttonCmd.textColor,
-                            fontSize: buttonCmd.fontSize,
-                            fontWeight: buttonCmd.fontWeight,
-                            borderRadius: buttonCmd.borderRadius,
+                            // Mirror the runtime defaults (overlayHandler) so a button with
+                            // unset size/colors still renders on the canvas instead of
+                            // collapsing to an invisible 0-size element.
+                            width: buttonCmd.width || 20,
+                            height: buttonCmd.height || 8,
+                            backgroundColor: buttonCmd.backgroundColor || '#6366f1',
+                            textColor: buttonCmd.textColor || '#ffffff',
+                            fontSize: buttonCmd.fontSize || 18,
+                            fontWeight: buttonCmd.fontWeight || 'normal',
+                            borderRadius: buttonCmd.borderRadius ?? 8,
                             imageUrl,
                             hoverImageUrl,
+                            rotation: buttonCmd.rotation, flipX: buttonCmd.flipX, flipY: buttonCmd.flipY,
                         });
                     }
                     break;
                 case CommandType.HideButton:
                     buttonOverlays = buttonOverlays.filter(o => o.id !== command.buttonId);
+                    break;
+                case CommandType.ShowHotSpot:
+                    if (evaluateConditions(command.conditions, currentVariables)) {
+                        hotSpotOverlays.push({
+                            id: command.id, name: command.name, x: command.x, y: command.y,
+                            width: command.width, height: command.height, shape: command.shape,
+                            trigger: command.trigger, visible: command.visible, highlightColor: command.highlightColor,
+                        });
+                    }
+                    break;
+                case CommandType.HideHotSpot:
+                    hotSpotOverlays = hotSpotOverlays.filter(o => o.id !== command.targetCommandId);
                     break;
             }
         });
@@ -429,12 +471,12 @@ const StagingArea: React.FC<{
             }
         }
 
-        setStageState({ backgroundUrl, characters, textOverlays, imageOverlays, buttonOverlays, screen, dialogue, movie, flash, choices, textInput, commandIndicator, variables: currentVariables });
+        setStageState({ backgroundUrl, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, textInput, commandIndicator, variables: currentVariables });
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
     // --- Drag-to-Position State ---
-    type DragKind = 'character' | 'text' | 'image' | 'button';
+    type DragKind = 'character' | 'text' | 'image' | 'button' | 'hotspot';
     const [overlayDrag, setOverlayDrag] = useState<{
         kind: DragKind;
         overlayId: string;
@@ -445,6 +487,35 @@ const StagingArea: React.FC<{
         startPosY: number;
     } | null>(null);
     const [overlayDragOffset, setOverlayDragOffset] = useState<{ x: number; y: number } | null>(null);
+
+    // --- Resize (scale) State ---
+    const [overlayResize, setOverlayResize] = useState<{
+        kind: DragKind;
+        overlayId: string;
+        sourceCommandId: string;
+        startMouseX: number;
+        startMouseY: number;
+        startW: number;
+        startH: number;
+    } | null>(null);
+    const [overlayResizeSize, setOverlayResizeSize] = useState<{ width: number; height: number } | null>(null);
+
+    const handleOverlayResizeMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, overlayId: string, width: number, height: number, sourceCommandId?: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setOverlayResize({
+            kind,
+            overlayId,
+            // For most overlays the overlay id IS the command id; characters key on charId but
+            // their command lives at sourceCommandId, so allow it to be passed explicitly.
+            sourceCommandId: sourceCommandId ?? overlayId,
+            startMouseX: e.clientX,
+            startMouseY: e.clientY,
+            startW: width,
+            startH: height,
+        });
+        setOverlayResizeSize(null);
+    }, []);
 
     const handleCharMouseDown = useCallback((e: React.MouseEvent, char: StageCharacterState) => {
         if (!char.sourceCommandId) return;
@@ -533,6 +604,58 @@ const StagingArea: React.FC<{
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
     }, [overlayDrag, overlayDragOffset, project.scenes, dispatch, stageSize]);
+
+    // Resize drag: the overlay is center-anchored, so growing width/height by 2× the
+    // mouse delta keeps the dragged corner under the cursor.
+    useEffect(() => {
+        if (!overlayResize) return;
+        const sw = stageSize.width || 1;
+        const sh = stageSize.height || 1;
+        const MIN = 1; // percent
+        const isCharacter = overlayResize.kind === 'character';
+        const onMove = (e: MouseEvent) => {
+            const dx = ((e.clientX - overlayResize.startMouseX) / sw) * 100;
+            const dy = ((e.clientY - overlayResize.startMouseY) / sh) * 100;
+            if (isCharacter) {
+                // Characters scale uniformly. They render at ~90% of stage height, so dragging the
+                // handle down by dy% of the stage grows the scale by dy/90. startW holds the start scale.
+                let s = overlayResize.startW + dy / 90;
+                if (e.shiftKey) s = Math.round(s * 10) / 10;
+                s = Math.max(0.1, Math.round(s * 100) / 100);
+                setOverlayResizeSize({ width: s, height: s });
+                return;
+            }
+            let nw = overlayResize.startW + dx * 2;
+            let nh = overlayResize.startH + dy * 2;
+            if (e.shiftKey) { nw = Math.round(nw); nh = Math.round(nh); }
+            nw = Math.max(MIN, Math.round(nw * 10) / 10);
+            nh = Math.max(MIN, Math.round(nh * 10) / 10);
+            setOverlayResizeSize({ width: nw, height: nh });
+        };
+        const onUp = () => {
+            const resize = overlayResize;
+            const size = overlayResizeSize;
+            setOverlayResize(null);
+            setOverlayResizeSize(null);
+            if (!size) return;
+            for (const scene of Object.values(project.scenes) as VNScene[]) {
+                const idx = scene.commands.findIndex((c: VNCommand) => c.id === resize.sourceCommandId);
+                if (idx < 0) continue;
+                const cmd = scene.commands[idx];
+                const patch = resize.kind === 'character'
+                    ? { scale: size.width }
+                    : { width: size.width, height: size.height };
+                dispatch({
+                    type: 'UPDATE_COMMAND',
+                    payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, ...patch } },
+                });
+                break;
+            }
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [overlayResize, overlayResizeSize, project.scenes, dispatch, stageSize]);
 
     const getPositionStyle = (position: VNPosition): React.CSSProperties => {
         if (typeof position === 'object') {
@@ -750,7 +873,7 @@ const StagingArea: React.FC<{
                             }),
                         }}>
                             <span style={{...nameStyle, lineHeight: 1.3}}>
-                                <span style={extractTextGradientStyle(project.ui.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                                <GradientText style={extractTextGradientStyle(project.ui.dialogueNameFont)}>{dialogue.characterName}</GradientText>
                             </span>
                         </div>
                     </div>
@@ -795,7 +918,7 @@ const StagingArea: React.FC<{
                             paddingRight: textPadRight ? s(textPadRight) : undefined,
                         }}>
                             <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'break-word' as const, overflowWrap: 'break-word' as const}}>
-                                <span style={extractTextGradientStyle(project.ui.dialogueTextFont) || undefined}>{interpolatedText}</span>
+                                <GradientText style={extractTextGradientStyle(project.ui.dialogueTextFont)}>{interpolatedText}</GradientText>
                             </p>
                         </div>
                     </div>
@@ -840,7 +963,7 @@ const StagingArea: React.FC<{
                                     overflowWrap: 'break-word' as const,
                                     cursor: 'pointer',
                                 }}>
-                            <span style={extractTextGradientStyle(project.ui.choiceTextFont) || undefined}>{interpolatedText}</span>
+                            <GradientText style={extractTextGradientStyle(project.ui.choiceTextFont)}>{interpolatedText}</GradientText>
                         </button>
                     </div>
                 )
@@ -894,7 +1017,7 @@ const StagingArea: React.FC<{
                             padding: inputSizeMode === 'nine-slice' && inputBoxImageUrl ? s(inputBoxPadding) : undefined,
                         }}>
                             <p className="mb-4" style={promptStyle}>
-                                <span style={extractTextGradientStyle(project.ui.inputPromptFont) || undefined}>{ti.prompt}</span>
+                                <GradientText style={extractTextGradientStyle(project.ui.inputPromptFont)}>{ti.prompt}</GradientText>
                             </p>
                             <div className="w-full px-3 py-2"
                                  style={{
@@ -907,7 +1030,7 @@ const StagingArea: React.FC<{
                             </div>
                             <div className="mt-3 text-center">
                                 <span className="inline-block px-4 py-1 rounded bg-sky-600/80" style={submitStyle}>
-                                    <span style={extractTextGradientStyle(project.ui.inputSubmitFont) || undefined}>Submit</span>
+                                    <GradientText style={extractTextGradientStyle(project.ui.inputSubmitFont)}>Submit</GradientText>
                                 </span>
                             </div>
                         </div>
@@ -1039,16 +1162,21 @@ const StagingArea: React.FC<{
                         : getPositionStyle(char.position);
                     const isCustomPosition = typeof char.position === 'object';
                     const isDragging = overlayDrag?.kind === 'character' && overlayDrag.overlayId === char.charId;
+                    const isResizingChar = overlayResize?.kind === 'character' && overlayResize.overlayId === char.charId;
                     if (isDragging && overlayDragOffset) {
                         posStyle = { left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%` };
                     }
                     // For preset positions, anchor to bottom. For custom positions, respect the exact coordinates
                     // Build transform including scale and inversion
                     let transformStr = posStyle.transform || '';
-                    if (char.scale && char.scale !== 1 || char.inverted) {
-                        const scaleX = char.inverted ? -1 : 1;
-                        const scaleValue = char.scale ?? 1;
-                        transformStr = `${transformStr} scale(${scaleX * scaleValue}, ${scaleValue})`.trim();
+                    const liveScale = (isResizingChar && overlayResizeSize) ? overlayResizeSize.width : (char.scale ?? 1);
+                    if (char.rotation) {
+                        transformStr = `${transformStr} rotate(${char.rotation}deg)`.trim();
+                    }
+                    if (liveScale !== 1 || char.inverted || char.flipY) {
+                        const scaleX = (char.inverted ? -1 : 1) * liveScale;
+                        const scaleY = (char.flipY ? -1 : 1) * liveScale;
+                        transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
                     }
                     const finalStyle = isCustomPosition || (isDragging && overlayDragOffset)
                         ? { ...posStyle, height: '90%', ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}) }
@@ -1065,9 +1193,26 @@ const StagingArea: React.FC<{
                             onMouseDown={char.sourceCommandId ? (e) => handleCharMouseDown(e, char) : undefined}
                         >
                             {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
+                            {/* Resize handle (bottom-right) — drag to scale the character sprite. */}
+                            {char.sourceCommandId && (
+                                <div
+                                    onMouseDown={e => handleOverlayResizeMouseDown(e, 'character', char.charId, char.scale ?? 1, char.scale ?? 1, char.sourceCommandId)}
+                                    title="Drag to resize (scale)"
+                                    style={{
+                                        position: 'absolute', right: 0, bottom: 0, width: 14, height: 14,
+                                        borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff',
+                                        boxShadow: '0 0 3px rgba(0,0,0,0.6)', cursor: 'nwse-resize', zIndex: 60,
+                                    }}
+                                />
+                            )}
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50">
                                     {overlayDragOffset.x}%, {overlayDragOffset.y}%
+                                </div>
+                            )}
+                            {isResizingChar && overlayResizeSize && (
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50">
+                                    {overlayResizeSize.width.toFixed(2)}×
                                 </div>
                             )}
                         </div>
@@ -1084,7 +1229,7 @@ const StagingArea: React.FC<{
                         top: `${displayY}%`,
                         width: o.width ? `${pxToPercentWidth(o.width)}%` : 'auto', 
                         height: o.height ? `${pxToPercentHeight(o.height)}%` : 'auto',
-                        transform: 'translate(-50%, -50%)', 
+                        transform: `translate(-50%, -50%) ${buildOrientationTransform({ rotation: o.rotation, flipX: o.flipX, flipY: o.flipY })}`.trim(),
                         ...fontSettingsToStyle({ family: o.fontFamily, size: o.fontSize, color: o.color, weight: o.fontWeight || 'normal', italic: o.fontStyle === 'italic' }),
                         fontSize: `${scaleFontSize(o.fontSize)}px`,
                         textAlign: o.textAlign,
@@ -1104,7 +1249,8 @@ const StagingArea: React.FC<{
                      return (
                          <React.Fragment key={o.id}>
                              <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}>
-                                 {gradientSpanStyle ? <span style={gradientSpanStyle}>{o.text}</span> : <span>{o.text}</span>}
+                                 {/* GradientText forces Chromium to re-clip the gradient when colors change live. */}
+                                 {gradientSpanStyle ? <GradientText style={gradientSpanStyle}>{o.text}</GradientText> : <span>{o.text}</span>}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -1128,7 +1274,7 @@ const StagingArea: React.FC<{
                                      top: `${displayY}%`,
                                      width: `${pxToPercentWidth(o.width)}%`, 
                                      height: `${pxToPercentHeight(o.height)}%`,
-                                     transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX}, ${o.scaleY})`,
+                                     transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX * (o.flipX ? -1 : 1)}, ${o.scaleY * (o.flipY ? -1 : 1)})`,
                                      opacity: o.opacity,
                                      cursor: isDragging ? 'grabbing' : 'grab',
                                      zIndex: isDragging ? 50 : undefined,
@@ -1150,9 +1296,12 @@ const StagingArea: React.FC<{
                     const scaledBorderRadius = btn.borderRadius * (stageSize.width / REFERENCE_WIDTH);
                     const scaledButtonFontSize = scaleFontSize(btn.fontSize);
                     const isDragging = overlayDrag?.kind === 'button' && overlayDrag.overlayId === btn.id;
+                    const isResizing = overlayResize?.kind === 'button' && overlayResize.overlayId === btn.id;
                     const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : btn.x;
                     const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : btn.y;
-                    
+                    const displayW = isResizing && overlayResizeSize ? overlayResizeSize.width : btn.width;
+                    const displayH = isResizing && overlayResizeSize ? overlayResizeSize.height : btn.height;
+
                     return (
                         <React.Fragment key={btn.id}>
                             <div
@@ -1160,17 +1309,36 @@ const StagingArea: React.FC<{
                                     position: 'absolute',
                                     left: `${displayX}%`,
                                     top: `${displayY}%`,
-                                    width: `${btn.width}%`,
-                                    height: `${btn.height}%`,
-                                    transform: 'translate(-50%, -50%)',
-                                    cursor: isDragging ? 'grabbing' : 'grab',
-                                    zIndex: isDragging ? 50 : undefined,
+                                    width: `${displayW}%`,
+                                    // Image buttons let the height follow the image aspect (box conforms to art).
+                                    height: btn.imageUrl ? 'auto' : `${displayH}%`,
+                                    transform: `translate(-50%, -50%) ${buildOrientationTransform({ rotation: btn.rotation, flipX: btn.flipX, flipY: btn.flipY })}`.trim(),
+                                    cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
+                                    zIndex: (isDragging || isResizing) ? 50 : undefined,
                                 }}
                                 onMouseDown={e => handleOverlayMouseDown(e, 'button', btn.id, btn.x, btn.y)}
                             >
+                                {/* Resize handle (bottom-right corner) — drag to scale the button. */}
+                                <div
+                                    onMouseDown={e => handleOverlayResizeMouseDown(e, 'button', btn.id, btn.width, btn.height)}
+                                    title="Drag to resize"
+                                    style={{
+                                        position: 'absolute',
+                                        right: -6,
+                                        bottom: -6,
+                                        width: 12,
+                                        height: 12,
+                                        borderRadius: 3,
+                                        background: '#0ea5e9',
+                                        border: '2px solid #fff',
+                                        boxShadow: '0 0 3px rgba(0,0,0,0.6)',
+                                        cursor: 'nwse-resize',
+                                        zIndex: 60,
+                                    }}
+                                />
                                 {btn.imageUrl ? (
-                                    <div className="w-full h-full relative">
-                                        <img src={btn.imageUrl} alt="" className="w-full h-full object-cover" style={{ borderRadius: `${scaledBorderRadius}px` }} />
+                                    <div className="relative" style={{ width: '100%' }}>
+                                        <img src={btn.imageUrl} alt="" style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'contain', borderRadius: `${scaledBorderRadius}px` }} />
                                         <div className="absolute inset-0 flex items-center justify-center" style={{
                                             color: btn.textColor,
                                             fontSize: `${scaledButtonFontSize}px`,
@@ -1194,6 +1362,51 @@ const StagingArea: React.FC<{
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
                                      style={{ left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%`, transform: 'translate(-50%, -120%)', zIndex: 999 }}>
+                                    {overlayDragOffset.x}%, {overlayDragOffset.y}%
+                                </div>
+                            )}
+                            {isResizing && overlayResizeSize && (
+                                <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
+                                     style={{ left: `${displayX}%`, top: `${displayY}%`, transform: 'translate(-50%, -120%)', zIndex: 999 }}>
+                                    {overlayResizeSize.width}% × {overlayResizeSize.height}%
+                                </div>
+                            )}
+                        </React.Fragment>
+                    );
+                })}
+
+                {/* Hot spots (ShowHotSpot) — always shown in the editor (with a label) so authors
+                    can see/position them, even when set invisible for the final game. Top-left
+                    anchored to match the runtime. */}
+                {stageState.hotSpotOverlays.map(hs => {
+                    const isDragging = overlayDrag?.kind === 'hotspot' && overlayDrag.overlayId === hs.id;
+                    const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : hs.x;
+                    const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : hs.y;
+                    const outline = hs.highlightColor || 'rgba(99,102,241,0.9)';
+                    return (
+                        <React.Fragment key={hs.id}>
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: `${displayX}%`, top: `${displayY}%`,
+                                    width: `${hs.width}%`, height: `${hs.height}%`,
+                                    borderRadius: hs.shape === 'circle' ? '50%' : 6,
+                                    border: `2px dashed ${outline}`,
+                                    background: hs.visible ? (hs.highlightColor || 'rgba(99,102,241,0.25)') : 'rgba(99,102,241,0.08)',
+                                    cursor: isDragging ? 'grabbing' : 'grab',
+                                    zIndex: isDragging ? 50 : 9,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}
+                                onMouseDown={e => handleOverlayMouseDown(e, 'hotspot', hs.id, hs.x, hs.y)}
+                                title={`${hs.name} (${hs.trigger})`}
+                            >
+                                <span className="text-[10px] text-white/90 px-1 py-0.5 rounded bg-black/50 pointer-events-none truncate max-w-full">
+                                    🎯 {hs.name}
+                                </span>
+                            </div>
+                            {isDragging && overlayDragOffset && (
+                                <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
+                                     style={{ left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%`, transform: 'translate(0, -120%)', zIndex: 999 }}>
                                     {overlayDragOffset.x}%, {overlayDragOffset.y}%
                                 </div>
                             )}

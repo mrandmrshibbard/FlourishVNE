@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface GuidedTourProps {
     isActive: boolean;
@@ -17,54 +18,56 @@ interface TourStep {
     arrowDirection?: 'left' | 'right' | 'up' | 'down' | 'none';
 }
 
-const TOUR_STEPS: TourStep[] = [
-    {
-        title: 'Scene Editor',
-        description: 'This is your scene editor. Build your story by adding dialogue, choices, and effects to each scene.',
-        position: { top: '35%', left: '22%' },
-        arrowDirection: 'left',
-    },
-    {
-        title: 'Live Preview',
-        description: 'See your visual novel in real-time as you build it. Changes appear instantly!',
-        position: { top: '35%', left: '50%' },
-        arrowDirection: 'none',
-    },
-    {
-        title: 'Characters & Assets',
-        description: 'Manage your characters, backgrounds, music, and images in the asset panels.',
-        position: { top: '35%', right: '5%' },
-        arrowDirection: 'right',
-    },
-    {
-        title: 'Command Palette',
-        description: 'Add dialogue, choices, branching paths, sound effects, and 30+ other commands to your scenes.',
-        position: { top: '18%', left: '10%' },
-        arrowDirection: 'up',
-    },
-    {
-        title: 'Game Settings',
-        description: "Configure your game's resolution, title, author info, and starting scene.",
-        position: { top: '12%', left: '50%' },
-        arrowDirection: 'up',
-    },
-    {
-        title: 'Build & Export',
-        description: "When you're ready, build your game as a standalone web page or desktop app - no coding needed!",
-        position: { top: '12%', right: '5%' },
-        arrowDirection: 'up',
-    },
-    {
-        title: "You're Ready!",
-        description: "That's the basics! Explore the editor, experiment freely, and create something amazing.",
-        position: { top: '50%', left: '50%' },
-        arrowDirection: 'none',
-    },
-];
-
 const STORAGE_KEY = 'flourish:tourCompleted';
 
 const GuidedTour: React.FC<GuidedTourProps> = ({ isActive, onComplete }) => {
+    const { t } = useTranslation('components');
+
+    const TOUR_STEPS: TourStep[] = [
+        {
+            title: t('guidedTour.steps.sceneEditorTitle'),
+            description: t('guidedTour.steps.sceneEditorDesc'),
+            position: { top: '35%', left: '22%' },
+            arrowDirection: 'left',
+        },
+        {
+            title: t('guidedTour.steps.livePreviewTitle'),
+            description: t('guidedTour.steps.livePreviewDesc'),
+            position: { top: '35%', left: '50%' },
+            arrowDirection: 'none',
+        },
+        {
+            title: t('guidedTour.steps.assetsTitle'),
+            description: t('guidedTour.steps.assetsDesc'),
+            position: { top: '35%', right: '5%' },
+            arrowDirection: 'right',
+        },
+        {
+            title: t('guidedTour.steps.commandPaletteTitle'),
+            description: t('guidedTour.steps.commandPaletteDesc'),
+            position: { top: '18%', left: '10%' },
+            arrowDirection: 'up',
+        },
+        {
+            title: t('guidedTour.steps.gameSettingsTitle'),
+            description: t('guidedTour.steps.gameSettingsDesc'),
+            position: { top: '12%', left: '50%' },
+            arrowDirection: 'up',
+        },
+        {
+            title: t('guidedTour.steps.buildTitle'),
+            description: t('guidedTour.steps.buildDesc'),
+            position: { top: '12%', right: '5%' },
+            arrowDirection: 'up',
+        },
+        {
+            title: t('guidedTour.steps.readyTitle'),
+            description: t('guidedTour.steps.readyDesc'),
+            position: { top: '50%', left: '50%' },
+            arrowDirection: 'none',
+        },
+    ];
+
     const [currentStep, setCurrentStep] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
     const [isFading, setIsFading] = useState(false);
@@ -214,7 +217,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ isActive, onComplete }) => {
                         marginBottom: 8,
                     }}
                 >
-                    Step {currentStep + 1} of {TOUR_STEPS.length}
+                    {t('guidedTour.stepCounter', { current: currentStep + 1, total: TOUR_STEPS.length })}
                 </div>
 
                 <h3
@@ -264,7 +267,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ isActive, onComplete }) => {
                             e.currentTarget.style.background = 'none';
                         }}
                     >
-                        Skip Tour
+                        {t('guidedTour.skip')}
                     </button>
 
                     <button
@@ -290,7 +293,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ isActive, onComplete }) => {
                             e.currentTarget.style.boxShadow = '0 2px 12px rgba(255,126,179,0.3)';
                         }}
                     >
-                        {isLastStep ? 'Get Started!' : 'Next'}
+                        {isLastStep ? t('guidedTour.getStarted') : t('guidedTour.next')}
                     </button>
                 </div>
 

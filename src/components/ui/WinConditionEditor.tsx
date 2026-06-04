@@ -6,6 +6,7 @@
  * screen is allowed to carry a win condition now.
  */
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import { VNHotZoneWinCondition } from '../../features/ui/types';
@@ -27,6 +28,7 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
     targetableElements,
     onChange,
 }) => {
+    const { t } = useTranslation('ui');
     const update = (patch: Partial<VNHotZoneWinCondition>) => {
         const current = winCondition || { type: 'allPlaced' as const, actions: [] };
         onChange({ ...current, ...patch });
@@ -34,7 +36,7 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
 
     return (
         <div>
-            <h4 className="text-xs font-bold text-amber-300 mb-1">Win Condition</h4>
+            <h4 className="text-xs font-bold text-amber-300 mb-1">{t('winCondition.title')}</h4>
             <select
                 value={winCondition?.type || ''}
                 onChange={e => {
@@ -43,9 +45,9 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
                 }}
                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-xs"
             >
-                <option value="">None</option>
-                <option value="allPlaced">All Elements Placed</option>
-                <option value="variable">Variable Check</option>
+                <option value="">{t('winCondition.none')}</option>
+                <option value="allPlaced">{t('winCondition.allPlaced')}</option>
+                <option value="variable">{t('winCondition.variableCheck')}</option>
             </select>
             {winCondition?.type === 'variable' && (
                 <div className="mt-1 space-y-1">
@@ -54,7 +56,7 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
                         onChange={e => update({ variableId: e.target.value as VNID })}
                         className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
                     >
-                        <option value="">-- Variable --</option>
+                        <option value="">{t('winCondition.selectVariable')}</option>
                         {Object.values(project.variables).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
                     <select
@@ -75,7 +77,7 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
                         <input
                             type="text"
                             value={String(winCondition.value ?? '')}
-                            placeholder="Value..."
+                            placeholder={t('winCondition.value')}
                             onChange={e => update({ value: e.target.value })}
                             className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
                         />
@@ -89,7 +91,7 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
                         project={project}
                         targetableElements={targetableElements}
                         onChange={actions => update({ actions })}
-                        label="Win Actions"
+                        label={t('winCondition.winActions')}
                     />
                 </div>
             )}

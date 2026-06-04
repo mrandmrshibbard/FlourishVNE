@@ -4,5 +4,8 @@
   "confirm": "Confirm",
   "close": "Close",
   "delete": "Delete",
-  "add": "Add"
+  "add": "Add",
+  "rename": "Rename",
+  "duplicate": "Duplicate",
+  "ok": "OK"
 }

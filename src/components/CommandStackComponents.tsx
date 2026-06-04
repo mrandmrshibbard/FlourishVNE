@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNCommand } from '../features/scene/types';
 import { VNProject } from '../types/project';
 import { 
@@ -32,8 +33,9 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
     onSelect,
     onUnstack,
 }) => {
+    const { t } = useTranslation(['commands', 'scenes']);
     const [showWarning, setShowWarning] = useState(false);
-    
+
     const getCommandSummary = () => {
         switch (command.type) {
             case 'Dialogue':
@@ -154,14 +156,14 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                         <p className="text-xs font-bold text-sky-400 truncate">
-                            {command.type.replace(/([A-Z])/g, ' $1').trim()}
+                            {t(`commands:names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() })}
                         </p>
                         {isAsync && canBeAsync && (
                             <span 
                                 className="text-xs bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1"
                                 onMouseEnter={() => hasWarning && setShowWarning(true)}
                                 onMouseLeave={() => setShowWarning(false)}
-                                title={isAsync ? 'Runs in parallel' : undefined}
+                                title={isAsync ? t('scenes:runsInParallel') : undefined}
                             >
                                 <SparkleIcon className="w-3 h-3" />
                                 {hasWarning && '⚠'}
@@ -186,7 +188,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                             onUnstack();
                         }}
                         className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 p-1 hover:bg-red-500/20 rounded"
-                        title="Remove from stack"
+                        title={t('scenes:removeFromStack')}
                     >
                         <XMarkIcon className="w-4 h-4 text-red-400" />
                     </button>

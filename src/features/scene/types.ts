@@ -77,15 +77,39 @@ export enum CommandType {
     SpawnParticles = 'SpawnParticles', // Spawn a particle effect on stage
     StopParticles = 'StopParticles', // Stop/clear particle effects
     CallCommonEvent = 'CallCommonEvent', // Invoke a reusable Common Event
-    ShowImageMap = 'ShowImageMap', // Display an image with clickable hot spot regions
-    HideImageMap = 'HideImageMap', // Remove an image map from stage
+    ShowImageMap = 'ShowImageMap', // DEPRECATED — inert legacy command (superseded by ShowHotSpot). Kept for backward-compat loading.
+    HideImageMap = 'HideImageMap', // DEPRECATED — inert legacy command. Kept for backward-compat loading.
+    ShowHotSpot = 'ShowHotSpot', // Place an interactive hot spot on the scene (click / hover / drop target)
+    HideHotSpot = 'HideHotSpot', // Remove a scene hot spot
     TweenElement = 'TweenElement', // Animate position/size/opacity/etc. of an on-stage element over time
 }
+
+/**
+ * Visual/state commands that may opt into live (reactive) conditions via
+ * `liveConditions`. These place a persistent visual whose visibility can sensibly
+ * follow a variable; sequential commands (Dialogue, Choice, Jump, SetVariable, audio,
+ * Wait) are intentionally excluded — re-evaluating them live would break story flow.
+ */
+export const REACTIVE_VISUAL_TYPES: ReadonlySet<CommandType> = new Set([
+    CommandType.SetBackground,
+    CommandType.ShowImage,
+    CommandType.ShowText,
+    CommandType.ShowButton,
+    CommandType.ShowCharacter,
+    CommandType.ShowHotSpot,
+]);
 
 interface BaseCommand {
     id: VNID;
     type: CommandType;
     conditions?: VNCondition[];
+    /**
+     * Opt-in for the visual/state commands (see REACTIVE_VISUAL_TYPES): when true the
+     * command's visual is always created and its `conditions` are re-evaluated every
+     * render (show/hide live as variables change), instead of the default one-time
+     * "run if conditions met when reached" behavior. Ignored for non-visual commands.
+     */
+    liveConditions?: boolean;
     modifiers?: CommandModifiers;
 }
 
@@ -156,8 +180,12 @@ export interface ShowCharacterCommand extends BaseCommand {
     endPosition?: VNPosition; // for slide transitions
     /** Scale multiplier (1 = 100%). Controls character sprite size on stage. */
     scale?: number;
-    /** When true, flips the character sprite horizontally (scaleX = -1) */
+    /** When true, flips the character sprite horizontally (scaleX = -1). Acts as flipX. */
     inverted?: boolean;
+    /** Rotation in degrees (positive = clockwise). */
+    rotation?: number;
+    /** When true, flips the character sprite vertically. */
+    flipY?: boolean;
     /** Optional visual effects applied to the character while on stage (multiple can stack) */
     visualEffects?: VNCharacterVisualEffect[];
     /** @deprecated Use visualEffects instead — kept for backward compatibility */
@@ -248,9 +276,18 @@ export interface PlaySoundEffectCommand extends BaseCommand {
     type: CommandType.PlaySoundEffect;
     audioId: VNID;
     volume?: number; // optional per-sfx volume (0-1)
+    /** Loop the sound until a Stop Sound Effect command (or, when live, until its condition fails). */
+    loop?: boolean;
+    // NOTE: `conditions` + `liveConditions` (on BaseCommand) drive live evaluation — when
+    // `liveConditions` is set, the sound plays while the conditions are met (looping) or fires
+    // once each time they become true (non-loop), re-evaluated as variables change.
 }
 export interface StopSoundEffectCommand extends BaseCommand {
     type: CommandType.StopSoundEffect;
+    /** Target sound to stop. Empty/undefined = stop all sound effects. */
+    audioId?: VNID;
+    /** Fade-out duration in seconds. 0/undefined = stop instantly. */
+    fadeDuration?: number;
 }
 export interface PlayMovieCommand extends BaseCommand {
     type: CommandType.PlayMovie;
@@ -371,6 +408,10 @@ export interface ShowTextCommand extends BaseCommand {
     verticalAlign?: VNVAlign;
     transition: VNTransition;
     duration: number; // in seconds
+    // Orientation (shared across visual elements)
+    rotation?: number;  // degrees, positive = clockwise
+    flipX?: boolean;    // mirror horizontally
+    flipY?: boolean;    // mirror vertically
 }
 
 export interface ShowImageCommand extends BaseCommand {
@@ -384,6 +425,8 @@ export interface ShowImageCommand extends BaseCommand {
     opacity: number;
     scaleX?: number;
     scaleY?: number;
+    flipX?: boolean;    // mirror horizontally (composed with scaleX)
+    flipY?: boolean;    // mirror vertically (composed with scaleY)
     transition: VNTransition;
     duration: number; // in seconds
 }
@@ -436,6 +479,10 @@ export interface ShowButtonCommand extends BaseCommand {
     // Transition
     transition?: VNTransition;
     duration?: number; // in seconds
+    // Orientation (shared across visual elements)
+    rotation?: number;  // degrees, positive = clockwise
+    flipX?: boolean;    // mirror horizontally
+    flipY?: boolean;    // mirror vertically
     // Conditions
     showConditions?: VNCondition[];
 }
@@ -676,6 +723,37 @@ export interface HideImageMapCommand extends BaseCommand {
     duration: number; // in seconds
 }
 
+/** An interactive hot spot placed on the scene stage. Click/hover fires its actions;
+ *  a drag-drop spot is a drop target reachable from any surface via the drop-target
+ *  registry (e.g. drag an item from the HUD onto it). Mirrors screen hot spots. */
+export interface ShowHotSpotCommand extends BaseCommand {
+    type: CommandType.ShowHotSpot;
+    name: string;
+    x: number; // percentage
+    y: number; // percentage
+    width: number; // percentage
+    height: number; // percentage
+    shape: 'rect' | 'circle';
+    trigger: 'click' | 'hover' | 'drag-drop';
+    /** Actions fired when triggered (clicked, hovered, or dropped onto). */
+    actions: VNUIAction[];
+    /** Only active when these conditions are met. */
+    conditions?: VNCondition[];
+    /** For drag-drop: only accept a dragged element carrying this tag (empty = accept any). */
+    acceptedTag?: string;
+    /** Outline colour for edit-time + when visible. */
+    highlightColor?: string;
+    /** Draw the spot at runtime (otherwise it's an invisible hit area). */
+    visible?: boolean;
+    /** If true, a click trigger also advances the dialogue (default false — the click is consumed). */
+    advanceOnTrigger?: boolean;
+}
+
+export interface HideHotSpotCommand extends BaseCommand {
+    type: CommandType.HideHotSpot;
+    targetCommandId: VNID;
+}
+
 /** Target element type for tween commands */
 export type TweenTargetType = 'character' | 'image' | 'text' | 'button' | 'imageMap' | 'screen';
 
@@ -739,6 +817,7 @@ export type VNCommand =
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowImageMapCommand | HideImageMapCommand
+  | ShowHotSpotCommand | HideHotSpotCommand
   | TweenElementCommand;
 
 export interface VNScene {

@@ -6,6 +6,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
@@ -33,6 +34,7 @@ const ExpressionListItem: React.FC<{
     onCommitRename: (name: string) => void;
     onDeleteRequest: () => void;
 }> = ({ expr, isSelected, isRenaming, layers, onSelect, onStartRename, onCommitRename, onDeleteRequest }) => {
+    const { t } = useTranslation('characters');
     const { inputProps: renameInputProps } = useInlineRename(expr.name, (newName) => {
         const trimmed = newName.trim();
         onCommitRename(trimmed || expr.name);
@@ -70,7 +72,7 @@ const ExpressionListItem: React.FC<{
                         <span className="text-sm block truncate" style={{ color: 'var(--text-primary)' }}>{expr.name}</span>
                         {totalLayers > 0 && (
                             <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                                {configuredCount}/{totalLayers} layers
+                                {t('editor.layersCount', { configured: configuredCount, total: totalLayers })}
                             </span>
                         )}
                     </>
@@ -78,10 +80,10 @@ const ExpressionListItem: React.FC<{
             </div>
 
             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={e => { e.stopPropagation(); onStartRename(); }} className="p-1 text-slate-500 hover:text-[var(--accent-cyan)]" title="Rename">
+                <button onClick={e => { e.stopPropagation(); onStartRename(); }} className="p-1 text-slate-500 hover:text-[var(--accent-cyan)]" title={t('editor.rename')}>
                     <PencilIcon className="w-3 h-3" />
                 </button>
-                <button onClick={e => { e.stopPropagation(); onDeleteRequest(); }} className="p-1 text-slate-500 hover:text-red-400" title="Delete">
+                <button onClick={e => { e.stopPropagation(); onDeleteRequest(); }} className="p-1 text-slate-500 hover:text-red-400" title={t('editor.delete')}>
                     <TrashIcon className="w-3 h-3" />
                 </button>
             </div>
@@ -93,6 +95,7 @@ const LayerCard: React.FC<{
     characterId: VNID;
     layer: VNCharacterLayer;
 }> = ({ characterId, layer }) => {
+    const { t } = useTranslation('characters');
     const { dispatch } = useProject();
     const [isRenaming, setIsRenaming] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -123,13 +126,13 @@ const LayerCard: React.FC<{
     };
 
     const handleDeleteLayer = () => {
-        if (confirm(`Delete layer "${layer.name}"? This removes it from all expressions.`)) {
+        if (confirm(t('editor.deleteLayerConfirm', { name: layer.name }))) {
             dispatch({ type: 'DELETE_CHARACTER_LAYER', payload: { characterId, layerId: layer.id } });
         }
     };
 
     const handleDeleteAsset = (assetId: VNID, assetName: string) => {
-        if (confirm(`Delete asset "${assetName}"?`)) {
+        if (confirm(t('editor.deleteAssetConfirm', { name: assetName }))) {
             dispatch({ type: 'DELETE_LAYER_ASSET', payload: { characterId, layerId: layer.id, assetId } });
         }
     };
@@ -153,12 +156,12 @@ const LayerCard: React.FC<{
                     <span className="text-sm font-semibold flex-1" style={{ color: 'var(--text-primary)' }}>{layer.name}</span>
                 )}
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
-                    {assetCount} asset{assetCount !== 1 ? 's' : ''}
+                    {t('editor.assetsCount', { count: assetCount })}
                 </span>
-                <button onClick={e => { e.stopPropagation(); setIsRenaming(true); }} className="p-1 text-slate-500 hover:text-sky-400" title="Rename layer">
+                <button onClick={e => { e.stopPropagation(); setIsRenaming(true); }} className="p-1 text-slate-500 hover:text-sky-400" title={t('editor.renameLayer')}>
                     <PencilIcon className="w-3 h-3" />
                 </button>
-                <button onClick={e => { e.stopPropagation(); handleDeleteLayer(); }} className="p-1 text-slate-500 hover:text-red-400" title="Delete layer">
+                <button onClick={e => { e.stopPropagation(); handleDeleteLayer(); }} className="p-1 text-slate-500 hover:text-red-400" title={t('editor.deleteLayer')}>
                     <TrashIcon className="w-3 h-3" />
                 </button>
             </div>
@@ -167,7 +170,7 @@ const LayerCard: React.FC<{
             {!isCollapsed && (
                 <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
                     {assetCount === 0 ? (
-                        <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>No assets yet. Upload images for this layer.</p>
+                        <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>{t('editor.noAssetsYet')}</p>
                     ) : (
                         <div className="grid grid-cols-2 gap-1.5 mb-2">
                             {Object.values(layer.assets).map((asset: VNLayerAsset) => (
@@ -195,7 +198,7 @@ const LayerCard: React.FC<{
                         className="w-full text-xs py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-colors"
                         style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
                     >
-                        <UploadIcon /> Upload Asset
+                        <UploadIcon /> {t('editor.uploadAsset')}
                     </button>
                     <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*,video/*" className="hidden" />
                 </div>
@@ -211,6 +214,7 @@ const CharacterEditor: React.FC<{
     selectedExpressionId: VNID | null;
     setSelectedExpressionId: (id: VNID | null) => void;
 }> = ({ activeCharacterId, selectedExpressionId, setSelectedExpressionId }) => {
+    const { t } = useTranslation('characters');
     const { project, dispatch } = useProject();
     const toast = useToast();
     const character = project.characters[activeCharacterId];
@@ -238,7 +242,7 @@ const CharacterEditor: React.FC<{
 
     if (!character) return (
         <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
-            <p>Select a character to begin editing.</p>
+            <p>{t('editor.selectCharacter')}</p>
         </div>
     );
 
@@ -266,7 +270,7 @@ const CharacterEditor: React.FC<{
         const file = event.target.files?.[0];
         if (!file) return;
         if (!file.name.toLowerCase().endsWith('.ttf') && !file.name.toLowerCase().endsWith('.otf')) {
-            toast.warning('Please upload a TTF or OTF font file.');
+            toast.warning(t('editor.fontUploadWarning'));
             return;
         }
         const dataUrl = await fileToBase64(file);
@@ -275,7 +279,7 @@ const CharacterEditor: React.FC<{
     };
 
     const handleAddExpression = () => {
-        const name = `Expression ${expressionsArray.length + 1}`;
+        const name = t('editor.newExpressionName', { n: expressionsArray.length + 1 });
         dispatch({ type: 'ADD_EXPRESSION', payload: { characterId: activeCharacterId, name } });
     };
 
@@ -286,7 +290,7 @@ const CharacterEditor: React.FC<{
 
     const handleDeleteExprRequest = (expr: VNCharacterExpression) => {
         if (expressionsArray.length <= 1) {
-            toast.warning("Cannot delete the last expression.");
+            toast.warning(t('editor.cannotDeleteLast'));
             return;
         }
         setConfirmDeleteExpr(expr);
@@ -309,16 +313,16 @@ const CharacterEditor: React.FC<{
     };
 
     const handleAddLayer = () => {
-        const name = `Layer ${layersArray.length + 1}`;
+        const name = t('editor.newLayerName', { n: layersArray.length + 1 });
         dispatch({ type: 'ADD_CHARACTER_LAYER', payload: { characterId: activeCharacterId, name } });
     };
 
     /* ── Tab definitions ── */
 
     const tabs: { key: EditorTab; label: string; icon: string }[] = [
-        { key: 'expressions', label: 'Expressions', icon: '🎭' },
-        { key: 'layers', label: 'Sprite Layers', icon: '🖼️' },
-        { key: 'style', label: 'Style', icon: '🎨' },
+        { key: 'expressions', label: t('editor.tabExpressions'), icon: '🎭' },
+        { key: 'layers', label: t('editor.tabLayers'), icon: '🖼️' },
+        { key: 'style', label: t('editor.tabStyle'), icon: '🎨' },
     ];
 
     /* ── Render ── */
@@ -353,9 +357,9 @@ const CharacterEditor: React.FC<{
                             value={character.color}
                             onChange={e => updateCharacter({ color: e.target.value })}
                             className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
-                            title="Dialogue color"
+                            title={t('editor.dialogueColor')}
                         />
-                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>color</span>
+                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('editor.color')}</span>
                     </div>
                 </div>
 
@@ -380,10 +384,10 @@ const CharacterEditor: React.FC<{
                 <div className="w-2/5 flex flex-col border-r" style={{ borderColor: 'var(--border-subtle)' }}>
                     <div className="px-3 py-1.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
                         <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                            Preview
+                            {t('editor.preview')}
                         </span>
                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                            {selectedExpression?.name || 'No expression'}
+                            {selectedExpression?.name || t('editor.noExpression')}
                         </span>
                     </div>
                     <div className="flex-1 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}>
@@ -416,7 +420,7 @@ const CharacterEditor: React.FC<{
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="text-center" style={{ color: 'var(--text-muted)' }}>
                                     <span className="text-3xl block mb-2">👤</span>
-                                    <p className="text-xs">Upload a base sprite or add layers</p>
+                                    <p className="text-xs">{t('editor.uploadBaseHint')}</p>
                                 </div>
                             </div>
                         )}
@@ -462,8 +466,8 @@ const CharacterEditor: React.FC<{
                 </div>
             </div>
 
-            <ConfirmationModal isOpen={!!confirmDeleteExpr} onClose={() => setConfirmDeleteExpr(null)} onConfirm={handleConfirmDeleteExpr} title="Delete Expression">
-                Are you sure you want to delete the expression &ldquo;{confirmDeleteExpr?.name}&rdquo;?
+            <ConfirmationModal isOpen={!!confirmDeleteExpr} onClose={() => setConfirmDeleteExpr(null)} onConfirm={handleConfirmDeleteExpr} title={t('editor.deleteExpression')}>
+                {t('editor.deleteExpressionConfirm', { name: confirmDeleteExpr?.name })}
             </ConfirmationModal>
         </div>
     );
@@ -477,13 +481,13 @@ const CharacterEditor: React.FC<{
                 <div>
                     <div className="flex items-center justify-between mb-2">
                         <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                            Expressions
+                            {t('editor.expressions')}
                         </h3>
                         <button
                             onClick={handleAddExpression}
                             className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors bg-[var(--accent-cyan)]/10 hover:bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)]"
                         >
-                            <PlusIcon className="w-3 h-3" /> Add
+                            <PlusIcon className="w-3 h-3" /> {t('editor.add')}
                         </button>
                     </div>
                     <div className="space-y-1">
@@ -507,10 +511,10 @@ const CharacterEditor: React.FC<{
                 {selectedExpression && layersArray.length > 0 && (
                     <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
-                            Layer Config: <span style={{ color: 'var(--accent-cyan)' }}>{selectedExpression.name}</span>
+                            {t('editor.layerConfig')} <span style={{ color: 'var(--accent-cyan)' }}>{selectedExpression.name}</span>
                         </h3>
                         <p className="text-[10px] mb-3" style={{ color: 'var(--text-muted)' }}>
-                            Choose which asset from each layer is visible for this expression.
+                            {t('editor.layerConfigHint')}
                         </p>
                         <div className="space-y-2">
                             {layersArray.map((layer: VNCharacterLayer) => (
@@ -524,7 +528,7 @@ const CharacterEditor: React.FC<{
                                         className="flex-1 text-xs rounded-md px-2 py-1.5 border"
                                         style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)', color: 'var(--text-primary)' }}
                                     >
-                                        <option value="">(None)</option>
+                                        <option value="">{t('editor.none')}</option>
                                         {Object.values(layer.assets).map((asset: VNLayerAsset) => (
                                             <option key={asset.id} value={asset.id}>{asset.name}</option>
                                         ))}
@@ -538,13 +542,13 @@ const CharacterEditor: React.FC<{
                 {selectedExpression && layersArray.length === 0 && (
                     <div className="text-center py-4 rounded-lg border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
                         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                            No sprite layers defined yet.
+                            {t('editor.noLayersYet')}
                         </p>
                         <button
                             onClick={() => setActiveTab('layers')}
                             className="text-xs text-[var(--accent-cyan)] hover:underline mt-1"
                         >
-                            Go to Sprite Layers →
+                            {t('editor.goToLayers')}
                         </button>
                     </div>
                 )}
@@ -558,17 +562,17 @@ const CharacterEditor: React.FC<{
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                            Sprite Layers
+                            {t('editor.spriteLayers')}
                         </h3>
                         <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                            Layers stack on top of each other. Upload assets, then assign them per-expression.
+                            {t('editor.spriteLayersHint')}
                         </p>
                     </div>
                     <button
                         onClick={handleAddLayer}
                         className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors bg-sky-500/10 hover:bg-sky-500/20 text-sky-400"
                     >
-                        <PlusIcon className="w-3 h-3" /> Add Layer
+                        <PlusIcon className="w-3 h-3" /> {t('editor.addLayer')}
                     </button>
                 </div>
 
@@ -576,8 +580,7 @@ const CharacterEditor: React.FC<{
                     <div className="text-center py-8 rounded-lg border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
                         <span className="text-3xl block mb-2">🖼️</span>
                         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                            No layers yet. Layers let you build composite sprites<br />
-                            (e.g., separate body, face, accessories).
+                            {t('editor.noLayersComposite')}
                         </p>
                     </div>
                 ) : (
@@ -597,10 +600,10 @@ const CharacterEditor: React.FC<{
                 {/* Base Image Section */}
                 <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
-                        Base Sprite
+                        {t('editor.baseSprite')}
                     </h3>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
-                        Optional base image/video shown behind all layers for every expression.
+                        {t('editor.baseSpriteHint')}
                     </p>
                     <div className="flex items-center gap-2">
                         {character.baseVideoUrl ? (
@@ -618,14 +621,14 @@ const CharacterEditor: React.FC<{
                                 className="text-xs py-1.5 rounded-md flex items-center justify-center gap-1 transition-colors"
                                 style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}
                             >
-                                <UploadIcon /> {(character.baseImageUrl || character.baseVideoUrl) ? 'Change...' : 'Upload...'}
+                                <UploadIcon /> {(character.baseImageUrl || character.baseVideoUrl) ? t('editor.change') : t('editor.upload')}
                             </button>
                             {(character.baseImageUrl || character.baseVideoUrl) && (
                                 <button
                                     onClick={() => updateCharacter({ baseImageUrl: null, baseVideoUrl: null, isBaseVideo: false })}
                                     className="text-xs py-1 rounded-md text-red-400 hover:bg-red-500/10 transition-colors"
                                 >
-                                    Remove
+                                    {t('editor.remove')}
                                 </button>
                             )}
                         </div>
@@ -638,20 +641,20 @@ const CharacterEditor: React.FC<{
                 {/* Font Settings */}
                 <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
-                        Dialogue Font
+                        {t('editor.dialogueFont')}
                     </h3>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
-                        Override the project default for this character's dialogue text.
+                        {t('editor.dialogueFontHint')}
                     </p>
 
-                    <FormField label="Font Family">
+                    <FormField label={t('editor.fontFamily')}>
                         <Select
                             value={character.fontFamily || ''}
                             onChange={e => updateCharacter({ fontFamily: e.target.value || undefined })}
                         >
                             {popularFonts.map(f => (
                                 <option key={f} value={f === 'Default (Use Project Settings)' ? '' : f}>
-                                    {f.split(',')[0]}
+                                    {f === 'Default (Use Project Settings)' ? t('editor.fontDefault') : f.split(',')[0]}
                                 </option>
                             ))}
                         </Select>
@@ -664,7 +667,7 @@ const CharacterEditor: React.FC<{
                             className="flex-1 text-xs py-1.5 rounded-md flex items-center justify-center gap-1 transition-colors"
                             style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}
                         >
-                            <UploadIcon /> {character.fontUrl ? 'Change Font File...' : 'Upload TTF/OTF...'}
+                            <UploadIcon /> {character.fontUrl ? t('editor.changeFontFile') : t('editor.uploadFontFile')}
                         </button>
                         {character.fontUrl && (
                             <button
@@ -677,25 +680,25 @@ const CharacterEditor: React.FC<{
                         <input type="file" ref={fontFileInputRef} onChange={handleFontUpload} accept=".ttf,.otf" className="hidden" />
                     </div>
                     {character.fontUrl && (
-                        <p className="text-[10px] text-[var(--accent-cyan)] mb-3">✓ Custom font: {character.fontFamily}</p>
+                        <p className="text-[10px] text-[var(--accent-cyan)] mb-3">{t('editor.customFont', { name: character.fontFamily })}</p>
                     )}
 
                     <div className="grid grid-cols-2 gap-3">
-                        <FormField label="Font Size (px)">
+                        <FormField label={t('editor.fontSize')}>
                             <TextInput
                                 type="number"
                                 value={character.fontSize || ''}
                                 onChange={e => updateCharacter({ fontSize: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                                placeholder="Default"
+                                placeholder={t('editor.fontSizeDefault')}
                             />
                         </FormField>
-                        <FormField label="Weight">
+                        <FormField label={t('editor.weight')}>
                             <Select
                                 value={character.fontWeight || 'normal'}
                                 onChange={e => updateCharacter({ fontWeight: e.target.value as 'normal' | 'bold' })}
                             >
-                                <option value="normal">Normal</option>
-                                <option value="bold">Bold</option>
+                                <option value="normal">{t('editor.normal')}</option>
+                                <option value="bold">{t('editor.bold')}</option>
                             </Select>
                         </FormField>
                     </div>
@@ -707,7 +710,7 @@ const CharacterEditor: React.FC<{
                             onChange={e => updateCharacter({ fontItalic: e.target.checked })}
                             className="accent-[var(--accent-cyan)]"
                         />
-                        Italic
+                        {t('editor.italic')}
                     </label>
                 </div>
 
@@ -716,17 +719,17 @@ const CharacterEditor: React.FC<{
                 {/* Default Voice */}
                 <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
-                        Default Voice
+                        {t('editor.defaultVoice')}
                     </h3>
                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
-                        Audio clip to play automatically with every dialogue line for this character (can be overridden per-line).
+                        {t('editor.defaultVoiceHint')}
                     </p>
-                    <FormField label="Voice Clip">
+                    <FormField label={t('editor.voiceClip')}>
                         <Select
                             value={character.defaultVoiceId || ''}
                             onChange={e => updateCharacter({ defaultVoiceId: e.target.value || null })}
                         >
-                            <option value="">None</option>
+                            <option value="">{t('editor.voiceNone')}</option>
                             {Object.values(project.audio || {}).map((a: any) => (
                                 <option key={a.id} value={a.id}>{a.name || a.id}</option>
                             ))}

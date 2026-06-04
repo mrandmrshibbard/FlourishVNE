@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface HelpPanelProps {
   isOpen: boolean;
@@ -13,42 +14,44 @@ interface CommandDoc {
   example: string;
 }
 
-const COMMAND_DOCS: CommandDoc[] = [
-  { name: 'Dialogue', category: 'Story', description: 'Display character dialogue with optional speaker name and portrait.', params: ['text', 'characterId'], example: 'Show Sakura saying "Hello!" on the left side of the screen.' },
-  { name: 'Choice', category: 'Story', description: 'Present the player with multiple options that affect the story path.', params: ['options[]', 'text', 'actions'], example: 'Ask the player "Where do you go?" with options "Park", "Library", "Home".' },
-  { name: 'BranchStart', category: 'Story', description: 'Begin a named branch section for organizing story paths visually.', params: ['name', 'color', 'branchId'], example: 'Start a branch called "Sakura Route" colored pink to group related commands.' },
-  { name: 'BranchEnd', category: 'Story', description: 'End a previously opened branch section.', params: ['branchId'], example: 'Close the "Sakura Route" branch block.' },
-  { name: 'ShowCharacter', category: 'Visual', description: 'Display a character sprite on screen with position and expression.', params: ['characterId', 'expressionId', 'position', 'transition', 'duration'], example: 'Show Kai at center position with happy expression, fading in over 0.5 seconds.' },
-  { name: 'HideCharacter', category: 'Visual', description: 'Remove a character from the screen with a transition.', params: ['characterId', 'transition', 'duration'], example: 'Hide Sakura with a fade-out transition over 1 second.' },
-  { name: 'SetBackground', category: 'Visual', description: 'Change the background image of the scene.', params: ['backgroundId', 'transition', 'duration'], example: 'Set background to "school_hallway" with crossfade over 1 second.' },
-  { name: 'ShowText', category: 'Visual', description: 'Display text overlay on screen at a specific position with styling.', params: ['text', 'x', 'y', 'fontSize', 'fontFamily', 'color', 'transition', 'duration'], example: 'Show "Chapter 1" centered on screen in large white text, fading in.' },
-  { name: 'HideText', category: 'Visual', description: 'Remove a previously shown text overlay from the screen.', params: ['targetCommandId', 'transition', 'duration'], example: 'Hide the chapter title text with a fade-out.' },
-  { name: 'ShowImage', category: 'Visual', description: 'Display an image overlay on screen with position, size, and rotation.', params: ['imageId', 'x', 'y', 'width', 'height', 'rotation', 'opacity', 'transition', 'duration'], example: 'Show a letter image centered on screen at 50% size, fading in.' },
-  { name: 'HideImage', category: 'Visual', description: 'Remove a previously shown image overlay from the screen.', params: ['targetCommandId', 'transition', 'duration'], example: 'Hide the letter image with a fade-out transition.' },
-  { name: 'ShowButton', category: 'Visual', description: 'Display an interactive button on screen with styling and click actions.', params: ['text', 'x', 'y', 'width', 'height', 'backgroundColor', 'textColor', 'onClick', 'transition'], example: 'Show a "Continue" button at the bottom center that jumps to the next scene when clicked.' },
-  { name: 'HideButton', category: 'Visual', description: 'Remove a previously shown button from the screen.', params: ['targetCommandId', 'transition', 'duration'], example: 'Hide the "Continue" button with a fade-out.' },
-  { name: 'ShowImageMap', category: 'Visual', description: 'Display an image with clickable hot-spot regions that trigger actions (jump, set variable).', params: ['imageId', 'regions', 'x', 'y', 'width', 'height', 'opacity', 'waitForClick', 'transition', 'duration'], example: 'Show a world map image with clickable city regions that jump to different scenes when clicked.' },
-  { name: 'HideImageMap', category: 'Visual', description: 'Remove a previously shown image map from the screen.', params: ['targetCommandId', 'transition', 'duration'], example: 'Hide the world map with a fade-out transition.' },
-  { name: 'PlayMusic', category: 'Audio', description: 'Start playing background music. Loops by default.', params: ['audioId', 'loop', 'fadeDuration', 'volume'], example: 'Play "romantic_theme.mp3" at 80% volume with 2s fade-in.' },
-  { name: 'StopMusic', category: 'Audio', description: 'Stop the currently playing background music.', params: ['fadeDuration'], example: 'Stop music with a 1 second fade-out.' },
-  { name: 'PlaySoundEffect', category: 'Audio', description: 'Play a one-shot sound effect.', params: ['audioId', 'volume'], example: 'Play door_knock sound at full volume.' },
-  { name: 'StopSoundEffect', category: 'Audio', description: 'Stop all currently playing sound effects.', params: [], example: 'Stop all sound effects immediately.' },
-  { name: 'PlayMovie', category: 'Media', description: 'Play a video file. In fullscreen mode, shows over a black background (cutscenes). In overlay mode, plays transparently on top of the scene (effects like falling petals, rain).', params: ['videoId', 'waitsForCompletion', 'displayMode', 'loop'], example: 'Play falling petals as a looping transparent overlay while dialogue continues underneath.' },
-  { name: 'StopMovie', category: 'Media', description: 'Stop all currently playing movie overlays.', params: [], example: 'Stop the falling petals overlay when the scene changes.' },
-  { name: 'SetVariable', category: 'Logic', description: 'Set a game variable to a value. Used for tracking choices and stats.', params: ['variableId', 'operator', 'value', 'randomMin', 'randomMax'], example: 'Set "playerScore" to 10, or add 5 to "friendshipLevel".' },
-  { name: 'TextInput', category: 'Logic', description: 'Ask the player to type text input and store it in a variable.', params: ['variableId', 'prompt', 'placeholder', 'maxLength'], example: 'Ask "What is your name?" and store the answer in "playerName".' },
-  { name: 'Jump', category: 'Flow', description: 'Jump to another scene immediately.', params: ['targetSceneId'], example: 'Jump to scene "chapter2_start".' },
-  { name: 'Label', category: 'Flow', description: 'Define a named label point within a scene that can be jumped to.', params: ['labelId'], example: 'Create a label called "loop_start" to mark a return point.' },
-  { name: 'JumpToLabel', category: 'Flow', description: 'Jump to a named label within the current scene.', params: ['labelId'], example: 'Jump back to the "loop_start" label to repeat a section.' },
-  { name: 'Wait', category: 'Flow', description: 'Pause for a specified duration before continuing.', params: ['duration', 'waitForInput'], example: 'Wait 2 seconds before showing next dialogue, or wait for player click.' },
-  { name: 'ShowScreen', category: 'Flow', description: 'Display a custom UI screen (menus, inventories, etc.).', params: ['screenId'], example: 'Show the "inventory_screen" UI overlay.' },
-  { name: 'ShakeScreen', category: 'Effects', description: 'Apply a screen shake effect for dramatic impact.', params: ['duration', 'intensity'], example: 'Shake the screen for 0.5 seconds at medium intensity during an explosion.' },
-  { name: 'TintScreen', category: 'Effects', description: 'Apply a color tint overlay to the entire screen.', params: ['color', 'duration'], example: 'Tint the screen red over 1 second to indicate danger.' },
-  { name: 'FlashScreen', category: 'Effects', description: 'Flash the screen with a bright color for a brief moment.', params: ['color', 'duration'], example: 'Flash the screen white for 0.3 seconds for a lightning effect.' },
-  { name: 'PanZoomScreen', category: 'Effects', description: 'Pan and zoom the camera to focus on a specific area.', params: ['zoom', 'panX', 'panY', 'duration'], example: 'Zoom in 2x on the left side of the screen over 1 second.' },
-  { name: 'ResetScreenEffects', category: 'Effects', description: 'Reset all active screen effects (tint, zoom, etc.) back to normal.', params: ['duration'], example: 'Reset all screen effects smoothly over 0.5 seconds.' },
-  { name: 'SetScreenOverlayEffect', category: 'Effects', description: 'Apply a persistent overlay effect like rain, snow, or particles.', params: ['effectType', 'intensity', 'variant', 'color'], example: 'Add a gentle snowfall effect at 50% intensity.' },
-  { name: 'Group', category: 'Organization', description: 'Group multiple events together for visual organization in the editor.', params: ['name', 'commandIds'], example: 'Group the "enter classroom" events (background, characters, music) together.' },
+// Command docs. `name`/`category`/`params` are stable identifiers; the human-readable
+// `description`/`example` are pulled from the `components.helpPanel.commands.<name>` keys.
+const COMMAND_DOC_META: { name: string; category: string; params: string[] }[] = [
+  { name: 'Dialogue', category: 'Story', params: ['text', 'characterId'] },
+  { name: 'Choice', category: 'Story', params: ['options[]', 'text', 'actions'] },
+  { name: 'BranchStart', category: 'Story', params: ['name', 'color', 'branchId'] },
+  { name: 'BranchEnd', category: 'Story', params: ['branchId'] },
+  { name: 'ShowCharacter', category: 'Visual', params: ['characterId', 'expressionId', 'position', 'transition', 'duration'] },
+  { name: 'HideCharacter', category: 'Visual', params: ['characterId', 'transition', 'duration'] },
+  { name: 'SetBackground', category: 'Visual', params: ['backgroundId', 'transition', 'duration'] },
+  { name: 'ShowText', category: 'Visual', params: ['text', 'x', 'y', 'fontSize', 'fontFamily', 'color', 'transition', 'duration'] },
+  { name: 'HideText', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
+  { name: 'ShowImage', category: 'Visual', params: ['imageId', 'x', 'y', 'width', 'height', 'rotation', 'opacity', 'transition', 'duration'] },
+  { name: 'HideImage', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
+  { name: 'ShowButton', category: 'Visual', params: ['text', 'x', 'y', 'width', 'height', 'backgroundColor', 'textColor', 'onClick', 'transition'] },
+  { name: 'HideButton', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
+  { name: 'ShowImageMap', category: 'Visual', params: ['imageId', 'regions', 'x', 'y', 'width', 'height', 'opacity', 'waitForClick', 'transition', 'duration'] },
+  { name: 'HideImageMap', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
+  { name: 'PlayMusic', category: 'Audio', params: ['audioId', 'loop', 'fadeDuration', 'volume'] },
+  { name: 'StopMusic', category: 'Audio', params: ['fadeDuration'] },
+  { name: 'PlaySoundEffect', category: 'Audio', params: ['audioId', 'volume'] },
+  { name: 'StopSoundEffect', category: 'Audio', params: [] },
+  { name: 'PlayMovie', category: 'Media', params: ['videoId', 'waitsForCompletion', 'displayMode', 'loop'] },
+  { name: 'StopMovie', category: 'Media', params: [] },
+  { name: 'SetVariable', category: 'Logic', params: ['variableId', 'operator', 'value', 'randomMin', 'randomMax'] },
+  { name: 'TextInput', category: 'Logic', params: ['variableId', 'prompt', 'placeholder', 'maxLength'] },
+  { name: 'Jump', category: 'Flow', params: ['targetSceneId'] },
+  { name: 'Label', category: 'Flow', params: ['labelId'] },
+  { name: 'JumpToLabel', category: 'Flow', params: ['labelId'] },
+  { name: 'Wait', category: 'Flow', params: ['duration', 'waitForInput'] },
+  { name: 'ShowScreen', category: 'Flow', params: ['screenId'] },
+  { name: 'ShakeScreen', category: 'Effects', params: ['duration', 'intensity'] },
+  { name: 'TintScreen', category: 'Effects', params: ['color', 'duration'] },
+  { name: 'FlashScreen', category: 'Effects', params: ['color', 'duration'] },
+  { name: 'PanZoomScreen', category: 'Effects', params: ['zoom', 'panX', 'panY', 'duration'] },
+  { name: 'ResetScreenEffects', category: 'Effects', params: ['duration'] },
+  { name: 'SetScreenOverlayEffect', category: 'Effects', params: ['effectType', 'intensity', 'variant', 'color'] },
+  { name: 'Group', category: 'Organization', params: ['name', 'commandIds'] },
 ];
 
 const CATEGORIES = ['Story', 'Visual', 'Audio', 'Logic', 'Flow', 'Effects', 'Organization'];
@@ -70,29 +73,20 @@ interface SectionState {
   tips: boolean;
 }
 
-const KEYBOARD_SHORTCUTS = [
-  { keys: 'Ctrl + Z', action: 'Undo last action' },
-  { keys: 'Ctrl + Y', action: 'Redo last action' },
-  { keys: 'Ctrl + Shift + Z', action: 'Redo last action (alternative)' },
-  { keys: 'Ctrl + S', action: 'Export / Save project' },
-  { keys: 'Delete', action: 'Delete selected event' },
-  { keys: 'Ctrl + D', action: 'Duplicate selected event' },
-  { keys: 'Ctrl + C', action: 'Copy selected event' },
-  { keys: 'Ctrl + V', action: 'Paste event' },
-  { keys: 'Space', action: 'Play / Preview scene' },
-  { keys: 'Escape', action: 'Close panel or cancel action' },
+const KEYBOARD_SHORTCUT_META: { keys: string; key: string }[] = [
+  { keys: 'Ctrl + Z', key: 'undo' },
+  { keys: 'Ctrl + Y', key: 'redo' },
+  { keys: 'Ctrl + Shift + Z', key: 'redoAlt' },
+  { keys: 'Ctrl + S', key: 'save' },
+  { keys: 'Delete', key: 'delete' },
+  { keys: 'Ctrl + D', key: 'duplicate' },
+  { keys: 'Ctrl + C', key: 'copy' },
+  { keys: 'Ctrl + V', key: 'paste' },
+  { keys: 'Space', key: 'play' },
+  { keys: 'Escape', key: 'escape' },
 ];
 
-const TIPS = [
-  { title: 'Organize with Scenes', tip: 'Break your story into logical scenes. Each scene should represent a distinct location, conversation, or event. This makes it easier to navigate and edit your project.' },
-  { title: 'Use Variables for Branching', tip: 'Track player choices with variables (e.g., "friendshipLevel", "route"). Use conditions to create branching paths based on these values for a more dynamic story.' },
-  { title: 'Preview Often', tip: 'Use the Play button frequently to test your scenes. This helps catch dialogue errors, missing transitions, and pacing issues early.' },
-  { title: 'Layer Your Audio', tip: 'Combine background music with sound effects for immersive scenes. Use fade-in/out durations for smooth audio transitions between scenes.' },
-  { title: 'Use Labels for Loops', tip: 'Instead of duplicating content, use Label and JumpToLabel commands to create loops within a scene — great for retry mechanics or repeated dialogue.' },
-  { title: 'Command Stacking', tip: 'Use the async modifier on commands to run them in parallel. This lets you show a character, change background, and play music all at once for cinematic moments.' },
-  { title: 'Branches for Organization', tip: 'Use BranchStart/BranchEnd to visually group related commands in the editor. Color-code branches to quickly identify different story routes.' },
-  { title: 'Screen Effects for Drama', tip: 'Combine ShakeScreen, FlashScreen, and TintScreen effects with sound effects for impactful dramatic moments like explosions or revelations.' },
-];
+const TIP_KEYS = ['organize', 'variables', 'preview', 'audio', 'labels', 'stacking', 'branches', 'effects'];
 
 const ChevronIcon: React.FC<{ isOpen: boolean }> = ({ isOpen }) => (
   <svg
@@ -106,6 +100,24 @@ const ChevronIcon: React.FC<{ isOpen: boolean }> = ({ isOpen }) => (
 );
 
 const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
+  const { t } = useTranslation('components');
+
+  const COMMAND_DOCS: CommandDoc[] = useMemo(() => COMMAND_DOC_META.map(m => ({
+    ...m,
+    description: t(`helpPanel.commands.${m.name}.desc`),
+    example: t(`helpPanel.commands.${m.name}.example`),
+  })), [t]);
+
+  const KEYBOARD_SHORTCUTS = useMemo(() => KEYBOARD_SHORTCUT_META.map(m => ({
+    keys: m.keys,
+    action: t(`helpPanel.shortcuts.${m.key}`),
+  })), [t]);
+
+  const TIPS = useMemo(() => TIP_KEYS.map(k => ({
+    title: t(`helpPanel.tips.${k}Title`),
+    tip: t(`helpPanel.tips.${k}Tip`),
+  })), [t]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [sections, setSections] = useState<SectionState>({
     gettingStarted: true,
@@ -129,7 +141,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
         cmd.params.some(p => p.toLowerCase().includes(q)) ||
         cmd.example.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, COMMAND_DOCS]);
 
   const filteredShortcuts = useMemo(() => {
     if (!searchQuery.trim()) return KEYBOARD_SHORTCUTS;
@@ -137,15 +149,15 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
     return KEYBOARD_SHORTCUTS.filter(
       s => s.keys.toLowerCase().includes(q) || s.action.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, KEYBOARD_SHORTCUTS]);
 
   const filteredTips = useMemo(() => {
     if (!searchQuery.trim()) return TIPS;
     const q = searchQuery.toLowerCase();
     return TIPS.filter(
-      t => t.title.toLowerCase().includes(q) || t.tip.toLowerCase().includes(q)
+      item => item.title.toLowerCase().includes(q) || item.tip.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, TIPS]);
 
   const hasGettingStartedMatch = useMemo(() => {
     if (!searchQuery.trim()) return true;
@@ -184,7 +196,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
           <div className="flex items-center gap-2">
             <span className="text-lg">📖</span>
-            <h2 className="text-white font-semibold text-base">Help & Reference</h2>
+            <h2 className="text-white font-semibold text-base">{t('helpPanel.title')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -208,7 +220,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
             </svg>
             <input
               type="text"
-              placeholder="Search events, shortcuts, tips..."
+              placeholder={t('helpPanel.searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-[var(--bg-primary)] text-white text-sm pl-9 pr-3 py-2 rounded-lg border border-[var(--border-default)] focus:border-cyan-500 focus:outline-none placeholder-slate-500"
@@ -234,29 +246,29 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
                 className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <ChevronIcon isOpen={sections.gettingStarted} />
-                <span className="text-cyan-400 font-medium text-sm">Getting Started</span>
+                <span className="text-cyan-400 font-medium text-sm">{t('helpPanel.gettingStarted')}</span>
               </button>
               {sections.gettingStarted && (
                 <div className="px-4 pb-4 space-y-3">
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
-                    <h4 className="text-white text-xs font-semibold mb-1">1. Create a Project</h4>
-                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">From the Project Hub, click "New Project" to start fresh or open an existing .zip project file.</p>
+                    <h4 className="text-white text-xs font-semibold mb-1">{t('helpPanel.gs.step1Title')}</h4>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">{t('helpPanel.gs.step1Desc')}</p>
                   </div>
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
-                    <h4 className="text-white text-xs font-semibold mb-1">2. Add Scenes</h4>
-                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Use the Scenes tab to create scenes. Each scene contains a sequence of commands that make up your story.</p>
+                    <h4 className="text-white text-xs font-semibold mb-1">{t('helpPanel.gs.step2Title')}</h4>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">{t('helpPanel.gs.step2Desc')}</p>
                   </div>
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
-                    <h4 className="text-white text-xs font-semibold mb-1">3. Add Commands</h4>
-                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Inside a scene, add commands like Dialogue, ShowCharacter, and SetBackground to build your visual novel.</p>
+                    <h4 className="text-white text-xs font-semibold mb-1">{t('helpPanel.gs.step3Title')}</h4>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">{t('helpPanel.gs.step3Desc')}</p>
                   </div>
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
-                    <h4 className="text-white text-xs font-semibold mb-1">4. Add Characters & Assets</h4>
-                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Use the Characters tab to create characters with expressions, and the Assets tab to import backgrounds, images, and audio.</p>
+                    <h4 className="text-white text-xs font-semibold mb-1">{t('helpPanel.gs.step4Title')}</h4>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">{t('helpPanel.gs.step4Desc')}</p>
                   </div>
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-3">
-                    <h4 className="text-white text-xs font-semibold mb-1">5. Preview & Export</h4>
-                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">Click "Play" to preview your game live. When ready, use "Export" to save as .zip or "Build" to create a standalone game.</p>
+                    <h4 className="text-white text-xs font-semibold mb-1">{t('helpPanel.gs.step5Title')}</h4>
+                    <p className="text-[var(--text-secondary)] text-xs leading-relaxed">{t('helpPanel.gs.step5Desc')}</p>
                   </div>
                 </div>
               )}
@@ -271,9 +283,9 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
               >
                 <div className="flex items-center gap-2">
                   <ChevronIcon isOpen={sections.commands} />
-                  <span className="text-cyan-400 font-medium text-sm">Events Reference</span>
+                  <span className="text-cyan-400 font-medium text-sm">{t('helpPanel.eventsReference')}</span>
                 </div>
-                <span className="text-[var(--text-muted)] text-xs">{filteredCommands.length} events</span>
+                <span className="text-[var(--text-muted)] text-xs">{t('helpPanel.eventsCount', { count: filteredCommands.length })}</span>
               </button>
               {sections.commands && (
                 <div className="px-4 pb-4 space-y-4">
@@ -285,7 +297,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
                           style={{ backgroundColor: CATEGORY_COLORS[category] || '#94a3b8' }}
                         />
                         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: CATEGORY_COLORS[category] || '#94a3b8' }}>
-                          {category}
+                          {t(`helpPanel.categories.${category}`, { defaultValue: category })}
                         </span>
                       </div>
                       <div className="space-y-2">
@@ -307,7 +319,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
                 className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <ChevronIcon isOpen={sections.shortcuts} />
-                <span className="text-cyan-400 font-medium text-sm">Keyboard Shortcuts</span>
+                <span className="text-cyan-400 font-medium text-sm">{t('helpPanel.keyboardShortcuts')}</span>
               </button>
               {sections.shortcuts && (
                 <div className="px-4 pb-4 space-y-1">
@@ -331,7 +343,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
                 className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-[var(--bg-primary)]/50 transition-colors"
               >
                 <ChevronIcon isOpen={sections.tips} />
-                <span className="text-cyan-400 font-medium text-sm">Tips & Tricks</span>
+                <span className="text-cyan-400 font-medium text-sm">{t('helpPanel.tipsTricks')}</span>
               </button>
               {sections.tips && (
                 <div className="px-4 pb-4 space-y-2">
@@ -349,14 +361,14 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
           {searchQuery && filteredCommands.length === 0 && filteredShortcuts.length === 0 && filteredTips.length === 0 && !hasGettingStartedMatch && (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <span className="text-3xl mb-3">🔍</span>
-              <p className="text-[var(--text-secondary)] text-sm">No results found for "{searchQuery}"</p>
-              <p className="text-[var(--text-muted)] text-xs mt-1">Try searching for a command name, category, or keyword.</p>
+              <p className="text-[var(--text-secondary)] text-sm">{t('helpPanel.noResults', { query: searchQuery })}</p>
+              <p className="text-[var(--text-muted)] text-xs mt-1">{t('helpPanel.noResultsHint')}</p>
             </div>
           )}
         </div>
 
         <div className="px-4 py-2 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]/80">
-          <p className="text-[var(--text-muted)] text-[10px] text-center">Flourish Visual Novel Engine</p>
+          <p className="text-[var(--text-muted)] text-[10px] text-center">{t('helpPanel.footer')}</p>
         </div>
       </div>
     </>
@@ -364,6 +376,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
 };
 
 const CommandCard: React.FC<{ cmd: CommandDoc }> = ({ cmd }) => {
+  const { t } = useTranslation('components');
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -382,7 +395,7 @@ const CommandCard: React.FC<{ cmd: CommandDoc }> = ({ cmd }) => {
           <p className="text-[var(--text-primary)] text-xs leading-relaxed">{cmd.description}</p>
           {cmd.params.length > 0 && (
             <div>
-              <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold">Parameters</span>
+              <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold">{t('helpPanel.parameters')}</span>
               <div className="flex flex-wrap gap-1 mt-1">
                 {cmd.params.map(p => (
                   <span key={p} className="bg-[var(--bg-secondary)]/80 text-cyan-300 text-[10px] px-1.5 py-0.5 rounded font-mono">
@@ -393,7 +406,7 @@ const CommandCard: React.FC<{ cmd: CommandDoc }> = ({ cmd }) => {
             </div>
           )}
           <div>
-            <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold">Example</span>
+            <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold">{t('helpPanel.example')}</span>
             <p className="text-emerald-400/80 text-xs mt-0.5 italic">"{cmd.example}"</p>
           </div>
         </div>

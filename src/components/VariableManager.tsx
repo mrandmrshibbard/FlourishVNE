@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNProject } from '../types/project';
 import { VNVariable, VNVariableScope } from '../features/variables/types';
@@ -29,27 +31,27 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
             // SetVariable command
             if (cmd.type === CommandType.SetVariable && (cmd as SetVariableCommand).variableId === variableId) {
                 usages.push({
-                    location: `Scene: ${scene.name}`,
+                    location: i18n.t('variables:usage.scene', { name: scene.name }),
                     type: 'command',
-                    detail: `Command ${index + 1}: Set Variable`
+                    detail: i18n.t('variables:usage.cmdSetVariable', { n: index + 1 })
                 });
             }
-            
+
             // TextInput command
             if (cmd.type === CommandType.TextInput && (cmd as TextInputCommand).variableId === variableId) {
                 usages.push({
-                    location: `Scene: ${scene.name}`,
+                    location: i18n.t('variables:usage.scene', { name: scene.name }),
                     type: 'command',
-                    detail: `Command ${index + 1}: Text Input`
+                    detail: i18n.t('variables:usage.cmdTextInput', { n: index + 1 })
                 });
             }
-            
+
             // Check conditions on any command
             if (cmd.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
                 usages.push({
-                    location: `Scene: ${scene.name}`,
+                    location: i18n.t('variables:usage.scene', { name: scene.name }),
                     type: 'condition',
-                    detail: `Command ${index + 1}: Has condition using variable`
+                    detail: i18n.t('variables:usage.cmdCondition', { n: index + 1 })
                 });
             }
             
@@ -61,9 +63,9 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
                     options.forEach((opt, optIndex) => {
                         if (opt.conditions?.some((c: VNCondition) => c.variableId === variableId)) {
                             usages.push({
-                                location: `Scene: ${scene.name}`,
+                                location: i18n.t('variables:usage.scene', { name: scene.name }),
                                 type: 'condition',
-                                detail: `Command ${index + 1}, Option ${optIndex + 1}: Has condition`
+                                detail: i18n.t('variables:usage.optCondition', { n: index + 1, opt: optIndex + 1 })
                             });
                         }
                         const actions = opt.actions || [];
@@ -71,9 +73,9 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
                             actions.forEach(action => {
                                 if (action.type === UIActionType.SetVariable && (action as SetVariableAction).variableId === variableId) {
                                     usages.push({
-                                        location: `Scene: ${scene.name}`,
+                                        location: i18n.t('variables:usage.scene', { name: scene.name }),
                                         type: 'ui-action',
-                                        detail: `Command ${index + 1}, Option ${optIndex + 1}: Sets variable`
+                                        detail: i18n.t('variables:usage.optSetsVariable', { n: index + 1, opt: optIndex + 1 })
                                     });
                                 }
                             });
@@ -87,9 +89,9 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
                 const text = (cmd as any).text || '';
                 if (text.includes(`{${variableName}}`) || text.includes(`{${variableId}}`)) {
                     usages.push({
-                        location: `Scene: ${scene.name}`,
+                        location: i18n.t('variables:usage.scene', { name: scene.name }),
                         type: 'text-reference',
-                        detail: `Command ${index + 1}: Referenced in dialogue text`
+                        detail: i18n.t('variables:usage.cmdDialogueRef', { n: index + 1 })
                     });
                 }
             }
@@ -101,7 +103,7 @@ function findVariableUsages(project: VNProject, variableId: string, variableName
         const screen = project.uiScreens[screenId];
         const elements = screen.elements || [];
         if (Array.isArray(elements)) {
-            checkUIElementsForVariableUsage(elements, variableId, variableName, `UI Screen: ${screen.name}`, usages);
+            checkUIElementsForVariableUsage(elements, variableId, variableName, i18n.t('variables:usage.uiScreen', { name: screen.name }), usages);
         }
     }
     
@@ -123,7 +125,7 @@ function checkUIElementsForVariableUsage(
             usages.push({
                 location: locationPrefix,
                 type: 'condition',
-                detail: `Element "${element.name || element.type}": Has condition`
+                detail: i18n.t('variables:usage.elCondition', { name: element.name || element.type })
             });
         }
         
@@ -135,14 +137,14 @@ function checkUIElementsForVariableUsage(
                     usages.push({
                         location: locationPrefix,
                         type: 'ui-action',
-                        detail: `Element "${element.name || element.type}": Sets variable`
+                        detail: i18n.t('variables:usage.elSetsVariable', { name: element.name || element.type })
                     });
                 }
                 if (action.type === UIActionType.CycleLayerAsset && (action as CycleLayerAssetAction).variableId === variableId) {
                     usages.push({
                         location: locationPrefix,
                         type: 'ui-action',
-                        detail: `Element "${element.name || element.type}": Cycles layer asset`
+                        detail: i18n.t('variables:usage.elCyclesLayer', { name: element.name || element.type })
                     });
                 }
             });
@@ -153,7 +155,7 @@ function checkUIElementsForVariableUsage(
             usages.push({
                 location: locationPrefix,
                 type: 'text-reference',
-                detail: `Element "${element.name || element.type}": Referenced in text`
+                detail: i18n.t('variables:usage.elTextRef', { name: element.name || element.type })
             });
         }
         
@@ -176,6 +178,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
     setSelectedVariableId: setControlledSelectedId
 }) => {
     const { dispatch } = useProject();
+    const { t } = useTranslation(['variables', 'common']);
     const [internalSelectedVariableId, setInternalSelectedVariableId] = useState<string | null>(null);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ variableId: string; usages: VariableUsage[] } | null>(null);
@@ -197,7 +200,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
     );
 
     const addVariable = () => {
-        const name = `new_variable_${Object.keys(project.variables || {}).length + 1}`;
+        const name = t('newVariableName', { n: Object.keys(project.variables || {}).length + 1 });
         dispatch({ type: 'ADD_VARIABLE', payload: { name, type: 'number', defaultValue: 0 } });
     };
 
@@ -243,7 +246,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                 <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <Cog6ToothIcon className="w-5 h-5" />
-                        Variables
+                        {t('listTitle')}
                     </h2>
                 </div>
 
@@ -268,7 +271,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                         className="w-full bg-sky-500 hover:bg-sky-600 text-white p-2 rounded-md flex items-center justify-center gap-2 font-bold transition-colors"
                     >
                         <PlusIcon className="w-4 h-4" />
-                        Add Variable
+                        {t('addVariable')}
                     </button>
                 </div>
             </div>
@@ -285,8 +288,8 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                     <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
                         <div className="text-center">
                             <Cog6ToothIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                            <p className="text-lg">Select a variable to inspect</p>
-                            <p className="text-sm">View and edit variable properties</p>
+                            <p className="text-lg">{t('selectToInspect')}</p>
+                            <p className="text-sm">{t('selectToInspectHint')}</p>
                         </div>
                     </div>
                 )}
@@ -298,17 +301,16 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                     isOpen={true}
                     onClose={() => setDeleteConfirm(null)}
                     onConfirm={() => handleDeleteVariable(deleteConfirm.variableId)}
-                    title={deleteConfirm.usages.length > 0 ? "Variable In Use" : "Delete Variable"}
-                    confirmLabel={deleteConfirm.usages.length > 0 ? "Delete Anyway" : "Delete"}
+                    title={deleteConfirm.usages.length > 0 ? t('delete.inUseTitle') : t('delete.deleteTitle')}
+                    confirmLabel={deleteConfirm.usages.length > 0 ? t('delete.deleteAnyway') : t('common:delete')}
                 >
                     {deleteConfirm.usages.length > 0 ? (
                         <div className="space-y-3">
                             <p className="text-[var(--text-primary)]">
-                                This variable is used in <strong>{deleteConfirm.usages.length}</strong> place{deleteConfirm.usages.length !== 1 ? 's' : ''}. 
-                                Deleting it may break your game!
+                                {t('delete.inUseBody', { count: deleteConfirm.usages.length })}
                             </p>
                             <div className="max-h-48 overflow-y-auto bg-[var(--bg-tertiary)] rounded-lg p-3">
-                                <p className="text-xs font-semibold text-[var(--text-secondary)] mb-2">Usages found:</p>
+                                <p className="text-xs font-semibold text-[var(--text-secondary)] mb-2">{t('delete.usagesFound')}</p>
                                 <ul className="space-y-1.5 text-sm">
                                     {deleteConfirm.usages.slice(0, 10).map((usage, i) => (
                                         <li key={i} className="flex items-start gap-2 text-[var(--text-secondary)]">
@@ -327,7 +329,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                                     ))}
                                     {deleteConfirm.usages.length > 10 && (
                                         <li className="text-xs text-[var(--text-secondary)] italic pt-1">
-                                            ...and {deleteConfirm.usages.length - 10} more
+                                            {t('delete.andMore', { count: deleteConfirm.usages.length - 10 })}
                                         </li>
                                     )}
                             </ul>
@@ -335,7 +337,7 @@ const VariableManager: React.FC<VariableManagerProps> = ({
                     </div>
                     ) : (
                         <p className="text-[var(--text-primary)]">
-                            Are you sure you want to delete this variable? This action cannot be undone.
+                            {t('delete.confirmBody')}
                         </p>
                     )}
                 </ConfirmationModal>
@@ -363,6 +365,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
     onCommitRename,
     onDelete
 }) => {
+    const { t } = useTranslation(['variables', 'common']);
     const { inputProps: renameInputProps } = useInlineRename(variable.name, onCommitRename);
 
     const getTypeIcon = (type: string) => {
@@ -409,17 +412,17 @@ const VariableItem: React.FC<VariableItemProps> = ({
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0">
-                <span className={`text-[10px] capitalize px-1.5 py-0.5 rounded ${sc.bg} ${sc.text} border ${sc.border}`}>
-                    {sc.label}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${sc.bg} ${sc.text} border ${sc.border}`}>
+                    {t(`scopes.${scope}`)}
                 </span>
-                <span className="text-xs text-[var(--text-secondary)] capitalize px-2 py-1 bg-[var(--bg-tertiary)] rounded">
-                    {variable.type}
+                <span className="text-xs text-[var(--text-secondary)] px-2 py-1 bg-[var(--bg-tertiary)] rounded">
+                    {t(`types.${variable.type}`)}
                 </span>
 
                 <button
                     onClick={(e) => { e.stopPropagation(); onStartRenaming(); }}
                     className="p-1 text-[var(--text-muted)] hover:text-sky-400 transition-opacity"
-                    title="Rename"
+                    title={t('common:rename')}
                 >
                     <PencilIcon className="w-3 h-3" />
                 </button>
@@ -431,7 +434,7 @@ const VariableItem: React.FC<VariableItemProps> = ({
                         onDelete(); 
                     }}
                     className="p-1 text-red-500 hover:text-red-400 transition-opacity"
-                    title="Delete"
+                    title={t('common:delete')}
                 >
                     <TrashIcon className="w-3 h-3" />
                 </button>
@@ -447,12 +450,13 @@ interface VariableInspectorProps {
 }
 
 const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, project, onUpdate }) => {
+    const { t } = useTranslation('variables');
     const variable = project.variables?.[variableId];
 
     if (!variable) {
         return (
             <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
-                <p>Variable not found</p>
+                <p>{t('notFound')}</p>
             </div>
         );
     }
@@ -481,11 +485,6 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
     };
 
     const currentScope: VNVariableScope = variable.scope || 'global';
-    const scopeDescriptions: Record<VNVariableScope, string> = {
-        local: 'Reset when the scene changes. Use for temporary/scene-specific state.',
-        global: 'Persists across scenes within a playthrough. Resets on new game.',
-        persistent: 'Saved permanently across play sessions. Use for CG Gallery unlocks, achievements, etc.',
-    };
 
     return (
         <div className="flex-1 p-4 overflow-y-auto">
@@ -493,42 +492,42 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
 
             <div className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Scope</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('scopeLabel')}</label>
                     <select
                         value={currentScope}
                         onChange={(e) => onUpdate({ scope: e.target.value as VNVariableScope })}
                         className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                     >
-                        <option value="local">🟢 Local (scene-scoped)</option>
-                        <option value="global">🔵 Global (playthrough)</option>
-                        <option value="persistent">🟡 Persistent (cross-session)</option>
+                        <option value="local">{t('scopeOptions.local')}</option>
+                        <option value="global">{t('scopeOptions.global')}</option>
+                        <option value="persistent">{t('scopeOptions.persistent')}</option>
                     </select>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">{scopeDescriptions[currentScope]}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">{t(`scopeDesc.${currentScope}`)}</p>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Type</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('typeLabel')}</label>
                     <select
                         value={variable.type}
                         onChange={(e) => handleTypeChange(e.target.value as 'number' | 'string' | 'boolean')}
                         className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                     >
-                        <option value="number">Number</option>
-                        <option value="string">String</option>
-                        <option value="boolean">Boolean</option>
+                        <option value="number">{t('types.number')}</option>
+                        <option value="string">{t('types.string')}</option>
+                        <option value="boolean">{t('types.boolean')}</option>
                     </select>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Default Value</label>
+                    <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('defaultValue')}</label>
                     {variable.type === 'boolean' ? (
                         <select
                             value={variable.defaultValue ? 'true' : 'false'}
                             onChange={(e) => handleDefaultValueChange(e.target.value === 'true')}
                             className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         >
-                            <option value="false">False</option>
-                            <option value="true">True</option>
+                            <option value="false">{t('boolean.false')}</option>
+                            <option value="true">{t('boolean.true')}</option>
                         </select>
                     ) : variable.type === 'number' ? (
                         <input
@@ -549,12 +548,12 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
 
                 <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-[var(--border-subtle)]">
                     <div>
-                        <span className="text-[var(--text-secondary)]">ID:</span>
+                        <span className="text-[var(--text-secondary)]">{t('idLabel')}</span>
                         <span className="text-white ml-2 font-mono text-xs">{variable.id}</span>
                     </div>
                     <div>
-                        <span className="text-[var(--text-secondary)]">Type:</span>
-                        <span className="text-white ml-2 capitalize">{variable.type}</span>
+                        <span className="text-[var(--text-secondary)]">{t('typeColon')}</span>
+                        <span className="text-white ml-2">{t(`types.${variable.type}`)}</span>
                     </div>
                 </div>
             </div>

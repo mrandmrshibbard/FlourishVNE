@@ -9,8 +9,15 @@ import { variableReducer } from '../features/variables/state/variableReducer';
 import { scriptReducer } from '../features/scripting/state/scriptReducer';
 import { commonEventReducer } from '../features/common-events/state/commonEventReducer';
 import { pluginReducer } from '../features/plugins/state/pluginReducer';
+import { itemReducer } from '../features/items/state/itemReducer';
 
-const reducers = [
+// Each slice reducer only handles its own actions and ignores the rest. We type
+// the list with an `any` action param so the (large) ProjectAction union isn't
+// instantiated across every reducer signature — that tips TS over its union
+// complexity limit (TS2590) once enough slices are registered.
+type SliceReducer = (state: VNProject, action: any) => VNProject;
+
+const reducers: SliceReducer[] = [
   projectReducer,
   assetReducer,
   characterReducer,
@@ -20,6 +27,7 @@ const reducers = [
   scriptReducer,
   commonEventReducer,
   pluginReducer,
+  itemReducer,
 ];
 
 export const rootReducer = (state: VNProject, action: ProjectAction): VNProject => {

@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useTheme, ThemeName } from '../contexts/ThemeContext';
 
 const ThemeSelector: React.FC = () => {
+  const { t } = useTranslation('components');
   const { themeName, setTheme, availableThemes } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
@@ -50,7 +52,7 @@ const ThemeSelector: React.FC = () => {
           color: 'var(--text-primary)',
           boxShadow: isOpen ? '0 0 15px color-mix(in srgb, var(--accent-lavender) 30%, transparent)' : 'none'
         }}
-        title="Change editor theme"
+        title={t('themeSelector.changeTheme')}
       >
         <span className="text-base">{currentTheme?.emoji || '🎨'}</span>
         <span
@@ -59,7 +61,7 @@ const ThemeSelector: React.FC = () => {
             background: `linear-gradient(135deg, ${currentTheme?.colors.accentPink} 0%, ${currentTheme?.colors.accentCyan} 50%, ${currentTheme?.colors.accentLavender} 100%)` 
           }}
         />
-        <span>Theme</span>
+        <span>{t('themeSelector.theme')}</span>
       </button>
 
       {isOpen && createPortal(
@@ -88,7 +90,7 @@ const ThemeSelector: React.FC = () => {
             }}
           />
           <div className="p-3 border-b border-[var(--border-subtle)]">
-            <span className="text-xs text-[var(--text-secondary)] font-semibold tracking-wide uppercase">✨ Editor Theme</span>
+            <span className="text-xs text-[var(--text-secondary)] font-semibold tracking-wide uppercase">✨ {t('themeSelector.editorTheme')}</span>
           </div>
           <div className="p-2">
             {availableThemes.map((theme) => {

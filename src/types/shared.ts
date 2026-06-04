@@ -12,6 +12,11 @@ export interface VNCondition {
     variableId: VNID;
     operator: VNConditionOperator;
     value?: string | number | boolean;
+    /** How this condition joins to the PREVIOUS one in the list. Ignored on the
+     *  first condition. Defaults to 'and' (so existing all-AND lists are unchanged).
+     *  Evaluated left-to-right with no operator precedence:
+     *  `A or B and C` === `((A or B) and C)`. */
+    connector?: 'and' | 'or';
 }
 
 // Moved from ui/types.ts
@@ -28,6 +33,10 @@ export enum UIActionType {
     JumpToScene = 'JumpToScene',
     JumpToLabel = 'JumpToLabel',
     SetVariable = 'SetVariable',
+    /** Resets a single variable (or all variables) back to its defined default value. */
+    ResetVariable = 'ResetVariable',
+    /** Plays a selected audio asset (one-shot or looping) when the button is clicked. */
+    PlaySound = 'PlaySound',
     CycleLayerAsset = 'CycleLayerAsset',
     ToggleScreen = 'ToggleScreen',
     OpenURL = 'OpenURL',
@@ -45,12 +54,22 @@ export enum UIActionType {
     SkipBackward = 'SkipBackward',
 }
 
-export interface BaseUIAction { type: UIActionType; }
+export interface BaseUIAction {
+    type: UIActionType;
+    /** Optional per-action conditions: when set, the action only fires if these
+     *  conditions are currently met. Lets a single button branch (e.g. a "Use"
+     *  button whose actions each check `selected_item == "key"`). */
+    conditions?: VNCondition[];
+}
 export interface GoToScreenAction extends BaseUIAction { type: UIActionType.GoToScreen; targetScreenId: VNID; }
 // FIX: Renamed targetScreenId to targetSceneId to match its purpose and usage.
 export interface JumpToSceneAction extends BaseUIAction { type: UIActionType.JumpToScene; targetSceneId: VNID; }
 export interface JumpToLabelAction extends BaseUIAction { type: UIActionType.JumpToLabel; targetLabel: string; }
 export interface SetVariableAction extends BaseUIAction { type: UIActionType.SetVariable; variableId: VNID; operator: VNSetVariableOperator; value: string | number | boolean; randomMin?: number; randomMax?: number; }
+/** Sentinel `variableId` for a ResetVariable action that resets every variable. */
+export const RESET_ALL_VARIABLES = '__ALL_VARIABLES__' as VNID;
+export interface ResetVariableAction extends BaseUIAction { type: UIActionType.ResetVariable; variableId: VNID; }
+export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlaySound; audioId: VNID; volume?: number; loop?: boolean; }
 export interface LoadGameAction extends BaseUIAction { type: UIActionType.LoadGame; slotNumber: number; }
 export interface SaveGameAction extends BaseUIAction { type: UIActionType.SaveGame; slotNumber: number; }
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
@@ -59,4 +78,4 @@ export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL
 export interface PlayAnimationAction extends BaseUIAction { type: UIActionType.PlayAnimation; targetElementId: VNID; animation: string; duration?: number; }
 export interface ChangeImageAction extends BaseUIAction { type: UIActionType.ChangeImage; targetElementId: VNID; newImageId: VNID; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction;

@@ -14,6 +14,9 @@ export type StageSize = { width: number; height: number };
 export interface TextOverlay {
     id: VNID;
     text: string;
+    /** Un-interpolated template (with {variable} tokens). When `live`, the renderer
+     *  re-interpolates this against current variables each frame so values update live. */
+    rawText?: string;
     x: number;
     y: number;
     fontSize: number;
@@ -32,6 +35,13 @@ export interface TextOverlay {
     transition?: VNTransition;
     duration?: number;
     action?: 'show' | 'hide';
+    // Orientation
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
+    /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
+    conditions?: import('../../../types/shared').VNCondition[];
+    live?: boolean;
 }
 
 export interface ImageOverlay {
@@ -48,9 +58,14 @@ export interface ImageOverlay {
     opacity: number;
     scaleX: number;
     scaleY: number;
+    flipX?: boolean;
+    flipY?: boolean;
     transition?: VNTransition;
     duration?: number;
     action?: 'show' | 'hide';
+    /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
+    conditions?: import('../../../types/shared').VNCondition[];
+    live?: boolean;
 }
 
 export interface ButtonOverlay {
@@ -80,6 +95,13 @@ export interface ButtonOverlay {
     transition?: VNTransition;
     duration?: number;
     action?: 'show' | 'hide';
+    // Orientation
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
+    /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
+    conditions?: import('../../../types/shared').VNCondition[];
+    live?: boolean;
 }
 
 export interface ImageMapRegionOverlay {
@@ -110,6 +132,26 @@ export interface ImageMapOverlay {
     action?: 'show' | 'hide';
 }
 
+/** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
+export interface HotSpotOverlay {
+    id: VNID;
+    /** The ShowHotSpot command id that placed it (for HideHotSpot targeting). */
+    commandId: VNID;
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    shape: 'rect' | 'circle';
+    trigger: 'click' | 'hover' | 'drag-drop';
+    actions: import('../../../types/shared').VNUIAction[];
+    conditions?: import('../../../types/shared').VNCondition[];
+    acceptedTag?: string;
+    highlightColor?: string;
+    visible?: boolean;
+    advanceOnTrigger?: boolean;
+}
+
 export interface StageCharacterTransition {
     type: VNTransition;
     duration: number;
@@ -136,6 +178,23 @@ export interface StageCharacterState {
     scale?: number;
     /** When true, character sprite is flipped horizontally */
     inverted?: boolean;
+    /** Rotation in degrees (positive = clockwise). */
+    rotation?: number;
+    /** When true, character sprite is flipped vertically. */
+    flipY?: boolean;
+    /** Live (reactive) conditions: when `live`, the character is shown only while met. */
+    conditions?: import('../../../types/shared').VNCondition[];
+    live?: boolean;
+}
+
+/** A live (reactive) conditional background candidate (from a live Set Background). */
+export interface BackgroundLayer {
+    commandId: VNID;
+    conditions?: import('../../../types/shared').VNCondition[];
+    url: string | null;
+    color?: string;
+    isVideo?: boolean;
+    loop?: boolean;
 }
 
 export interface StageState {
@@ -144,11 +203,15 @@ export interface StageState {
     backgroundLoop?: boolean;
     /** Solid color background (used when backgroundColor is set on the SetBackground command) */
     backgroundColor?: string;
+    /** Live conditional background candidates; render picks the last whose conditions match, else the base background. */
+    backgroundLayers?: BackgroundLayer[];
     characters: Record<VNID, StageCharacterState>;
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
     imageMapOverlays: ImageMapOverlay[];
+    /** Interactive scene hot spots (ShowHotSpot). Optional for back-compat with older saves. */
+    hotSpotOverlays?: HotSpotOverlay[];
     /** Persistent movie overlays (transparent, looping) that play behind characters */
     movieOverlays?: Array<{
         url: string;

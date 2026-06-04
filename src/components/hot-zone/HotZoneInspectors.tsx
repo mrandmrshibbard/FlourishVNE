@@ -12,6 +12,7 @@
  * operate on typed elements directly.
  */
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import {
@@ -210,6 +211,7 @@ export const HotSpotProperties: React.FC<{
     /** Removes this hot spot from the screen. */
     onDelete?: () => void;
 }> = ({ spot, project, targetableElements, onUpdate: typedOnUpdate, onDelete }) => {
+    const { t } = useTranslation('ui');
     // Inside the body we still operate on the legacy VNHotSpot shape (field
     // names match), so existing JSX builds Partial<VNHotSpot> patches; convert
     // to Partial<UIHotSpotElement> at the boundary.
@@ -224,7 +226,7 @@ export const HotSpotProperties: React.FC<{
     const targetable = targetableElements;
 
     return (
-        <Panel title="Properties: Hot Spot" className="w-96 flex-shrink-0">
+        <Panel title={t('hotZone.propsHotSpot')} className="w-96 flex-shrink-0">
             <div className="flex-grow overflow-y-auto pr-1 space-y-3 text-sm">
             <h4 className="font-bold text-sky-300 flex items-center gap-2">
                 Hot Spot Properties
@@ -234,7 +236,7 @@ export const HotSpotProperties: React.FC<{
             </h4>
 
             <label className="block">
-                <span className="text-[var(--text-secondary)] text-xs">Name</span>
+                <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.name')}</span>
                 <input
                     type="text"
                     value={spot.name}
@@ -245,34 +247,34 @@ export const HotSpotProperties: React.FC<{
 
             <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                    <span className="text-[var(--text-secondary)] text-xs">Shape</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.shape')}</span>
                     <select
                         value={spot.shape}
                         onChange={e => onUpdate({ shape: e.target.value as HotSpotShape })}
                         className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                     >
-                        <option value="rect">Rectangle</option>
-                        <option value="circle">Circle</option>
+                        <option value="rect">{t('hotZone.shapeRect')}</option>
+                        <option value="circle">{t('hotZone.shapeCircle')}</option>
                     </select>
                 </label>
                 <label className="block">
-                    <span className="text-[var(--text-secondary)] text-xs">Trigger</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.trigger')}</span>
                     <select
                         value={spot.trigger}
                         onChange={e => onUpdate({ trigger: e.target.value as HotSpotTrigger })}
                         className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                     >
-                        <option value="click">Click</option>
-                        <option value="hover">Hover</option>
-                        <option value="drag-drop">Drag & Drop</option>
+                        <option value="click">{t('hotZone.trigClick')}</option>
+                        <option value="hover">{t('hotZone.trigHover')}</option>
+                        <option value="drag-drop">{t('hotZone.trigDragDrop')}</option>
                     </select>
                 </label>
             </div>
 
             {spot.trigger === 'drag-drop' && (
                 <div>
-                    <span className="text-[var(--text-secondary)] text-xs font-semibold">Accepted Elements</span>
-                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Which elements can be dropped here?</p>
+                    <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.acceptedElements')}</span>
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hotZone.acceptedHint')}</p>
                     <div className="mt-0.5 space-y-0.5 max-h-28 overflow-y-auto">
                         {(Object.values(hotZoneElements) as VNHotZoneElement[]).map(el => {
                             const isAccepted = spot.acceptedElementIds?.includes(el.id) ?? false;
@@ -294,7 +296,7 @@ export const HotSpotProperties: React.FC<{
                             );
                         })}
                         {Object.keys(hotZoneElements).length === 0 && (
-                            <p className="text-[10px] text-slate-500 italic">No elements added yet</p>
+                            <p className="text-[10px] text-slate-500 italic">{t('hotZone.noElementsYet')}</p>
                         )}
                     </div>
                 </div>
@@ -302,7 +304,7 @@ export const HotSpotProperties: React.FC<{
 
             <div className="flex gap-2">
                 <label className="block flex-1">
-                    <span className="text-[var(--text-secondary)] text-xs">Highlight Color</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.highlightColor')}</span>
                     <input
                         type="color"
                         value={spot.highlightColor || '#3b82f6'}
@@ -316,12 +318,12 @@ export const HotSpotProperties: React.FC<{
                         checked={spot.visible ?? false}
                         onChange={e => onUpdate({ visible: e.target.checked })}
                     />
-                    <span className="text-[var(--text-secondary)] text-xs">Visible</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.visible')}</span>
                 </label>
             </div>
 
             <div>
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Position & Size</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.positionSize')}</span>
                 <div className="grid grid-cols-4 gap-1 mt-0.5">
                     {(['x', 'y', 'width', 'height'] as const).map(field => (
                         <label key={field} className="block">
@@ -338,7 +340,7 @@ export const HotSpotProperties: React.FC<{
             <hr className="border-[var(--border-subtle)]" />
 
             <div className="space-y-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Visibility Conditions</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.visibilityConditions')}</span>
                 <p className="text-[10px] text-[var(--text-muted)]">
                     Hot spot is only active when all conditions are met.
                 </p>
@@ -356,14 +358,14 @@ export const HotSpotProperties: React.FC<{
                 project={project}
                 targetableElements={targetable}
                 onChange={actions => onUpdate({ actions })}
-                label="Trigger Actions"
+                label={t('hotZone.triggerActions')}
             />
 
             {onDelete && (
                 <>
                     <hr className="border-[var(--border-subtle)]" />
                     <button onClick={onDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
-                        <TrashIcon /> Delete Hot Spot
+                        <TrashIcon /> {t('hotZone.deleteHotSpot')}
                     </button>
                 </>
             )}
@@ -382,6 +384,7 @@ export const HotZoneElementProperties: React.FC<{
     /** Removes this element (draggable / image map) from the screen. */
     onDelete?: () => void;
 }> = ({ element: typedElement, project, targetableElements, onUpdate: typedOnUpdate, onDelete }) => {
+    const { t } = useTranslation('ui');
     const element = toLegacyHotZoneElement(typedElement);
     if (!element) return null;
     // Existing JSX produces Partial<VNHotZoneElement> patches; translate at the
@@ -403,9 +406,9 @@ export const HotZoneElementProperties: React.FC<{
 
     const elType = element.elementType || 'image';
     const defaultFont: VNFontSettings = { family: 'sans-serif', size: 16, color: '#ffffff', weight: 'normal', italic: false };
-    const panelTitle = elType === 'imageMap' ? 'Properties: Image Map'
-        : element.draggable ? 'Properties: Draggable Element'
-        : `Properties: ${elType.charAt(0).toUpperCase()}${elType.slice(1)}`;
+    const panelTitle = elType === 'imageMap' ? t('hotZone.propsImageMap')
+        : element.draggable ? t('hotZone.propsDraggable')
+        : t('hotZone.propsType', { type: `${elType.charAt(0).toUpperCase()}${elType.slice(1)}` });
 
     return (
         <Panel title={panelTitle} className="w-96 flex-shrink-0">
@@ -420,7 +423,7 @@ export const HotZoneElementProperties: React.FC<{
             </h4>
 
             <label className="block">
-                <span className="text-[var(--text-secondary)] text-xs">Name</span>
+                <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.name')}</span>
                 <input
                     type="text"
                     value={element.name}
@@ -430,18 +433,18 @@ export const HotZoneElementProperties: React.FC<{
             </label>
 
             <label className="block">
-                <span className="text-[var(--text-secondary)] text-xs">Element Type</span>
+                <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.elementType')}</span>
                 <select
                     value={elType}
                     onChange={e => onUpdate({ elementType: e.target.value as HotZoneElementType })}
                     className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                 >
-                    <option value="image">Image</option>
-                    <option value="text">Text</option>
-                    <option value="button">Button</option>
-                    <option value="video">Video</option>
-                    <option value="textInput">Text Input</option>
-                    <option value="imageMap">Image Map</option>
+                    <option value="image">{t('hotZone.typeImage')}</option>
+                    <option value="text">{t('hotZone.typeText')}</option>
+                    <option value="button">{t('hotZone.typeButton')}</option>
+                    <option value="video">{t('hotZone.typeVideo')}</option>
+                    <option value="textInput">{t('hotZone.typeTextInput')}</option>
+                    <option value="imageMap">{t('hotZone.typeImageMap')}</option>
                 </select>
             </label>
 
@@ -453,7 +456,7 @@ export const HotZoneElementProperties: React.FC<{
                         onChange={e => onUpdate({ imageId: e.target.value as VNID })}
                         className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                     >
-                        <option value="">-- Select Image --</option>
+                        <option value="">{t('hotZone.selectImage')}</option>
                         {imageAssets.map((img: any) => (
                             <option key={img.id} value={img.id}>{img.name || img.id}</option>
                         ))}
@@ -463,31 +466,31 @@ export const HotZoneElementProperties: React.FC<{
 
             {elType === 'imageMap' && (
                 <label className="block">
-                    <span className="text-[var(--text-secondary)] text-xs">Hover State Image</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.hoverStateImage')}</span>
                     <select
                         value={element.hoverImageId || ''}
                         onChange={e => onUpdate({ hoverImageId: (e.target.value || undefined) as VNID | undefined })}
                         className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                     >
-                        <option value="">-- None --</option>
+                        <option value="">{t('hotZone.none')}</option>
                         {imageAssets.map((img: any) => (
                             <option key={img.id} value={img.id}>{img.name || img.id}</option>
                         ))}
                     </select>
-                    <span className="text-[var(--text-muted)] text-[9px]">Shown clipped to hovered region (Ren'Py-style)</span>
+                    <span className="text-[var(--text-muted)] text-[9px]">{t('hotZone.hoverClipNote')}</span>
                 </label>
             )}
 
             {elType === 'video' && (
                 <>
                     <label className="block">
-                        <span className="text-[var(--text-secondary)] text-xs">Video Asset</span>
+                        <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.videoAsset')}</span>
                         <select
                             value={element.videoId || ''}
                             onChange={e => onUpdate({ videoId: e.target.value as VNID })}
                             className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                         >
-                            <option value="">-- Select Video --</option>
+                            <option value="">{t('hotZone.selectVideo')}</option>
                             {Object.values(project.videos).map((v: any) => (
                                 <option key={v.id} value={v.id}>{v.name || v.id}</option>
                             ))}
@@ -511,48 +514,48 @@ export const HotZoneElementProperties: React.FC<{
             {elType === 'textInput' && (
                 <>
                     <label className="block">
-                        <span className="text-[var(--text-secondary)] text-xs">Bind to Variable</span>
+                        <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.bindToVariable')}</span>
                         <select
                             value={element.variableId || ''}
                             onChange={e => onUpdate({ variableId: e.target.value as VNID })}
                             className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                         >
-                            <option value="">-- Select Variable --</option>
+                            <option value="">{t('hotZone.selectVariable')}</option>
                             {Object.values(project.variables).map((v: any) => (
                                 <option key={v.id} value={v.id}>{v.name} ({v.type})</option>
                             ))}
                         </select>
                     </label>
                     <label className="block">
-                        <span className="text-[var(--text-secondary)] text-xs">Placeholder</span>
+                        <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.placeholder')}</span>
                         <input
                             type="text"
                             value={element.placeholder || ''}
                             onChange={e => onUpdate({ placeholder: e.target.value })}
-                            placeholder="Enter text..."
+                            placeholder={t('hotZone.enterText')}
                             className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                         />
                     </label>
                     <label className="block">
-                        <span className="text-[var(--text-secondary)] text-xs">Max Length</span>
+                        <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.maxLength')}</span>
                         <input
                             type="number"
                             value={element.maxLength || ''}
                             onChange={e => onUpdate({ maxLength: e.target.value ? Number(e.target.value) : undefined })}
-                            placeholder="No limit"
+                            placeholder={t('hotZone.noLimit')}
                             min={1}
                             className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                         />
                     </label>
                     <div className="grid grid-cols-2 gap-1">
                         <label className="block">
-                            <span className="text-[var(--text-muted)] text-[10px]">Background</span>
+                            <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.background')}</span>
                             <input type="color" value={element.backgroundColor || '#1e293b'}
                                 onChange={e => onUpdate({ backgroundColor: e.target.value })}
                                 className="w-full h-6 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
                         </label>
                         <label className="block">
-                            <span className="text-[var(--text-muted)] text-[10px]">Border</span>
+                            <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.border')}</span>
                             <input type="color" value={element.borderColor || '#475569'}
                                 onChange={e => onUpdate({ borderColor: e.target.value })}
                                 className="w-full h-6 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
@@ -588,37 +591,37 @@ export const HotZoneElementProperties: React.FC<{
                 return (
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                            <span className="text-[var(--text-secondary)] text-xs font-semibold">Clickable Regions ({regions.length})</span>
+                            <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.clickableRegions', { count: regions.length })}</span>
                             <button onClick={addRegion} className="flex items-center gap-1 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">
-                                <PlusIcon className="w-3 h-3" /> Add
+                                <PlusIcon className="w-3 h-3" /> {t('hotZone.add')}
                             </button>
                         </div>
 
                         {regions.map((region, idx) => (
                             <div key={region.id} className="p-2 bg-[var(--bg-primary)] rounded border border-emerald-500/30 space-y-1">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-emerald-300">Region {idx + 1}</span>
-                                    <button onClick={() => removeRegion(idx)} className="text-red-400 hover:text-red-300 p-0.5" title="Remove Region">
+                                    <span className="text-[10px] font-bold text-emerald-300">{t('hotZone.region', { n: idx + 1 })}</span>
+                                    <button onClick={() => removeRegion(idx)} className="text-red-400 hover:text-red-300 p-0.5" title={t('hotZone.removeRegion')}>
                                         <TrashIcon className="w-3 h-3" />
                                     </button>
                                 </div>
 
                                 <label className="block">
-                                    <span className="text-[var(--text-muted)] text-[10px]">Name</span>
+                                    <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.name')}</span>
                                     <input type="text" value={region.name} onChange={e => updateRegion(idx, { name: e.target.value })}
                                         className="w-full mt-0.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" />
                                 </label>
 
                                 <label className="block">
-                                    <span className="text-[var(--text-muted)] text-[10px]">Shape</span>
+                                    <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.shape')}</span>
                                     <select value={region.shape} onChange={e => {
                                         const shape = e.target.value as 'rect' | 'circle' | 'poly';
                                         const defaultCoords = shape === 'rect' ? [25, 25, 50, 50] : shape === 'circle' ? [50, 50, 25] : [25, 25, 75, 25, 75, 75, 25, 75];
                                         updateRegion(idx, { shape, coords: defaultCoords });
                                     }} className="w-full mt-0.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]">
-                                        <option value="rect">Rectangle</option>
-                                        <option value="circle">Circle</option>
-                                        <option value="poly">Polygon</option>
+                                        <option value="rect">{t('hotZone.shapeRect')}</option>
+                                        <option value="circle">{t('hotZone.shapeCircle')}</option>
+                                        <option value="poly">{t('hotZone.shapePoly')}</option>
                                     </select>
                                 </label>
 
@@ -655,7 +658,7 @@ export const HotZoneElementProperties: React.FC<{
 
                                 {region.shape === 'poly' && (
                                     <div className="space-y-1">
-                                        <span className="text-[var(--text-muted)] text-[10px]">Points (x%, y%)</span>
+                                        <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.points')}</span>
                                         {Array.from({ length: Math.floor(region.coords.length / 2) }).map((_, pi) => (
                                             <div key={pi} className="grid grid-cols-3 gap-1 items-end">
                                                 <input type="number" value={region.coords[pi * 2] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
@@ -663,22 +666,22 @@ export const HotZoneElementProperties: React.FC<{
                                                 <input type="number" value={region.coords[pi * 2 + 1] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }}
                                                     className="bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" title={`P${pi + 1} Y`} />
                                                 <button onClick={() => { const c = [...region.coords]; c.splice(pi * 2, 2); updateRegion(idx, { coords: c.length >= 2 ? c : [50, 50] }); }}
-                                                    className="text-red-400 hover:text-red-300 text-[10px] p-0.5" title="Remove Point">✕</button>
+                                                    className="text-red-400 hover:text-red-300 text-[10px] p-0.5" title={t('hotZone.removePoint')}>✕</button>
                                             </div>
                                         ))}
                                         <button onClick={() => updateRegion(idx, { coords: [...region.coords, 50, 50] })}
-                                            className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">+ Point</button>
+                                            className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white px-1.5 py-0.5 rounded transition-colors">{t('hotZone.addPoint')}</button>
                                     </div>
                                 )}
 
                                 <label className="block">
-                                    <span className="text-[var(--text-muted)] text-[10px]">Tooltip</span>
-                                    <input type="text" value={region.tooltip || ''} onChange={e => updateRegion(idx, { tooltip: e.target.value })} placeholder="Hover text..."
+                                    <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.tooltip')}</span>
+                                    <input type="text" value={region.tooltip || ''} onChange={e => updateRegion(idx, { tooltip: e.target.value })} placeholder={t('hotZone.hoverText')}
                                         className="w-full mt-0.5 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]" />
                                 </label>
 
                                 <label className="block">
-                                    <span className="text-[var(--text-muted)] text-[10px]">Highlight Color</span>
+                                    <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.highlightColor')}</span>
                                     <input type="color" value={region.highlightColor?.startsWith('rgba') ? '#10b981' : (region.highlightColor || '#10b981')}
                                         onChange={e => updateRegion(idx, { highlightColor: e.target.value + '4D' })}
                                         className="w-full h-5 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
@@ -689,7 +692,7 @@ export const HotZoneElementProperties: React.FC<{
                                     project={project}
                                     targetableElements={targetable}
                                     onChange={actions => updateRegion(idx, { actions })}
-                                    label="On Click Actions"
+                                    label={t('hotZone.onClickActions')}
                                 />
 
                                 <ConditionsEditor
@@ -705,12 +708,12 @@ export const HotZoneElementProperties: React.FC<{
 
             {(elType === 'text' || elType === 'button') && (
                 <label className="block">
-                    <span className="text-[var(--text-secondary)] text-xs">Text</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.text')}</span>
                     <input
                         type="text"
                         value={element.text || ''}
                         onChange={e => onUpdate({ text: e.target.value })}
-                        placeholder="Display text..."
+                        placeholder={t('hotZone.displayText')}
                         className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                     />
                 </label>
@@ -721,17 +724,17 @@ export const HotZoneElementProperties: React.FC<{
                 const updateFont = (updates: Partial<VNFontSettings>) => onUpdate({ font: { ...font, ...updates } });
                 return (
                     <div className="space-y-1">
-                        <span className="text-[var(--text-secondary)] text-xs font-semibold">Font</span>
+                        <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.font')}</span>
                         <div className="grid grid-cols-2 gap-1">
                             <input type="number" value={font.size} min={8} max={120}
                                 onChange={e => updateFont({ size: Number(e.target.value) })}
                                 className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
-                                title="Font size"
+                                title={t('hotZone.fontSize')}
                             />
                             <input type="color" value={font.color}
                                 onChange={e => updateFont({ color: e.target.value })}
                                 className="h-6 bg-transparent border border-[var(--border-default)] rounded cursor-pointer"
-                                title="Text color"
+                                title={t('hotZone.textColor')}
                             />
                         </div>
                         <div className="flex gap-2">
@@ -749,40 +752,40 @@ export const HotZoneElementProperties: React.FC<{
             })()}
 
             <div className="space-y-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Sounds</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.sounds')}</span>
                 <label className="block">
-                    <span className="text-[var(--text-muted)] text-[10px]">Click Sound</span>
+                    <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.clickSound')}</span>
                     <select
                         value={element.clickSoundId || ''}
                         onChange={e => onUpdate({ clickSoundId: (e.target.value || null) as VNID | null })}
                         className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
                     >
-                        <option value="">None</option>
+                        <option value="">{t('hotZone.noneOption')}</option>
                         {audioAssets.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                     </select>
                 </label>
                 <label className="block">
-                    <span className="text-[var(--text-muted)] text-[10px]">Hover Sound</span>
+                    <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.hoverSound')}</span>
                     <select
                         value={element.hoverSoundId || ''}
                         onChange={e => onUpdate({ hoverSoundId: (e.target.value || null) as VNID | null })}
                         className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
                     >
-                        <option value="">None</option>
+                        <option value="">{t('hotZone.noneOption')}</option>
                         {audioAssets.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                     </select>
                 </label>
             </div>
 
             <div className="space-y-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Behavior</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.behavior')}</span>
                 <label className="flex items-center gap-2 text-xs px-1 py-0.5 rounded hover:bg-[var(--bg-secondary)]">
                     <input
                         type="checkbox"
                         checked={element.draggable ?? false}
                         onChange={e => onUpdate({ draggable: e.target.checked })}
                     />
-                    <span className="text-[var(--text-secondary)]">Draggable by player</span>
+                    <span className="text-[var(--text-secondary)]">{t('hotZone.draggableByPlayer')}</span>
                 </label>
 
                 {element.draggable && (
@@ -793,7 +796,7 @@ export const HotZoneElementProperties: React.FC<{
                                 checked={element.snapBack ?? false}
                                 onChange={e => onUpdate({ snapBack: e.target.checked })}
                             />
-                            <span className="text-[var(--text-secondary)]">Snap back if not on hot spot</span>
+                            <span className="text-[var(--text-secondary)]">{t('hotZone.snapBack')}</span>
                         </label>
                         <label className="flex items-center gap-2 text-xs px-1 py-0.5 rounded hover:bg-[var(--bg-secondary)] ml-3">
                             <input
@@ -801,7 +804,7 @@ export const HotZoneElementProperties: React.FC<{
                                 checked={element.snapToHotSpot ?? false}
                                 onChange={e => onUpdate({ snapToHotSpot: e.target.checked })}
                             />
-                            <span className="text-[var(--text-secondary)]">Snap to hot spot center</span>
+                            <span className="text-[var(--text-secondary)]">{t('hotZone.snapCenter')}</span>
                         </label>
                         {element.snapToHotSpot && (
                             <label className="flex items-center gap-2 text-xs px-1 py-0.5 rounded hover:bg-[var(--bg-secondary)] ml-6">
@@ -810,7 +813,7 @@ export const HotZoneElementProperties: React.FC<{
                                     checked={element.hideOnDrop ?? false}
                                     onChange={e => onUpdate({ hideOnDrop: e.target.checked })}
                                 />
-                                <span className="text-[var(--text-secondary)]">Hide on drop</span>
+                                <span className="text-[var(--text-secondary)]">{t('hotZone.hideOnDrop')}</span>
                             </label>
                         )}
                     </>
@@ -818,7 +821,7 @@ export const HotZoneElementProperties: React.FC<{
             </div>
 
             <div>
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Position & Size</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.positionSize')}</span>
                 <div className="grid grid-cols-4 gap-1 mt-0.5">
                     {(['x', 'y', 'width', 'height'] as const).map(field => (
                         <label key={field} className="block">
@@ -835,7 +838,7 @@ export const HotZoneElementProperties: React.FC<{
             <hr className="border-[var(--border-subtle)]" />
 
             <div className="space-y-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">Visibility Conditions</span>
+                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.visibilityConditions')}</span>
                 <p className="text-[10px] text-[var(--text-muted)]">
                     Element is only shown when all conditions are met.
                 </p>
@@ -853,7 +856,7 @@ export const HotZoneElementProperties: React.FC<{
                 project={project}
                 targetableElements={targetable}
                 onChange={actions => onUpdate({ actions })}
-                label={element.draggable ? 'Click Actions (non-drag)' : 'Click Actions'}
+                label={element.draggable ? t('hotZone.clickActionsNonDrag') : t('hotZone.clickActions')}
             />
 
             {onDelete && (

@@ -131,6 +131,7 @@ export const createInitialProject = (): VNProject => {
         audio: {},
         videos: {},
         variables: {},
+        items: {},
         fonts: {},
         ui: {
             ...specialIds,

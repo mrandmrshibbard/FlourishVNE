@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
@@ -26,10 +27,11 @@ const ParamSlider: React.FC<{ label: string; value: number; onChange: (v: number
 );
 
 const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
+    const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const screen = project.uiScreens[screenId];
 
-    if (!screen) return <Panel title="Properties">Screen not found.</Panel>;
+    if (!screen) return <Panel title={t('screenInspector.propertiesTitle')}>{t('screenInspector.notFound')}</Panel>;
 
     const updateScreen = (updates: Partial<VNUIScreen>) => {
         dispatch({ type: 'UPDATE_UI_SCREEN', payload: { screenId, updates }});
@@ -67,16 +69,16 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     };
 
     return (
-        <Panel title="Screen Properties" className="w-96 flex-shrink-0">
+        <Panel title={t('screenInspector.title')} className="w-96 flex-shrink-0">
             <div className="flex-grow overflow-y-auto pr-1">
-                <FormField label="Screen Name">
+                <FormField label={t('screenInspector.screenName')}>
                     <TextInput value={screen.name} onChange={e => updateScreen({ name: e.target.value })} disabled={isSpecialScreen} />
                 </FormField>
 
                 <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">Background</h3>
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.background')}</h3>
                 <div className="grid grid-cols-2 gap-2">
-                    <FormField label="Type">
+                    <FormField label={t('screenInspector.type')}>
                          <Select value={screen.background.type} onChange={e => {
                             const newType = e.target.value as 'color' | 'image' | 'video';
                             if (newType === 'color') {
@@ -85,17 +87,17 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                 updateScreen({ background: { type: newType, assetId: null }});
                             }
                          }}>
-                            <option value="color">Color</option>
-                            <option value="image">Image</option>
-                            <option value="video">Video</option>
+                            <option value="color">{t('screenInspector.bgColor')}</option>
+                            <option value="image">{t('screenInspector.bgImage')}</option>
+                            <option value="video">{t('screenInspector.bgVideo')}</option>
                         </Select>
                     </FormField>
                     {screen.background.type === 'color' ? (
-                        <FormField label="Color Value">
+                        <FormField label={t('screenInspector.colorValue')}>
                             <ColorInput value={screen.background.value} onChange={val => updateScreen({ background: { type: 'color', value: val }})} className="p-1 h-10"/>
                         </FormField>
                     ) : (
-                         <AssetSelector label="Asset" assetType={screen.background.type === 'image' ? 'images' : 'videos'} allowVideo value={screen.background.assetId} 
+                         <AssetSelector label={t('screenInspector.asset')} assetType={screen.background.type === 'image' ? 'images' : 'videos'} allowVideo value={screen.background.assetId}
                             onChange={id => {
                                 if (screen.background.type !== 'color') {
                                     updateScreen({ background: { type: screen.background.type, assetId: id }});
@@ -105,82 +107,94 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 </div>
 
                 <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">Music</h3>
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.music')}</h3>
                  <div className="grid grid-cols-2 gap-2">
-                    <AssetSelector label="Track" assetType="audio" value={screen.music.audioId} onChange={id => updateScreen({ music: { ...screen.music, audioId: id } })} />
-                    <FormField label="Playback Policy">
+                    <AssetSelector label={t('screenInspector.track')} assetType="audio" value={screen.music.audioId} onChange={id => updateScreen({ music: { ...screen.music, audioId: id } })} />
+                    <FormField label={t('screenInspector.playbackPolicy')}>
                          <Select value={screen.music.policy} onChange={e => updateScreen({ music: { ...screen.music, policy: e.target.value as any }})}>
-                            <option value="continue">Continue</option>
-                            <option value="stop">Stop on Exit</option>
+                            <option value="continue">{t('screenInspector.continue')}</option>
+                            <option value="stop">{t('screenInspector.stopOnExit')}</option>
                         </Select>
                     </FormField>
                 </div>
-                <FormField label={`Default Volume: ${Math.round((screen.music.volume ?? 1) * 100)}%`}>
+                <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.music.volume ?? 1) * 100) })}>
                     <input type="range" min="0" max="100" value={Math.round((screen.music.volume ?? 1) * 100)}
                         onChange={e => updateScreen({ music: { ...screen.music, volume: parseInt(e.target.value) / 100 } })}
                         className="w-full accent-purple-500" />
                 </FormField>
 
                 <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">Ambient Noise</h3>
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.ambientNoise')}</h3>
                  <div className="grid grid-cols-2 gap-2">
-                    <AssetSelector label="Track" assetType="audio" value={screen.ambientNoise.audioId} onChange={id => updateScreen({ ambientNoise: { ...screen.ambientNoise, audioId: id } })} />
-                    <FormField label="Playback Policy">
+                    <AssetSelector label={t('screenInspector.track')} assetType="audio" value={screen.ambientNoise.audioId} onChange={id => updateScreen({ ambientNoise: { ...screen.ambientNoise, audioId: id } })} />
+                    <FormField label={t('screenInspector.playbackPolicy')}>
                          <Select value={screen.ambientNoise.policy} onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, policy: e.target.value as any }})}>
-                            <option value="continue">Continue</option>
-                            <option value="stop">Stop on Exit</option>
+                            <option value="continue">{t('screenInspector.continue')}</option>
+                            <option value="stop">{t('screenInspector.stopOnExit')}</option>
                         </Select>
                     </FormField>
                 </div>
-                <FormField label={`Default Volume: ${Math.round((screen.ambientNoise.volume ?? 1) * 100)}%`}>
+                <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.ambientNoise.volume ?? 1) * 100) })}>
                     <input type="range" min="0" max="100" value={Math.round((screen.ambientNoise.volume ?? 1) * 100)}
                         onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, volume: parseInt(e.target.value) / 100 } })}
                         className="w-full accent-purple-500" />
                 </FormField>
 
                 <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">Screen Transitions</h3>
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.transitions')}</h3>
                 <div className="grid grid-cols-2 gap-2">
-                    <FormField label="Transition In">
+                    <FormField label={t('screenInspector.transitionIn')}>
                         <Select value={screen.transitionIn || 'fade'} onChange={e => updateScreen({ transitionIn: e.target.value as any })}>
-                            <option value="none">None</option>
-                            <option value="fade">Fade</option>
-                            <option value="crossfade">Crossfade</option>
-                            <option value="slideUp">Slide Up</option>
-                            <option value="slideDown">Slide Down</option>
-                            <option value="slideLeft">Slide Left</option>
-                            <option value="slideRight">Slide Right</option>
+                            <option value="none">{t('screenInspector.transNone')}</option>
+                            <option value="fade">{t('screenInspector.transFade')}</option>
+                            <option value="crossfade">{t('screenInspector.transCrossfade')}</option>
+                            <option value="slideUp">{t('screenInspector.transSlideUp')}</option>
+                            <option value="slideDown">{t('screenInspector.transSlideDown')}</option>
+                            <option value="slideLeft">{t('screenInspector.transSlideLeft')}</option>
+                            <option value="slideRight">{t('screenInspector.transSlideRight')}</option>
                         </Select>
                     </FormField>
-                    <FormField label="Transition Out">
+                    <FormField label={t('screenInspector.transitionOut')}>
                         <Select value={screen.transitionOut || 'fade'} onChange={e => updateScreen({ transitionOut: e.target.value as any })}>
-                            <option value="none">None</option>
-                            <option value="fade">Fade</option>
-                            <option value="crossfade">Crossfade</option>
-                            <option value="slideUp">Slide Up</option>
-                            <option value="slideDown">Slide Down</option>
-                            <option value="slideLeft">Slide Left</option>
-                            <option value="slideRight">Slide Right</option>
+                            <option value="none">{t('screenInspector.transNone')}</option>
+                            <option value="fade">{t('screenInspector.transFade')}</option>
+                            <option value="crossfade">{t('screenInspector.transCrossfade')}</option>
+                            <option value="slideUp">{t('screenInspector.transSlideUp')}</option>
+                            <option value="slideDown">{t('screenInspector.transSlideDown')}</option>
+                            <option value="slideLeft">{t('screenInspector.transSlideLeft')}</option>
+                            <option value="slideRight">{t('screenInspector.transSlideRight')}</option>
                         </Select>
                     </FormField>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <FormField label="Fade In Duration (ms)">
+                    <FormField label={t('screenInspector.fadeInDuration')}>
                         <TextInput type="number" value={screen.transitionInDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionInDuration: parseInt(e.target.value) || 300 })} />
                     </FormField>
-                    <FormField label="Fade Out Duration (ms)">
+                    <FormField label={t('screenInspector.fadeOutDuration')}>
                         <TextInput type="number" value={screen.transitionOutDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionOutDuration: parseInt(e.target.value) || 300 })} />
                     </FormField>
                 </div>
 
                 <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">Dialogue Box</h3>
-                <FormField label="Show Dialogue">
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.dialogueBox')}</h3>
+                <FormField label={t('screenInspector.showDialogue')}>
                     <input type="checkbox" checked={screen.showDialogue || false} onChange={e => updateScreen({ showDialogue: e.target.checked })} className="w-5 h-5" />
                 </FormField>
 
                 <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">Screen Effects</h3>
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.overlayBehavior')}</h3>
+                <FormField label={t('screenInspector.passThrough')}>
+                    <input
+                        type="checkbox"
+                        checked={screen.passThrough ?? (screenId === project.ui.gameHudScreenId)}
+                        onChange={e => updateScreen({ passThrough: e.target.checked })}
+                        className="w-5 h-5"
+                    />
+                </FormField>
+                <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.passThroughHint')}</p>
+
+                <hr className="border-slate-700 my-4" />
+                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.screenEffects')}</h3>
 
                 {([
                     { type: 'crtScanlines' as const, label: 'CRT Scanlines',
@@ -203,7 +217,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     { type: 'snowAsh' as const, label: 'Snow / Ash', supportsColor: true, defaultColor: '#FFFFFF',
                       extraParams: ['particleSize', 'windStrength', 'speed'] as const,
                       paramLabels: { particleSize: 'Particle Size', windStrength: 'Wind Strength', speed: 'Fall Speed' } },
-                ] as const).map(({ type, label, supportsColor, defaultColor, extraParams, paramLabels, supportsBlend }) => {
+                ] as const).map(({ type, supportsColor, defaultColor, extraParams, supportsBlend }) => {
                     const intensity = getIntensity(type);
                     const enabled = intensity > 0;
                     const effectColor = getColor(type);
@@ -228,14 +242,14 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         }
                                     }}
                                 />
-                                <span>{label}</span>
+                                <span>{t('screenInspector.effects.' + type)}</span>
                             </label>
 
                             {enabled && (
                                 <>
                                     <div className="mt-2">
                                         <div className="text-xs text-slate-300 mb-1 flex justify-between">
-                                            <span>Intensity</span>
+                                            <span>{t('screenInspector.intensity')}</span>
                                             <span>{Math.round(intensity * 100)}%</span>
                                         </div>
                                         <input
@@ -254,7 +268,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         {extraParams.map(pKey => (
                                             <ParamSlider
                                                 key={pKey}
-                                                label={(paramLabels as Record<string, string>)[pKey] || pKey}
+                                                label={t('screenInspector.params.' + type + '.' + pKey)}
                                                 value={typeof params[pKey] === 'number' ? (params[pKey] as number) : 0.5}
                                                 onChange={v => updateParam(pKey, v)}
                                             />
@@ -262,15 +276,15 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
 
                                         {supportsBlend && (
                                             <div className="mt-1">
-                                                <div className="text-xs text-slate-400 mb-0.5">Blend Mode</div>
+                                                <div className="text-xs text-slate-400 mb-0.5">{t('screenInspector.blendMode')}</div>
                                                 <Select
                                                     value={params.blendMode || (type === 'sunbeams' ? 'screen' : 'overlay')}
                                                     onChange={e => updateParam('blendMode', e.target.value)}
                                                 >
-                                                    <option value="screen">Screen</option>
-                                                    <option value="overlay">Overlay</option>
-                                                    <option value="soft-light">Soft Light</option>
-                                                    <option value="normal">Normal</option>
+                                                    <option value="screen">{t('screenInspector.blendScreen')}</option>
+                                                    <option value="overlay">{t('screenInspector.blendOverlay')}</option>
+                                                    <option value="soft-light">{t('screenInspector.blendSoftLight')}</option>
+                                                    <option value="normal">{t('screenInspector.blendNormal')}</option>
                                                 </Select>
                                             </div>
                                         )}
@@ -279,24 +293,24 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         {type === 'shimmer' && (
                                             <>
                                                 <div className="mt-1">
-                                                    <div className="text-xs text-slate-400 mb-0.5">Side</div>
+                                                    <div className="text-xs text-slate-400 mb-0.5">{t('screenInspector.side')}</div>
                                                     <Select
                                                         value={(params as any).shimmerSide || 'full'}
                                                         onChange={e => updateParam('shimmerSide' as any, e.target.value)}
                                                     >
-                                                        <option value="full">Full Screen</option>
-                                                        <option value="left">Left Side</option>
-                                                        <option value="right">Right Side</option>
+                                                        <option value="full">{t('screenInspector.sideFull')}</option>
+                                                        <option value="left">{t('screenInspector.sideLeft')}</option>
+                                                        <option value="right">{t('screenInspector.sideRight')}</option>
                                                     </Select>
                                                 </div>
                                                 <div className="mt-1">
-                                                    <div className="text-xs text-slate-400 mb-0.5">Direction</div>
+                                                    <div className="text-xs text-slate-400 mb-0.5">{t('screenInspector.direction')}</div>
                                                     <Select
                                                         value={(params as any).shimmerDirection || 'up'}
                                                         onChange={e => updateParam('shimmerDirection' as any, e.target.value)}
                                                     >
-                                                        <option value="up">Drift Up</option>
-                                                        <option value="down">Drift Down</option>
+                                                        <option value="up">{t('screenInspector.driftUp')}</option>
+                                                        <option value="down">{t('screenInspector.driftDown')}</option>
                                                     </Select>
                                                 </div>
                                                 <label className="flex items-center gap-2 text-xs text-slate-300 mt-1 cursor-pointer">
@@ -305,7 +319,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                                         checked={!!(params as any).shimmerParticlesOnly}
                                                         onChange={e => updateParam('shimmerParticlesOnly' as any, e.target.checked as any)}
                                                     />
-                                                    Particles Only (no light waves)
+                                                    {t('screenInspector.particlesOnly')}
                                                 </label>
                                             </>
                                         )}
@@ -313,7 +327,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
 
                                     {supportsColor && (
                                         <div className="mt-2">
-                                            <div className="text-xs text-slate-300 mb-1">Color</div>
+                                            <div className="text-xs text-slate-300 mb-1">{t('screenInspector.color')}</div>
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="color"
@@ -332,22 +346,22 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                                     type="button"
                                                     onClick={() => setEffect(type, intensity, variant, defaultColor, params)}
                                                     className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 rounded"
-                                                    title="Reset to default color"
+                                                    title={t('screenInspector.resetColorTitle')}
                                                 >
-                                                    Reset
+                                                    {t('screenInspector.reset')}
                                                 </button>
                                             </div>
                                         </div>
                                     )}
 
                                     {type === 'snowAsh' && (
-                                        <FormField label="Mode">
+                                        <FormField label={t('screenInspector.mode')}>
                                             <Select
                                                 value={getSnowAshVariant()}
                                                 onChange={(e) => setEffect('snowAsh', intensity, e.target.value as any, effectColor || undefined, params)}
                                             >
-                                                <option value="snow">Snow</option>
-                                                <option value="ash">Ash</option>
+                                                <option value="snow">{t('screenInspector.snow')}</option>
+                                                <option value="ash">{t('screenInspector.ash')}</option>
                                             </Select>
                                         </FormField>
                                     )}
@@ -363,10 +377,9 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 routes to HotZoneEditor for detail editing (until Phase 3 brings overlays
                 directly into MenuEditor). */}
             <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
-                <h3 className="text-sm font-bold text-purple-300 mb-2">Interactivity</h3>
+                <h3 className="text-sm font-bold text-purple-300 mb-2">{t('screenInspector.interactivity')}</h3>
                 <p className="text-[10px] text-[var(--text-muted)] mb-2">
-                    Hot spots, draggable elements, and image maps work on any screen. Adding one switches
-                    the editor into Hot Zone mode for detail editing.
+                    {t('screenInspector.interactivityHint')}
                 </p>
                 <div className="space-y-1">
                     <button
@@ -377,7 +390,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             ).length;
                             const newSpot: UIHotSpotElement = {
                                 id,
-                                name: `Hot Spot ${existingCount + 1}`,
+                                name: t('screenInspector.hotSpotName', { n: existingCount + 1 }),
                                 type: UIElementType.HotSpot,
                                 shape: 'rect',
                                 trigger: 'click',
@@ -390,7 +403,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         }}
                         className="w-full text-left text-xs bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 px-2 py-1.5 rounded transition-colors"
                     >
-                        + Add Hot Spot
+                        {t('screenInspector.addHotSpot')}
                     </button>
                     <button
                         onClick={() => {
@@ -403,7 +416,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             // element in the hot zone editor even if `draggable` is toggled off later.
                             const newEl: UIImageElement = {
                                 id,
-                                name: `Draggable ${draggableCount + 1}`,
+                                name: t('screenInspector.draggableName', { n: draggableCount + 1 }),
                                 type: UIElementType.Image,
                                 background: { type: 'color', value: '#00000000' },
                                 image: null,
@@ -418,7 +431,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         }}
                         className="w-full text-left text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 px-2 py-1.5 rounded transition-colors"
                     >
-                        + Add Draggable Element
+                        {t('screenInspector.addDraggable')}
                     </button>
                     <button
                         onClick={() => {
@@ -428,7 +441,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             ).length;
                             const newEl: UIImageMapElement = {
                                 id,
-                                name: `Image Map ${mapCount + 1}`,
+                                name: t('screenInspector.imageMapName', { n: mapCount + 1 }),
                                 type: UIElementType.ImageMap,
                                 image: null,
                                 imageMapRegions: [],
@@ -440,7 +453,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         }}
                         className="w-full text-left text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 px-2 py-1.5 rounded transition-colors"
                     >
-                        + Add Image Map
+                        {t('screenInspector.addImageMap')}
                     </button>
                 </div>
             </div>

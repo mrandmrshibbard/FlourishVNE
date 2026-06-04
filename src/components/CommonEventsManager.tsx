@@ -8,6 +8,8 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { useProject } from '../contexts/ProjectContext';
 import { VNCommonEvent, CommonEventParameter, CommonEventTrigger, createDefaultCommonEvent, createCommonEventParameter } from '../types/commonEvents';
 import { CommandType, VNCommand } from '../features/scene/types';
@@ -43,10 +45,8 @@ const TRIGGER_LABELS: Record<CommonEventTrigger, { label: string; description: s
     },
 };
 
-const formatCommandName = (type: string): string => {
-    if (type === 'BranchStart') return 'Branch';
-    return type.replace(/([A-Z])/g, ' $1').trim();
-};
+const formatCommandName = (type: string): string =>
+    i18n.t(`commands:names.${type}`, { defaultValue: type.replace(/([A-Z])/g, ' $1').trim() });
 
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                     */
@@ -58,6 +58,7 @@ interface CommonEventsManagerProps {
 
 const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) => {
     const { dispatch } = useProject();
+    const { t } = useTranslation(['commonEvents', 'common']);
     const commonEvents = useMemo(
         () => Object.values(project.commonEvents || {}) as VNCommonEvent[],
         [project.commonEvents]
@@ -89,7 +90,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
     /* ------------------------------------------------------------ */
 
     const handleCreate = useCallback(() => {
-        const name = newEventName.trim() || `Common Event ${commonEvents.length + 1}`;
+        const name = newEventName.trim() || t('defaultName', { n: commonEvents.length + 1 });
         const ce = createDefaultCommonEvent(name);
         dispatch({ type: 'ADD_COMMON_EVENT', payload: { commonEvent: ce } });
         setSelectedEventId(ce.id);
@@ -98,7 +99,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
     }, [dispatch, newEventName, commonEvents.length]);
 
     const handleDelete = useCallback((id: VNID) => {
-        if (!confirm('Delete this Common Event? Any "Call Common Event" commands referencing it will be cleared.')) return;
+        if (!confirm(t('deleteConfirm'))) return;
         dispatch({ type: 'DELETE_COMMON_EVENT', payload: { commonEventId: id } });
         if (selectedEventId === id) {
             const remaining = commonEvents.filter(e => e.id !== id);
@@ -272,7 +273,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                 {/* Header */}
                 <div className="p-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--border-subtle)' }}>
                     <CommonEventsIcon className="w-4 h-4 text-amber-400" />
-                    <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Common Events</h2>
+                    <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{t('title')}</h2>
                     <span className="text-xs ml-auto px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-amber, #f59e0b)', color: '#fff' }}>
                         {commonEvents.length}
                     </span>
@@ -286,7 +287,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search events..."
+                            placeholder={t('searchPlaceholder')}
                             className="w-full pl-7 pr-2 py-1 rounded text-xs outline-none"
                             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                         />
@@ -300,7 +301,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                         className="w-full py-1.5 px-2 rounded text-xs flex items-center justify-center gap-1 font-bold transition-colors"
                         style={{ background: 'var(--accent-amber, #f59e0b)', color: '#fff' }}
                     >
-                        <PlusIcon className="w-3 h-3" /> New Common Event
+                        <PlusIcon className="w-3 h-3" /> {t('newEvent')}
                     </button>
                 </div>
 
@@ -312,14 +313,14 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                             value={newEventName}
                             onChange={e => setNewEventName(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                            placeholder="Event name..."
+                            placeholder={t('eventNamePlaceholder')}
                             className="w-full px-2 py-1 rounded text-xs outline-none ring-1 ring-amber-500 mb-1"
                             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                             autoFocus
                         />
                         <div className="flex gap-1">
-                            <button onClick={handleCreate} className="flex-1 py-1 rounded text-xs text-white" style={{ background: 'var(--accent-amber, #f59e0b)' }}>Create</button>
-                            <button onClick={() => setShowNewDialog(false)} className="flex-1 py-1 rounded text-xs" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Cancel</button>
+                            <button onClick={handleCreate} className="flex-1 py-1 rounded text-xs text-white" style={{ background: 'var(--accent-amber, #f59e0b)' }}>{t('create')}</button>
+                            <button onClick={() => setShowNewDialog(false)} className="flex-1 py-1 rounded text-xs" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{t('common:cancel')}</button>
                         </div>
                     </div>
                 )}
@@ -331,8 +332,8 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                             <CommonEventsIcon className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
                             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                                 {commonEvents.length === 0
-                                    ? 'No Common Events yet.\nCreate one to build reusable command sequences.'
-                                    : 'No matching events found.'}
+                                    ? t('emptyListNew')
+                                    : t('emptyListNoMatch')}
                             </p>
                         </div>
                     ) : (
@@ -374,21 +375,21 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                             <button
                                                 onClick={e => { e.stopPropagation(); handleRenameStart(event); }}
                                                 className="p-0.5 rounded hover:bg-white/10"
-                                                title="Rename"
+                                                title={t('common:rename')}
                                             >
                                                 <PencilIcon className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
                                             </button>
                                             <button
                                                 onClick={e => { e.stopPropagation(); handleDuplicate(event.id); }}
                                                 className="p-0.5 rounded hover:bg-white/10"
-                                                title="Duplicate"
+                                                title={t('common:duplicate')}
                                             >
                                                 <DuplicateIcon className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
                                             </button>
                                             <button
                                                 onClick={e => { e.stopPropagation(); handleDelete(event.id); }}
                                                 className="p-0.5 rounded hover:bg-red-500/20"
-                                                title="Delete"
+                                                title={t('common:delete')}
                                             >
                                                 <TrashIcon className="w-3 h-3 text-red-400" />
                                             </button>
@@ -396,14 +397,14 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                     </div>
                                     <div className="flex items-center gap-1.5 pl-3.5">
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${triggerInfo.color}`}>
-                                            {triggerInfo.label}
+                                            {t(`triggers.${event.trigger}`)}
                                         </span>
                                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                                            {event.commands.length} cmd{event.commands.length !== 1 ? 's' : ''}
+                                            {t('cmdCount', { count: event.commands.length })}
                                         </span>
                                         {event.parameters.length > 0 && (
                                             <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                                                {event.parameters.length} param{event.parameters.length !== 1 ? 's' : ''}
+                                                {t('paramCount', { count: event.parameters.length })}
                                             </span>
                                         )}
                                     </div>
@@ -428,7 +429,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                 )}
                             </div>
                             <span className={`text-xs px-2 py-1 rounded-full border ${TRIGGER_LABELS[selectedEvent.trigger].color}`}>
-                                {TRIGGER_LABELS[selectedEvent.trigger].label}
+                                {t(`triggers.${selectedEvent.trigger}`)}
                             </span>
                         </div>
 
@@ -439,14 +440,14 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                 className="w-full flex items-center gap-2 px-4 py-2 hover:bg-white/5 transition-colors"
                             >
                                 {expandedSections.has('properties') ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
-                                <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Properties</span>
+                                <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('properties')}</span>
                             </button>
 
                             {expandedSections.has('properties') && (
                                 <div className="px-4 pb-3 space-y-2">
                                     {/* Name */}
                                     <div>
-                                        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>Name</label>
+                                        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>{t('name')}</label>
                                         <input
                                             type="text"
                                             value={selectedEvent.name}
@@ -458,11 +459,11 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
 
                                     {/* Description */}
                                     <div>
-                                        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>Description</label>
+                                        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>{t('description')}</label>
                                         <textarea
                                             value={selectedEvent.description || ''}
                                             onChange={e => updateEvent({ description: e.target.value })}
-                                            placeholder="Optional description..."
+                                            placeholder={t('descriptionPlaceholder')}
                                             rows={2}
                                             className="w-full px-2 py-1 rounded text-xs outline-none resize-none"
                                             style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
@@ -471,15 +472,15 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
 
                                     {/* Trigger */}
                                     <div>
-                                        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>Trigger</label>
+                                        <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>{t('trigger')}</label>
                                         <select
                                             value={selectedEvent.trigger}
                                             onChange={e => updateEvent({ trigger: e.target.value as CommonEventTrigger })}
                                             className="w-full px-2 py-1 rounded text-xs outline-none"
                                             style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                                         >
-                                            {Object.entries(TRIGGER_LABELS).map(([value, info]) => (
-                                                <option key={value} value={value}>{info.label} — {info.description}</option>
+                                            {Object.keys(TRIGGER_LABELS).map((value) => (
+                                                <option key={value} value={value}>{t(`triggers.${value}`)} — {t(`triggerDesc.${value}`)}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -492,14 +493,14 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                             onChange={e => updateEvent({ enabled: e.target.checked })}
                                             className="accent-amber-500"
                                         />
-                                        <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>Enabled</label>
+                                        <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('enabled')}</label>
                                     </div>
 
                                     {/* Condition Variable (for parallel/auto) */}
                                     {(selectedEvent.trigger === 'parallel' || selectedEvent.trigger === 'auto') && (
                                         <div>
                                             <label className="text-[10px] font-semibold block mb-0.5" style={{ color: 'var(--text-secondary)' }}>
-                                                Condition Variable (optional)
+                                                {t('conditionVariable')}
                                             </label>
                                             <select
                                                 value={selectedEvent.conditionVariableId || ''}
@@ -507,13 +508,13 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                 className="w-full px-2 py-1 rounded text-xs outline-none"
                                                 style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                                             >
-                                                <option value="">No condition (always run)</option>
+                                                <option value="">{t('noCondition')}</option>
                                                 {Object.values(project.variables || {}).map((v: any) => (
                                                     <option key={v.id} value={v.id}>{v.name}</option>
                                                 ))}
                                             </select>
                                             <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                                                When set, this event only fires when the variable is truthy.
+                                                {t('conditionHint')}
                                             </p>
                                         </div>
                                     )}
@@ -529,7 +530,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                     className="w-full flex items-center gap-2 px-4 py-2 hover:bg-white/5 transition-colors"
                                 >
                                     {expandedSections.has('parameters') ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
-                                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Parameters</span>
+                                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('parameters')}</span>
                                     <span className="text-[10px] ml-auto px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
                                         {selectedEvent.parameters.length}
                                     </span>
@@ -538,7 +539,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                 {expandedSections.has('parameters') && (
                                     <div className="px-4 pb-3 space-y-2">
                                         <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                                            Parameters allow callers to pass values when invoking this event. Use them inside commands via variable references.
+                                            {t('parametersHint')}
                                         </p>
 
                                         {selectedEvent.parameters.map((param: CommonEventParameter) => (
@@ -548,7 +549,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                         type="text"
                                                         value={param.name}
                                                         onChange={e => handleUpdateParam(param.id, { name: e.target.value })}
-                                                        placeholder="Parameter name"
+                                                        placeholder={t('parameterNamePlaceholder')}
                                                         className="w-full px-1.5 py-0.5 rounded text-xs outline-none"
                                                         style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                                                     />
@@ -559,9 +560,9 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                             className="px-1.5 py-0.5 rounded text-[10px] outline-none"
                                                             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                                                         >
-                                                            <option value="string">String</option>
-                                                            <option value="number">Number</option>
-                                                            <option value="boolean">Boolean</option>
+                                                            <option value="string">{t('paramTypes.string')}</option>
+                                                            <option value="number">{t('paramTypes.number')}</option>
+                                                            <option value="boolean">{t('paramTypes.boolean')}</option>
                                                         </select>
                                                         <input
                                                             type="text"
@@ -573,7 +574,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                                         ? e.target.value === 'true'
                                                                         : e.target.value
                                                             })}
-                                                            placeholder="Default value"
+                                                            placeholder={t('defaultValuePlaceholder')}
                                                             className="flex-1 px-1.5 py-0.5 rounded text-[10px] outline-none"
                                                             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                                                         />
@@ -582,7 +583,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                 <button
                                                     onClick={() => handleDeleteParam(param.id)}
                                                     className="p-1 rounded hover:bg-red-500/20 text-red-400"
-                                                    title="Remove parameter"
+                                                    title={t('removeParameter')}
                                                 >
                                                     <TrashIcon className="w-3 h-3" />
                                                 </button>
@@ -594,7 +595,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                             className="w-full py-1 rounded text-xs flex items-center justify-center gap-1 transition-colors"
                                             style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px dashed var(--border-subtle)' }}
                                         >
-                                            <PlusIcon className="w-3 h-3" /> Add Parameter
+                                            <PlusIcon className="w-3 h-3" /> {t('addParameter')}
                                         </button>
                                     </div>
                                 )}
@@ -609,7 +610,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                 style={{ borderColor: 'var(--border-subtle)' }}
                             >
                                 {expandedSections.has('commands') ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
-                                <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Commands</span>
+                                <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('commands')}</span>
                                 <span className="text-[10px] ml-auto px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
                                     {selectedEvent.commands.length}
                                 </span>
@@ -618,7 +619,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                             {expandedSections.has('commands') && (
                                 <div className="px-4 py-3">
                                     <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
-                                        Drag commands from the Command Palette (visible on the Scenes tab) and drop them here, or use the quick-add buttons below.
+                                        {t('commandsHint')}
                                     </p>
 
                                     {/* Command list */}
@@ -636,7 +637,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                             <div className="flex flex-col items-center justify-center py-6">
                                                 <BoltIcon className="w-6 h-6 mb-1" style={{ color: 'var(--text-muted)' }} />
                                                 <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
-                                                    Drop commands here or use quick-add below
+                                                    {t('dropHere')}
                                                 </p>
                                             </div>
                                         ) : (
@@ -658,14 +659,14 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                             )}
                                                             {cmd.type === CommandType.CallCommonEvent && (cmd as any).commonEventId && (
                                                                 <span className="ml-1 opacity-50 font-normal">
-                                                                    → {(project.commonEvents || {})[(cmd as any).commonEventId]?.name || 'Unknown'}
+                                                                    → {(project.commonEvents || {})[(cmd as any).commonEventId]?.name || t('unknown')}
                                                                 </span>
                                                             )}
                                                         </span>
                                                         <button
                                                             onClick={() => handleDeleteCommand(index)}
                                                             className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-opacity"
-                                                            title="Remove command"
+                                                            title={t('removeCommand')}
                                                         >
                                                             <TrashIcon className="w-3 h-3" />
                                                         </button>
@@ -701,7 +702,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                     handleCommandDrop(fakeDropEvent);
                                                 }}
                                                 className={`px-2 py-0.5 rounded text-[10px] border ${getCommandColor(cmdType)} hover:opacity-80 transition-opacity`}
-                                                title={`Add ${formatCommandName(cmdType)}`}
+                                                title={t('addCommandTitle', { name: formatCommandName(cmdType) })}
                                             >
                                                 + {formatCommandName(cmdType)}
                                             </button>
@@ -715,11 +716,11 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                     <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
                             <CommonEventsIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
-                            <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Common Events</h3>
+                            <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--text-primary)' }}>{t('emptyTitle')}</h3>
                             <p className="text-xs max-w-xs mx-auto" style={{ color: 'var(--text-muted)' }}>
                                 {commonEvents.length === 0
-                                    ? 'Create reusable command sequences that can be called from any scene. Common Events work like functions — author once, reuse everywhere.'
-                                    : 'Select a Common Event from the sidebar to edit it.'}
+                                    ? t('emptyDescNew')
+                                    : t('emptyDescSelect')}
                             </p>
                             {commonEvents.length === 0 && (
                                 <button
@@ -727,7 +728,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                     className="mt-3 px-4 py-1.5 rounded text-xs font-bold text-white transition-colors"
                                     style={{ background: 'var(--accent-amber, #f59e0b)' }}
                                 >
-                                    <PlusIcon className="w-3 h-3 inline mr-1" /> Create First Common Event
+                                    <PlusIcon className="w-3 h-3 inline mr-1" /> {t('createFirst')}
                                 </button>
                             )}
                         </div>

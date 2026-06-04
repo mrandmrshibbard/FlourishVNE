@@ -1,0 +1,52 @@
+{
+  "listTitle": "Cenas",
+  "newSceneName": "Nova Cena {{n}}",
+  "cannotDeleteLast": "Você não pode excluir a última cena.",
+  "cannotDeleteLastShort": "Não é possível excluir a última cena",
+  "setAsStartScene": "Definir como Cena Inicial",
+  "startSceneMarked": "Cena Inicial ✓",
+  "startScene": "Cena Inicial",
+  "duplicateScene": "Duplicar Cena",
+  "removeFromStack": "Remover da pilha",
+  "runsInParallel": "Executa em paralelo",
+  "editor": {
+    "title": "Editor de Cena",
+    "titleNamed": "Cena: {{name}}",
+    "selectToStart": "Selecione uma cena para começar.",
+    "configureSettings": "Configurar Definições da Cena",
+    "settings": "Configurações",
+    "hasConditions_one": "Esta cena tem {{count}} condição",
+    "hasConditions_other": "Esta cena tem {{count}} condições",
+    "cannotStackTitle": "Não é Possível Empilhar Comandos",
+    "cannotStackDefault": "Não é possível empilhar estes comandos",
+    "copied_one": "{{count}} comando copiado",
+    "copied_other": "{{count}} comandos copiados",
+    "pasted_one": "{{count}} comando colado",
+    "pasted_other": "{{count}} comandos colados",
+    "deleted_one": "{{count}} comando excluído",
+    "deleted_other": "{{count}} comandos excluídos"
+  },
+  "config": {
+    "title": "Configuração da Cena",
+    "titleNamed": "Configuração da Cena: {{name}}",
+    "notFound": "Cena não encontrada.",
+    "exitTransition": "Transição de Saída",
+    "exitTransitionDesc": "Como a tela faz a transição ao sair desta cena.",
+    "transitionStyle": "Estilo de Transição",
+    "transitions": {
+      "fade": "Esmaecer para Preto",
+      "dissolve": "Dissolver",
+      "iris-out": "Íris para Fora",
+      "wipe-right": "Varredura à Direita",
+      "slide-left": "Deslizar à Esquerda",
+      "instant": "Instantâneo (Sem Transição)"
+    },
+    "duration": "Duração (s)",
+    "sceneConditions": "Condições da Cena",
+    "sceneConditionsDesc": "Esta cena só será reproduzida se todas as condições forem atendidas. Se as condições falharem, a cena será ignorada.",
+    "fallbackScene": "Cena de Reserva",
+    "fallbackDesc": "Se as condições falharem, pular para esta cena:",
+    "skipToNext": "Pular para a próxima cena na sequência",
+    "done": "Concluído"
+  }
+}

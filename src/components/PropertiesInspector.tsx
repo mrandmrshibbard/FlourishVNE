@@ -1,20 +1,23 @@
 import React from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNID, VNPosition, VNPositionPreset, VNTransition } from '../types';
 import { VNProject } from '../types/project';
 import {
     VNCommand, CommandType, DialogueCommand, SetBackgroundCommand, ShowCharacterCommand,
     HideCharacterCommand, ChoiceCommand, SetVariableCommand, TextInputCommand, JumpCommand, ChoiceOption,
-    PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, WaitCommand, ShakeScreenCommand, PlayMovieCommand,
+    PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand, WaitCommand, ShakeScreenCommand, PlayMovieCommand,
     TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand, FlashScreenCommand, ShowScreenCommand,
     HideTextCommand, HideImageCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, HideButtonCommand,
     LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground, CreditMedia,
     GroupCommand, RunScriptCommand, CallCommonEventCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     ShowImageMapCommand, HideImageMapCommand, ImageMapRegion,
+    ShowHotSpotCommand, HideHotSpotCommand,
     TweenElementCommand,
     VNScene,
     ChoiceAction,
+    REACTIVE_VISUAL_TYPES,
 } from '../features/scene/types';
 import { 
     canRunAsync, 
@@ -40,12 +43,54 @@ import ConditionsEditor from './ui/ConditionsEditor';
 import SceneConfigEditor from './SceneConfigEditor';
 import VariablePropertiesEditor from './VariablePropertiesEditor';
 
+/**
+ * Shared orientation control: a bidirectional rotation slider (-180°..180°) plus
+ * horizontal/vertical flip toggles. Used by Image/Text/Button/Character editors.
+ * For characters, flipX maps to the existing `inverted` field (handled by the caller).
+ */
+const OrientationFields: React.FC<{
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
+    flipXLabel?: string;
+    onChange: (patch: { rotation?: number; flipX?: boolean; flipY?: boolean }) => void;
+}> = ({ rotation, flipX, flipY, flipXLabel = 'Flip Horizontal', onChange }) => (
+    <div className="space-y-1 pt-1 border-t border-[var(--border-subtle)] mt-2">
+        <FormField label={`Rotation: ${rotation ?? 0}°`}>
+            <div className="flex items-center gap-2">
+                <input
+                    type="range" min={-180} max={180} step={1} value={rotation ?? 0}
+                    onChange={e => onChange({ rotation: parseInt(e.target.value, 10) })}
+                    className="w-full cursor-pointer"
+                />
+                <button
+                    type="button"
+                    onClick={() => onChange({ rotation: 0 })}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
+                    title="Reset rotation to 0°"
+                >0°</button>
+            </div>
+        </FormField>
+        <div className="flex gap-4 pb-1">
+            <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer">
+                <input type="checkbox" checked={!!flipX} onChange={e => onChange({ flipX: e.target.checked })} className="cursor-pointer" />
+                {flipXLabel}
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer">
+                <input type="checkbox" checked={!!flipY} onChange={e => onChange({ flipY: e.target.checked })} className="cursor-pointer" />
+                Flip Vertical
+            </label>
+        </div>
+    </div>
+);
+
 const PositionInputs: React.FC<{
     label: string;
     position: VNPosition;
     onChange: (position: VNPosition) => void;
     disabled?: boolean;
 }> = ({ label, position, onChange, disabled }) => {
+    const { t } = useTranslation('properties');
     const isCustom = typeof position === 'object';
     const coords = isCustom ? position : { x: 50, y: 50 }; // default center
     const [showCustom, setShowCustom] = React.useState(isCustom);
@@ -67,14 +112,14 @@ const PositionInputs: React.FC<{
                         }}
                         disabled={disabled}
                     >
-                        <option value="left">Left</option>
-                        <option value="center">Center</option>
-                        <option value="right">Right</option>
-                        <option value="custom">Custom Coordinates</option>
+                        <option value="left">{t('positions.left')}</option>
+                        <option value="center">{t('positions.center')}</option>
+                        <option value="right">{t('positions.right')}</option>
+                        <option value="custom">{t('positions.custom')}</option>
                     </Select>
                     {showCustom && (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="X (%)">
+                            <FormField label={t('shared.xPercent')}>
                                 <TextInput 
                                     type="number" 
                                     min="0" 
@@ -84,12 +129,12 @@ const PositionInputs: React.FC<{
                                     disabled={disabled}
                                 />
                             </FormField>
-                            <FormField label="Y (%)">
-                                <TextInput 
-                                    type="number" 
-                                    min="0" 
-                                    max="100" 
-                                    value={coords.y} 
+                            <FormField label={t('shared.yPercent')}>
+                                <TextInput
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={coords.y}
                                     onChange={e => onChange({ ...coords, y: parseFloat(e.target.value) || 0 })} 
                                     disabled={disabled}
                                 />
@@ -272,26 +317,29 @@ const TransitionFields: React.FC<{
     transition: VNTransition;
     duration: number;
     onUpdate: (updates: { transition?: VNTransition; duration?: number }) => void;
-}> = ({ transition, duration, onUpdate }) => (
+}> = ({ transition, duration, onUpdate }) => {
+    const { t } = useTranslation('properties');
+    return (
     <div className="space-y-2">
         <div className="grid grid-cols-2 gap-1">
-            <FormField label="Transition">
+            <FormField label={t('shared.transition')}>
                 <Select value={transition} onChange={e => onUpdate({ transition: e.target.value as VNTransition })}>
-                    <option value="fade">Fade</option>
-                    <option value="dissolve">Dissolve</option>
-                    <option value="slide">Slide</option>
-                    <option value="iris-in">Iris</option>
-                    <option value="wipe-right">Wipe</option>
-                    <option value="instant">Instant</option>
+                    <option value="fade">{t('transitions.fade')}</option>
+                    <option value="dissolve">{t('transitions.dissolve')}</option>
+                    <option value="slide">{t('transitions.slide')}</option>
+                    <option value="iris-in">{t('transitions.iris')}</option>
+                    <option value="wipe-right">{t('transitions.wipe')}</option>
+                    <option value="instant">{t('transitions.instant')}</option>
                 </Select>
             </FormField>
-            <FormField label="Duration (s)">
+            <FormField label={t('shared.durationSec')}>
                 <TextInput type="number" min="0" step="0.1" value={duration} onChange={e => onUpdate({ duration: parseFloat(e.target.value) || 0 })} />
             </FormField>
         </div>
         <TransitionPreview transition={transition} duration={duration} />
     </div>
-);
+    );
+};
 
 
 const PropertiesInspector: React.FC<{
@@ -304,41 +352,45 @@ const PropertiesInspector: React.FC<{
     onCloseSceneConfig?: () => void;
 }> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, selectedVariableId, setSelectedVariableId, isConfigScene, onCloseSceneConfig }) => {
     const { project, dispatch } = useProject();
+    const { t } = useTranslation('properties');
     const activeScene = project.scenes[activeSceneId];
 
-    // Handle scene configuration
-    if (isConfigScene) {
-        return <SceneConfigEditor activeSceneId={activeSceneId} onCloseSceneConfig={onCloseSceneConfig} />;
-    }
-
-    // Handle variable editing
-    if (selectedVariableId && setSelectedVariableId) {
-        return <VariablePropertiesEditor selectedVariableId={selectedVariableId} setSelectedVariableId={setSelectedVariableId} />;
-    }
-
-    if (selectedCommandIndex === null || !activeScene || !activeScene.commands[selectedCommandIndex]) {
-        return (
-            <Panel title="Properties" className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
-                <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-xs italic">
-                    <p>Select a command to edit its properties.</p>
-                </div>
-            </Panel>
-        );
-    }
-    
-    const command = activeScene.commands[selectedCommandIndex];
-    const generateId = () => `opt-${Math.random().toString(36).substring(2, 9)}`;
+    // Compute the selected command up-front and run ALL hooks before any early return,
+    // so the hook count never changes between command / scene-config / variable / empty
+    // states. (Hooks behind a conditional return throw "rendered fewer hooks than
+    // expected" → blank screen — which is what happened opening Scene Settings with a
+    // command selected.)
+    const command = (selectedCommandIndex !== null && activeScene) ? activeScene.commands[selectedCommandIndex] : undefined;
 
     const updateCommand = React.useCallback((updatedProps: Partial<VNCommand>) => {
-        if (!command) {
-            return;
-        }
+        if (!command || selectedCommandIndex === null) return;
         const newCommand = { ...command, ...updatedProps };
         dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex, command: newCommand as VNCommand } });
     }, [command, dispatch, activeSceneId, selectedCommandIndex]);
 
     useCommandDefaults(command, project, updateCommand);
     useChoiceActionNormalization(command, project, updateCommand);
+
+    // ── Early returns (after all hooks have run) ──
+    if (isConfigScene) {
+        return <SceneConfigEditor activeSceneId={activeSceneId} onCloseSceneConfig={onCloseSceneConfig} />;
+    }
+
+    if (selectedVariableId && setSelectedVariableId) {
+        return <VariablePropertiesEditor selectedVariableId={selectedVariableId} setSelectedVariableId={setSelectedVariableId} />;
+    }
+
+    if (selectedCommandIndex === null || !activeScene || !command) {
+        return (
+            <Panel title={t('footer.title')} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
+                <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-xs italic">
+                    <p>{t('footer.selectCommand')}</p>
+                </div>
+            </Panel>
+        );
+    }
+
+    const generateId = () => `opt-${Math.random().toString(36).substring(2, 9)}`;
 
     const handleDelete = () => {
       // Check if it's a group with commands
@@ -410,46 +462,46 @@ const PropertiesInspector: React.FC<{
             case CommandType.Dialogue: {
                 const cmd = command as DialogueCommand;
                 const characterOptions = [
-                    { value: '', label: 'Narrator' },
+                    { value: '', label: t('shared.narrator') },
                     ...Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }))
                 ];
                 const audioOptions = [
-                    { value: '', label: 'None' },
+                    { value: '', label: t('shared.none') },
                     ...Object.values(project.audio).map((a: any) => ({ value: a.id, label: a.name }))
                 ];
                 const textEffectOptions = [
-                    { value: 'none', label: 'None' },
-                    { value: 'shake', label: 'Shake' },
-                    { value: 'wave', label: 'Wave' },
-                    { value: 'rainbow', label: 'Rainbow' },
-                    { value: 'glitch', label: 'Glitch' },
-                    { value: 'pulse', label: 'Pulse' },
-                    { value: 'fade-in', label: 'Fade In' },
-                    { value: 'bounce', label: 'Bounce' },
-                    { value: 'typewriter-bounce', label: 'Typewriter Bounce' },
+                    { value: 'none', label: t('dialogue.effects.none') },
+                    { value: 'shake', label: t('dialogue.effects.shake') },
+                    { value: 'wave', label: t('dialogue.effects.wave') },
+                    { value: 'rainbow', label: t('dialogue.effects.rainbow') },
+                    { value: 'glitch', label: t('dialogue.effects.glitch') },
+                    { value: 'pulse', label: t('dialogue.effects.pulse') },
+                    { value: 'fade-in', label: t('dialogue.effects.fade-in') },
+                    { value: 'bounce', label: t('dialogue.effects.bounce') },
+                    { value: 'typewriter-bounce', label: t('dialogue.effects.typewriter-bounce') },
                 ];
                 const currentTextEffect = cmd.textEffect?.type || 'none';
                 return <>
-                    <FormField label="Character">
-                        <SearchableSelect 
+                    <FormField label={t('shared.character')}>
+                        <SearchableSelect
                             options={characterOptions}
-                            value={cmd.characterId || ''} 
+                            value={cmd.characterId || ''}
                             onChange={(value) => updateCommand({ characterId: value || null })}
-                            placeholder="Select character..."
+                            placeholder={t('shared.selectCharacter')}
                         />
                     </FormField>
-                    <FormField label="Dialogue Text">
+                    <FormField label={t('dialogue.text')}>
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
-                    <FormField label="Voice Clip">
+                    <FormField label={t('dialogue.voiceClip')}>
                         <SearchableSelect
                             options={audioOptions}
                             value={cmd.voiceAudioId || ''}
                             onChange={(value) => updateCommand({ voiceAudioId: value || null })}
-                            placeholder="Select voice clip..."
+                            placeholder={t('dialogue.selectVoiceClip')}
                         />
                     </FormField>
-                    <FormField label="Text Effect">
+                    <FormField label={t('dialogue.textEffect')}>
                         <Select
                             value={currentTextEffect}
                             onChange={e => {
@@ -467,16 +519,16 @@ const PropertiesInspector: React.FC<{
                         </Select>
                     </FormField>
                     {currentTextEffect !== 'none' && <>
-                        <FormField label="Effect Speed">
+                        <FormField label={t('dialogue.effectSpeed')}>
                             <input type="range" min="0.1" max="5" step="0.1" value={cmd.textEffect?.speed ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), speed: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.speed ?? 1).toFixed(1)}x</span>
                         </FormField>
-                        <FormField label="Effect Intensity">
+                        <FormField label={t('dialogue.effectIntensity')}>
                             <input type="range" min="0.1" max="3" step="0.1" value={cmd.textEffect?.intensity ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), intensity: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{(cmd.textEffect?.intensity ?? 1).toFixed(1)}x</span>
                         </FormField>
                     </>}
-                    <FormField label="Keep Open During Choices">
+                    <FormField label={t('dialogue.keepOpen')}>
                         <input 
                             type="checkbox" 
                             checked={cmd.keepOpenDuringChoices ?? false} 
@@ -502,9 +554,9 @@ const PropertiesInspector: React.FC<{
                     });
                 }
                 return <>
-                    <FormField label="Background Type">
-                        <select 
-                            value={useColor ? 'color' : 'image'} 
+                    <FormField label={t('background.type')}>
+                        <select
+                            value={useColor ? 'color' : 'image'}
                             onChange={(e) => {
                                 if (e.target.value === 'color') {
                                     updateCommand({ backgroundColor: '#1a102c', backgroundId: cmd.backgroundId });
@@ -514,21 +566,21 @@ const PropertiesInspector: React.FC<{
                             }}
                             className="w-full px-2 py-1 rounded bg-[var(--bg-primary)] text-white border border-[var(--border-default)]"
                         >
-                            <option value="image">Image/Video</option>
-                            <option value="color">Solid Color</option>
+                            <option value="image">{t('background.imageVideo')}</option>
+                            <option value="color">{t('background.solidColor')}</option>
                         </select>
                     </FormField>
                     {useColor ? (
-                        <FormField label="Color">
-                            <input 
-                                type="color" 
-                                value={cmd.backgroundColor} 
+                        <FormField label={t('background.color')}>
+                            <input
+                                type="color"
+                                value={cmd.backgroundColor}
                                 onChange={(e) => updateCommand({ backgroundColor: e.target.value })}
                                 className="w-full h-10 rounded cursor-pointer"
                             />
                         </FormField>
                     ) : (
-                        <FormField label="Background">
+                        <FormField label={t('background.background')}>
                             <SearchableSelect 
                                 options={backgroundOptions}
                                 value={cmd.backgroundId} 
@@ -553,45 +605,45 @@ const PropertiesInspector: React.FC<{
                     ? Object.values(character.expressions).map((expr: VNCharacterExpression) => ({ value: expr.id, label: expr.name }))
                     : [];
                  return <>
-                    <FormField label="Character">
-                        <SearchableSelect 
+                    <FormField label={t('shared.character')}>
+                        <SearchableSelect
                             options={characterOptions}
-                            value={cmd.characterId} 
+                            value={cmd.characterId}
                             onChange={(value) => {
                                 const newChar = project.characters[value];
                                 const firstExprId = newChar ? Object.keys(newChar.expressions)[0] : '';
                                 updateCommand({ characterId: value, expressionId: firstExprId || '' });
                             }}
-                            placeholder={Object.keys(project.characters).length === 0 ? "No characters defined" : "Select character..."}
+                            placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')}
                         />
                     </FormField>
-                    <FormField label="Expression">
-                        <SearchableSelect 
+                    <FormField label={t('shared.expression')}>
+                        <SearchableSelect
                             options={expressionOptions}
-                            value={cmd.expressionId} 
+                            value={cmd.expressionId}
                             onChange={(value) => updateCommand({ expressionId: value })}
-                            placeholder={(!character || Object.keys(character.expressions).length === 0) ? "No expressions" : "Select expression..."}
+                            placeholder={(!character || Object.keys(character.expressions).length === 0) ? t('shared.noExpressions') : t('shared.selectExpression')}
                         />
                     </FormField>
                     
                     {isSlideTransition ? (
                         <>
-                            <PositionInputs 
-                                label="Start Position" 
-                                position={cmd.startPosition || cmd.position} 
-                                onChange={(pos) => updateCommand({ startPosition: pos })} 
+                            <PositionInputs
+                                label={t('shared.startPosition')}
+                                position={cmd.startPosition || cmd.position}
+                                onChange={(pos) => updateCommand({ startPosition: pos })}
                             />
-                            <PositionInputs 
-                                label="End Position" 
-                                position={cmd.endPosition || cmd.position} 
-                                onChange={(pos) => updateCommand({ endPosition: pos })} 
+                            <PositionInputs
+                                label={t('shared.endPosition')}
+                                position={cmd.endPosition || cmd.position}
+                                onChange={(pos) => updateCommand({ endPosition: pos })}
                             />
                         </>
                     ) : (
-                        <PositionInputs 
-                            label="Position" 
-                            position={cmd.position} 
-                            onChange={(pos) => updateCommand({ position: pos })} 
+                        <PositionInputs
+                            label={t('shared.position')}
+                            position={cmd.position}
+                            onChange={(pos) => updateCommand({ position: pos })}
                         />
                     )}
                     
@@ -602,7 +654,7 @@ const PropertiesInspector: React.FC<{
                     />
 
                     {/* Scale control */}
-                    <FormField label="Scale">
+                    <FormField label={t('shared.scale')}>
                         <div className="flex items-center gap-2">
                             <input 
                                 type="range" min="0.1" max="3" step="0.05"
@@ -617,24 +669,26 @@ const PropertiesInspector: React.FC<{
                                 style={{ width: '60px' }}
                             />
                         </div>
-                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>1 = 100% original size</p>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('character.scaleHint')}</p>
                     </FormField>
 
-                    {/* Flip Horizontally */}
-                    <FormField label="Flip Horizontally">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={cmd.inverted ?? false}
-                                onChange={e => updateCommand({ inverted: e.target.checked })}
-                                className="w-4 h-4"
-                            />
-                            <span className="text-sm">Mirror sprite horizontally</span>
-                        </label>
-                    </FormField>
+                    {/* Orientation: rotation slider + flip toggles (flipX maps to `inverted`) */}
+                    <OrientationFields
+                        rotation={cmd.rotation}
+                        flipX={cmd.inverted}
+                        flipY={cmd.flipY}
+                        flipXLabel={t('character.mirrorSprite')}
+                        onChange={p => {
+                            const patch: any = {};
+                            if ('rotation' in p) patch.rotation = p.rotation;
+                            if ('flipX' in p) patch.inverted = p.flipX;
+                            if ('flipY' in p) patch.flipY = p.flipY;
+                            updateCommand(patch);
+                        }}
+                    />
 
                     {/* Per-Character Visual Effects — multiple stacking */}
-                    <FormField label="Visual Effects">
+                    <FormField label={t('character.visualEffects')}>
                         {(() => {
                             // Normalize: prefer visualEffects array, fall back to legacy single visualEffect
                             const effects: any[] = cmd.visualEffects && cmd.visualEffects.length > 0
@@ -662,7 +716,7 @@ const PropertiesInspector: React.FC<{
                             };
 
                             return <>
-                                {effects.length === 0 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No effects applied.</p>}
+                                {effects.length === 0 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('character.noEffects')}</p>}
                                 {effects.map((eff: any, idx: number) => (
                                     <div key={idx} className="mb-3 p-2 rounded-lg" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-primary)' }}>
                                         <div className="flex items-center gap-1 mb-2">
@@ -671,34 +725,34 @@ const PropertiesInspector: React.FC<{
                                                 if (type === 'none') { removeEffect(idx); }
                                                 else { updateEffect(idx, { type }); }
                                             }}>
-                                                <option value="none">Remove…</option>
-                                                <option value="shake">Shake</option>
-                                                <option value="bounce">Bounce</option>
-                                                <option value="float">Float</option>
-                                                <option value="pulse">Pulse</option>
-                                                <option value="glow">Glow</option>
-                                                <option value="tint">Tint</option>
-                                                <option value="silhouette">Silhouette</option>
-                                                <option value="breathing">Breathing</option>
-                                                <option value="flicker">Flicker</option>
+                                                <option value="none">{t('character.remove')}</option>
+                                                <option value="shake">{t('character.effects.shake')}</option>
+                                                <option value="bounce">{t('character.effects.bounce')}</option>
+                                                <option value="float">{t('character.effects.float')}</option>
+                                                <option value="pulse">{t('character.effects.pulse')}</option>
+                                                <option value="glow">{t('character.effects.glow')}</option>
+                                                <option value="tint">{t('character.effects.tint')}</option>
+                                                <option value="silhouette">{t('character.effects.silhouette')}</option>
+                                                <option value="breathing">{t('character.effects.breathing')}</option>
+                                                <option value="flicker">{t('character.effects.flicker')}</option>
                                             </Select>
-                                            <button onClick={() => removeEffect(idx)} className="p-1 rounded hover:bg-[var(--bg-tertiary)]" title="Remove effect">
+                                            <button onClick={() => removeEffect(idx)} className="p-1 rounded hover:bg-[var(--bg-tertiary)]" title={t('character.removeEffect')}>
                                                 <svg className="w-3.5 h-3.5" style={{ color: 'var(--accent-coral)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                             </button>
                                         </div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>Speed</span>
+                                            <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.speed')}</span>
                                             <input type="range" min="0.1" max="5" step="0.1" value={eff.speed ?? 1} onChange={e => updateEffect(idx, { speed: parseFloat(e.target.value) })} className="flex-1" />
                                             <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.speed ?? 1).toFixed(1)}x</span>
                                         </div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>Power</span>
+                                            <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.power')}</span>
                                             <input type="range" min="0.1" max="3" step="0.1" value={eff.intensity ?? 1} onChange={e => updateEffect(idx, { intensity: parseFloat(e.target.value) })} className="flex-1" />
                                             <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.intensity ?? 1).toFixed(1)}x</span>
                                         </div>
                                         {(eff.type === 'glow' || eff.type === 'tint' || eff.type === 'silhouette') && (
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>Color</span>
+                                                <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.color')}</span>
                                                 <input type="color" value={eff.color || '#FFFFFF'} onChange={e => updateEffect(idx, { color: e.target.value })} className="w-7 h-7 rounded cursor-pointer border-0" />
                                             </div>
                                         )}
@@ -706,7 +760,7 @@ const PropertiesInspector: React.FC<{
                                 ))}
                                 <button onClick={addEffect} className="w-full text-xs py-1.5 rounded-lg border border-dashed hover:border-solid transition-colors"
                                     style={{ borderColor: 'var(--accent-lavender)', color: 'var(--accent-lavender)', background: 'transparent' }}>
-                                    + Add Visual Effect
+                                    {t('character.addEffect')}
                                 </button>
                             </>;
                         })()}
@@ -717,21 +771,21 @@ const PropertiesInspector: React.FC<{
                  const cmd = command as HideCharacterCommand;
                  const characterOptions = Object.values(project.characters).map((c: VNCharacter) => ({ value: c.id, label: c.name }));
                  return <>
-                    <FormField label="Character">
-                        <SearchableSelect 
+                    <FormField label={t('shared.character')}>
+                        <SearchableSelect
                             options={characterOptions}
-                            value={cmd.characterId} 
+                            value={cmd.characterId}
                             onChange={(value) => updateCommand({ characterId: value })}
-                            placeholder={Object.keys(project.characters).length === 0 ? "No characters defined" : "Select character..."}
+                            placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')}
                         />
                     </FormField>
-                    <TransitionFields 
-                        transition={cmd.transition} 
-                        duration={cmd.duration} 
-                        onUpdate={(updates) => updateCommand(updates)} 
+                    <TransitionFields
+                        transition={cmd.transition}
+                        duration={cmd.duration}
+                        onUpdate={(updates) => updateCommand(updates)}
                     />
-                    {cmd.transition === 'slide' && <PositionInputs label="Start Position" position={cmd.startPosition} onChange={pos => updateCommand({ startPosition: pos })} />}
-                    {cmd.transition === 'slide' && <PositionInputs label="End Position" position={cmd.endPosition} onChange={pos => updateCommand({ endPosition: pos })} />}
+                    {cmd.transition === 'slide' && <PositionInputs label={t('shared.startPosition')} position={cmd.startPosition} onChange={pos => updateCommand({ startPosition: pos })} />}
+                    {cmd.transition === 'slide' && <PositionInputs label={t('shared.endPosition')} position={cmd.endPosition} onChange={pos => updateCommand({ endPosition: pos })} />}
                  </>;
             }
             case CommandType.Choice: {
@@ -799,7 +853,7 @@ const PropertiesInspector: React.FC<{
                 };
 
                 return <div>
-                    <h3 className="font-bold mb-2">Options</h3>
+                    <h3 className="font-bold mb-2">{t('choice.options')}</h3>
                     {cmd.options.map((opt, i) => {
                         const migratedOpt: ChoiceOption = ('targetSceneId' in opt && !('actions' in opt)) ? {
                             id: opt.id || generateId(), text: opt.text, conditions: opt.conditions,
@@ -809,11 +863,11 @@ const PropertiesInspector: React.FC<{
                         return (
                             <div key={migratedOpt.id} className="p-1 border border-[var(--border-subtle)] rounded-md mb-2">
                                <FormField label={`Option ${i+1} Text`}><TextInput value={migratedOpt.text} onChange={e => updateOption(i, { text: e.target.value })}/></FormField>
-                               <h4 className="font-bold text-xs mt-3 mb-1 text-[var(--text-secondary)]">Conditions</h4>
-                               <p className="text-xs text-[var(--text-muted)] mb-2">This option will only be shown if all conditions are met.</p>
+                               <h4 className="font-bold text-xs mt-3 mb-1 text-[var(--text-secondary)]">{t('choice.conditions')}</h4>
+                               <p className="text-xs text-[var(--text-muted)] mb-2">{t('choice.conditionsHint')}</p>
                                <ConditionsEditor conditions={migratedOpt.conditions} project={project} onChange={(cs) => updateOption(i, { conditions: cs })}/>
                                
-                                <h4 className="font-bold text-xs mt-3 mb-1 text-[var(--text-secondary)]">Actions</h4>
+                                <h4 className="font-bold text-xs mt-3 mb-1 text-[var(--text-secondary)]">{t('choice.actions')}</h4>
                                 <div className="space-y-2 pl-2 border-l-2 border-[var(--border-default)]">
                                     {(migratedOpt.actions || []).map((action, actionIndex) => (
                                         <div key={actionIndex} className="p-1 bg-[var(--bg-primary)] rounded-md">
@@ -821,7 +875,7 @@ const PropertiesInspector: React.FC<{
                                                 (() => {
                                                     const actionAsJump = action as ChoiceAction & { targetSceneId: VNID };
                                                     return (
-                                                <FormField label="Jump to Scene">
+                                                <FormField label={t('choice.jumpToScene')}>
                                                     <div className="flex items-center gap-1">
                                                         <Select value={actionAsJump.targetSceneId} onChange={e => updateAction(i, actionIndex, { targetSceneId: e.target.value })}>
                                                             {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -834,7 +888,7 @@ const PropertiesInspector: React.FC<{
                                             ) : action.type === UIActionType.SetVariable ? (
                                                 <div className="space-y-1">
                                                     <div className="flex justify-between items-center">
-                                                        <p className="text-xs font-semibold">Set Variable</p>
+                                                        <p className="text-xs font-semibold">{t('choice.setVariable')}</p>
                                                         <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
                                                     </div>
                                                     {(() => {
@@ -842,7 +896,7 @@ const PropertiesInspector: React.FC<{
                                                         const variable = project.variables[actionAsSetVar.variableId];
                                                         return (
                                                             <div className="space-y-2">
-                                                                <FormField label="Variable">
+                                                                <FormField label={t('vars.variable')}>
                                                                     <Select value={actionAsSetVar.variableId} onChange={e => {
                                                                         const newVarId = e.target.value;
                                                                         const newVar = project.variables[newVarId];
@@ -871,18 +925,18 @@ const PropertiesInspector: React.FC<{
                                                                     </Select>
                                                                 </FormField>
                                                                 <div className="grid grid-cols-2 gap-1">
-                                                                    <FormField label="Operator">
+                                                                    <FormField label={t('vars.operator')}>
                                                                         <Select value={actionAsSetVar.operator} onChange={e => updateAction(i, actionIndex, { operator: e.target.value as VNSetVariableOperator })}>
                                                                             <option value="set">Set (=)</option>
                                                                             {variable?.type === 'number' && <option value="add">Add (+)</option>}
                                                                             {variable?.type === 'number' && <option value="subtract">Subtract (-)</option>}
                                                                         </Select>
                                                                     </FormField>
-                                                                    <FormField label="Value">
+                                                                    <FormField label={t('vars.value')}>
                                                                         {variable?.type === 'boolean' ? (
                                                                             <Select value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: e.target.value === 'true' })}>
-                                                                                <option value="true">True</option>
-                                                                                <option value="false">False</option>
+                                                                                <option value="true">{t('vars.true')}</option>
+                                                                                <option value="false">{t('vars.false')}</option>
                                                                             </Select>
                                                                         ) : variable?.type === 'number' ? (
                                                                             <TextInput type="number" value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: parseFloat(e.target.value) || 0 })}/>
@@ -899,29 +953,29 @@ const PropertiesInspector: React.FC<{
                                         </div>
                                     ))}
                                     <div className="flex gap-1 pt-1">
-                                       <button onClick={() => addAction(i, UIActionType.JumpToScene)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">Add Jump</button>
-                                       <button onClick={() => addAction(i, UIActionType.SetVariable)} disabled={Object.keys(project.variables).length === 0} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed">Add Set Variable</button>
+                                       <button onClick={() => addAction(i, UIActionType.JumpToScene)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">{t('choice.addJump')}</button>
+                                       <button onClick={() => addAction(i, UIActionType.SetVariable)} disabled={Object.keys(project.variables).length === 0} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed">{t('choice.addSetVariable')}</button>
                                     </div>
                                 </div>
-                               <button onClick={() => removeOption(i)} className="text-red-400 hover:text-red-300 text-xs mt-3">Remove Option</button>
+                               <button onClick={() => removeOption(i)} className="text-red-400 hover:text-red-300 text-xs mt-3">{t('choice.removeOption')}</button>
                             </div>
                         )
                     })}
-                    <button onClick={addOption} className="text-sky-400 hover:text-sky-300 mt-2 flex items-center gap-1 text-xs"><PlusIcon className="w-4 h-4"/>Add Option</button>
+                    <button onClick={addOption} className="text-sky-400 hover:text-sky-300 mt-2 flex items-center gap-1 text-xs"><PlusIcon className="w-4 h-4"/>{t('choice.addOption')}</button>
                 </div>
             }
             case CommandType.PlayMusic: {
                 const cmd = command as PlayMusicCommand;
                 return <>
-                    <FormField label="Audio Track"><Select value={cmd.audioId} onChange={e => updateCommand({ audioId: e.target.value })}>
-                        {Object.keys(project.audio).length === 0 && <option disabled>No audio uploaded</option>}
+                    <FormField label={t('audio.audioTrack')}><Select value={cmd.audioId} onChange={e => updateCommand({ audioId: e.target.value })}>
+                        {Object.keys(project.audio).length === 0 && <option disabled>{t('audio.noAudio')}</option>}
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select></FormField>
                     <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
                         <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
-                    <FormField label="Fade Duration (s)"><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>
-                    <div className="flex items-center gap-1"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" /> <label>Loop</label></div>
+                    <FormField label={t('audio.fadeDurationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}/></FormField>
+                    <div className="flex items-center gap-1"><input type="checkbox" checked={cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" /> <label>{t('audio.loop')}</label></div>
                 </>;
             }
             case CommandType.StopMusic: {
@@ -931,12 +985,31 @@ const PropertiesInspector: React.FC<{
              case CommandType.PlaySoundEffect: {
                 const cmd = command as PlaySoundEffectCommand;
                 return <>
-                    <FormField label="Audio Track"><Select value={cmd.audioId} onChange={e => updateCommand({ audioId: e.target.value })}>
-                        {Object.keys(project.audio).length === 0 && <option disabled>No audio uploaded</option>}
+                    <FormField label={t('audio.audioTrack')}><Select value={cmd.audioId} onChange={e => updateCommand({ audioId: e.target.value })}>
+                        {Object.keys(project.audio).length === 0 && <option disabled>{t('audio.noAudio')}</option>}
                         {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select></FormField>
                     <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
                         <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 })} className="w-full accent-[var(--accent-lavender)]" />
+                    </FormField>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                        <input type="checkbox" checked={!!cmd.loop} onChange={e => updateCommand({ loop: e.target.checked })} className="cursor-pointer" />
+                        <span>Loop (plays until a Stop Sound Effect{cmd.liveConditions ? ', or while its condition holds' : ''})</span>
+                    </label>
+                </>;
+            }
+            case CommandType.StopSoundEffect: {
+                const cmd = command as StopSoundEffectCommand;
+                return <>
+                    <FormField label={t('audio.targetSound')}>
+                        <Select value={cmd.audioId || ''} onChange={e => updateCommand({ audioId: e.target.value })}>
+                            <option value="">{t('audio.allSounds')}</option>
+                            {Object.values(project.audio).map((a: VNAudio) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </Select>
+                    </FormField>
+                    <FormField label={t('audio.fadeOutSec')}>
+                        <TextInput type="number" min="0" step="0.1" value={cmd.fadeDuration ?? 0} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })} />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('audio.fadeOutHint')}</span>
                     </FormField>
                 </>;
             }
@@ -944,13 +1017,13 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as PlayMovieCommand;
                 const isOverlay = cmd.displayMode === 'overlay';
                 return <>
-                    <FormField label="Video">
+                    <FormField label={t('movie.video')}>
                         <Select value={cmd.videoId} onChange={e => updateCommand({ videoId: e.target.value })}>
-                            {Object.keys(project.videos).length === 0 && <option disabled>No videos uploaded</option>}
+                            {Object.keys(project.videos).length === 0 && <option disabled>{t('movie.noVideos')}</option>}
                             {Object.values(project.videos).map((v: VNVideo) => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </Select>
                     </FormField>
-                    <FormField label="Display Mode">
+                    <FormField label={t('movie.displayMode')}>
                         <Select value={cmd.displayMode || 'fullscreen'} onChange={e => {
                             const mode = e.target.value as 'fullscreen' | 'overlay';
                             // Overlay mode always advances immediately (non-blocking)
@@ -960,8 +1033,8 @@ const PropertiesInspector: React.FC<{
                                 updateCommand({ displayMode: mode });
                             }
                         }}>
-                            <option value="fullscreen">Fullscreen (black background)</option>
-                            <option value="overlay">Overlay (transparent, plays over scene)</option>
+                            <option value="fullscreen">{t('movie.fullscreen')}</option>
+                            <option value="overlay">{t('movie.overlay')}</option>
                         </Select>
                     </FormField>
                     <p className="text-xs text-[var(--text-secondary)] mt-1 mb-2">
@@ -971,16 +1044,16 @@ const PropertiesInspector: React.FC<{
                     </p>
                     <div className="flex items-center gap-1 mt-2">
                         <input id="movie-loop" type="checkbox" checked={cmd.loop ?? false} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" />
-                        <label htmlFor="movie-loop" className="text-sm">Loop continuously</label>
+                        <label htmlFor="movie-loop" className="text-sm">{t('movie.loopContinuously')}</label>
                     </div>
                     {!isOverlay && (
                         <div className="flex items-center gap-1 mt-2">
                             <input id="waits-for-completion" type="checkbox" checked={cmd.waitsForCompletion} onChange={e => updateCommand({ waitsForCompletion: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" /> 
-                            <label htmlFor="waits-for-completion" className="text-sm">Wait for completion</label>
+                            <label htmlFor="waits-for-completion" className="text-sm">{t('movie.waitForCompletion')}</label>
                         </div>
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <FormField label="Display Sizing">
+                    <FormField label={t('movie.displaySizing')}>
                         <Select value={cmd.objectFit || 'cover'} onChange={e => {
                             const val = e.target.value as 'cover' | 'contain' | 'fill' | 'custom';
                             if (val === 'custom') {
@@ -990,43 +1063,43 @@ const PropertiesInspector: React.FC<{
                                 updateCommand({ objectFit: val, x: 0, y: 0, width: 100, height: 100 });
                             }
                         }}>
-                            <option value="cover">Cover (fill area, may crop)</option>
-                            <option value="contain">Contain (fit inside, may letterbox)</option>
-                            <option value="fill">Fill (stretch to fit)</option>
-                            <option value="custom">Custom (set position & size)</option>
+                            <option value="cover">{t('movie.cover')}</option>
+                            <option value="contain">{t('movie.contain')}</option>
+                            <option value="fill">{t('movie.fill')}</option>
+                            <option value="custom">{t('movie.custom')}</option>
                         </Select>
                     </FormField>
                     {cmd.objectFit === 'custom' && (
                         <>
-                            <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Position & Size</h4>
+                            <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('movie.positionSize')}</h4>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="X Position (%)"><TextInput type="number" min="0" max="100" step="1" value={cmd.x ?? 0} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
-                                <FormField label="Y Position (%)"><TextInput type="number" min="0" max="100" step="1" value={cmd.y ?? 0} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                                <FormField label={t('shared.xPosition')}><TextInput type="number" min="0" max="100" step="1" value={cmd.x ?? 0} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                                <FormField label={t('shared.yPosition')}><TextInput type="number" min="0" max="100" step="1" value={cmd.y ?? 0} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="Width (%)"><TextInput type="number" min="1" max="100" step="1" value={cmd.width ?? 100} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 100 })} /></FormField>
-                                <FormField label="Height (%)"><TextInput type="number" min="1" max="100" step="1" value={cmd.height ?? 100} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 100 })} /></FormField>
+                                <FormField label={t('shared.widthPercent')}><TextInput type="number" min="1" max="100" step="1" value={cmd.width ?? 100} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 100 })} /></FormField>
+                                <FormField label={t('shared.heightPercent')}><TextInput type="number" min="1" max="100" step="1" value={cmd.height ?? 100} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 100 })} /></FormField>
                             </div>
                         </>
                     )}
-                    <FormField label={`Opacity: ${Math.round((cmd.opacity ?? 1) * 100)}%`}>
+                    <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
                         <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
                     {isOverlay && (
                         <p className="text-xs text-[var(--text-secondary)] mt-2">
-                            Use the <strong>Stop Movie</strong> command to remove overlay movies.
+                            <Trans t={t} i18nKey="movie.stopMovieNote" components={{ strong: <strong /> }} />
                         </p>
                     )}
                 </>;
             }
             case CommandType.StopMovie: {
-                return <p className="text-xs text-[var(--text-secondary)]">Stops all currently playing movie overlays.</p>;
+                return <p className="text-xs text-[var(--text-secondary)]">{t('movie.stopMovieDesc')}</p>;
             }
             case CommandType.SetVariable: {
                 const cmd = command as SetVariableCommand;
                 const variable = project.variables[cmd.variableId];
                 return <>
-                    <FormField label="Variable"><Select value={cmd.variableId} onChange={e => {
+                    <FormField label={t('vars.variable')}><Select value={cmd.variableId} onChange={e => {
                         const newVarId = e.target.value;
                         const newVar = project.variables[newVarId];
                         let newOperator = cmd.operator;
@@ -1036,31 +1109,31 @@ const PropertiesInspector: React.FC<{
                         }
                         updateCommand({ variableId: newVarId, operator: newOperator });
                     }}>
-                         {Object.keys(project.variables).length === 0 && <option disabled>No variables defined</option>}
+                         {Object.keys(project.variables).length === 0 && <option disabled>{t('vars.noVariables')}</option>}
                         {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </Select></FormField>
-                    <FormField label="Operator"><Select value={cmd.operator} onChange={e => updateCommand({ operator: e.target.value as VNSetVariableOperator })}>
-                        <option value="set">Set (=)</option>
-                        {variable?.type === 'number' && <option value="add">Add (+)</option>}
-                        {variable?.type === 'number' && <option value="subtract">Subtract (-)</option>}
-                        {variable?.type === 'number' && <option value="random">Random (Range)</option>}
+                    <FormField label={t('vars.operator')}><Select value={cmd.operator} onChange={e => updateCommand({ operator: e.target.value as VNSetVariableOperator })}>
+                        <option value="set">{t('vars.set')}</option>
+                        {variable?.type === 'number' && <option value="add">{t('vars.add')}</option>}
+                        {variable?.type === 'number' && <option value="subtract">{t('vars.subtract')}</option>}
+                        {variable?.type === 'number' && <option value="random">{t('vars.random')}</option>}
                     </Select></FormField>
                     
                     {cmd.operator === 'random' && variable?.type === 'number' ? (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="Min Value">
+                            <FormField label={t('vars.minValue')}>
                                 <TextInput type="number" value={String(cmd.randomMin ?? 0)} onChange={e => updateCommand({ randomMin: parseFloat(e.target.value) || 0 })}/>
                             </FormField>
-                            <FormField label="Max Value">
+                            <FormField label={t('vars.maxValue')}>
                                 <TextInput type="number" value={String(cmd.randomMax ?? 100)} onChange={e => updateCommand({ randomMax: parseFloat(e.target.value) || 100 })}/>
                             </FormField>
                         </div>
                     ) : (
-                        <FormField label="Value">
+                        <FormField label={t('vars.value')}>
                             {variable?.type === 'boolean' ? (
                                 <Select value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value === 'true' })}>
-                                    <option value="true">True</option>
-                                    <option value="false">False</option>
+                                    <option value="true">{t('vars.true')}</option>
+                                    <option value="false">{t('vars.false')}</option>
                                 </Select>
                             ) : variable?.type === 'number' ? (
                                 <TextInput type="number" value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value })}/>
@@ -1074,19 +1147,19 @@ const PropertiesInspector: React.FC<{
             case CommandType.TextInput: {
                 const cmd = command as TextInputCommand;
                 return <>
-                    <FormField label="Variable"><Select value={cmd.variableId} onChange={e => updateCommand({ variableId: e.target.value })}>
-                         {Object.keys(project.variables).length === 0 && <option disabled>No variables defined</option>}
+                    <FormField label={t('vars.variable')}><Select value={cmd.variableId} onChange={e => updateCommand({ variableId: e.target.value })}>
+                         {Object.keys(project.variables).length === 0 && <option disabled>{t('vars.noVariables')}</option>}
                         {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </Select></FormField>
-                    <FormField label="Prompt"><TextInput value={cmd.prompt} onChange={e => updateCommand({ prompt: e.target.value })} placeholder="Enter your name:"/></FormField>
-                    <FormField label="Placeholder"><TextInput value={cmd.placeholder || ''} onChange={e => updateCommand({ placeholder: e.target.value })} placeholder="Type here..."/></FormField>
-                    <FormField label="Max Length"><TextInput type="number" min="1" max="1000" value={cmd.maxLength || 50} onChange={e => updateCommand({ maxLength: parseInt(e.target.value) || 50 })}/></FormField>
+                    <FormField label={t('textInput.prompt')}><TextInput value={cmd.prompt} onChange={e => updateCommand({ prompt: e.target.value })} placeholder={t('textInput.promptPlaceholder')}/></FormField>
+                    <FormField label={t('textInput.placeholder')}><TextInput value={cmd.placeholder || ''} onChange={e => updateCommand({ placeholder: e.target.value })} placeholder={t('textInput.placeholderPlaceholder')}/></FormField>
+                    <FormField label={t('textInput.maxLength')}><TextInput type="number" min="1" max="1000" value={cmd.maxLength || 50} onChange={e => updateCommand({ maxLength: parseInt(e.target.value) || 50 })}/></FormField>
                 </>;
             }
              case CommandType.Jump: {
                 const cmd = command as JumpCommand;
                 return <>
-                    <FormField label="Target Scene"><Select value={cmd.targetSceneId} onChange={e => updateCommand({ targetSceneId: e.target.value })}>
+                    <FormField label={t('jump.targetScene')}><Select value={cmd.targetSceneId} onChange={e => updateCommand({ targetSceneId: e.target.value })}>
                          {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select></FormField>
                     {!project.scenes[cmd.targetSceneId] && <p className="text-red-500 text-xs">Warning: Target scene not found.</p>}
@@ -1095,20 +1168,20 @@ const PropertiesInspector: React.FC<{
             case CommandType.Wait: {
                 const cmd = command as WaitCommand;
                 return <>
-                    <FormField label="Duration (s)"><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} disabled={cmd.waitIndefinitelyForInput}/></FormField>
-                    <FormField label="Wait Mode">
+                    <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} disabled={cmd.waitIndefinitelyForInput}/></FormField>
+                    <FormField label={t('wait.waitMode')}>
                         <div className="space-y-2">
                             <label className="flex items-center gap-1">
                                 <input type="checkbox" checked={!cmd.waitIndefinitelyForInput && !cmd.waitForInput} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false })} />
-                                <span className="text-xs text-[var(--text-primary)]">Timed wait</span>
+                                <span className="text-xs text-[var(--text-primary)]">{t('wait.timed')}</span>
                             </label>
                             <label className="flex items-center gap-1">
                                 <input type="checkbox" checked={!!cmd.waitForInput && !cmd.waitIndefinitelyForInput} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false })} />
-                                <span className="text-xs text-[var(--text-primary)]">Allow click advance</span>
+                                <span className="text-xs text-[var(--text-primary)]">{t('wait.allowClick')}</span>
                             </label>
                             <label className="flex items-center gap-1">
                                 <input type="checkbox" checked={!!cmd.waitIndefinitelyForInput} onChange={e => updateCommand({ waitIndefinitelyForInput: e.target.checked, waitForInput: false })} />
-                                <span className="text-xs text-[var(--text-primary)]">Wait indefinitely for user input</span>
+                                <span className="text-xs text-[var(--text-primary)]">{t('wait.indefinite')}</span>
                             </label>
                         </div>
                     </FormField>
@@ -1118,28 +1191,28 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as ShakeScreenCommand;
                 const isShakePersistent = cmd.duration === 0;
                 return <>
-                    <FormField label={`Intensity: ${cmd.intensity}`}>
+                    <FormField label={t('screen.intensity', { value: cmd.intensity })}>
                         <input type="range" min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
-                    <FormField label="Duration">
+                    <FormField label={t('screen.duration')}>
                         <label className="flex items-center gap-2 mb-2">
                             <input type="checkbox" checked={isShakePersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 0.5 })} />
-                            <span className="text-xs text-[var(--text-primary)]">Persistent (until cleared by Reset Screen Effects or scene change)</span>
+                            <span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShake')}</span>
                         </label>
                         {!isShakePersistent && (
                             <TextInput type="number" min="0.1" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.1 })}/>
                         )}
                     </FormField>
-                    {isShakePersistent && <p className="text-xs text-amber-400/80">⚠ Shake will continue until a "Reset Screen Effects" command runs or the scene changes.</p>}
+                    {isShakePersistent && <p className="text-xs text-amber-400/80">{t('screen.shakeWarning')}</p>}
                 </>;
             }
             case CommandType.TintScreen: {
                 const cmd = command as TintScreenCommand;
                 return <>
-                    <FormField label="Tint Color (Hex with Alpha: #RRGGBBAA)">
+                    <FormField label={t('screen.tintColor')}>
                         <TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value })}/>
                     </FormField>
-                    <FormField label="Duration (s)">
+                    <FormField label={t('shared.durationSec')}>
                         <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/>
                     </FormField>
                 </>;
@@ -1147,16 +1220,16 @@ const PropertiesInspector: React.FC<{
             case CommandType.PanZoomScreen: {
                 const cmd = command as PanZoomScreenCommand;
                 return <>
-                    <FormField label={`Zoom: ${cmd.zoom}x`}>
+                    <FormField label={t('screen.zoom', { value: cmd.zoom })}>
                         <input type="range" min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
-                     <FormField label={`Pan X: ${cmd.panX}%`}>
+                     <FormField label={t('screen.panX', { value: cmd.panX })}>
                         <input type="range" min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
-                     <FormField label={`Pan Y: ${cmd.panY}%`}>
+                     <FormField label={t('screen.panY', { value: cmd.panY })}>
                         <input type="range" min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
-                    <FormField label="Duration (s)">
+                    <FormField label={t('shared.durationSec')}>
                         <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/>
                     </FormField>
                 </>;
@@ -1164,7 +1237,7 @@ const PropertiesInspector: React.FC<{
             case CommandType.ResetScreenEffects: {
                 const cmd = command as ResetScreenEffectsCommand;
                 return <>
-                    <FormField label="Duration (s)">
+                    <FormField label={t('shared.durationSec')}>
                         <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/>
                     </FormField>
                 </>;
@@ -1172,10 +1245,10 @@ const PropertiesInspector: React.FC<{
             case CommandType.FlashScreen: {
                 const cmd = command as FlashScreenCommand;
                 return <>
-                    <FormField label="Flash Color">
+                    <FormField label={t('screen.flashColor')}>
                         <TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value })}/>
                     </FormField>
-                    <FormField label="Duration (s)">
+                    <FormField label={t('shared.durationSec')}>
                         <TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}/>
                     </FormField>
                 </>;
@@ -1196,23 +1269,23 @@ const PropertiesInspector: React.FC<{
                 const effectColor = cmd.color || defaultColors[effectType] || '#FFFFFF';
                 
                 return <>
-                    <FormField label="Effect">
+                    <FormField label={t('screen.effect')}>
                         <Select value={effectType} onChange={e => updateCommand({ effectType: e.target.value, color: undefined })}>
-                            <option value="crtScanlines">CRT Scanlines</option>
-                            <option value="chromaticGlitch">Chromatic Glitch</option>
-                            <option value="sunbeams">Undulating Sunbeams</option>
-                            <option value="shimmer">Undulating Shimmer</option>
-                            <option value="rain">Rain</option>
-                            <option value="snowAsh">Snow / Ash</option>
+                            <option value="crtScanlines">{t('screen.effects.crtScanlines')}</option>
+                            <option value="chromaticGlitch">{t('screen.effects.chromaticGlitch')}</option>
+                            <option value="sunbeams">{t('screen.effects.sunbeams')}</option>
+                            <option value="shimmer">{t('screen.effects.shimmer')}</option>
+                            <option value="rain">{t('screen.effects.rain')}</option>
+                            <option value="snowAsh">{t('screen.effects.snowAsh')}</option>
                         </Select>
                     </FormField>
 
-                    <FormField label={`Intensity: ${Math.round(intensity * 100)}%`}>
+                    <FormField label={t('screen.intensityPct', { value: Math.round(intensity * 100) })}>
                         <input type="range" min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) })} className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent-lavender)]"/>
                     </FormField>
 
                     {supportsColor && (
-                        <FormField label="Color">
+                        <FormField label={t('screen.color')}>
                             <div className="flex items-center gap-2">
                                 <ColorInput 
                                     value={effectColor} 
@@ -1229,19 +1302,19 @@ const PropertiesInspector: React.FC<{
                                     type="button"
                                     onClick={() => updateCommand({ color: undefined })}
                                     className="px-2 py-1 text-xs bg-[var(--bg-tertiary)] hover:bg-[var(--bg-tertiary)] rounded"
-                                    title="Reset to default"
+                                    title={t('screen.reset')}
                                 >
-                                    Reset
+                                    {t('screen.reset')}
                                 </button>
                             </div>
                         </FormField>
                     )}
 
                     {effectType === 'snowAsh' && (
-                        <FormField label="Mode">
+                        <FormField label={t('screen.mode')}>
                             <Select value={cmd.variant || 'snow'} onChange={e => updateCommand({ variant: e.target.value })}>
-                                <option value="snow">Snow</option>
-                                <option value="ash">Ash</option>
+                                <option value="snow">{t('screen.snow')}</option>
+                                <option value="ash">{t('screen.ash')}</option>
                             </Select>
                         </FormField>
                     )}
@@ -1249,27 +1322,27 @@ const PropertiesInspector: React.FC<{
                     {(() => {
                         const overlayDuration = typeof cmd.duration === 'number' ? cmd.duration : 0;
                         const isPersistent = overlayDuration === 0;
-                        return <FormField label="Duration">
+                        return <FormField label={t('screen.duration')}>
                             <label className="flex items-center gap-2 mb-2">
                                 <input type="checkbox" checked={isPersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 5 })} />
-                                <span className="text-xs text-[var(--text-primary)]">Persistent (until cleared)</span>
+                                <span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShort')}</span>
                             </label>
                             {!isPersistent && (
                                 <TextInput type="number" min="0.1" step="0.5" value={overlayDuration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.1 })} />
                             )}
-                            {!isPersistent && <p className="text-xs text-[var(--text-secondary)] mt-1">Effect will automatically remove itself after this many seconds.</p>}
+                            {!isPersistent && <p className="text-xs text-[var(--text-secondary)] mt-1">{t('screen.autoRemoveHint')}</p>}
                         </FormField>;
                     })()}
-                    
-                    <p className="text-xs text-[var(--text-secondary)]">Tip: set intensity to 0 to disable this effect.</p>
+
+                    <p className="text-xs text-[var(--text-secondary)]">{t('screen.tip')}</p>
                 </>;
             }
             case CommandType.ShowScreen: {
                 const cmd = command as ShowScreenCommand;
                 return <>
-                    <FormField label="UI Screen">
+                    <FormField label={t('screen.uiScreen')}>
                         <Select value={cmd.screenId} onChange={e => updateCommand({ screenId: e.target.value })}>
-                             {Object.keys(project.uiScreens).length === 0 && <option disabled>No UI Screens defined</option>}
+                             {Object.keys(project.uiScreens).length === 0 && <option disabled>{t('screen.noUIScreens')}</option>}
                             {Object.values(project.uiScreens).map((s: VNUIScreen) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </Select>
                     </FormField>
@@ -1278,7 +1351,7 @@ const PropertiesInspector: React.FC<{
             case CommandType.Label: {
                 const cmd = command as LabelCommand;
                 return <>
-                    <FormField label="Label ID">
+                    <FormField label={t('screen.labelId')}>
                         <TextInput value={cmd.labelId} onChange={e => updateCommand({ labelId: e.target.value })} />
                     </FormField>
                 </>;
@@ -1286,7 +1359,7 @@ const PropertiesInspector: React.FC<{
             case CommandType.JumpToLabel: {
                 const cmd = command as JumpToLabelCommand;
                 return <>
-                    <FormField label="Label ID">
+                    <FormField label={t('screen.labelId')}>
                         <TextInput value={cmd.labelId} onChange={e => updateCommand({ labelId: e.target.value })} />
                     </FormField>
                 </>;
@@ -1294,141 +1367,140 @@ const PropertiesInspector: React.FC<{
             case CommandType.ShowText: {
                 const cmd = command as ShowTextCommand;
                 return <>
-                    <FormField label="Text">
+                    <FormField label={t('text.text')}>
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
-                        <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Max Width (px, optional)"><TextInput type="number" value={cmd.width || ''} onChange={e => updateCommand({ width: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></FormField>
-                        <FormField label="Max Height (px, optional)"><TextInput type="number" value={cmd.height || ''} onChange={e => updateCommand({ height: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></FormField>
+                        <FormField label={t('text.maxWidth')}><TextInput type="number" value={cmd.width || ''} onChange={e => updateCommand({ width: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></FormField>
+                        <FormField label={t('text.maxHeight')}><TextInput type="number" value={cmd.height || ''} onChange={e => updateCommand({ height: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></FormField>
                     </div>
+                    <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY} onChange={p => updateCommand(p)} />
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Styling</h4>
-                    <FormField label="Font Family"><TextInput value={cmd.fontFamily} onChange={e => updateCommand({ fontFamily: e.target.value })} placeholder="e.g., Arial, sans-serif" /></FormField>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('text.styling')}</h4>
+                    <FormField label={t('text.fontFamily')}><TextInput value={cmd.fontFamily} onChange={e => updateCommand({ fontFamily: e.target.value })} placeholder={t('text.fontFamilyPlaceholder')} /></FormField>
                     <div className="grid grid-cols-2 gap-1">
-                         <FormField label="Font Size (px)"><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 16 })} /></FormField>
-                        <FormField label="Color"><ColorInput value={cmd.color} onChange={val => updateCommand({ color: val })} className="p-1 h-10" /></FormField>
+                         <FormField label={t('text.fontSize')}><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 16 })} /></FormField>
+                        <FormField label={t('shared.color')}><ColorInput value={cmd.color} onChange={val => updateCommand({ color: val })} className="p-1 h-10" /></FormField>
                     </div>
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Weight">
+                        <FormField label={t('text.weight')}>
                             <Select value={cmd.fontWeight || 'normal'} onChange={e => updateCommand({ fontWeight: e.target.value as any })}>
-                                <option value="normal">Normal</option>
-                                <option value="bold">Bold</option>
+                                <option value="normal">{t('text.normal')}</option>
+                                <option value="bold">{t('text.bold')}</option>
                             </Select>
                         </FormField>
-                        <FormField label="Style">
+                        <FormField label={t('text.style')}>
                             <Select value={cmd.fontStyle || 'normal'} onChange={e => updateCommand({ fontStyle: e.target.value as any })}>
-                                <option value="normal">Normal</option>
-                                <option value="italic">Italic</option>
+                                <option value="normal">{t('text.normal')}</option>
+                                <option value="italic">{t('text.italic')}</option>
                             </Select>
                         </FormField>
                     </div>
-                    <FormField label="Letter Spacing (px)">
+                    <FormField label={t('text.letterSpacing')}>
                         <TextInput type="number" value={cmd.letterSpacing ?? 0} onChange={e => updateCommand({ letterSpacing: parseFloat(e.target.value) || 0 })} />
                     </FormField>
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Text Align">
+                        <FormField label={t('text.textAlign')}>
                             <Select value={cmd.textAlign || 'left'} onChange={e => updateCommand({ textAlign: e.target.value as any })}>
-                                <option value="left">Left</option>
-                                <option value="center">Center</option>
-                                <option value="right">Right</option>
+                                <option value="left">{t('positions.left')}</option>
+                                <option value="center">{t('positions.center')}</option>
+                                <option value="right">{t('positions.right')}</option>
                             </Select>
                         </FormField>
-                        <FormField label="Vertical Align">
+                        <FormField label={t('text.verticalAlign')}>
                             <Select value={cmd.verticalAlign || 'top'} onChange={e => updateCommand({ verticalAlign: e.target.value as any })}>
-                                <option value="top">Top</option>
-                                <option value="middle">Middle</option>
-                                <option value="bottom">Bottom</option>
+                                <option value="top">{t('text.top')}</option>
+                                <option value="middle">{t('text.middle')}</option>
+                                <option value="bottom">{t('text.bottom')}</option>
                             </Select>
                         </FormField>
                     </div>
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Text Shadow</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('text.textShadow')}</h4>
                     <label className="flex items-center gap-2 text-xs text-[var(--text-primary)] cursor-pointer mb-2">
                         <input type="checkbox" checked={cmd.textShadow?.enabled ?? false} onChange={e => updateCommand({ textShadow: { ...( cmd.textShadow || { offsetX: 2, offsetY: 2, blur: 4, color: '#000000' }), enabled: e.target.checked } })} />
-                        Enable Shadow
+                        {t('text.enableShadow')}
                     </label>
                     {cmd.textShadow?.enabled && (
                         <>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="X Offset"><TextInput type="number" value={cmd.textShadow.offsetX} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, offsetX: parseFloat(e.target.value) || 0 } })} /></FormField>
-                                <FormField label="Y Offset"><TextInput type="number" value={cmd.textShadow.offsetY} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, offsetY: parseFloat(e.target.value) || 0 } })} /></FormField>
+                                <FormField label={t('text.xOffset')}><TextInput type="number" value={cmd.textShadow.offsetX} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, offsetX: parseFloat(e.target.value) || 0 } })} /></FormField>
+                                <FormField label={t('text.yOffset')}><TextInput type="number" value={cmd.textShadow.offsetY} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, offsetY: parseFloat(e.target.value) || 0 } })} /></FormField>
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="Blur"><TextInput type="number" value={cmd.textShadow.blur} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, blur: parseFloat(e.target.value) || 0 } })} /></FormField>
-                                <FormField label="Shadow Color"><ColorInput value={cmd.textShadow.color} onChange={val => updateCommand({ textShadow: { ...cmd.textShadow!, color: val } })} className="p-1 h-10" /></FormField>
+                                <FormField label={t('text.blur')}><TextInput type="number" value={cmd.textShadow.blur} onChange={e => updateCommand({ textShadow: { ...cmd.textShadow!, blur: parseFloat(e.target.value) || 0 } })} /></FormField>
+                                <FormField label={t('text.shadowColor')}><ColorInput value={cmd.textShadow.color} onChange={val => updateCommand({ textShadow: { ...cmd.textShadow!, color: val } })} className="p-1 h-10" /></FormField>
                             </div>
                         </>
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Text Gradient</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('text.textGradient')}</h4>
                     <label className="flex items-center gap-2 text-xs text-[var(--text-primary)] cursor-pointer mb-2">
                         <input type="checkbox" checked={cmd.textGradient?.enabled ?? false} onChange={e => updateCommand({ textGradient: { ...(cmd.textGradient || { type: 'linear', angle: 90, colors: ['#ff00a5', '#8a2be2'] }), enabled: e.target.checked } })} />
-                        Enable Gradient
+                        {t('text.enableGradient')}
                     </label>
                     {cmd.textGradient?.enabled && (
                         <>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="Type">
+                                <FormField label={t('text.type')}>
                                     <Select value={cmd.textGradient.type} onChange={e => updateCommand({ textGradient: { ...cmd.textGradient!, type: e.target.value as any } })}>
-                                        <option value="linear">Linear</option>
-                                        <option value="radial">Radial</option>
+                                        <option value="linear">{t('text.linear')}</option>
+                                        <option value="radial">{t('text.radial')}</option>
                                     </Select>
                                 </FormField>
                                 {cmd.textGradient.type === 'linear' && (
-                                    <FormField label="Angle (°)"><TextInput type="number" value={cmd.textGradient.angle} onChange={e => updateCommand({ textGradient: { ...cmd.textGradient!, angle: parseInt(e.target.value, 10) || 0 } })} /></FormField>
+                                    <FormField label={t('text.angle')}><TextInput type="number" value={cmd.textGradient.angle} onChange={e => updateCommand({ textGradient: { ...cmd.textGradient!, angle: parseInt(e.target.value, 10) || 0 } })} /></FormField>
                                 )}
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="Color 1"><ColorInput value={cmd.textGradient.colors[0] || '#ff00a5'} onChange={val => { const c = [...(cmd.textGradient!.colors)]; c[0] = val; updateCommand({ textGradient: { ...cmd.textGradient!, colors: c } }); }} className="p-1 h-10" /></FormField>
-                                <FormField label="Color 2"><ColorInput value={cmd.textGradient.colors[1] || '#8a2be2'} onChange={val => { const c = [...(cmd.textGradient!.colors)]; c[1] = val; updateCommand({ textGradient: { ...cmd.textGradient!, colors: c } }); }} className="p-1 h-10" /></FormField>
+                                <FormField label={t('text.color1')}><ColorInput value={cmd.textGradient.colors[0] || '#ff00a5'} onChange={val => { const c = [...(cmd.textGradient!.colors)]; c[0] = val; updateCommand({ textGradient: { ...cmd.textGradient!, colors: c } }); }} className="p-1 h-10" /></FormField>
+                                <FormField label={t('text.color2')}><ColorInput value={cmd.textGradient.colors[1] || '#8a2be2'} onChange={val => { const c = [...(cmd.textGradient!.colors)]; c[1] = val; updateCommand({ textGradient: { ...cmd.textGradient!, colors: c } }); }} className="p-1 h-10" /></FormField>
                             </div>
                         </>
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Text Border</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('text.textBorder')}</h4>
                     <label className="flex items-center gap-2 text-xs text-[var(--text-primary)] cursor-pointer mb-2">
                         <input type="checkbox" checked={cmd.textBorder?.enabled ?? false} onChange={e => updateCommand({ textBorder: { ...(cmd.textBorder || { width: 1, color: '#000000' }), enabled: e.target.checked } })} />
-                        Enable Border
+                        {t('text.enableBorder')}
                     </label>
                     {cmd.textBorder?.enabled && (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="Width (px)"><TextInput type="number" value={cmd.textBorder.width} onChange={e => updateCommand({ textBorder: { ...cmd.textBorder!, width: parseFloat(e.target.value) || 0 } })} /></FormField>
-                            <FormField label="Border Color"><ColorInput value={cmd.textBorder.color} onChange={val => updateCommand({ textBorder: { ...cmd.textBorder!, color: val } })} className="p-1 h-10" /></FormField>
+                            <FormField label={t('text.borderWidth')}><TextInput type="number" value={cmd.textBorder.width} onChange={e => updateCommand({ textBorder: { ...cmd.textBorder!, width: parseFloat(e.target.value) || 0 } })} /></FormField>
+                            <FormField label={t('text.borderColor')}><ColorInput value={cmd.textBorder.color} onChange={val => updateCommand({ textBorder: { ...cmd.textBorder!, color: val } })} className="p-1 h-10" /></FormField>
                         </div>
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                 </>;
             }
             case CommandType.ShowImage: {
                 const cmd = command as ShowImageCommand;
                 return <>
-                    <AssetSelector label="Image" assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || ''})} allowVideo />
+                    <AssetSelector label={t('image.image')} assetType="images" value={cmd.imageId} onChange={id => updateCommand({ imageId: id || ''})} allowVideo />
                      <div className="grid grid-cols-2 gap-1">
-                        <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
-                        <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
                      <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Width (px)"><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseInt(e.target.value, 10) || 0 })} /></FormField>
-                        <FormField label="Height (px)"><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        <FormField label={t('shared.widthPx')}><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        <FormField label={t('shared.heightPx')}><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseInt(e.target.value, 10) || 0 })} /></FormField>
                     </div>
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Scale X"><TextInput type="number" step="0.1" value={cmd.scaleX ?? 1} onChange={e => updateCommand({ scaleX: parseFloat(e.target.value) || 1 })} /></FormField>
-                        <FormField label="Scale Y"><TextInput type="number" step="0.1" value={cmd.scaleY ?? 1} onChange={e => updateCommand({ scaleY: parseFloat(e.target.value) || 1 })} /></FormField>
+                        <FormField label={t('shared.scaleX')}><TextInput type="number" step="0.1" value={cmd.scaleX ?? 1} onChange={e => updateCommand({ scaleX: parseFloat(e.target.value) || 1 })} /></FormField>
+                        <FormField label={t('shared.scaleY')}><TextInput type="number" step="0.1" value={cmd.scaleY ?? 1} onChange={e => updateCommand({ scaleY: parseFloat(e.target.value) || 1 })} /></FormField>
                     </div>
-                    <FormField label="Rotation (°)">
-                        <TextInput type="number" value={cmd.rotation} onChange={e => updateCommand({ rotation: parseInt(e.target.value, 10) || 0 })} />
-                    </FormField>
-                    <FormField label={`Opacity: ${cmd.opacity}`}>
+                    <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY} onChange={p => updateCommand(p)} />
+                    <FormField label={t('image.opacity', { value: cmd.opacity })}>
                         <input type="range" min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} />
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                 </>;
             }
@@ -1440,9 +1512,9 @@ const PropertiesInspector: React.FC<{
 
                 return (
                     <>
-                        <FormField label="Target Text to Hide">
+                        <FormField label={t('overlay.targetText')}>
                             <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
-                                <option value="">Select Text...</option>
+                                <option value="">{t('overlay.selectText')}</option>
                                 {availableTextCommands.map(c => (
                                     <option key={c.id} value={c.id}>
                                         "{c.text.substring(0, 40)}..." (ID: {c.id})
@@ -1451,7 +1523,7 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                         <hr className="border-[var(--border-subtle)] my-2" />
-                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
@@ -1464,9 +1536,9 @@ const PropertiesInspector: React.FC<{
 
                 return (
                     <>
-                        <FormField label="Target Image to Hide">
+                        <FormField label={t('overlay.targetImage')}>
                             <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
-                                <option value="">Select Image...</option>
+                                <option value="">{t('overlay.selectImage')}</option>
                                 {availableImageCommands.map(c => {
                                     const image = (project.images || {})[c.imageId] as VNImage | undefined;
                                     const bgForImage = project.backgrounds[c.imageId];
@@ -1476,7 +1548,7 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                         <hr className="border-[var(--border-subtle)] my-2" />
-                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
@@ -1484,51 +1556,53 @@ const PropertiesInspector: React.FC<{
             case CommandType.ShowButton: {
                 const cmd = command as ShowButtonCommand;
                 return <>
-                    <FormField label="Button Text"><TextInput value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} /></FormField>
-                    
+                    <FormField label={t('button.buttonText')}><TextInput value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} /></FormField>
+
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
-                        <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Width (%)"><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 20 })} /></FormField>
-                        <FormField label="Height (%)"><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 8 })} /></FormField>
+                        <FormField label={t('shared.widthPercent')}><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 20 })} /></FormField>
+                        <FormField label={t('shared.heightPercent')}><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 8 })} /></FormField>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Anchor X"><TextInput type="number" step="0.1" value={cmd.anchorX} onChange={e => updateCommand({ anchorX: parseFloat(e.target.value) || 0.5 })} /></FormField>
-                        <FormField label="Anchor Y"><TextInput type="number" step="0.1" value={cmd.anchorY} onChange={e => updateCommand({ anchorY: parseFloat(e.target.value) || 0.5 })} /></FormField>
+                        <FormField label={t('button.anchorX')}><TextInput type="number" step="0.1" value={cmd.anchorX} onChange={e => updateCommand({ anchorX: parseFloat(e.target.value) || 0.5 })} /></FormField>
+                        <FormField label={t('button.anchorY')}><TextInput type="number" step="0.1" value={cmd.anchorY} onChange={e => updateCommand({ anchorY: parseFloat(e.target.value) || 0.5 })} /></FormField>
                     </div>
-                    
+
+                    <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY} onChange={p => updateCommand(p)} />
+
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Styling</h4>
-                    
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('text.styling')}</h4>
+
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Background"><ColorInput value={cmd.backgroundColor || '#6366f1'} onChange={val => updateCommand({ backgroundColor: val })} /></FormField>
-                        <FormField label="Text Color"><ColorInput value={cmd.textColor || '#ffffff'} onChange={val => updateCommand({ textColor: val })} /></FormField>
+                        <FormField label={t('button.background')}><ColorInput value={cmd.backgroundColor || '#6366f1'} onChange={val => updateCommand({ backgroundColor: val })} /></FormField>
+                        <FormField label={t('button.textColor')}><ColorInput value={cmd.textColor || '#ffffff'} onChange={val => updateCommand({ textColor: val })} /></FormField>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Font Size (px)"><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 18 })} /></FormField>
-                        <FormField label="Font Weight">
+                        <FormField label={t('text.fontSize')}><TextInput type="number" value={cmd.fontSize} onChange={e => updateCommand({ fontSize: parseInt(e.target.value, 10) || 18 })} /></FormField>
+                        <FormField label={t('button.fontWeight')}>
                             <Select value={cmd.fontWeight} onChange={e => updateCommand({ fontWeight: e.target.value as 'normal' | 'bold' })}>
-                                <option value="normal">Normal</option>
-                                <option value="bold">Bold</option>
+                                <option value="normal">{t('text.normal')}</option>
+                                <option value="bold">{t('text.bold')}</option>
                             </Select>
                         </FormField>
                     </div>
-                    
-                    <FormField label="Border Radius (px)"><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
-                    
-                    <FormField label={`Opacity: ${Math.round((cmd.opacity ?? 1) * 100)}%`}>
+
+                    <FormField label={t('button.borderRadius')}><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+
+                    <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
                         <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                     </FormField>
-                    
+
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Images (Optional)</h4>
-                    
-                    <AssetSelector label="Button Image" assetType="images" value={cmd.image?.id || null} allowVideo onChange={id => {
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('button.imagesOptional')}</h4>
+
+                    <AssetSelector label={t('button.buttonImage')} assetType="images" value={cmd.image?.id || null} allowVideo onChange={id => {
                         if (id) {
                             updateCommand({ image: { type: 'image', id } });
                         } else {
@@ -1536,18 +1610,18 @@ const PropertiesInspector: React.FC<{
                         }
                     }} />
                     
-                    <AssetSelector label="Hover Image" assetType="images" value={cmd.hoverImage?.id || null} allowVideo onChange={id => {
+                    <AssetSelector label={t('button.hoverImage')} assetType="images" value={cmd.hoverImage?.id || null} allowVideo onChange={id => {
                         if (id) {
                             updateCommand({ hoverImage: { type: 'image', id } });
                         } else {
                             updateCommand({ hoverImage: null });
                         }
                     }} />
-                    
+
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">On Click Action</h4>
-                    
-                    <FormField label="Wait for Click">
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('button.onClickAction')}</h4>
+
+                    <FormField label={t('button.waitForClick')}>
                         <div className="flex items-center gap-1">
                             <input
                                 type="checkbox"
@@ -1555,11 +1629,11 @@ const PropertiesInspector: React.FC<{
                                 onChange={e => updateCommand({ waitForClick: e.target.checked })}
                                 className="w-4 h-4"
                             />
-                            <span className="text-xs text-[var(--text-secondary)]">Pause scene execution until this button is clicked</span>
+                            <span className="text-xs text-[var(--text-secondary)]">{t('button.waitForClickHint')}</span>
                         </div>
                     </FormField>
 
-                    <FormField label="Quick Menu Mode">
+                    <FormField label={t('button.quickMenuMode')}>
                         <div className="flex items-center gap-1">
                             <input
                                 type="checkbox"
@@ -1567,26 +1641,26 @@ const PropertiesInspector: React.FC<{
                                 onChange={e => updateCommand({ quickMenuMode: e.target.checked })}
                                 className="w-4 h-4"
                             />
-                            <span className="text-xs text-[var(--text-secondary)]">Behave like a quick-menu button — fires its actions on click but never advances the dialogue or consumes the click.</span>
+                            <span className="text-xs text-[var(--text-secondary)]">{t('button.quickMenuModeHint')}</span>
                         </div>
                     </FormField>
 
-                    <h4 className="font-bold text-xs mb-2 mt-2 text-[var(--text-secondary)]">Primary Action</h4>
+                    <h4 className="font-bold text-xs mb-2 mt-2 text-[var(--text-secondary)]">{t('button.primaryAction')}</h4>
                     <ActionEditor action={cmd.onClick} onActionChange={action => updateCommand({ onClick: action })} />
-                    
-                    <h4 className="font-bold text-xs mb-2 mt-2 text-[var(--text-secondary)]">Additional Actions</h4>
+
+                    <h4 className="font-bold text-xs mb-2 mt-2 text-[var(--text-secondary)]">{t('button.additionalActions')}</h4>
                     <div className="space-y-2">
                         {(cmd.actions || []).map((action, idx) => (
                             <div key={idx} className="p-2 bg-[var(--bg-primary)] rounded space-y-2">
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs text-[var(--text-secondary)]">Action {idx + 1}</span>
-                                    <button 
+                                    <span className="text-xs text-[var(--text-secondary)]">{t('button.action', { n: idx + 1 })}</span>
+                                    <button
                                         onClick={() => {
                                             const newActions = (cmd.actions || []).filter((_, i) => i !== idx);
                                             updateCommand({ actions: newActions });
                                         }}
                                         className="p-1 hover:bg-red-600 rounded transition-colors"
-                                        title="Remove Action"
+                                        title={t('button.removeAction')}
                                     >
                                         <TrashIcon className="w-3 h-3" />
                                     </button>
@@ -1608,19 +1682,19 @@ const PropertiesInspector: React.FC<{
                             }}
                             className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs"
                         >
-                            + Add Action
+                            {t('button.addAction')}
                         </button>
                     </div>
-                    
-                    <AssetSelector label="Click Sound" assetType="audio" value={cmd.clickSound} onChange={id => updateCommand({ clickSound: id })} />
-                    
+
+                    <AssetSelector label={t('button.clickSound')} assetType="audio" value={cmd.clickSound} onChange={id => updateCommand({ clickSound: id })} />
+
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
-                    
+
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Show Conditions</h4>
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">Button will only show if these conditions are met.</p>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('button.showConditions')}</h4>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">{t('button.showConditionsHint')}</p>
                     <ConditionsEditor
                         conditions={cmd.showConditions || []}
                         project={project}
@@ -1636,9 +1710,9 @@ const PropertiesInspector: React.FC<{
 
                 return (
                     <>
-                        <FormField label="Target Button to Hide">
+                        <FormField label={t('button.targetButton')}>
                             <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
-                                <option value="">Select Button...</option>
+                                <option value="">{t('button.selectButton')}</option>
                                 {availableButtonCommands.map(c => (
                                     <option key={c.id} value={c.id}>
                                         "{c.text}" (ID: {c.id})
@@ -1647,7 +1721,7 @@ const PropertiesInspector: React.FC<{
                             </Select>
                         </FormField>
                         <hr className="border-[var(--border-subtle)] my-2" />
-                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
                 );
@@ -1682,40 +1756,40 @@ const PropertiesInspector: React.FC<{
 
                 return (
                     <>
-                        <AssetSelector label="Image Map Background" assetType="images" value={cmd.imageId || null} onChange={id => updateCommand({ imageId: id || '' })} />
-                        <AssetSelector label="Hover State Image" assetType="images" value={cmd.hoverImageId || null} onChange={id => updateCommand({ hoverImageId: id || undefined })} />
-                        <p className="text-[10px] text-[var(--text-secondary)] -mt-1">When a region is hovered, this image is shown clipped to that region (Ren'Py-style hover effect).</p>
+                        <AssetSelector label={t('imageMap.background')} assetType="images" value={cmd.imageId || null} onChange={id => updateCommand({ imageId: id || '' })} />
+                        <AssetSelector label={t('imageMap.hoverStateImage')} assetType="images" value={cmd.hoverImageId || null} onChange={id => updateCommand({ hoverImageId: id || undefined })} />
+                        <p className="text-[10px] text-[var(--text-secondary)] -mt-1">{t('imageMap.hoverStateHint')}</p>
 
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="X Position (%)"><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
-                            <FormField label="Y Position (%)"><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                            <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                            <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
                         </div>
 
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="Width (%)"><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 100 })} /></FormField>
-                            <FormField label="Height (%)"><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 100 })} /></FormField>
+                            <FormField label={t('shared.widthPercent')}><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 100 })} /></FormField>
+                            <FormField label={t('shared.heightPercent')}><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 100 })} /></FormField>
                         </div>
 
-                        <FormField label={`Opacity: ${Math.round((cmd.opacity ?? 1) * 100)}%`}>
+                        <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
                             <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                         </FormField>
 
-                        <FormField label="Wait for Click">
+                        <FormField label={t('imageMap.waitForClick')}>
                             <div className="flex items-center gap-1">
                                 <input type="checkbox" checked={cmd.waitForClick || false} onChange={e => updateCommand({ waitForClick: e.target.checked })} className="w-4 h-4" />
-                                <span className="text-xs text-[var(--text-secondary)]">Pause execution until a region is clicked</span>
+                                <span className="text-xs text-[var(--text-secondary)]">{t('imageMap.waitForClickHint')}</span>
                             </div>
                         </FormField>
 
                         <hr className="border-[var(--border-subtle)] my-2" />
-                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
 
                         <hr className="border-[var(--border-subtle)] my-2" />
                         <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-bold text-xs text-[var(--text-secondary)]">Clickable Regions ({regions.length})</h4>
+                            <h4 className="font-bold text-xs text-[var(--text-secondary)]">{t('imageMap.clickableRegions', { count: regions.length })}</h4>
                             <button onClick={addRegion} className="flex items-center gap-1 text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded transition-colors">
-                                <PlusIcon className="w-3 h-3" /> Add Region
+                                <PlusIcon className="w-3 h-3" /> {t('imageMap.addRegion')}
                             </button>
                         </div>
 
@@ -1723,80 +1797,80 @@ const PropertiesInspector: React.FC<{
                             {regions.map((region, idx) => (
                                 <div key={region.id} className="p-2 bg-[var(--bg-primary)] rounded space-y-2 border border-[var(--border-subtle)]">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xs font-bold text-[var(--text-primary)]">Region {idx + 1}</span>
-                                        <button onClick={() => removeRegion(idx)} className="p-1 hover:bg-red-600 rounded transition-colors" title="Remove Region">
+                                        <span className="text-xs font-bold text-[var(--text-primary)]">{t('imageMap.region', { n: idx + 1 })}</span>
+                                        <button onClick={() => removeRegion(idx)} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('imageMap.removeRegion')}>
                                             <TrashIcon className="w-3 h-3" />
                                         </button>
                                     </div>
 
-                                    <FormField label="Name"><TextInput value={region.name} onChange={e => updateRegion(idx, { name: e.target.value })} /></FormField>
+                                    <FormField label={t('imageMap.name')}><TextInput value={region.name} onChange={e => updateRegion(idx, { name: e.target.value })} /></FormField>
 
-                                    <FormField label="Shape">
+                                    <FormField label={t('imageMap.shape')}>
                                         <Select value={region.shape} onChange={e => {
                                             const shape = e.target.value as 'rect' | 'circle' | 'poly';
                                             const defaultCoords = shape === 'rect' ? [25, 25, 50, 50] : shape === 'circle' ? [50, 50, 25] : [25, 25, 75, 25, 75, 75, 25, 75];
                                             updateRegion(idx, { shape, coords: defaultCoords });
                                         }}>
-                                            <option value="rect">Rectangle</option>
-                                            <option value="circle">Circle</option>
-                                            <option value="poly">Polygon</option>
+                                            <option value="rect">{t('imageMap.rectangle')}</option>
+                                            <option value="circle">{t('imageMap.circle')}</option>
+                                            <option value="poly">{t('imageMap.polygon')}</option>
                                         </Select>
                                     </FormField>
 
                                     {region.shape === 'rect' && (
                                         <div className="grid grid-cols-2 gap-1">
-                                            <FormField label="X (%)"><TextInput type="number" value={region.coords[0] ?? 0} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                            <FormField label="Y (%)"><TextInput type="number" value={region.coords[1] ?? 0} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                            <FormField label="Width (%)"><TextInput type="number" value={region.coords[2] ?? 50} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                            <FormField label="Height (%)"><TextInput type="number" value={region.coords[3] ?? 50} onChange={e => { const c = [...region.coords]; c[3] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.x')}><TextInput type="number" value={region.coords[0] ?? 0} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.y')}><TextInput type="number" value={region.coords[1] ?? 0} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.width')}><TextInput type="number" value={region.coords[2] ?? 50} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.height')}><TextInput type="number" value={region.coords[3] ?? 50} onChange={e => { const c = [...region.coords]; c[3] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
                                         </div>
                                     )}
 
                                     {region.shape === 'circle' && (
                                         <div className="grid grid-cols-3 gap-1">
-                                            <FormField label="CX (%)"><TextInput type="number" value={region.coords[0] ?? 50} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                            <FormField label="CY (%)"><TextInput type="number" value={region.coords[1] ?? 50} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                            <FormField label="Radius (%)"><TextInput type="number" value={region.coords[2] ?? 25} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.cx')}><TextInput type="number" value={region.coords[0] ?? 50} onChange={e => { const c = [...region.coords]; c[0] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.cy')}><TextInput type="number" value={region.coords[1] ?? 50} onChange={e => { const c = [...region.coords]; c[1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                            <FormField label={t('imageMap.radius')}><TextInput type="number" value={region.coords[2] ?? 25} onChange={e => { const c = [...region.coords]; c[2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
                                         </div>
                                     )}
 
                                     {region.shape === 'poly' && (
                                         <div className="space-y-1">
-                                            <p className="text-xs text-[var(--text-secondary)]">Polygon points (x%, y% pairs):</p>
+                                            <p className="text-xs text-[var(--text-secondary)]">{t('imageMap.polygonPoints')}</p>
                                             {Array.from({ length: Math.floor(region.coords.length / 2) }).map((_, pi) => (
                                                 <div key={pi} className="grid grid-cols-3 gap-1 items-end">
-                                                    <FormField label={`P${pi + 1} X`}><TextInput type="number" value={region.coords[pi * 2] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                                    <FormField label={`P${pi + 1} Y`}><TextInput type="number" value={region.coords[pi * 2 + 1] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
-                                                    <button onClick={() => { const c = [...region.coords]; c.splice(pi * 2, 2); updateRegion(idx, { coords: c.length >= 2 ? c : [50, 50] }); }} className="p-1 hover:bg-red-600 rounded transition-colors mb-1" title="Remove Point">
+                                                    <FormField label={t('imageMap.pX', { n: pi + 1 })}><TextInput type="number" value={region.coords[pi * 2] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                                    <FormField label={t('imageMap.pY', { n: pi + 1 })}><TextInput type="number" value={region.coords[pi * 2 + 1] ?? 0} onChange={e => { const c = [...region.coords]; c[pi * 2 + 1] = parseFloat(e.target.value) || 0; updateRegion(idx, { coords: c }); }} /></FormField>
+                                                    <button onClick={() => { const c = [...region.coords]; c.splice(pi * 2, 2); updateRegion(idx, { coords: c.length >= 2 ? c : [50, 50] }); }} className="p-1 hover:bg-red-600 rounded transition-colors mb-1" title={t('imageMap.removePoint')}>
                                                         <XMarkIcon className="w-3 h-3" />
                                                     </button>
                                                 </div>
                                             ))}
-                                            <button onClick={() => { updateRegion(idx, { coords: [...region.coords, 50, 50] }); }} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded transition-colors">+ Add Point</button>
+                                            <button onClick={() => { updateRegion(idx, { coords: [...region.coords, 50, 50] }); }} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded transition-colors">{t('imageMap.addPoint')}</button>
                                         </div>
                                     )}
 
-                                    <FormField label="Tooltip"><TextInput value={region.tooltip || ''} onChange={e => updateRegion(idx, { tooltip: e.target.value })} placeholder="Hover text..." /></FormField>
-                                    <FormField label="Highlight Color"><ColorInput value={region.highlightColor || 'rgba(99,102,241,0.3)'} onChange={val => updateRegion(idx, { highlightColor: val })} /></FormField>
+                                    <FormField label={t('imageMap.tooltip')}><TextInput value={region.tooltip || ''} onChange={e => updateRegion(idx, { tooltip: e.target.value })} placeholder={t('imageMap.tooltipPlaceholder')} /></FormField>
+                                    <FormField label={t('imageMap.highlightColor')}><ColorInput value={region.highlightColor || 'rgba(99,102,241,0.3)'} onChange={val => updateRegion(idx, { highlightColor: val })} /></FormField>
 
-                                    <h4 className="font-bold text-xs mt-2 text-[var(--text-secondary)]">Region Actions</h4>
+                                    <h4 className="font-bold text-xs mt-2 text-[var(--text-secondary)]">{t('imageMap.regionActions')}</h4>
                                     <div className="space-y-2">
                                         {(region.actions || []).map((action, ai) => (
                                             <div key={ai} className="p-2 bg-[var(--bg-secondary)] rounded space-y-2">
                                                 <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-xs text-[var(--text-secondary)]">Action {ai + 1}</span>
-                                                    <button onClick={() => { const newActions = (region.actions || []).filter((_, i) => i !== ai); updateRegion(idx, { actions: newActions }); }} className="p-1 hover:bg-red-600 rounded transition-colors" title="Remove Action">
+                                                    <span className="text-xs text-[var(--text-secondary)]">{t('imageMap.action', { n: ai + 1 })}</span>
+                                                    <button onClick={() => { const newActions = (region.actions || []).filter((_, i) => i !== ai); updateRegion(idx, { actions: newActions }); }} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('imageMap.removeAction')}>
                                                         <TrashIcon className="w-3 h-3" />
                                                     </button>
                                                 </div>
                                                 <ActionEditor action={action} onActionChange={updatedAction => { const newActions = [...(region.actions || [])]; newActions[ai] = updatedAction; updateRegion(idx, { actions: newActions }); }} />
                                             </div>
                                         ))}
-                                        <button onClick={() => { const newAction = { type: 'GoToScreen', targetScreenId: '' } as any; updateRegion(idx, { actions: [...(region.actions || []), newAction] }); }} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">+ Add Action</button>
+                                        <button onClick={() => { const newAction = { type: 'GoToScreen', targetScreenId: '' } as any; updateRegion(idx, { actions: [...(region.actions || []), newAction] }); }} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">{t('imageMap.addAction')}</button>
                                     </div>
 
-                                    <h4 className="font-bold text-xs mt-2 text-[var(--text-secondary)]">Region Conditions</h4>
-                                    <p className="text-xs text-[var(--text-secondary)]">Region only active when conditions are met.</p>
+                                    <h4 className="font-bold text-xs mt-2 text-[var(--text-secondary)]">{t('imageMap.regionConditions')}</h4>
+                                    <p className="text-xs text-[var(--text-secondary)]">{t('imageMap.regionConditionsHint')}</p>
                                     <ConditionsEditor conditions={region.conditions || []} project={project} onChange={cs => updateRegion(idx, { conditions: cs })} />
                                 </div>
                             ))}
@@ -1812,20 +1886,103 @@ const PropertiesInspector: React.FC<{
 
                 return (
                     <>
-                        <FormField label="Target Image Map to Hide">
+                        <FormField label={t('imageMap.targetImageMap')}>
                             <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
-                                <option value="">Select Image Map...</option>
+                                <option value="">{t('imageMap.selectImageMap')}</option>
                                 {availableImageMapCommands.map(c => (
                                     <option key={c.id} value={c.id}>
-                                        Image Map ({(c.regions || []).length} regions) (ID: {c.id})
+                                        {t('imageMap.imageMapOption', { count: (c.regions || []).length, id: c.id })}
                                     </option>
                                 ))}
                             </Select>
                         </FormField>
                         <hr className="border-[var(--border-subtle)] my-2" />
-                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Animation</h4>
+                        <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('shared.animation')}</h4>
                         <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
                     </>
+                );
+            }
+            case CommandType.ShowHotSpot: {
+                const cmd = command as ShowHotSpotCommand;
+                const acts = cmd.actions || [];
+                return <>
+                    <FormField label="Name"><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value })} /></FormField>
+                    <div className="grid grid-cols-2 gap-1">
+                        <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.widthPercent')}><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 0 })} /></FormField>
+                        <FormField label={t('shared.heightPercent')}><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 0 })} /></FormField>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                        <FormField label="Shape">
+                            <Select value={cmd.shape} onChange={e => updateCommand({ shape: e.target.value as 'rect' | 'circle' })}>
+                                <option value="rect">Rectangle</option>
+                                <option value="circle">Circle</option>
+                            </Select>
+                        </FormField>
+                        <FormField label="Trigger">
+                            <Select value={cmd.trigger} onChange={e => updateCommand({ trigger: e.target.value as 'click' | 'hover' | 'drag-drop' })}>
+                                <option value="click">Click</option>
+                                <option value="hover">Hover</option>
+                                <option value="drag-drop">Drop target</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    {cmd.trigger === 'drag-drop' && (
+                        <FormField label="Accept tag (optional)">
+                            <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value })} placeholder="e.g. key — leave empty to accept any" />
+                        </FormField>
+                    )}
+                    {cmd.trigger === 'click' && (
+                        <FormField label="Advance dialogue on click">
+                            <div className="flex items-center gap-1">
+                                <input type="checkbox" checked={cmd.advanceOnTrigger || false} onChange={e => updateCommand({ advanceOnTrigger: e.target.checked })} className="w-4 h-4" />
+                                <span className="text-xs text-[var(--text-secondary)]">Otherwise the click is consumed</span>
+                            </div>
+                        </FormField>
+                    )}
+                    <FormField label="Visible outline">
+                        <div className="flex items-center gap-1">
+                            <input type="checkbox" checked={cmd.visible || false} onChange={e => updateCommand({ visible: e.target.checked })} className="w-4 h-4" />
+                            <span className="text-xs text-[var(--text-secondary)]">Draw the spot during play</span>
+                        </div>
+                    </FormField>
+                    {cmd.visible && (
+                        <FormField label={t('shared.color')}><ColorInput value={cmd.highlightColor || 'rgba(99,102,241,0.35)'} onChange={val => updateCommand({ highlightColor: val })} /></FormField>
+                    )}
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Actions</h4>
+                    <div className="space-y-2">
+                        {acts.map((action, idx) => (
+                            <div key={idx} className="p-2 bg-[var(--bg-primary)] rounded space-y-2">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-[var(--text-secondary)]">{t('button.action', { n: idx + 1 })}</span>
+                                    <button onClick={() => updateCommand({ actions: acts.filter((_, i) => i !== idx) })} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('button.removeAction')}><TrashIcon className="w-3 h-3" /></button>
+                                </div>
+                                <ActionEditor action={action} onActionChange={updated => { const next = [...acts]; next[idx] = updated; updateCommand({ actions: next }); }} />
+                            </div>
+                        ))}
+                        <button onClick={() => updateCommand({ actions: [...acts, { type: 'SetVariable' } as any] })} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">{t('button.addAction')}</button>
+                    </div>
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('footer.conditions')}</h4>
+                    <ConditionsEditor conditions={cmd.conditions} project={project} onChange={cs => updateCommand({ conditions: cs })} />
+                </>;
+            }
+            case CommandType.HideHotSpot: {
+                const cmd = command as HideHotSpotCommand;
+                const availableHotSpots = activeScene.commands.filter(
+                    (c, i) => c.type === CommandType.ShowHotSpot && i < selectedCommandIndex
+                ) as ShowHotSpotCommand[];
+                return (
+                    <FormField label="Target Hot Spot to Hide">
+                        <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
+                            <option value="">Select Hot Spot...</option>
+                            {availableHotSpots.map(c => (
+                                <option key={c.id} value={c.id}>{c.name || c.id}</option>
+                            ))}
+                        </Select>
+                    </FormField>
                 );
             }
             case CommandType.CreditRoll: {
@@ -1856,7 +2013,7 @@ const PropertiesInspector: React.FC<{
                 };
                 
                 return <>
-                    <FormField label="Credit Entries">
+                    <FormField label={t('credit.entries')}>
                         <div className="space-y-2 mb-2">
                             {entries.map((entry, i) => (
                                 <div key={i} className={`p-2 rounded-lg border ${
@@ -1866,31 +2023,31 @@ const PropertiesInspector: React.FC<{
                                 }`}>
                                     <div className="flex items-center gap-1 mb-1">
                                         <span className="text-[10px] uppercase font-bold text-[var(--text-secondary)]">
-                                            {entry.kind === 'heading' ? 'Heading' : 'Credit'}
+                                            {entry.kind === 'heading' ? t('credit.heading') : t('credit.credit')}
                                         </span>
                                         <div className="flex-1" />
-                                        <button onClick={() => moveEntry(i, -1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title="Move up"><ChevronUpIcon className="w-3.5 h-3.5" /></button>
-                                        <button onClick={() => moveEntry(i, 1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title="Move down"><ChevronDownIcon className="w-3.5 h-3.5" /></button>
-                                        <button onClick={() => removeEntry(i)} className="p-0.5 text-red-400 hover:text-red-300" title="Remove"><XMarkIcon className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => moveEntry(i, -1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title={t('credit.moveUp')}><ChevronUpIcon className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => moveEntry(i, 1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title={t('credit.moveDown')}><ChevronDownIcon className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => removeEntry(i)} className="p-0.5 text-red-400 hover:text-red-300" title={t('credit.remove')}><XMarkIcon className="w-3.5 h-3.5" /></button>
                                     </div>
                                     {entry.kind === 'heading' ? (
                                         <TextInput
                                             value={entry.label}
                                             onChange={e => updateEntry(i, 'label', e.target.value)}
-                                            placeholder="Section Title (e.g. Cast, Staff)"
+                                            placeholder={t('credit.sectionTitlePlaceholder')}
                                         />
                                     ) : (
                                         <div className="flex gap-1">
                                             <TextInput
                                                 value={entry.label}
                                                 onChange={e => updateEntry(i, 'label', e.target.value)}
-                                                placeholder="Role"
+                                                placeholder={t('credit.rolePlaceholder')}
                                                 className="flex-1"
                                             />
                                             <TextInput
                                                 value={entry.value || ''}
                                                 onChange={e => updateEntry(i, 'value', e.target.value)}
-                                                placeholder="Name"
+                                                placeholder={t('credit.namePlaceholder')}
                                                 className="flex-1"
                                             />
                                         </div>
@@ -1903,60 +2060,60 @@ const PropertiesInspector: React.FC<{
                                 onClick={() => addEntry('heading')}
                                 className="flex-1 px-2 py-1.5 text-xs bg-amber-900/30 hover:bg-amber-800/40 border border-amber-500/30 rounded text-amber-300 transition-colors"
                             >
-                                + Heading
+                                {t('credit.addHeading')}
                             </button>
                             <button
                                 onClick={() => addEntry('credit')}
                                 className="flex-1 px-2 py-1.5 text-xs bg-[var(--bg-tertiary)]/30 hover:bg-[var(--bg-tertiary)]/40 border border-[var(--border-default)]/30 rounded text-[var(--text-primary)] transition-colors"
                             >
-                                + Credit
+                                {t('credit.addCredit')}
                             </button>
                         </div>
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <FormField label="Scroll Speed">
+                    <FormField label={t('credit.scrollSpeed')}>
                         <input type="range" min="10" max="200" step="5" value={cmd.scrollSpeed || 60} onChange={e => updateCommand({ scrollSpeed: parseInt(e.target.value) || 60 })} className="w-full" />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.scrollSpeed || 60} px/sec — {(cmd.scrollSpeed || 60) <= 40 ? 'Slow' : (cmd.scrollSpeed || 60) <= 80 ? 'Normal' : (cmd.scrollSpeed || 60) <= 130 ? 'Fast' : 'Very Fast'}</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('credit.pxPerSec', { value: cmd.scrollSpeed || 60, label: (cmd.scrollSpeed || 60) <= 40 ? t('credit.speedSlow') : (cmd.scrollSpeed || 60) <= 80 ? t('credit.speedNormal') : (cmd.scrollSpeed || 60) <= 130 ? t('credit.speedFast') : t('credit.speedVeryFast') })}</span>
                     </FormField>
-                    <FormField label="Max Duration (s)">
+                    <FormField label={t('credit.maxDuration')}>
                         <TextInput type="number" min="5" max="300" step="1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 15 })} />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Safety cap — credits end after this time regardless</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('credit.maxDurationHint')}</span>
                     </FormField>
-                    <FormField label="Background Color">
+                    <FormField label={t('credit.backgroundColor')}>
                         <div className="flex items-center gap-2">
                             <ColorInput value={cmd.backgroundColor.substring(0, 7)} onChange={val => updateCommand({ backgroundColor: val + 'FF' })} className="w-10 h-10" />
                             <TextInput value={cmd.backgroundColor} onChange={e => updateCommand({ backgroundColor: e.target.value })} placeholder="#000000FF" className="flex-1" />
                         </div>
                     </FormField>
-                    <FormField label="Text Color">
+                    <FormField label={t('credit.textColor')}>
                         <div className="flex items-center gap-2">
                             <ColorInput value={cmd.textColor} onChange={val => updateCommand({ textColor: val })} className="w-10 h-10" />
                             <TextInput value={cmd.textColor} onChange={e => updateCommand({ textColor: e.target.value })} placeholder="#FFFFFF" className="flex-1" />
                         </div>
                     </FormField>
-                    <FormField label="Allow Skip">
+                    <FormField label={t('credit.allowSkip')}>
                         <label className="flex items-center gap-2">
                             <input type="checkbox" checked={cmd.allowSkip} onChange={e => updateCommand({ allowSkip: e.target.checked })} />
-                            <span className="text-xs text-[var(--text-primary)]">Player can click/press to skip credits</span>
+                            <span className="text-xs text-[var(--text-primary)]">{t('credit.allowSkipHint')}</span>
                         </label>
                     </FormField>
-                    <FormField label="On Complete">
+                    <FormField label={t('credit.onComplete')}>
                         <Select value={cmd.onComplete} onChange={e => updateCommand({ onComplete: e.target.value })}>
-                            <option value="advance">Continue to next command</option>
-                            <option value="title">Return to Title Screen</option>
+                            <option value="advance">{t('credit.onCompleteAdvance')}</option>
+                            <option value="title">{t('credit.onCompleteTitle')}</option>
                         </Select>
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-3" />
-                    <FormField label="Background Slideshow">
-                        <p className="text-[10px] text-[var(--text-secondary)] mb-2">Add images/videos that cycle behind the scrolling credits. Leave empty for a solid color background.</p>
+                    <FormField label={t('credit.backgroundSlideshow')}>
+                        <p className="text-[10px] text-[var(--text-secondary)] mb-2">{t('credit.backgroundSlideshowHint')}</p>
                         {(() => {
                             const backgrounds: CreditBackground[] = cmd.backgrounds || [];
                             const bgAssetOptions: { value: string; label: string; group?: string }[] = [];
                             Object.values(project.backgrounds).forEach((b: VNBackground) => {
-                                bgAssetOptions.push({ value: b.id, label: b.name, group: 'Backgrounds' });
+                                bgAssetOptions.push({ value: b.id, label: b.name, group: t('credit.groupBackgrounds') });
                             });
                             Object.values(project.images).forEach((img: VNImage) => {
-                                bgAssetOptions.push({ value: img.id, label: img.name, group: 'Images' });
+                                bgAssetOptions.push({ value: img.id, label: img.name, group: t('credit.groupImages') });
                             });
 
                             const updateBg = (index: number, updates: Partial<CreditBackground>) => {
@@ -1984,36 +2141,36 @@ const PropertiesInspector: React.FC<{
                                     {backgrounds.map((bg, i) => (
                                         <div key={i} className="p-2 rounded-lg border bg-indigo-900/15 border-indigo-500/25">
                                             <div className="flex items-center gap-1 mb-1.5">
-                                                <span className="text-[10px] uppercase font-bold text-indigo-300">Slide {i + 1}</span>
+                                                <span className="text-[10px] uppercase font-bold text-indigo-300">{t('credit.slide', { n: i + 1 })}</span>
                                                 <div className="flex-1" />
-                                                <button onClick={() => moveBg(i, -1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title="Move up"><ChevronUpIcon className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => moveBg(i, 1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title="Move down"><ChevronDownIcon className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => removeBg(i)} className="p-0.5 text-red-400 hover:text-red-300" title="Remove"><XMarkIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => moveBg(i, -1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title={t('credit.moveUp')}><ChevronUpIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => moveBg(i, 1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title={t('credit.moveDown')}><ChevronDownIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => removeBg(i)} className="p-0.5 text-red-400 hover:text-red-300" title={t('credit.remove')}><XMarkIcon className="w-3.5 h-3.5" /></button>
                                             </div>
                                             <SearchableSelect
                                                 options={bgAssetOptions}
                                                 value={bg.assetId || ''}
                                                 onChange={(value) => updateBg(i, { assetId: value || null })}
-                                                placeholder={bgAssetOptions.length === 0 ? "No assets uploaded" : "Select image/video..."}
+                                                placeholder={bgAssetOptions.length === 0 ? t('credit.noAssets') : t('credit.selectImageVideo')}
                                             />
                                             <div className="grid grid-cols-2 gap-1 mt-1.5">
-                                                <FormField label="Display (s)">
+                                                <FormField label={t('credit.displaySec')}>
                                                     <TextInput type="number" min="1" max="120" step="0.5" value={bg.displayDuration} onChange={e => updateBg(i, { displayDuration: parseFloat(e.target.value) || 5 })} />
                                                 </FormField>
-                                                <FormField label="Transition">
+                                                <FormField label={t('credit.transition')}>
                                                     <Select value={bg.transition} onChange={e => updateBg(i, { transition: e.target.value as CreditBackground['transition'] })}>
-                                                        <option value="fade">Fade</option>
-                                                        <option value="dissolve">Dissolve</option>
-                                                        <option value="instant">Instant</option>
+                                                        <option value="fade">{t('credit.transitionFade')}</option>
+                                                        <option value="dissolve">{t('credit.transitionDissolve')}</option>
+                                                        <option value="instant">{t('credit.transitionInstant')}</option>
                                                     </Select>
                                                 </FormField>
                                             </div>
                                             {bg.transition !== 'instant' && (
-                                                <FormField label="Transition Duration (s)">
+                                                <FormField label={t('credit.transitionDuration')}>
                                                     <TextInput type="number" min="0.1" max="5" step="0.1" value={bg.transitionDuration} onChange={e => updateBg(i, { transitionDuration: parseFloat(e.target.value) || 0.5 })} />
                                                 </FormField>
                                             )}
-                                            <FormField label="Sizing">
+                                            <FormField label={t('credit.sizing')}>
                                                 <Select value={bg.objectFit || 'cover'} onChange={e => {
                                                     const val = e.target.value as 'cover' | 'contain' | 'fill' | 'custom';
                                                     if (val === 'custom') {
@@ -2022,25 +2179,25 @@ const PropertiesInspector: React.FC<{
                                                         updateBg(i, { objectFit: val, x: 0, y: 0, width: 100, height: 100 });
                                                     }
                                                 }}>
-                                                    <option value="cover">Cover</option>
-                                                    <option value="contain">Contain</option>
-                                                    <option value="fill">Fill</option>
-                                                    <option value="custom">Custom</option>
+                                                    <option value="cover">{t('credit.sizingCover')}</option>
+                                                    <option value="contain">{t('credit.sizingContain')}</option>
+                                                    <option value="fill">{t('credit.sizingFill')}</option>
+                                                    <option value="custom">{t('credit.sizingCustom')}</option>
                                                 </Select>
                                             </FormField>
                                             {bg.objectFit === 'custom' && (
                                                 <>
                                                     <div className="grid grid-cols-2 gap-1 mt-1.5">
-                                                        <FormField label="X (%)"><TextInput type="number" min="0" max="100" step="1" value={bg.x ?? 0} onChange={e => updateBg(i, { x: parseFloat(e.target.value) || 0 })} /></FormField>
-                                                        <FormField label="Y (%)"><TextInput type="number" min="0" max="100" step="1" value={bg.y ?? 0} onChange={e => updateBg(i, { y: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                        <FormField label={t('credit.x')}><TextInput type="number" min="0" max="100" step="1" value={bg.x ?? 0} onChange={e => updateBg(i, { x: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                        <FormField label={t('credit.y')}><TextInput type="number" min="0" max="100" step="1" value={bg.y ?? 0} onChange={e => updateBg(i, { y: parseFloat(e.target.value) || 0 })} /></FormField>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-1">
-                                                        <FormField label="Width (%)"><TextInput type="number" min="1" max="100" step="1" value={bg.width ?? 100} onChange={e => updateBg(i, { width: parseFloat(e.target.value) || 100 })} /></FormField>
-                                                        <FormField label="Height (%)"><TextInput type="number" min="1" max="100" step="1" value={bg.height ?? 100} onChange={e => updateBg(i, { height: parseFloat(e.target.value) || 100 })} /></FormField>
+                                                        <FormField label={t('credit.width')}><TextInput type="number" min="1" max="100" step="1" value={bg.width ?? 100} onChange={e => updateBg(i, { width: parseFloat(e.target.value) || 100 })} /></FormField>
+                                                        <FormField label={t('credit.height')}><TextInput type="number" min="1" max="100" step="1" value={bg.height ?? 100} onChange={e => updateBg(i, { height: parseFloat(e.target.value) || 100 })} /></FormField>
                                                     </div>
                                                 </>
                                             )}
-                                            <FormField label={`Opacity: ${Math.round((bg.opacity ?? 1) * 100)}%`}>
+                                            <FormField label={t('credit.opacity', { value: Math.round((bg.opacity ?? 1) * 100) })}>
                                                 <input type="range" min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                                             </FormField>
                                         </div>
@@ -2050,25 +2207,25 @@ const PropertiesInspector: React.FC<{
                                     onClick={addBg}
                                     className="w-full px-2 py-1.5 text-xs bg-indigo-900/25 hover:bg-indigo-800/35 border border-indigo-500/25 rounded text-indigo-300 transition-colors"
                                 >
-                                    + Add Background Slide
+                                    {t('credit.addBackgroundSlide')}
                                 </button>
                             </>;
                         })()}
                     </FormField>
                     <hr className="border-[var(--border-subtle)] my-3" />
-                    <FormField label="Foreground Media">
-                        <p className="text-[10px] text-[var(--text-secondary)] mb-2">Add positioned images/videos that appear during the credit roll with timed visibility.</p>
+                    <FormField label={t('credit.foregroundMedia')}>
+                        <p className="text-[10px] text-[var(--text-secondary)] mb-2">{t('credit.foregroundMediaHint')}</p>
                         {(() => {
                             const mediaList: CreditMedia[] = cmd.media || [];
                             const mediaAssetOptions: { value: string; label: string; group?: string }[] = [];
                             Object.values(project.backgrounds).forEach((b: VNBackground) => {
-                                mediaAssetOptions.push({ value: b.id, label: b.name, group: 'Backgrounds' });
+                                mediaAssetOptions.push({ value: b.id, label: b.name, group: t('credit.groupBackgrounds') });
                             });
                             Object.values(project.images).forEach((img: VNImage) => {
-                                mediaAssetOptions.push({ value: img.id, label: img.name, group: 'Images' });
+                                mediaAssetOptions.push({ value: img.id, label: img.name, group: t('credit.groupImages') });
                             });
                             Object.values(project.videos).forEach((v: VNVideo) => {
-                                mediaAssetOptions.push({ value: v.id, label: v.name, group: 'Videos' });
+                                mediaAssetOptions.push({ value: v.id, label: v.name, group: t('credit.groupVideos') });
                             });
 
                             const updateMedia = (index: number, updates: Partial<CreditMedia>) => {
@@ -2096,19 +2253,19 @@ const PropertiesInspector: React.FC<{
                                     {mediaList.map((item, i) => (
                                         <div key={i} className="p-2 rounded-lg border bg-emerald-900/15 border-emerald-500/25">
                                             <div className="flex items-center gap-1 mb-1.5">
-                                                <span className="text-[10px] uppercase font-bold text-emerald-300">Media {i + 1}</span>
+                                                <span className="text-[10px] uppercase font-bold text-emerald-300">{t('credit.media', { n: i + 1 })}</span>
                                                 <div className="flex-1" />
-                                                <button onClick={() => moveMedia(i, -1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title="Move up"><ChevronUpIcon className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => moveMedia(i, 1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title="Move down"><ChevronDownIcon className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => removeMedia(i)} className="p-0.5 text-red-400 hover:text-red-300" title="Remove"><XMarkIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => moveMedia(i, -1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title={t('credit.moveUp')}><ChevronUpIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => moveMedia(i, 1)} className="p-0.5 text-[var(--text-secondary)] hover:text-white" title={t('credit.moveDown')}><ChevronDownIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => removeMedia(i)} className="p-0.5 text-red-400 hover:text-red-300" title={t('credit.remove')}><XMarkIcon className="w-3.5 h-3.5" /></button>
                                             </div>
                                             <SearchableSelect
                                                 options={mediaAssetOptions}
                                                 value={item.assetId || ''}
                                                 onChange={(value) => updateMedia(i, { assetId: value || null })}
-                                                placeholder={mediaAssetOptions.length === 0 ? "No assets uploaded" : "Select image/video..."}
+                                                placeholder={mediaAssetOptions.length === 0 ? t('credit.noAssets') : t('credit.selectImageVideo')}
                                             />
-                                            <FormField label="Sizing">
+                                            <FormField label={t('credit.sizing')}>
                                                 <Select value={item.objectFit || 'contain'} onChange={e => {
                                                     const val = e.target.value as 'cover' | 'contain' | 'fill' | 'custom';
                                                     if (val === 'custom') {
@@ -2117,41 +2274,41 @@ const PropertiesInspector: React.FC<{
                                                         updateMedia(i, { objectFit: val, x: 10, y: 10, width: 30, height: 30 });
                                                     }
                                                 }}>
-                                                    <option value="cover">Cover</option>
-                                                    <option value="contain">Contain</option>
-                                                    <option value="fill">Fill</option>
-                                                    <option value="custom">Custom</option>
+                                                    <option value="cover">{t('credit.sizingCover')}</option>
+                                                    <option value="contain">{t('credit.sizingContain')}</option>
+                                                    <option value="fill">{t('credit.sizingFill')}</option>
+                                                    <option value="custom">{t('credit.sizingCustom')}</option>
                                                 </Select>
                                             </FormField>
                                             {item.objectFit === 'custom' && (
                                                 <>
                                                     <div className="grid grid-cols-2 gap-1 mt-1.5">
-                                                        <FormField label="X (%)"><TextInput type="number" min="0" max="100" step="1" value={item.x} onChange={e => updateMedia(i, { x: parseFloat(e.target.value) || 0 })} /></FormField>
-                                                        <FormField label="Y (%)"><TextInput type="number" min="0" max="100" step="1" value={item.y} onChange={e => updateMedia(i, { y: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                        <FormField label={t('credit.x')}><TextInput type="number" min="0" max="100" step="1" value={item.x} onChange={e => updateMedia(i, { x: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                        <FormField label={t('credit.y')}><TextInput type="number" min="0" max="100" step="1" value={item.y} onChange={e => updateMedia(i, { y: parseFloat(e.target.value) || 0 })} /></FormField>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-1">
-                                                        <FormField label="Width (%)"><TextInput type="number" min="1" max="100" step="1" value={item.width} onChange={e => updateMedia(i, { width: parseFloat(e.target.value) || 30 })} /></FormField>
-                                                        <FormField label="Height (%)"><TextInput type="number" min="1" max="100" step="1" value={item.height} onChange={e => updateMedia(i, { height: parseFloat(e.target.value) || 30 })} /></FormField>
+                                                        <FormField label={t('credit.width')}><TextInput type="number" min="1" max="100" step="1" value={item.width} onChange={e => updateMedia(i, { width: parseFloat(e.target.value) || 30 })} /></FormField>
+                                                        <FormField label={t('credit.height')}><TextInput type="number" min="1" max="100" step="1" value={item.height} onChange={e => updateMedia(i, { height: parseFloat(e.target.value) || 30 })} /></FormField>
                                                     </div>
                                                 </>
                                             )}
-                                            <FormField label={`Opacity: ${Math.round((item.opacity ?? 1) * 100)}%`}>
+                                            <FormField label={t('credit.opacity', { value: Math.round((item.opacity ?? 1) * 100) })}>
                                                 <input type="range" min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                                             </FormField>
                                             <div className="grid grid-cols-2 gap-1 mt-1.5">
-                                                <FormField label="Show at (s)"><TextInput type="number" min="0" step="0.5" value={item.showAt} onChange={e => updateMedia(i, { showAt: parseFloat(e.target.value) || 0 })} /></FormField>
-                                                <FormField label="Hide at (s)"><TextInput type="number" min="0" step="0.5" value={item.hideAt} onChange={e => updateMedia(i, { hideAt: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                <FormField label={t('credit.showAt')}><TextInput type="number" min="0" step="0.5" value={item.showAt} onChange={e => updateMedia(i, { showAt: parseFloat(e.target.value) || 0 })} /></FormField>
+                                                <FormField label={t('credit.hideAt')}><TextInput type="number" min="0" step="0.5" value={item.hideAt} onChange={e => updateMedia(i, { hideAt: parseFloat(e.target.value) || 0 })} /></FormField>
                                             </div>
-                                            <p className="text-[9px] text-[var(--text-muted)] mt-0.5">Hide at 0 = show for entire credit duration</p>
+                                            <p className="text-[9px] text-[var(--text-muted)] mt-0.5">{t('credit.hideAtHint')}</p>
                                             <div className="grid grid-cols-2 gap-1 mt-1">
-                                                <FormField label="Transition">
+                                                <FormField label={t('credit.transition')}>
                                                     <Select value={item.transition} onChange={e => updateMedia(i, { transition: e.target.value as 'fade' | 'instant' })}>
-                                                        <option value="fade">Fade</option>
-                                                        <option value="instant">Instant</option>
+                                                        <option value="fade">{t('credit.transitionFade')}</option>
+                                                        <option value="instant">{t('credit.transitionInstant')}</option>
                                                     </Select>
                                                 </FormField>
                                                 {item.transition !== 'instant' && (
-                                                    <FormField label="Duration (s)">
+                                                    <FormField label={t('credit.duration')}>
                                                         <TextInput type="number" min="0.1" max="5" step="0.1" value={item.transitionDuration} onChange={e => updateMedia(i, { transitionDuration: parseFloat(e.target.value) || 0.5 })} />
                                                     </FormField>
                                                 )}
@@ -2163,7 +2320,7 @@ const PropertiesInspector: React.FC<{
                                     onClick={addMedia}
                                     className="w-full px-2 py-1.5 text-xs bg-emerald-900/25 hover:bg-emerald-800/35 border border-emerald-500/25 rounded text-emerald-300 transition-colors"
                                 >
-                                    + Add Media Item
+                                    {t('credit.addMediaItem')}
                                 </button>
                             </>;
                         })()}
@@ -2173,11 +2330,11 @@ const PropertiesInspector: React.FC<{
             case CommandType.Group: {
                 const cmd = command as GroupCommand;
                 return <>
-                    <FormField label="Group Name">
-                        <TextInput value={cmd.name || ''} onChange={e => updateCommand({ name: e.target.value })} placeholder="Group name" />
+                    <FormField label={t('group.name')}>
+                        <TextInput value={cmd.name || ''} onChange={e => updateCommand({ name: e.target.value })} placeholder={t('group.namePlaceholder')} />
                     </FormField>
                     <p className="text-xs text-[var(--text-secondary)] mt-2">
-                        Contains {cmd.commandIds?.length || 0} command(s). Groups are visual only and have no effect during playback.
+                        {t('group.contains', { count: cmd.commandIds?.length || 0 })}
                     </p>
                 </>;
             }
@@ -2186,27 +2343,27 @@ const PropertiesInspector: React.FC<{
                 const scripts = Object.values(project.scripts || {});
                 const selectedScript = cmd.scriptId ? (project.scripts || {})[cmd.scriptId] : null;
                 return <>
-                    <FormField label="Script">
+                    <FormField label={t('runScript.script')}>
                         <Select value={cmd.scriptId} onChange={e => updateCommand({ scriptId: e.target.value })}>
-                            <option value="">Select Script...</option>
+                            <option value="">{t('runScript.selectScript')}</option>
                             {scripts.map((s: any) => (
-                                <option key={s.id} value={s.id}>{s.name}{!s.enabled ? ' (disabled)' : ''}</option>
+                                <option key={s.id} value={s.id}>{s.name}{!s.enabled ? t('runScript.disabled') : ''}</option>
                             ))}
                         </Select>
                     </FormField>
                     {scripts.length === 0 && (
-                        <p className="text-xs text-amber-400">No scripts created yet. Open Script Editor from Tools menu to create scripts.</p>
+                        <p className="text-xs text-amber-400">{t('runScript.noScripts')}</p>
                     )}
                     {selectedScript && (
                         <div className="text-xs p-2 rounded mt-1" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
-                            <p><strong>Trigger:</strong> {selectedScript.trigger}</p>
+                            <p><strong>{t('runScript.trigger')}</strong> {selectedScript.trigger}</p>
                             {selectedScript.description && <p className="mt-0.5">{selectedScript.description}</p>}
                         </div>
                     )}
-                    <FormField label="Wait for Completion">
+                    <FormField label={t('runScript.waitForCompletion')}>
                         <label className="flex items-center gap-2">
                             <input type="checkbox" checked={cmd.waitForCompletion} onChange={e => updateCommand({ waitForCompletion: e.target.checked })} />
-                            <span className="text-xs text-[var(--text-primary)]">Wait for script to finish before advancing</span>
+                            <span className="text-xs text-[var(--text-primary)]">{t('runScript.waitForCompletionHint')}</span>
                         </label>
                     </FormField>
                 </>;
@@ -2214,30 +2371,30 @@ const PropertiesInspector: React.FC<{
             case CommandType.SpawnParticles: {
                 const cmd = command as SpawnParticlesCommand;
                 const particlePresetOptions = [
-                    { value: 'none', label: 'Custom' },
-                    { value: 'fireflies', label: 'Fireflies' },
-                    { value: 'sparks', label: 'Sparks' },
-                    { value: 'bubbles', label: 'Bubbles' },
-                    { value: 'confetti', label: 'Confetti' },
-                    { value: 'embers', label: 'Embers' },
-                    { value: 'dust', label: 'Dust' },
-                    { value: 'petals', label: 'Petals' },
-                    { value: 'magic', label: 'Magic' },
-                    { value: 'stars', label: 'Stars' },
+                    { value: 'none', label: t('particles.presetCustom') },
+                    { value: 'fireflies', label: t('particles.presetFireflies') },
+                    { value: 'sparks', label: t('particles.presetSparks') },
+                    { value: 'bubbles', label: t('particles.presetBubbles') },
+                    { value: 'confetti', label: t('particles.presetConfetti') },
+                    { value: 'embers', label: t('particles.presetEmbers') },
+                    { value: 'dust', label: t('particles.presetDust') },
+                    { value: 'petals', label: t('particles.presetPetals') },
+                    { value: 'magic', label: t('particles.presetMagic') },
+                    { value: 'stars', label: t('particles.presetStars') },
                 ];
                 const shapeOptions = [
-                    { value: 'circle', label: 'Circle' },
-                    { value: 'square', label: 'Square' },
-                    { value: 'star', label: 'Star' },
-                    { value: 'heart', label: 'Heart' },
-                    { value: 'sparkle', label: 'Sparkle' },
+                    { value: 'circle', label: t('particles.shapeCircle') },
+                    { value: 'square', label: t('particles.shapeSquare') },
+                    { value: 'star', label: t('particles.shapeStar') },
+                    { value: 'heart', label: t('particles.shapeHeart') },
+                    { value: 'sparkle', label: t('particles.shapeSparkle') },
                 ];
                 const isCustom = !cmd.config?.preset || cmd.config.preset === 'none';
                 return <>
-                    <FormField label="Particle Tag">
-                        <TextInput value={cmd.particleTag || ''} onChange={e => updateCommand({ particleTag: e.target.value })} placeholder="e.g. firefly_glow" />
+                    <FormField label={t('particles.particleTag')}>
+                        <TextInput value={cmd.particleTag || ''} onChange={e => updateCommand({ particleTag: e.target.value })} placeholder={t('particles.particleTagPlaceholder')} />
                     </FormField>
-                    <FormField label="Preset">
+                    <FormField label={t('particles.preset')}>
                         <Select value={cmd.config?.preset || 'none'} onChange={e => {
                             const newPreset = e.target.value;
                             if (newPreset === 'none') {
@@ -2254,17 +2411,17 @@ const PropertiesInspector: React.FC<{
                             ))}
                         </Select>
                     </FormField>
-                    <FormField label="Duration (sec)">
+                    <FormField label={t('particles.durationSec')}>
                         <input type="number" min="0" step="0.5" value={cmd.duration || 0} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })}
                             className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>0 = persistent (until stopped)</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.durationHint')}</span>
                     </FormField>
                     {/* Key controls shown for ALL modes (preset + custom) */}
-                    <FormField label="Density (emit rate)">
+                    <FormField label={t('particles.density')}>
                         <input type="range" min="1" max="200" value={cmd.config?.emitRate || 20} onChange={e => updateCommand({ config: { ...cmd.config, emitRate: parseInt(e.target.value) || 20 } })} className="w-full" />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.emitRate || 20} particles / sec</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.densityHint', { value: cmd.config?.emitRate || 20 })}</span>
                     </FormField>
-                    <FormField label="Speed (min / max)">
+                    <FormField label={t('particles.speed')}>
                         <div className="flex gap-1">
                             <input type="number" min="0" value={cmd.config?.speedMin ?? 10} onChange={e => updateCommand({ config: { ...cmd.config, speedMin: parseFloat(e.target.value) || 0 } })}
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
@@ -2272,7 +2429,7 @@ const PropertiesInspector: React.FC<{
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                         </div>
                     </FormField>
-                    <FormField label="Size (min / max)">
+                    <FormField label={t('particles.size')}>
                         <div className="flex gap-1">
                             <input type="number" min="0.5" value={cmd.config?.sizeMin ?? 2} onChange={e => updateCommand({ config: { ...cmd.config, sizeMin: parseFloat(e.target.value) || 1 } })}
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
@@ -2281,7 +2438,7 @@ const PropertiesInspector: React.FC<{
                         </div>
                     </FormField>
                     {/* Emission area controls — always visible */}
-                    <FormField label="Emission Area">
+                    <FormField label={t('particles.emissionArea')}>
                         <Select value={(() => {
                             const eX = cmd.config?.emitterX ?? 50;
                             const eY = cmd.config?.emitterY ?? 50;
@@ -2306,66 +2463,66 @@ const PropertiesInspector: React.FC<{
                                 updateCommand({ config: { ...cmd.config, ...areaPresets[mode] } });
                             }
                         }}>
-                            <option value="full-screen">Full Screen</option>
-                            <option value="top-edge">Top Edge</option>
-                            <option value="bottom-edge">Bottom Edge</option>
-                            <option value="horizontal-line">Horizontal Line (center)</option>
-                            <option value="point">Point Source</option>
-                            <option value="custom">Custom Area</option>
+                            <option value="full-screen">{t('particles.areaFullScreen')}</option>
+                            <option value="top-edge">{t('particles.areaTopEdge')}</option>
+                            <option value="bottom-edge">{t('particles.areaBottomEdge')}</option>
+                            <option value="horizontal-line">{t('particles.areaHorizontalLine')}</option>
+                            <option value="point">{t('particles.areaPoint')}</option>
+                            <option value="custom">{t('particles.areaCustom')}</option>
                         </Select>
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Where particles spawn from</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.emissionAreaHint')}</span>
                     </FormField>
-                    <FormField label="Emitter Center (X% / Y%)">
+                    <FormField label={t('particles.emitterCenter')}>
                         <div className="flex gap-1">
                             <input type="number" min="0" max="100" value={cmd.config?.emitterX ?? 50} onChange={e => updateCommand({ config: { ...cmd.config, emitterX: parseFloat(e.target.value) } })}
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                             <input type="number" min="0" max="100" value={cmd.config?.emitterY ?? 50} onChange={e => updateCommand({ config: { ...cmd.config, emitterY: parseFloat(e.target.value) } })}
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                         </div>
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Center position (0=left/top, 100=right/bottom)</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.emitterCenterHint')}</span>
                     </FormField>
-                    <FormField label="Emitter Spread (W% / H%)">
+                    <FormField label={t('particles.emitterSpread')}>
                         <div className="flex gap-1">
                             <input type="number" min="0" max="200" value={cmd.config?.emitterWidth ?? 100} onChange={e => updateCommand({ config: { ...cmd.config, emitterWidth: parseFloat(e.target.value) } })}
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                             <input type="number" min="0" max="200" value={cmd.config?.emitterHeight ?? 100} onChange={e => updateCommand({ config: { ...cmd.config, emitterHeight: parseFloat(e.target.value) } })}
                                 className="w-1/2 rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                         </div>
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>0 = point, 100 = full width/height</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.emitterSpreadHint')}</span>
                     </FormField>
                     {/* Extended controls only for custom mode */}
                     {isCustom && <>
-                        <FormField label="Shape">
+                        <FormField label={t('particles.shape')}>
                             <Select value={cmd.config?.shape || 'circle'} onChange={e => updateCommand({ config: { ...cmd.config, shape: e.target.value } })}>
                                 {shapeOptions.map(opt => (
                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </Select>
                         </FormField>
-                        <FormField label="Lifetime (sec)">
+                        <FormField label={t('particles.lifetime')}>
                             <input type="number" min="0.1" max="30" step="0.1" value={cmd.config?.lifetime || 3} onChange={e => updateCommand({ config: { ...cmd.config, lifetime: parseFloat(e.target.value) || 3 } })}
                                 className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
                         </FormField>
-                        <FormField label="Gravity">
+                        <FormField label={t('particles.gravity')}>
                             <input type="range" min="-100" max="100" value={cmd.config?.gravity || 0} onChange={e => updateCommand({ config: { ...cmd.config, gravity: parseFloat(e.target.value) } })} className="w-full" />
-                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.gravity || 0} (- = up, + = down)</span>
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.gravityHint', { value: cmd.config?.gravity || 0 })}</span>
                         </FormField>
-                        <FormField label="Wind">
+                        <FormField label={t('particles.wind')}>
                             <input type="range" min="-50" max="50" value={cmd.config?.wind || 0} onChange={e => updateCommand({ config: { ...cmd.config, wind: parseFloat(e.target.value) } })} className="w-full" />
                             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cmd.config?.wind || 0}</span>
                         </FormField>
-                        <FormField label="Color(s)">
+                        <FormField label={t('particles.colors')}>
                             <TextInput value={(cmd.config?.colors || ['#FFFFFF']).join(', ')} onChange={e => updateCommand({ config: { ...cmd.config, colors: e.target.value.split(',').map((c: string) => c.trim()).filter(Boolean) } })} placeholder="#FF0000, #00FF00, #0000FF" />
-                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Comma-separated hex colors</span>
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.colorsHint')}</span>
                         </FormField>
-                        <FormField label="Options">
+                        <FormField label={t('particles.options')}>
                             <label className="flex items-center gap-2">
                                 <input type="checkbox" checked={cmd.config?.fadeOut ?? true} onChange={e => updateCommand({ config: { ...cmd.config, fadeOut: e.target.checked } })} />
-                                <span className="text-xs text-[var(--text-primary)]">Fade out</span>
+                                <span className="text-xs text-[var(--text-primary)]">{t('particles.fadeOut')}</span>
                             </label>
                             <label className="flex items-center gap-2 mt-1">
                                 <input type="checkbox" checked={cmd.config?.shrink ?? false} onChange={e => updateCommand({ config: { ...cmd.config, shrink: e.target.checked } })} />
-                                <span className="text-xs text-[var(--text-primary)]">Shrink over lifetime</span>
+                                <span className="text-xs text-[var(--text-primary)]">{t('particles.shrink')}</span>
                             </label>
                         </FormField>
                     </>}
@@ -2373,15 +2530,35 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.StopParticles: {
                 const cmd = command as StopParticlesCommand;
+                // Offer the actual emitters spawned earlier in this scene. A free-text
+                // tag silently matched nothing when mistyped (or when relying on the old
+                // shared default), so particles never stopped. The effective tag mirrors
+                // the runtime: `particleTag || particles_<spawnCommandId>`.
+                const availableEmitters = activeScene.commands
+                    .filter((c, i): c is SpawnParticlesCommand => c.type === CommandType.SpawnParticles && i < selectedCommandIndex)
+                    .map(c => {
+                        const tag = c.particleTag || `particles_${c.id}`;
+                        const preset = c.config?.preset && c.config.preset !== 'none' ? c.config.preset : 'particles';
+                        return { tag, label: c.particleTag ? c.particleTag : `${preset} (${c.id.slice(0, 6)})` };
+                    });
+                // Preserve a custom/legacy tag that isn't in the spawn list so it isn't lost.
+                if (cmd.particleTag && !availableEmitters.some(e => e.tag === cmd.particleTag)) {
+                    availableEmitters.push({ tag: cmd.particleTag, label: cmd.particleTag });
+                }
                 return <>
-                    <FormField label="Particle Tag">
-                        <TextInput value={cmd.particleTag || ''} onChange={e => updateCommand({ particleTag: e.target.value })} placeholder="Leave empty to stop all" />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Empty = stop all particle effects</span>
+                    <FormField label={t('particles.particleTag')}>
+                        <Select value={cmd.particleTag || ''} onChange={e => updateCommand({ particleTag: e.target.value })}>
+                            <option value="">{t('particles.stopAll')}</option>
+                            {availableEmitters.map((em, i) => (
+                                <option key={`${em.tag}-${i}`} value={em.tag}>{em.label}</option>
+                            ))}
+                        </Select>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.stopTagHint')}</span>
                     </FormField>
-                    <FormField label="Fade Duration (sec)">
+                    <FormField label={t('particles.fadeDurationSec')}>
                         <input type="number" min="0" step="0.1" value={cmd.fadeDuration || 0} onChange={e => updateCommand({ fadeDuration: parseFloat(e.target.value) || 0 })}
                             className="w-full rounded px-2 py-1 text-sm" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }} />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>0 = instant</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.fadeInstant')}</span>
                     </FormField>
                 </>;
             }
@@ -2390,30 +2567,30 @@ const PropertiesInspector: React.FC<{
                 const commonEvents = Object.values(project.commonEvents || {});
                 const selectedCE = cmd.commonEventId ? (project.commonEvents || {})[cmd.commonEventId] : null;
                 return <>
-                    <FormField label="Common Event">
+                    <FormField label={t('callCommonEvent.commonEvent')}>
                         <Select value={cmd.commonEventId || ''} onChange={e => updateCommand({ commonEventId: e.target.value, arguments: {} })}>
-                            <option value="">Select Common Event...</option>
+                            <option value="">{t('callCommonEvent.selectCommonEvent')}</option>
                             {commonEvents.map((ce: any) => (
-                                <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? ' (disabled)' : ''}</option>
+                                <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? t('callCommonEvent.disabled') : ''}</option>
                             ))}
                         </Select>
                     </FormField>
                     {commonEvents.length === 0 && (
-                        <p className="text-xs text-amber-400">No Common Events created yet. Go to the Common Events tab to create one.</p>
+                        <p className="text-xs text-amber-400">{t('callCommonEvent.noCommonEvents')}</p>
                     )}
                     {selectedCE && (
                         <div className="text-xs p-2 rounded mt-1" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
-                            <p><strong>Trigger:</strong> {selectedCE.trigger}</p>
-                            <p><strong>Commands:</strong> {selectedCE.commands?.length || 0}</p>
+                            <p><strong>{t('callCommonEvent.trigger')}</strong> {selectedCE.trigger}</p>
+                            <p><strong>{t('callCommonEvent.commands')}</strong> {selectedCE.commands?.length || 0}</p>
                             {selectedCE.description && <p className="mt-0.5">{selectedCE.description}</p>}
                         </div>
                     )}
                     {selectedCE && selectedCE.parameters && selectedCE.parameters.length > 0 && (
                         <>
                             <hr className="border-[var(--border-subtle)] my-2" />
-                            <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Arguments</h4>
+                            <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('callCommonEvent.arguments')}</h4>
                             <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>
-                                Pass values to the Common Event's parameters.
+                                {t('callCommonEvent.argumentsHint')}
                             </p>
                             {selectedCE.parameters.map((param: any) => (
                                 <FormField key={param.id} label={param.name}>
@@ -2444,7 +2621,7 @@ const PropertiesInspector: React.FC<{
                                             onChange={e => updateCommand({
                                                 arguments: { ...(cmd.arguments || {}), [param.id]: e.target.value }
                                             })}
-                                            placeholder={param.description || `Value for ${param.name}`}
+                                            placeholder={param.description || t('callCommonEvent.valueFor', { name: param.name })}
                                         />
                                     )}
                                 </FormField>
@@ -2456,12 +2633,12 @@ const PropertiesInspector: React.FC<{
             case CommandType.TweenElement: {
                 const cmd = command as TweenElementCommand;
                 const targetTypeOptions = [
-                    { value: 'character', label: 'Character' },
-                    { value: 'image', label: 'Image Overlay' },
-                    { value: 'text', label: 'Text Overlay' },
-                    { value: 'button', label: 'Button Overlay' },
-                    { value: 'imageMap', label: 'Image Map' },
-                    { value: 'screen', label: 'Screen' },
+                    { value: 'character', label: t('tween.typeCharacter') },
+                    { value: 'image', label: t('tween.typeImage') },
+                    { value: 'text', label: t('tween.typeText') },
+                    { value: 'button', label: t('tween.typeButton') },
+                    { value: 'imageMap', label: t('tween.typeImageMap') },
+                    { value: 'screen', label: t('tween.typeScreen') },
                 ];
                 const easingOptions = [
                     { group: 'Linear', options: ['linear'] },
@@ -2481,7 +2658,7 @@ const PropertiesInspector: React.FC<{
                 if (cmd.targetType === 'character') {
                     Object.values(project.characters).forEach((c: VNCharacter) => targetIdOptions.push({ value: c.id, label: c.name }));
                 } else if (cmd.targetType === 'screen') {
-                    targetIdOptions.push({ value: '__screen__', label: 'Screen' });
+                    targetIdOptions.push({ value: '__screen__', label: t('tween.screen') });
                 } else if (cmd.targetType === 'text') {
                     activeScene.commands
                         .filter((c): c is ShowTextCommand => c.type === CommandType.ShowText)
@@ -2491,7 +2668,7 @@ const PropertiesInspector: React.FC<{
                         .filter((c): c is ShowImageCommand => c.type === CommandType.ShowImage)
                         .forEach(c => {
                             const img = (project.images || {})[c.imageId] as VNImage | undefined;
-                            targetIdOptions.push({ value: c.id, label: img?.name || `Image (${c.id.substring(0, 8)}…)` });
+                            targetIdOptions.push({ value: c.id, label: img?.name || t('tween.imageLabel', { id: c.id.substring(0, 8) }) });
                         });
                 } else if (cmd.targetType === 'button') {
                     activeScene.commands
@@ -2502,7 +2679,7 @@ const PropertiesInspector: React.FC<{
                         .filter((c): c is ShowImageMapCommand => c.type === CommandType.ShowImageMap)
                         .forEach(c => {
                             const img = (project.images || {})[c.imageId] as VNImage | undefined;
-                            targetIdOptions.push({ value: c.id, label: img?.name || `Image Map (${c.id.substring(0, 8)}…)` });
+                            targetIdOptions.push({ value: c.id, label: img?.name || t('tween.imageMapLabel', { id: c.id.substring(0, 8) }) });
                         });
                 }
 
@@ -2519,31 +2696,31 @@ const PropertiesInspector: React.FC<{
                 const showZoomPan = cmd.targetType === 'screen';
 
                 return <>
-                    <FormField label="Target Type">
+                    <FormField label={t('tween.targetType')}>
                         <Select value={cmd.targetType} onChange={e => updateCommand({ targetType: e.target.value, targetId: '' })}>
                             {targetTypeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                         </Select>
                     </FormField>
-                    <FormField label="Target ID">
+                    <FormField label={t('tween.targetId')}>
                         {targetIdOptions.length > 0 ? (
                             <SearchableSelect
                                 options={targetIdOptions}
                                 value={cmd.targetId}
                                 onChange={(value) => updateCommand({ targetId: value })}
-                                placeholder="Select target..."
+                                placeholder={t('tween.selectTarget')}
                             />
                         ) : (
                             <TextInput
                                 value={cmd.targetId}
                                 onChange={e => updateCommand({ targetId: e.target.value })}
-                                placeholder="No matching Show commands found"
+                                placeholder={t('tween.noMatchingShow')}
                             />
                         )}
                     </FormField>
-                    <FormField label="Duration (seconds)">
+                    <FormField label={t('tween.durationSeconds')}>
                         <TextInput type="number" min="0.01" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 1 })} />
                     </FormField>
-                    <FormField label="Easing">
+                    <FormField label={t('tween.easing')}>
                         <Select value={cmd.easing || 'easeInOutCubic'} onChange={e => updateCommand({ easing: e.target.value })}>
                             {easingOptions.map(group => (
                                 <optgroup key={group.group} label={group.group}>
@@ -2554,33 +2731,33 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                     <div className="flex items-center gap-1 mt-1">
                         <input type="checkbox" checked={cmd.waitForCompletion !== false} onChange={e => updateCommand({ waitForCompletion: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)]" />
-                        <label className="text-sm">Wait for completion</label>
+                        <label className="text-sm">{t('tween.waitForCompletion')}</label>
                     </div>
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="text-xs font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Target Properties</h4>
-                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>Leave blank to keep the current value. Only filled properties will animate.</p>
+                    <h4 className="text-xs font-bold mb-1" style={{ color: 'var(--text-primary)' }}>{t('tween.targetProperties')}</h4>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('tween.targetPropertiesHint')}</p>
                     {showPosFields && (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="X (%)"><TextInput type="number" step="0.1" value={cmd.x ?? ''} onChange={e => updateCommand({ x: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
-                            <FormField label="Y (%)"><TextInput type="number" step="0.1" value={cmd.y ?? ''} onChange={e => updateCommand({ y: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.x')}><TextInput type="number" step="0.1" value={cmd.x ?? ''} onChange={e => updateCommand({ x: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.y')}><TextInput type="number" step="0.1" value={cmd.y ?? ''} onChange={e => updateCommand({ y: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                         </div>
                     )}
                     {showSizeFields && (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="Width"><TextInput type="number" min="0" step="1" value={cmd.width ?? ''} onChange={e => updateCommand({ width: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
-                            <FormField label="Height"><TextInput type="number" min="0" step="1" value={cmd.height ?? ''} onChange={e => updateCommand({ height: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.width')}><TextInput type="number" min="0" step="1" value={cmd.width ?? ''} onChange={e => updateCommand({ width: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.height')}><TextInput type="number" min="0" step="1" value={cmd.height ?? ''} onChange={e => updateCommand({ height: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                         </div>
                     )}
                     {showOpacity && (
-                        <FormField label={`Opacity: ${cmd.opacity !== undefined ? Math.round(cmd.opacity * 100) + '%' : '–'}`}>
+                        <FormField label={cmd.opacity !== undefined ? t('tween.opacity', { value: Math.round(cmd.opacity * 100) + '%' }) : t('tween.opacityNone')}>
                             <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" />
                         </FormField>
                     )}
                     {showRotation && (
-                        <FormField label="Rotation (°)"><TextInput type="number" step="1" value={cmd.rotation ?? ''} onChange={e => updateCommand({ rotation: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                        <FormField label={t('tween.rotation')}><TextInput type="number" step="1" value={cmd.rotation ?? ''} onChange={e => updateCommand({ rotation: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                     )}
                     {showScale && (
-                        <FormField label="Scale">
+                        <FormField label={t('tween.scale')}>
                             <div className="flex items-center gap-2">
                                 <input type="range" min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) })} className="flex-1" />
                                 <TextInput type="number" min="0.1" max="5" step="0.05" value={cmd.scale ?? ''} onChange={e => updateCommand({ scale: e.target.value ? parseFloat(e.target.value) : undefined })} style={{ width: '60px' }} />
@@ -2589,18 +2766,18 @@ const PropertiesInspector: React.FC<{
                     )}
                     {showScaleXY && (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label="Scale X"><TextInput type="number" step="0.05" value={cmd.scaleX ?? ''} onChange={e => updateCommand({ scaleX: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
-                            <FormField label="Scale Y"><TextInput type="number" step="0.05" value={cmd.scaleY ?? ''} onChange={e => updateCommand({ scaleY: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.scaleX')}><TextInput type="number" step="0.05" value={cmd.scaleX ?? ''} onChange={e => updateCommand({ scaleX: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.scaleY')}><TextInput type="number" step="0.05" value={cmd.scaleY ?? ''} onChange={e => updateCommand({ scaleY: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                         </div>
                     )}
                     {showFontSize && (
-                        <FormField label="Font Size (px)"><TextInput type="number" min="1" step="1" value={cmd.fontSize ?? ''} onChange={e => updateCommand({ fontSize: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                        <FormField label={t('tween.fontSize')}><TextInput type="number" min="1" step="1" value={cmd.fontSize ?? ''} onChange={e => updateCommand({ fontSize: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                     )}
                     {showBorderRadius && (
-                        <FormField label="Border Radius (px)"><TextInput type="number" min="0" step="1" value={cmd.borderRadius ?? ''} onChange={e => updateCommand({ borderRadius: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                        <FormField label={t('tween.borderRadius')}><TextInput type="number" min="0" step="1" value={cmd.borderRadius ?? ''} onChange={e => updateCommand({ borderRadius: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                     )}
                     {showColor && (
-                        <FormField label="Text Color">
+                        <FormField label={t('tween.textColor')}>
                             <div className="flex gap-1 items-center">
                                 <ColorInput value={cmd.color || '#FFFFFF'} onChange={val => updateCommand({ color: val })} className="w-12 h-10" />
                                 <TextInput value={cmd.color ?? ''} onChange={e => updateCommand({ color: e.target.value || undefined })} placeholder="–" className="flex-grow" />
@@ -2608,7 +2785,7 @@ const PropertiesInspector: React.FC<{
                         </FormField>
                     )}
                     {showBgColor && (
-                        <FormField label="Background Color">
+                        <FormField label={t('tween.backgroundColor')}>
                             <div className="flex gap-1 items-center">
                                 <ColorInput value={cmd.backgroundColor || '#6366f1'} onChange={val => updateCommand({ backgroundColor: val })} className="w-12 h-10" />
                                 <TextInput value={cmd.backgroundColor ?? ''} onChange={e => updateCommand({ backgroundColor: e.target.value || undefined })} placeholder="–" className="flex-grow" />
@@ -2617,27 +2794,51 @@ const PropertiesInspector: React.FC<{
                     )}
                     {showZoomPan && (
                         <>
-                            <FormField label="Zoom"><TextInput type="number" min="0.1" step="0.1" value={cmd.zoom ?? ''} onChange={e => updateCommand({ zoom: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                            <FormField label={t('tween.zoom')}><TextInput type="number" min="0.1" step="0.1" value={cmd.zoom ?? ''} onChange={e => updateCommand({ zoom: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                             <div className="grid grid-cols-2 gap-1">
-                                <FormField label="Pan X (%)"><TextInput type="number" step="1" value={cmd.panX ?? ''} onChange={e => updateCommand({ panX: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
-                                <FormField label="Pan Y (%)"><TextInput type="number" step="1" value={cmd.panY ?? ''} onChange={e => updateCommand({ panY: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                                <FormField label={t('tween.panX')}><TextInput type="number" step="1" value={cmd.panX ?? ''} onChange={e => updateCommand({ panX: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
+                                <FormField label={t('tween.panY')}><TextInput type="number" step="1" value={cmd.panY ?? ''} onChange={e => updateCommand({ panY: e.target.value ? parseFloat(e.target.value) : undefined })} placeholder="–" /></FormField>
                             </div>
                         </>
                     )}
                 </>;
             }
-            default: return <p>This command has no properties.</p>;
+            default: return <p>{t('footer.noProperties')}</p>;
         }
     };
 
-    return <Panel title={`Properties: ${command.type.replace(/([A-Z])/g, ' $1').trim()}`} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
+    return <Panel title={t('footer.titleNamed', { name: t(`commands:names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() }) })} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
         <div className="flex flex-col h-full">
             <div className="flex-grow overflow-y-auto pr-1">
                 {renderProperties()}
+                {(() => {
+                    // Shared "Reset Position" for any positionable command — snaps the element
+                    // back to its default placement (centre for overlays, 'center' for characters,
+                    // top-left for movies). Covers media, text, image, button and character commands.
+                    const RESETS: Partial<Record<CommandType, Partial<VNCommand>>> = {
+                        [CommandType.ShowImage]: { x: 50, y: 50 } as Partial<VNCommand>,
+                        [CommandType.ShowText]: { x: 50, y: 50 } as Partial<VNCommand>,
+                        [CommandType.ShowButton]: { x: 50, y: 50 } as Partial<VNCommand>,
+                        [CommandType.ShowCharacter]: { position: 'center' } as Partial<VNCommand>,
+                        [CommandType.PlayMovie]: { x: 0, y: 0 } as Partial<VNCommand>,
+                    };
+                    const patch = RESETS[command.type];
+                    if (!patch) return null;
+                    return (
+                        <button
+                            type="button"
+                            onClick={() => updateCommand(patch)}
+                            className="w-full mt-3 text-xs px-2 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                            title="Snap this element back to its default position."
+                        >
+                            ⤢ Reset Position
+                        </button>
+                    );
+                })()}
                 <>
                     <hr className="border-[var(--border-subtle)] my-4" />
-                    <h3 className="font-bold text-[var(--text-primary)]">Parallel Execution</h3>
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">Control how this command runs in relation to other commands.</p>
+                    <h3 className="font-bold text-[var(--text-primary)]">{t('footer.parallelExecution')}</h3>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">{t('footer.parallelDesc')}</p>
                     
                     {/* Run Async Checkbox */}
                     <div className="mb-4">
@@ -2661,21 +2862,21 @@ const PropertiesInspector: React.FC<{
                                 className="w-4 h-4 rounded border-[var(--border-default)] bg-[var(--bg-secondary)] text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
                             />
                             <span className={`text-xs ${!canRunAsync(command.type) ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-                                Run Async (Parallel) {command.modifiers?.runAsync && <BoltIcon className="w-3.5 h-3.5 inline text-[var(--accent-lavender)]" />}
+                                {t('footer.runAsync')} {command.modifiers?.runAsync && <BoltIcon className="w-3.5 h-3.5 inline text-[var(--accent-lavender)]" />}
                             </span>
                         </label>
                         
                         {/* Blocking Warning */}
                         {!canRunAsync(command.type) && (
                             <div className="mt-2 p-2 bg-red-900/30 border border-red-500/50 rounded text-xs text-red-300">
-                                <span className="font-bold">Cannot Run Async:</span> This command blocks execution and must wait for user input or scene changes.
+                                <span className="font-bold">{t('footer.cannotRunAsync')}</span> {t('footer.cannotRunAsyncDesc')}
                             </div>
                         )}
                         
                         {/* Unpredictable Warning */}
                         {canRunAsync(command.type) && hasUnpredictableAsyncBehavior(command.type) && command.modifiers?.runAsync && (
                             <div className="mt-2 p-2 bg-yellow-900/30 border border-yellow-500/50 rounded text-xs text-yellow-300">
-                                <span className="font-bold">Warning:</span> {getAsyncWarning(command.type)}
+                                <span className="font-bold">{t('footer.warning')}</span> {getAsyncWarning(command.type)}
                             </div>
                         )}
                         
@@ -2683,11 +2884,11 @@ const PropertiesInspector: React.FC<{
                         {isCommandStacked(command) && (
                             <div className="mt-2 p-2 bg-purple-900/30 border border-purple-500/50 rounded text-xs">
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-purple-300 font-bold">Stacked Command</span>
-                                    <span className="text-purple-400">Stack ID: {command.modifiers?.stackId?.substring(0, 8)}...</span>
+                                    <span className="text-purple-300 font-bold">{t('footer.stackedCommand')}</span>
+                                    <span className="text-purple-400">{t('footer.stackId', { id: command.modifiers?.stackId?.substring(0, 8) })}</span>
                                 </div>
                                 <div className="text-purple-200 mb-2">
-                                    Position in stack: {(command.modifiers?.stackOrder ?? 0) + 1}
+                                    {t('footer.positionInStack', { n: (command.modifiers?.stackOrder ?? 0) + 1 })}
                                 </div>
                                 <button
                                     onClick={() => {
@@ -2696,7 +2897,7 @@ const PropertiesInspector: React.FC<{
                                     }}
                                     className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"
                                 >
-                                    Unstack Command
+                                    {t('footer.unstackCommand')}
                                 </button>
                             </div>
                         )}
@@ -2704,25 +2905,41 @@ const PropertiesInspector: React.FC<{
                         {/* Help Text */}
                         {command.modifiers?.runAsync && !isCommandStacked(command) && (
                             <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                                <LightBulbIcon className="w-3.5 h-3.5 inline text-yellow-400 mr-0.5" /> Tip: This command will execute and immediately advance to the next command without waiting for completion.
+                                <LightBulbIcon className="w-3.5 h-3.5 inline text-yellow-400 mr-0.5" /> {t('footer.asyncTip')}
                             </p>
                         )}
                     </div>
                 </>
                 <>
                     <hr className="border-[var(--border-subtle)] my-4" />
-                    <h3 className="font-bold text-[var(--text-primary)]">Conditions</h3>
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">This command will only run if all conditions are met.</p>
+                    <h3 className="font-bold text-[var(--text-primary)]">{t('footer.conditions')}</h3>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">{t('footer.conditionsDesc')}</p>
                     <ConditionsEditor
                         conditions={command.conditions}
                         project={project}
                         onChange={(cs) => updateCommand({ conditions: cs })}
                     />
+                    {(REACTIVE_VISUAL_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect) && (
+                        <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!command.liveConditions}
+                                onChange={e => updateCommand({ liveConditions: e.target.checked })}
+                                className="w-4 h-4 mt-0.5 flex-shrink-0"
+                            />
+                            <span className="text-xs text-[var(--text-secondary)]">
+                                <span className="font-bold text-[var(--text-primary)]">{t('footer.liveConditions')}</span><br />
+                                {command.type === CommandType.PlaySoundEffect
+                                    ? 'Re-check this sound’s conditions as variables change: loop while met (or play once each time they become true).'
+                                    : t('footer.liveConditionsDesc')}
+                            </span>
+                        </label>
+                    )}
                 </>
             </div>
             <div className="pt-2 mt-auto">
                 <button onClick={handleDelete} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-[10px] flex items-center justify-center gap-1 transition-colors">
-                    <TrashIcon className="w-3 h-3" /> Delete
+                    <TrashIcon className="w-3 h-3" /> {t('common:delete')}
                 </button>
             </div>
         </div>

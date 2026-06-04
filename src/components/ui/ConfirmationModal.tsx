@@ -1,5 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 const ConfirmationModal: React.FC<{
     isOpen: boolean;
@@ -9,6 +10,7 @@ const ConfirmationModal: React.FC<{
     children: React.ReactNode;
     confirmLabel?: string;
 }> = ({ isOpen, onClose, onConfirm, title, children, confirmLabel }) => {
+    const { t } = useTranslation(['components', 'common']);
     if (!isOpen) return null;
 
     // Use onClick for the backdrop. The check e.target === e.currentTarget ensures that only
@@ -41,13 +43,13 @@ const ConfirmationModal: React.FC<{
                         onClick={onClose} 
                         className="px-4 py-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                     >
-                        Cancel
+                        {t('common:cancel')}
                     </button>
-                    <button 
-                        onClick={onConfirm} 
+                    <button
+                        onClick={onConfirm}
                         className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-pink)]/20 transition-all text-white font-medium"
                     >
-                        {confirmLabel || 'Confirm Delete'}
+                        {confirmLabel || t('confirmationModal.confirmDelete')}
                     </button>
                 </div>
             </div>

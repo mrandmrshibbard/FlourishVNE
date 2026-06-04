@@ -7,6 +7,7 @@ import { VNVariable } from '../features/variables/types';
 import { VNScript } from './scripting';
 import { VNCommonEvent } from './commonEvents';
 import { PluginRegistryEntry, VNPlugin } from './plugins';
+import { VNItem } from '../features/items/types';
 
 export interface VNProjectFont {
     id: VNID;
@@ -74,6 +75,8 @@ export interface VNProject {
     };
     /** CG Gallery configuration for unlockable art gallery */
     cgGallery?: CGGalleryConfig;
+    /** Inventory/shop item registry. Each item is backed by a count variable. */
+    items?: Record<VNID, VNItem>;
     /** User-defined scripts */
     scripts?: Record<VNID, VNScript>;
     /** Common Events — reusable command sequences callable from any scene */

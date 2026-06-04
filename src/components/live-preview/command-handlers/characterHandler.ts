@@ -192,6 +192,8 @@ export function handleShowCharacter(
     sourceCommandId: command.id,
     scale: command.scale,
     inverted: command.inverted,
+    rotation: command.rotation,
+    flipY: command.flipY,
     visualEffects: (() => {
         // Support both new visualEffects array and legacy single visualEffect
         const effects: import('../../../features/scene/types').VNCharacterVisualEffect[] = [];
@@ -211,6 +213,7 @@ export function handleShowCharacter(
             action: 'show' as const,
           }
         : null,
+    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
   };
 
   // If there's a transition, wait for it to complete before advancing

@@ -9,10 +9,12 @@
  */
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { VNProject } from '../types/project';
-import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings } from '../features/ui/types';
+import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, QuickMenuButtonKey, QuickMenuButtonConfig } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import FontEditor, { defaultFontSettings } from './ui/FontEditor';
+import { useTranslation } from 'react-i18next';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
+import { GradientText } from './ui/GradientText';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
 import {
     ChatBubbleIcon, BookmarkSquareIcon, SparklesIcon, PencilIcon,
@@ -171,11 +173,48 @@ function getQuickMenuRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     return { x, y, width: w, height: h };
 }
 
+/** The six quick-menu buttons + their per-button visibility flag (shared by editor UI). */
+const QUICK_MENU_BUTTONS: { key: QuickMenuButtonKey; label: string; showKey: keyof VNProjectUI }[] = [
+    { key: 'skipBackward', label: 'Back',  showKey: 'quickMenuShowSkipBackward' },
+    { key: 'log',          label: 'Log',   showKey: 'quickMenuShowLog' },
+    { key: 'autoAdvance',  label: 'Auto',  showKey: 'quickMenuShowAutoAdvance' },
+    { key: 'skipForward',  label: 'Skip',  showKey: 'quickMenuShowSkipForward' },
+    { key: 'save',         label: 'Save',  showKey: 'quickMenuShowSave' },
+    { key: 'load',         label: 'Load',  showKey: 'quickMenuShowLoad' },
+];
+
+function getQuickMenuVisibleButtons(ui: VNProjectUI) {
+    return QUICK_MENU_BUTTONS.filter(b => (ui as any)[b.showKey] !== false);
+}
+
+/** Per-button rects for independent layout — mirrors the runtime default spread. */
+function getQuickMenuButtonRects(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
+    const group = getQuickMenuRect(ui, gameW, gameH);
+    const visible = getQuickMenuVisibleButtons(ui);
+    const count = visible.length || 1;
+    const slotW = group.width / count;
+    const cfgs = ui.quickMenuButtons || {};
+    return visible.map((b, i) => {
+        const cfg = cfgs[b.key] || {};
+        return {
+            key: b.key,
+            label: b.label,
+            rect: {
+                x: cfg.x ?? (group.x + i * slotW),
+                y: cfg.y ?? group.y,
+                width: cfg.width ?? Math.max(4, slotW - 1),
+                height: cfg.height ?? group.height,
+            },
+        };
+    });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Canvas renderers – preview how elements look in-game               */
 /* ------------------------------------------------------------------ */
 
 const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const { t } = useTranslation('ui');
     const bgColor = hexToRgba(ui.dialogueBoxColor ?? '#0f172a', ui.dialogueBoxOpacity ?? 90);
     const br = ui.dialogueBoxBorderRadius ?? 8;
     const padding = ui.dialogueBoxPadding ?? 20;
@@ -232,7 +271,7 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
                     justifyContent: 'flex-start',
                 }}>
                     <p style={fontToStyle(ui.dialogueTextFont)} className="leading-relaxed opacity-80">
-                        This is a sample line of dialogue text to preview how it will look in-game…
+                        {t('inGameUi.sampleDialogue')}
                     </p>
                 </div>
             </div>
@@ -241,6 +280,7 @@ const DialogueBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({
 };
 
 const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const { t } = useTranslation('ui');
     const bgColor = hexToRgba(ui.nameboxColor ?? '#0f172a', ui.nameboxOpacity ?? 92);
     const br = ui.nameboxBorderRadius ?? 6;
     const pad = ui.nameboxPadding ?? 8;
@@ -267,13 +307,14 @@ const NameBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui,
                 }),
         }}>
             <span style={fontToStyle(ui.dialogueNameFont)} className="opacity-90">
-                <span style={extractTextGradientStyle(ui.dialogueNameFont) || undefined}>Character Name</span>
+                <GradientText style={extractTextGradientStyle(ui.dialogueNameFont)}>{t('inGameUi.characterName')}</GradientText>
             </span>
         </div>
     );
 };
 
 const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const { t } = useTranslation('ui');
     const bgColor = hexToRgba(ui.choiceButtonColor ?? '#1e293b', ui.choiceButtonOpacity ?? 90);
     const br = ui.choiceButtonBorderRadius ?? 8;
     const pad = ui.choiceButtonPadding ?? 16;
@@ -294,7 +335,7 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center gap-[4%]">
-            {['Choice A', 'Choice B', 'Choice C'].map(label => (
+            {['A', 'B', 'C'].map(label => (
                 <div key={label} className="w-[80%]"
                      style={borderUrl
                          ? { ...buildImageBackgroundStyle(borderUrl, sizeMode, slice), padding: `calc(var(--font-scale,1) * ${borderPadding}px)`, borderRadius: `calc(var(--font-scale,1) * ${br}px)` }
@@ -314,7 +355,7 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                                 : {}),
                     }}>
                         <span style={fontToStyle(ui.choiceTextFont)} className="opacity-90">
-                            <span style={extractTextGradientStyle(ui.choiceTextFont) || undefined}>{label}</span>
+                            <GradientText style={extractTextGradientStyle(ui.choiceTextFont)}>{`${t('inGameUi.sampleChoice')} ${label}`}</GradientText>
                         </span>
                     </div>
                 </div>
@@ -324,6 +365,7 @@ const ChoiceButtonsPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
 };
 
 const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const { t } = useTranslation('ui');
     const bgColor = hexToRgba(ui.inputBoxColor ?? '#0f172a', ui.inputBoxOpacity ?? 92);
     const br = ui.inputBoxBorderRadius ?? 8;
     const pad = ui.inputBoxPadding ?? 24;
@@ -362,14 +404,14 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
                             : {}),
                 }}>
                     <p style={fontToStyle(ui.inputPromptFont)} className="opacity-90">
-                        <span style={extractTextGradientStyle(ui.inputPromptFont) || undefined}>What is your name?</span>
+                        <GradientText style={extractTextGradientStyle(ui.inputPromptFont)}>{t('inGameUi.whatIsYourName')}</GradientText>
                     </p>
                     <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={fontToStyle(ui.inputFieldFont)}>
-                        <span className="opacity-40">Type here…</span>
+                        <span className="opacity-40">{t('inGameUi.typeHere')}</span>
                     </div>
                     <div className="px-4 py-1 rounded bg-sky-600/80">
                         <span style={fontToStyle(ui.inputSubmitFont)}>
-                            <span style={extractTextGradientStyle(ui.inputSubmitFont) || undefined}>Submit</span>
+                            <GradientText style={extractTextGradientStyle(ui.inputSubmitFont)}>{t('inGameUi.submit')}</GradientText>
                         </span>
                     </div>
                 </div>
@@ -378,41 +420,70 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
     );
 };
 
-const QuickMenuPreview: React.FC<{ ui: VNProjectUI }> = ({ ui }) => {
+/** Resolve a quick-menu button's art url from images + backgrounds. */
+function resolveQmArt(project: VNProject, asset?: { id: string } | null): string | null {
+    if (!asset?.id) return null;
+    const all = { ...(project.images || {}), ...(project.backgrounds || {}) } as Record<string, any>;
+    return all[asset.id]?.imageUrl || all[asset.id]?.videoUrl || null;
+}
+
+const QuickMenuPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const { t } = useTranslation('ui');
     const bgColor = hexToRgba(ui.quickMenuColor ?? '#0f172a', ui.quickMenuOpacity ?? 75);
     const br = ui.quickMenuBorderRadius ?? 4;
-
-    // Define all buttons with their visibility flags
-    const buttonDefs = [
-        { label: 'Back', show: ui.quickMenuShowSkipBackward !== false },
-        { label: 'Log', show: ui.quickMenuShowLog !== false },
-        { label: 'Auto', show: ui.quickMenuShowAutoAdvance !== false },
-        { label: 'Skip', show: ui.quickMenuShowSkipForward !== false },
-        { label: 'Save', show: ui.quickMenuShowSave !== false },
-        { label: 'Load', show: ui.quickMenuShowLoad !== false },
-    ];
-
-    const visibleButtons = buttonDefs.filter(b => b.show);
+    const visibleButtons = getQuickMenuVisibleButtons(ui);
+    const cfgs = ui.quickMenuButtons || {};
 
     return (
         <div className="w-full h-full flex items-center justify-center gap-[2%]">
-            {visibleButtons.map(btn => (
-                <div key={btn.label} style={{
-                    backgroundColor: bgColor,
-                    borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
-                    fontSize: 'calc(var(--font-scale,1) * 12px)',
-                    padding: 'calc(var(--font-scale,1) * 10px) calc(var(--font-scale,1) * 10px)',
-                    color: 'rgba(255,255,255,0.8)',
-                    border: '1px solid rgba(148,163,184,0.2)',
-                }}>
-                    {btn.label}
-                </div>
-            ))}
+            {visibleButtons.map(btn => {
+                const art = resolveQmArt(project, cfgs[btn.key]?.image as any);
+                if (art) {
+                    return <img key={btn.key} src={art} alt={t('inGameUi.qmLabels.'+btn.key)} draggable={false}
+                        style={{ height: '75%', width: 'auto', objectFit: 'contain', display: 'block' }} />;
+                }
+                return (
+                    <div key={btn.key} style={{
+                        backgroundColor: bgColor,
+                        borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
+                        fontSize: 'calc(var(--font-scale,1) * 12px)',
+                        padding: 'calc(var(--font-scale,1) * 10px) calc(var(--font-scale,1) * 10px)',
+                        color: 'rgba(255,255,255,0.8)',
+                        border: '1px solid rgba(148,163,184,0.2)',
+                    }}>
+                        {t('inGameUi.qmLabels.'+btn.key)}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+/** A single quick-menu button preview (fills its container) — used for the per-button
+ *  draggables in independent layout. Shows custom art (object-contain) or a default pill. */
+const QuickMenuButtonPreview: React.FC<{ ui: VNProjectUI; project: VNProject; btnKey: QuickMenuButtonKey; label: string }> = ({ ui, project, btnKey, label }) => {
+    const cfg = (ui.quickMenuButtons || {})[btnKey] || {};
+    const art = resolveQmArt(project, cfg.image as any);
+    if (art) {
+        return <img src={art} alt={label} draggable={false}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />;
+    }
+    return (
+        <div style={{
+            width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: hexToRgba(ui.quickMenuColor ?? '#0f172a', ui.quickMenuOpacity ?? 75),
+            borderRadius: `calc(var(--font-scale,1) * ${ui.quickMenuBorderRadius ?? 4}px)`,
+            color: 'rgba(255,255,255,0.8)',
+            fontSize: 'calc(var(--font-scale,1) * 12px)',
+            border: '1px solid rgba(148,163,184,0.2)',
+        }}>
+            {label}
         </div>
     );
 };
 
 const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const { t } = useTranslation('ui');
     const cd = ui.confirmDialogs || {};
     const bgColor = cd.backgroundColor ?? '#0f172a';
     const bgOpacity = (cd.backgroundOpacity ?? 92) / 100;
@@ -491,10 +562,10 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                     ...bgImageStyle,
                 }}>
                     <div style={{ ...titleStyle, marginBottom: 'calc(var(--font-scale,1) * 12px)' }}>
-                        {cd.quitTitle || 'Quit Game'}
+                        {cd.quitTitle || t('inGameUi.phQuitGame')}
                     </div>
                     <div style={{ ...messageStyle, marginBottom: 'calc(var(--font-scale,1) * 24px)' }}>
-                        {cd.quitMessage || 'Are you sure you want to quit?'}
+                        {cd.quitMessage || t('inGameUi.phQuitMsg')}
                     </div>
                     <div style={{ display: 'flex', gap: 'calc(var(--font-scale,1) * 12px)', justifyContent: 'center' }}>
                         <div style={{
@@ -505,7 +576,7 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                             border: cancelBtnImgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)',
                             ...makeBtnImageStyle(cancelBtnImgUrl),
                         }}>
-                            {cd.quitCancelLabel || 'Cancel'}
+                            {cd.quitCancelLabel || t('inGameUi.phCancel')}
                         </div>
                         <div style={{
                             ...btnStyle,
@@ -514,7 +585,7 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                             background: confirmBtnImgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)'),
                             ...makeBtnImageStyle(confirmBtnImgUrl),
                         }}>
-                            {cd.quitConfirmLabel || 'Quit'}
+                            {cd.quitConfirmLabel || t('inGameUi.phQuit')}
                         </div>
                     </div>
                 </div>
@@ -565,6 +636,7 @@ const PropsOpacityField: React.FC<{ label: string; value: number; onChange: (v: 
 );
 
 const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project, onUpdate }) => {
+    const { t } = useTranslation('ui');
     // Gather all available images (images + backgrounds) for background image selectors
     const allImages = useMemo(() => [
         ...Object.values(project.images || {}) as any[],
@@ -582,73 +654,73 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     if (element === 'dialogueBox') {
         return (
             <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Dialogue Box</h4>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.dialogueBox')}</h4>
                 <div className="grid grid-cols-2 gap-2">
-                    <ColorField label="Background" value={ui.dialogueBoxColor ?? '#0f172a'} onChange={v => onUpdate({ dialogueBoxColor: v })} />
-                    <OpacityField label="Opacity" value={ui.dialogueBoxOpacity ?? 90} onChange={v => onUpdate({ dialogueBoxOpacity: v })} />
+                    <ColorField label={t('inGameUi.colorBackground')} value={ui.dialogueBoxColor ?? '#0f172a'} onChange={v => onUpdate({ dialogueBoxColor: v })} />
+                    <OpacityField label={t('inGameUi.opacity')} value={ui.dialogueBoxOpacity ?? 90} onChange={v => onUpdate({ dialogueBoxOpacity: v })} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <NumInput label="Border Radius (px)" value={ui.dialogueBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ dialogueBoxBorderRadius: v })} />
-                    <NumInput label="Content Padding (px)" value={ui.dialogueBoxPadding} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxPadding: v })} />
+                    <NumInput label={t('inGameUi.borderRadius')} value={ui.dialogueBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ dialogueBoxBorderRadius: v })} />
+                    <NumInput label={t('inGameUi.contentPadding')} value={ui.dialogueBoxPadding} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxPadding: v })} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <NumInput label="Width (%)" value={ui.dialogueBoxWidth} fallback={100} min={10} max={100} onChange={v => onUpdate({ dialogueBoxWidth: v })} />
-                    <NumInput label="Bottom Margin (px)" value={ui.dialogueBoxBottomMargin} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxBottomMargin: v })} />
+                    <NumInput label={t('inGameUi.width')} value={ui.dialogueBoxWidth} fallback={100} min={10} max={100} onChange={v => onUpdate({ dialogueBoxWidth: v })} />
+                    <NumInput label={t('inGameUi.bottomMargin')} value={ui.dialogueBoxBottomMargin} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxBottomMargin: v })} />
                 </div>
 
-                <Field label="Background Image">
+                <Field label={t('inGameUi.backgroundImage')}>
                     <select className={inputCls} value={ui.dialogueBoxImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None (use color)</option>
+                        <option value="">{t('inGameUi.noneUseColor')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
 
                 {ui.dialogueBoxImage && (
-                    <Field label="Image Fit Mode">
+                    <Field label={t('inGameUi.imageFitMode')}>
                         <select className={inputCls} value={ui.dialogueBoxSizeMode ?? 'stretch'}
                             onChange={e => onUpdate({ dialogueBoxSizeMode: e.target.value as any })}>
-                            <option value="stretch">Stretch (fill box)</option>
-                            <option value="contain">Contain (fit inside)</option>
-                            <option value="cover">Cover (fill & crop)</option>
-                            <option value="tile">Tile (repeat)</option>
-                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                            <option value="contain">{t('inGameUi.fitContain')}</option>
+                            <option value="cover">{t('inGameUi.fitCover')}</option>
+                            <option value="tile">{t('inGameUi.fitTile')}</option>
+                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
                         </select>
                     </Field>
                 )}
                 {ui.dialogueBoxImage && (ui.dialogueBoxSizeMode ?? 'stretch') === 'nine-slice' && (
-                    <NumInput label="Slice (px)" value={ui.dialogueBoxSlice} fallback={30} min={1} onChange={v => onUpdate({ dialogueBoxSlice: v })} />
+                    <NumInput label={t('inGameUi.slice')} value={ui.dialogueBoxSlice} fallback={30} min={1} onChange={v => onUpdate({ dialogueBoxSlice: v })} />
                 )}
 
-                <Field label="Border Image">
+                <Field label={t('inGameUi.borderImage')}>
                     <select className={inputCls} value={ui.dialogueBoxBorderImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ dialogueBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None</option>
+                        <option value="">{t('inGameUi.none')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
                 {ui.dialogueBoxBorderImage && (
-                    <NumInput label="Border Padding (px)" value={ui.dialogueBorderPadding} fallback={12} min={0} onChange={v => onUpdate({ dialogueBorderPadding: v })} />
+                    <NumInput label={t('inGameUi.borderPadding')} value={ui.dialogueBorderPadding} fallback={12} min={0} onChange={v => onUpdate({ dialogueBorderPadding: v })} />
                 )}
 
                 {/* Text padding inside dialogue */}
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-2">Text Position (padding px)</h4>
-                <p className="text-[10px] text-[var(--text-muted)]">Controls where typed text starts inside the dialogue box. Drag the inner text area on canvas or set manually.</p>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-2">{t('inGameUi.textPosition')}</h4>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.textPosHint')}</p>
                 <div className="grid grid-cols-2 gap-2">
-                    <NumInput label="Top" value={ui.dialogueTextPaddingTop} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingTop: v })} />
-                    <NumInput label="Bottom" value={ui.dialogueTextPaddingBottom} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingBottom: v })} />
-                    <NumInput label="Left" value={ui.dialogueTextPaddingLeft} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingLeft: v })} />
-                    <NumInput label="Right" value={ui.dialogueTextPaddingRight} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingRight: v })} />
+                    <NumInput label={t('inGameUi.posTop')} value={ui.dialogueTextPaddingTop} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingTop: v })} />
+                    <NumInput label={t('inGameUi.posBottom')} value={ui.dialogueTextPaddingBottom} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingBottom: v })} />
+                    <NumInput label={t('inGameUi.posLeft')} value={ui.dialogueTextPaddingLeft} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingLeft: v })} />
+                    <NumInput label={t('inGameUi.posRight')} value={ui.dialogueTextPaddingRight} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingRight: v })} />
                 </div>
 
                 <FontEditor
-                    label="Dialogue Text Font"
+                    label={t('inGameUi.dialogueTextFont')}
                     font={(ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ dialogueTextFont: { ...((ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
@@ -660,43 +732,43 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     if (element === 'nameBox') {
         return (
             <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Name Box</h4>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.nameBox')}</h4>
                 <div className="grid grid-cols-2 gap-2">
-                    <ColorField label="Background" value={ui.nameboxColor ?? '#0f172a'} onChange={v => onUpdate({ nameboxColor: v })} />
-                    <OpacityField label="Opacity" value={ui.nameboxOpacity ?? 92} onChange={v => onUpdate({ nameboxOpacity: v })} />
+                    <ColorField label={t('inGameUi.colorBackground')} value={ui.nameboxColor ?? '#0f172a'} onChange={v => onUpdate({ nameboxColor: v })} />
+                    <OpacityField label={t('inGameUi.opacity')} value={ui.nameboxOpacity ?? 92} onChange={v => onUpdate({ nameboxOpacity: v })} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <NumInput label="Border Radius (px)" value={ui.nameboxBorderRadius} fallback={6} min={0} onChange={v => onUpdate({ nameboxBorderRadius: v })} />
-                    <NumInput label="Padding (px)" value={ui.nameboxPadding} fallback={8} min={0} onChange={v => onUpdate({ nameboxPadding: v })} />
-                    <NumInput label="H-Padding (px)" value={ui.nameboxHorizontalPadding} fallback={14} min={0} onChange={v => onUpdate({ nameboxHorizontalPadding: v })} />
+                    <NumInput label={t('inGameUi.borderRadius')} value={ui.nameboxBorderRadius} fallback={6} min={0} onChange={v => onUpdate({ nameboxBorderRadius: v })} />
+                    <NumInput label={t('inGameUi.padding')} value={ui.nameboxPadding} fallback={8} min={0} onChange={v => onUpdate({ nameboxPadding: v })} />
+                    <NumInput label={t('inGameUi.hPadding')} value={ui.nameboxHorizontalPadding} fallback={14} min={0} onChange={v => onUpdate({ nameboxHorizontalPadding: v })} />
                 </div>
 
-                <Field label="Background Image">
+                <Field label={t('inGameUi.backgroundImage')}>
                     <select className={inputCls} value={ui.nameboxImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ nameboxImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None (use color)</option>
+                        <option value="">{t('inGameUi.noneUseColor')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
 
                 {ui.nameboxImage && (
-                    <Field label="Image Fit Mode">
+                    <Field label={t('inGameUi.imageFitMode')}>
                         <select className={inputCls} value={ui.nameboxSizeMode ?? 'stretch'}
                             onChange={e => onUpdate({ nameboxSizeMode: e.target.value as any })}>
-                            <option value="stretch">Stretch (fill box)</option>
-                            <option value="contain">Contain (fit inside)</option>
-                            <option value="cover">Cover (fill & crop)</option>
-                            <option value="tile">Tile (repeat)</option>
-                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                            <option value="contain">{t('inGameUi.fitContain')}</option>
+                            <option value="cover">{t('inGameUi.fitCover')}</option>
+                            <option value="tile">{t('inGameUi.fitTile')}</option>
+                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
                         </select>
                     </Field>
                 )}
 
                 <FontEditor
-                    label="Name Font"
+                    label={t('inGameUi.nameFont')}
                     font={(ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ dialogueNameFont: { ...((ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
@@ -708,73 +780,73 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     if (element === 'choiceButtons') {
         return (
             <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Choice Buttons</h4>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.choiceButtons')}</h4>
                 <div className="grid grid-cols-2 gap-2">
-                    <ColorField label="Background" value={ui.choiceButtonColor ?? '#1e293b'} onChange={v => onUpdate({ choiceButtonColor: v })} />
-                    <OpacityField label="Opacity" value={ui.choiceButtonOpacity ?? 90} onChange={v => onUpdate({ choiceButtonOpacity: v })} />
+                    <ColorField label={t('inGameUi.colorBackground')} value={ui.choiceButtonColor ?? '#1e293b'} onChange={v => onUpdate({ choiceButtonColor: v })} />
+                    <OpacityField label={t('inGameUi.opacity')} value={ui.choiceButtonOpacity ?? 90} onChange={v => onUpdate({ choiceButtonOpacity: v })} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <NumInput label="Border Radius (px)" value={ui.choiceButtonBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ choiceButtonBorderRadius: v })} />
-                    <NumInput label="Padding (px)" value={ui.choiceButtonPadding} fallback={16} min={0} onChange={v => onUpdate({ choiceButtonPadding: v })} />
+                    <NumInput label={t('inGameUi.borderRadius')} value={ui.choiceButtonBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ choiceButtonBorderRadius: v })} />
+                    <NumInput label={t('inGameUi.padding')} value={ui.choiceButtonPadding} fallback={16} min={0} onChange={v => onUpdate({ choiceButtonPadding: v })} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <ColorField label="Hover Color" value={ui.choiceHoverColor ?? '#334155'} onChange={v => onUpdate({ choiceHoverColor: v })} />
+                    <ColorField label={t('inGameUi.hoverColor')} value={ui.choiceHoverColor ?? '#334155'} onChange={v => onUpdate({ choiceHoverColor: v })} />
                 </div>
 
-                <Field label="Background Image">
+                <Field label={t('inGameUi.backgroundImage')}>
                     <select className={inputCls} value={ui.choiceButtonImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ choiceButtonImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None (use color)</option>
+                        <option value="">{t('inGameUi.noneUseColor')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
 
                 {ui.choiceButtonImage && (
-                    <Field label="Image Fit Mode">
+                    <Field label={t('inGameUi.imageFitMode')}>
                         <select className={inputCls} value={ui.choiceButtonSizeMode ?? 'stretch'}
                             onChange={e => onUpdate({ choiceButtonSizeMode: e.target.value as any })}>
-                            <option value="stretch">Stretch (fill box)</option>
-                            <option value="contain">Contain (fit inside)</option>
-                            <option value="cover">Cover (fill & crop)</option>
-                            <option value="tile">Tile (repeat)</option>
-                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                            <option value="contain">{t('inGameUi.fitContain')}</option>
+                            <option value="cover">{t('inGameUi.fitCover')}</option>
+                            <option value="tile">{t('inGameUi.fitTile')}</option>
+                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
                         </select>
                     </Field>
                 )}
                 {ui.choiceButtonImage && (ui.choiceButtonSizeMode ?? 'stretch') === 'nine-slice' && (
-                    <NumInput label="Slice (px)" value={ui.choiceButtonSlice} fallback={15} min={1} onChange={v => onUpdate({ choiceButtonSlice: v })} />
+                    <NumInput label={t('inGameUi.slice')} value={ui.choiceButtonSlice} fallback={15} min={1} onChange={v => onUpdate({ choiceButtonSlice: v })} />
                 )}
 
-                <Field label="Hover Image">
+                <Field label={t('inGameUi.hoverImage')}>
                     <select className={inputCls} value={ui.choiceHoverImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ choiceHoverImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None</option>
+                        <option value="">{t('inGameUi.none')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
 
-                <Field label="Border Image">
+                <Field label={t('inGameUi.borderImage')}>
                     <select className={inputCls} value={ui.choiceButtonBorderImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ choiceButtonBorderImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None</option>
+                        <option value="">{t('inGameUi.none')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
                 {ui.choiceButtonBorderImage && (
-                    <NumInput label="Border Padding (px)" value={ui.choiceBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ choiceBorderPadding: v })} />
+                    <NumInput label={t('inGameUi.borderPadding')} value={ui.choiceBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ choiceBorderPadding: v })} />
                 )}
 
                 <FontEditor
-                    label="Choice Text Font"
+                    label={t('inGameUi.choiceTextFont')}
                     font={(ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ choiceTextFont: { ...((ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
@@ -786,69 +858,69 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     if (element === 'inputBox') {
         return (
             <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Text Input Box</h4>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.textInputBox')}</h4>
                 <div className="grid grid-cols-2 gap-2">
-                    <ColorField label="Background" value={ui.inputBoxColor ?? '#0f172a'} onChange={v => onUpdate({ inputBoxColor: v })} />
-                    <OpacityField label="Opacity" value={ui.inputBoxOpacity ?? 92} onChange={v => onUpdate({ inputBoxOpacity: v })} />
+                    <ColorField label={t('inGameUi.colorBackground')} value={ui.inputBoxColor ?? '#0f172a'} onChange={v => onUpdate({ inputBoxColor: v })} />
+                    <OpacityField label={t('inGameUi.opacity')} value={ui.inputBoxOpacity ?? 92} onChange={v => onUpdate({ inputBoxOpacity: v })} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <NumInput label="Border Radius (px)" value={ui.inputBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ inputBoxBorderRadius: v })} />
-                    <NumInput label="Padding (px)" value={ui.inputBoxPadding} fallback={24} min={0} onChange={v => onUpdate({ inputBoxPadding: v })} />
+                    <NumInput label={t('inGameUi.borderRadius')} value={ui.inputBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ inputBoxBorderRadius: v })} />
+                    <NumInput label={t('inGameUi.padding')} value={ui.inputBoxPadding} fallback={24} min={0} onChange={v => onUpdate({ inputBoxPadding: v })} />
                 </div>
 
-                <Field label="Background Image">
+                <Field label={t('inGameUi.backgroundImage')}>
                     <select className={inputCls} value={ui.inputBoxImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ inputBoxImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None (use color)</option>
+                        <option value="">{t('inGameUi.noneUseColor')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
 
                 {ui.inputBoxImage && (
-                    <Field label="Image Fit Mode">
+                    <Field label={t('inGameUi.imageFitMode')}>
                         <select className={inputCls} value={ui.inputBoxSizeMode ?? 'stretch'}
                             onChange={e => onUpdate({ inputBoxSizeMode: e.target.value as any })}>
-                            <option value="stretch">Stretch (fill box)</option>
-                            <option value="contain">Contain (fit inside)</option>
-                            <option value="cover">Cover (fill & crop)</option>
-                            <option value="tile">Tile (repeat)</option>
-                            <option value="nine-slice">9-Slice (preserve corners)</option>
+                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                            <option value="contain">{t('inGameUi.fitContain')}</option>
+                            <option value="cover">{t('inGameUi.fitCover')}</option>
+                            <option value="tile">{t('inGameUi.fitTile')}</option>
+                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
                         </select>
                     </Field>
                 )}
                 {ui.inputBoxImage && (ui.inputBoxSizeMode ?? 'stretch') === 'nine-slice' && (
-                    <NumInput label="Slice (px)" value={ui.inputBoxSlice} fallback={20} min={1} onChange={v => onUpdate({ inputBoxSlice: v })} />
+                    <NumInput label={t('inGameUi.slice')} value={ui.inputBoxSlice} fallback={20} min={1} onChange={v => onUpdate({ inputBoxSlice: v })} />
                 )}
 
-                <Field label="Border Image">
+                <Field label={t('inGameUi.borderImage')}>
                     <select className={inputCls} value={ui.inputBoxBorderImage?.id || ''}
                         onChange={e => {
                             const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
                             onUpdate({ inputBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
                         }}>
-                        <option value="">None</option>
+                        <option value="">{t('inGameUi.none')}</option>
                         {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
                     </select>
                 </Field>
                 {ui.inputBoxBorderImage && (
-                    <NumInput label="Border Padding (px)" value={ui.inputBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ inputBorderPadding: v })} />
+                    <NumInput label={t('inGameUi.borderPadding')} value={ui.inputBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ inputBorderPadding: v })} />
                 )}
 
                 <FontEditor
-                    label="Prompt Font"
+                    label={t('inGameUi.promptFont')}
                     font={(ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ inputPromptFont: { ...((ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
                 <FontEditor
-                    label="Input Field Font"
+                    label={t('inGameUi.inputFieldFont')}
                     font={(ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ inputFieldFont: { ...((ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
                 <FontEditor
-                    label="Submit Button Font"
+                    label={t('inGameUi.submitButtonFont')}
                     font={(ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ inputSubmitFont: { ...((ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
@@ -860,13 +932,13 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     if (element === 'quickMenu') {
         return (
             <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Quick Menu</h4>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.quickMenu')}</h4>
                 <div className="grid grid-cols-2 gap-2">
-                    <ColorField label="Button Color" value={ui.quickMenuColor ?? '#0f172a'} onChange={v => onUpdate({ quickMenuColor: v })} />
-                    <OpacityField label="Opacity" value={ui.quickMenuOpacity ?? 75} onChange={v => onUpdate({ quickMenuOpacity: v })} />
+                    <ColorField label={t('inGameUi.buttonColor')} value={ui.quickMenuColor ?? '#0f172a'} onChange={v => onUpdate({ quickMenuColor: v })} />
+                    <OpacityField label={t('inGameUi.opacity')} value={ui.quickMenuOpacity ?? 75} onChange={v => onUpdate({ quickMenuOpacity: v })} />
                 </div>
-                <NumInput label="Border Radius (px)" value={ui.quickMenuBorderRadius} fallback={4} min={0} onChange={v => onUpdate({ quickMenuBorderRadius: v })} />
-                <Field label="Position Preset">
+                <NumInput label={t('inGameUi.borderRadius')} value={ui.quickMenuBorderRadius} fallback={4} min={0} onChange={v => onUpdate({ quickMenuBorderRadius: v })} />
+                <Field label={t('inGameUi.positionPreset')}>
                     <select className={inputCls} value={ui.quickMenuPosition ?? 'above-dialogue'} onChange={e => onUpdate({
                         quickMenuPosition: e.target.value as any,
                         // Clear explicit drag-set coordinates so the new preset's defaults take effect.
@@ -876,12 +948,12 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         quickMenuWidth: undefined,
                         quickMenuHeight: undefined,
                     })}>
-                        <option value="above-dialogue">Above Dialogue</option>
-                        <option value="top-right">Top Right</option>
-                        <option value="top-left">Top Left</option>
-                        <option value="bottom-right">Bottom Right (pushes dialogue up)</option>
-                        <option value="bottom-left">Bottom Left (pushes dialogue up)</option>
-                        <option value="hidden">Hidden</option>
+                        <option value="above-dialogue">{t('inGameUi.posAboveDialogue')}</option>
+                        <option value="top-right">{t('inGameUi.posTopRight')}</option>
+                        <option value="top-left">{t('inGameUi.posTopLeft')}</option>
+                        <option value="bottom-right">{t('inGameUi.posBottomRight')}</option>
+                        <option value="bottom-left">{t('inGameUi.posBottomLeft')}</option>
+                        <option value="hidden">{t('inGameUi.posHidden')}</option>
                     </select>
                 </Field>
                 {(ui.quickMenuX !== undefined || ui.quickMenuY !== undefined || ui.quickMenuWidth !== undefined || ui.quickMenuHeight !== undefined) && (
@@ -889,79 +961,86 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         type="button"
                         onClick={() => onUpdate({ quickMenuX: undefined, quickMenuY: undefined, quickMenuWidth: undefined, quickMenuHeight: undefined })}
                         className="w-full text-xs px-2 py-1 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                        title="Discard custom drag position and snap the Quick Menu back to the selected preset."
+                        title={t('inGameUi.resetPresetTitle')}
                     >
-                        Reset to Preset Position
+                        {t('inGameUi.resetPreset')}
                     </button>
                 )}
-                <Field label="Float Over Dialogue">
+                <Field label={t('inGameUi.floatOverDialogue')}>
                     <input
                         type="checkbox"
                         checked={ui.quickMenuFloatOverDialogue ?? false}
                         onChange={e => onUpdate({ quickMenuFloatOverDialogue: e.target.checked })}
                         className="cursor-pointer"
                     />
-                    <span className="text-xs text-[var(--text-secondary)] ml-2">When enabled, quick menu floats over the dialogue box instead of pushing it up.</span>
+                    <span className="text-xs text-[var(--text-secondary)] ml-2">{t('inGameUi.floatOverHint')}</span>
                 </Field>
 
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-3">Button Visibility</h4>
-                <p className="text-[10px] text-[var(--text-muted)]">Toggle which buttons appear in the quick menu.</p>
+                <Field label={t('inGameUi.independentLayout')}>
+                    <input
+                        type="checkbox"
+                        checked={ui.quickMenuIndependentLayout ?? false}
+                        onChange={e => onUpdate({ quickMenuIndependentLayout: e.target.checked })}
+                        className="cursor-pointer"
+                    />
+                    <span className="text-xs text-[var(--text-secondary)] ml-2">{t('inGameUi.independentHint')}</span>
+                </Field>
+
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-3">{t('inGameUi.buttonsHeader')}</h4>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.buttonsHint')}{ui.quickMenuIndependentLayout ? t('inGameUi.buttonsHintDrag') : ''}</p>
 
                 <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={ui.quickMenuShowSkipBackward !== false}
-                            onChange={e => onUpdate({ quickMenuShowSkipBackward: e.target.checked })}
-                            className="cursor-pointer"
-                        />
-                        <span className="text-xs text-[var(--text-secondary)]">Back / Skip Backward</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={ui.quickMenuShowLog !== false}
-                            onChange={e => onUpdate({ quickMenuShowLog: e.target.checked })}
-                            className="cursor-pointer"
-                        />
-                        <span className="text-xs text-[var(--text-secondary)]">Log / History</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={ui.quickMenuShowAutoAdvance !== false}
-                            onChange={e => onUpdate({ quickMenuShowAutoAdvance: e.target.checked })}
-                            className="cursor-pointer"
-                        />
-                        <span className="text-xs text-[var(--text-secondary)]">Auto-Advance</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={ui.quickMenuShowSkipForward !== false}
-                            onChange={e => onUpdate({ quickMenuShowSkipForward: e.target.checked })}
-                            className="cursor-pointer"
-                        />
-                        <span className="text-xs text-[var(--text-secondary)]">Skip / Skip Forward</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={ui.quickMenuShowSave !== false}
-                            onChange={e => onUpdate({ quickMenuShowSave: e.target.checked })}
-                            className="cursor-pointer"
-                        />
-                        <span className="text-xs text-[var(--text-secondary)]">Save</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={ui.quickMenuShowLoad !== false}
-                            onChange={e => onUpdate({ quickMenuShowLoad: e.target.checked })}
-                            className="cursor-pointer"
-                        />
-                        <span className="text-xs text-[var(--text-secondary)]">Load</span>
-                    </label>
+                    {QUICK_MENU_BUTTONS.map(b => {
+                        const cfg = (ui.quickMenuButtons || {})[b.key] || {};
+                        const updateBtn = (patch: Partial<QuickMenuButtonConfig>) => {
+                            const prev = ui.quickMenuButtons || {};
+                            onUpdate({ quickMenuButtons: { ...prev, [b.key]: { ...prev[b.key], ...patch } } });
+                        };
+                        const shown = (ui as any)[b.showKey] !== false;
+                        return (
+                            <div key={b.key} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={shown}
+                                        onChange={e => onUpdate({ [b.showKey]: e.target.checked } as Partial<VNProjectUI>)}
+                                        className="cursor-pointer"
+                                    />
+                                    <span className="text-xs font-medium text-[var(--text-secondary)]">{t('inGameUi.qmLabels.'+b.key)}</span>
+                                </label>
+                                {shown && (
+                                    <>
+                                        <Field label={t('inGameUi.image')}>
+                                            <select className={inputCls} value={cfg.image?.id || ''}
+                                                onChange={e => {
+                                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                                    updateBtn({ image: asset ? { type: 'image', id: asset.id } : null });
+                                                }}>
+                                                <option value="">{t('inGameUi.noneDefaultStyle')}</option>
+                                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                            </select>
+                                        </Field>
+                                        <Field label={t('inGameUi.hoverImage')}>
+                                            <select className={inputCls} value={cfg.hoverImage?.id || ''}
+                                                onChange={e => {
+                                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                                    updateBtn({ hoverImage: asset ? { type: 'image', id: asset.id } : null });
+                                                }}>
+                                                <option value="">{t('inGameUi.none')}</option>
+                                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                            </select>
+                                        </Field>
+                                        {ui.quickMenuIndependentLayout && (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <NumInput label={t('inGameUi.width')} value={cfg.width} fallback={8} min={1} max={100} onChange={v => updateBtn({ width: v })} />
+                                                <NumInput label={t('inGameUi.height')} value={cfg.height} fallback={4} min={1} max={100} onChange={v => updateBtn({ height: v })} />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -974,29 +1053,29 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
         return (
             <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">Confirmation Dialogs</h4>
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.confirmationDialogs')}</h4>
                 <p className="text-xs text-[var(--text-secondary)]">
                     Shown when the player quits to title or starts a new game while a game is in progress.
                 </p>
 
                 {/* Quit dialog text */}
                 <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">Quit Confirmation</span>
-                    <Field label="Title">
-                        <input className={inputCls} value={cd.quitTitle ?? ''} placeholder="Quit Game"
+                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.quitConfirmation')}</span>
+                    <Field label={t('inGameUi.title')}>
+                        <input className={inputCls} value={cd.quitTitle ?? ''} placeholder={t('inGameUi.phQuitGame')}
                             onChange={e => updateCD({ quitTitle: e.target.value || undefined })} />
                     </Field>
-                    <Field label="Message">
-                        <textarea className={inputCls} rows={2} value={cd.quitMessage ?? ''} placeholder="Are you sure you want to quit?"
+                    <Field label={t('inGameUi.message')}>
+                        <textarea className={inputCls} rows={2} value={cd.quitMessage ?? ''} placeholder={t('inGameUi.phQuitMsg')}
                             onChange={e => updateCD({ quitMessage: e.target.value || undefined })} />
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Confirm Button">
-                            <input className={inputCls} value={cd.quitConfirmLabel ?? ''} placeholder="Quit"
+                        <Field label={t('inGameUi.confirmButton')}>
+                            <input className={inputCls} value={cd.quitConfirmLabel ?? ''} placeholder={t('inGameUi.phQuit')}
                                 onChange={e => updateCD({ quitConfirmLabel: e.target.value || undefined })} />
                         </Field>
-                        <Field label="Cancel Button">
-                            <input className={inputCls} value={cd.quitCancelLabel ?? ''} placeholder="Cancel"
+                        <Field label={t('inGameUi.cancelButton')}>
+                            <input className={inputCls} value={cd.quitCancelLabel ?? ''} placeholder={t('inGameUi.phCancel')}
                                 onChange={e => updateCD({ quitCancelLabel: e.target.value || undefined })} />
                         </Field>
                     </div>
@@ -1004,22 +1083,22 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 {/* New Game dialog text */}
                 <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">New Game Confirmation</span>
-                    <Field label="Title">
-                        <input className={inputCls} value={cd.newGameTitle ?? ''} placeholder="Start New Game"
+                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.newGameConfirmation')}</span>
+                    <Field label={t('inGameUi.title')}>
+                        <input className={inputCls} value={cd.newGameTitle ?? ''} placeholder={t('inGameUi.phStartNewGame')}
                             onChange={e => updateCD({ newGameTitle: e.target.value || undefined })} />
                     </Field>
-                    <Field label="Message">
-                        <textarea className={inputCls} rows={2} value={cd.newGameMessage ?? ''} placeholder="Any unsaved progress will be lost. Are you sure?"
+                    <Field label={t('inGameUi.message')}>
+                        <textarea className={inputCls} rows={2} value={cd.newGameMessage ?? ''} placeholder={t('inGameUi.phNewGameMsg')}
                             onChange={e => updateCD({ newGameMessage: e.target.value || undefined })} />
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
-                        <Field label="Confirm Button">
-                            <input className={inputCls} value={cd.newGameConfirmLabel ?? ''} placeholder="New Game"
+                        <Field label={t('inGameUi.confirmButton')}>
+                            <input className={inputCls} value={cd.newGameConfirmLabel ?? ''} placeholder={t('inGameUi.phNewGame')}
                                 onChange={e => updateCD({ newGameConfirmLabel: e.target.value || undefined })} />
                         </Field>
-                        <Field label="Cancel Button">
-                            <input className={inputCls} value={cd.newGameCancelLabel ?? ''} placeholder="Cancel"
+                        <Field label={t('inGameUi.cancelButton')}>
+                            <input className={inputCls} value={cd.newGameCancelLabel ?? ''} placeholder={t('inGameUi.phCancel')}
                                 onChange={e => updateCD({ newGameCancelLabel: e.target.value || undefined })} />
                         </Field>
                     </div>
@@ -1027,119 +1106,119 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 {/* Visual styling */}
                 <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">Dialog Box Appearance</span>
+                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.dialogBoxAppearance')}</span>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Background" value={cd.backgroundColor ?? '#0f172a'} onChange={v => updateCD({ backgroundColor: v })} />
-                        <OpacityField label="Opacity" value={cd.backgroundOpacity ?? 92} onChange={v => updateCD({ backgroundOpacity: v })} />
+                        <ColorField label={t('inGameUi.colorBackground')} value={cd.backgroundColor ?? '#0f172a'} onChange={v => updateCD({ backgroundColor: v })} />
+                        <OpacityField label={t('inGameUi.opacity')} value={cd.backgroundOpacity ?? 92} onChange={v => updateCD({ backgroundOpacity: v })} />
                     </div>
-                    <NumInput label="Border Radius (px)" value={cd.borderRadius} fallback={12} min={0} onChange={v => updateCD({ borderRadius: v })} />
-                    <NumInput label="Dialog Width (px)" value={cd.dialogWidth} fallback={0} min={0} max={1200} onChange={v => updateCD({ dialogWidth: v || undefined })} />
-                    <NumInput label="Inner Padding (px)" value={cd.dialogPadding} fallback={32} min={0} max={100} onChange={v => updateCD({ dialogPadding: v })} />
-                    <ColorField label="Overlay / Backdrop Color" value={cd.overlayColor ?? '#000000'} onChange={v => updateCD({ overlayColor: `${v}bf` })} />
+                    <NumInput label={t('inGameUi.borderRadius')} value={cd.borderRadius} fallback={12} min={0} onChange={v => updateCD({ borderRadius: v })} />
+                    <NumInput label={t('inGameUi.dialogWidth')} value={cd.dialogWidth} fallback={0} min={0} max={1200} onChange={v => updateCD({ dialogWidth: v || undefined })} />
+                    <NumInput label={t('inGameUi.innerPadding')} value={cd.dialogPadding} fallback={32} min={0} max={100} onChange={v => updateCD({ dialogPadding: v })} />
+                    <ColorField label={t('inGameUi.overlayColor')} value={cd.overlayColor ?? '#000000'} onChange={v => updateCD({ overlayColor: `${v}bf` })} />
 
-                    <Field label="Background Image">
+                    <Field label={t('inGameUi.backgroundImage')}>
                         <select className={inputCls} value={cd.backgroundImage?.id || ''}
                             onChange={e => {
                                 if (!e.target.value) { updateCD({ backgroundImage: null }); return; }
                                 updateCD({ backgroundImage: { type: 'image', id: e.target.value as any } });
                             }}>
-                            <option value="">None</option>
+                            <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
                                 <option key={img.id} value={img.id}>{img.name || img.id}</option>
                             ))}
                         </select>
                     </Field>
                     {cd.backgroundImage && (
-                        <Field label="Image Sizing">
+                        <Field label={t('inGameUi.imageSizing')}>
                             <select className={inputCls} value={cd.backgroundSizeMode ?? 'stretch'}
                                 onChange={e => updateCD({ backgroundSizeMode: e.target.value as any })}>
-                                <option value="stretch">Stretch</option>
-                                <option value="contain">Contain</option>
-                                <option value="cover">Cover</option>
-                                <option value="nine-slice">Nine-Slice</option>
+                                <option value="stretch">{t('inGameUi.sizeStretch')}</option>
+                                <option value="contain">{t('inGameUi.sizeContain')}</option>
+                                <option value="cover">{t('inGameUi.sizeCover')}</option>
+                                <option value="nine-slice">{t('inGameUi.sizeNineSlice')}</option>
                             </select>
                         </Field>
                     )}
                     {cd.backgroundImage && cd.backgroundSizeMode === 'nine-slice' && (
-                        <NumInput label="Slice Size (px)" value={cd.backgroundSlice} fallback={20} min={1} onChange={v => updateCD({ backgroundSlice: v })} />
+                        <NumInput label={t('inGameUi.sliceSize')} value={cd.backgroundSlice} fallback={20} min={1} onChange={v => updateCD({ backgroundSlice: v })} />
                     )}
 
-                    <Field label="Border Image">
+                    <Field label={t('inGameUi.borderImage')}>
                         <select className={inputCls} value={cd.borderImage?.id || ''}
                             onChange={e => {
                                 if (!e.target.value) { updateCD({ borderImage: null }); return; }
                                 updateCD({ borderImage: { type: 'image', id: e.target.value as any } });
                             }}>
-                            <option value="">None</option>
+                            <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
                                 <option key={img.id} value={img.id}>{img.name || img.id}</option>
                             ))}
                         </select>
                     </Field>
                     {cd.borderImage && (
-                        <NumInput label="Border Padding (px)" value={cd.borderPadding} fallback={12} min={0} onChange={v => updateCD({ borderPadding: v })} />
+                        <NumInput label={t('inGameUi.borderPadding')} value={cd.borderPadding} fallback={12} min={0} onChange={v => updateCD({ borderPadding: v })} />
                     )}
                 </div>
 
                 {/* Button styling */}
                 <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">Button Styling</span>
+                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.buttonStyling')}</span>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Confirm Btn Color" value={cd.confirmButtonColor ?? '#ec4899'} onChange={v => updateCD({ confirmButtonColor: v })} />
-                        <ColorField label="Cancel Btn Color" value={cd.cancelButtonColor ?? '#1e293b'} onChange={v => updateCD({ cancelButtonColor: v })} />
+                        <ColorField label={t('inGameUi.confirmBtnColor')} value={cd.confirmButtonColor ?? '#ec4899'} onChange={v => updateCD({ confirmButtonColor: v })} />
+                        <ColorField label={t('inGameUi.cancelBtnColor')} value={cd.cancelButtonColor ?? '#1e293b'} onChange={v => updateCD({ cancelButtonColor: v })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label="Confirm Hover Color" value={cd.confirmHoverColor ?? ''} onChange={v => updateCD({ confirmHoverColor: v || undefined })} />
-                        <ColorField label="Cancel Hover Color" value={cd.cancelHoverColor ?? '#334155'} onChange={v => updateCD({ cancelHoverColor: v })} />
+                        <ColorField label={t('inGameUi.confirmHoverColor')} value={cd.confirmHoverColor ?? ''} onChange={v => updateCD({ confirmHoverColor: v || undefined })} />
+                        <ColorField label={t('inGameUi.cancelHoverColor')} value={cd.cancelHoverColor ?? '#334155'} onChange={v => updateCD({ cancelHoverColor: v })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <NumInput label="Button Padding (px)" value={cd.buttonPadding} fallback={8} min={0} max={60} onChange={v => updateCD({ buttonPadding: v })} />
-                        <NumInput label="Button Radius (px)" value={cd.buttonBorderRadius} fallback={8} min={0} onChange={v => updateCD({ buttonBorderRadius: v })} />
+                        <NumInput label={t('inGameUi.buttonPadding')} value={cd.buttonPadding} fallback={8} min={0} max={60} onChange={v => updateCD({ buttonPadding: v })} />
+                        <NumInput label={t('inGameUi.buttonRadius')} value={cd.buttonBorderRadius} fallback={8} min={0} onChange={v => updateCD({ buttonBorderRadius: v })} />
                     </div>
 
-                    <Field label="Confirm Button Image">
+                    <Field label={t('inGameUi.confirmButtonImage')}>
                         <select className={inputCls} value={cd.confirmButtonImage?.id || ''}
                             onChange={e => {
                                 if (!e.target.value) { updateCD({ confirmButtonImage: null }); return; }
                                 updateCD({ confirmButtonImage: { type: 'image', id: e.target.value as any } });
                             }}>
-                            <option value="">None (solid color)</option>
+                            <option value="">{t('inGameUi.noneSolidColor')}</option>
                             {allImages.map((img: any) => (
                                 <option key={img.id} value={img.id}>{img.name || img.id}</option>
                             ))}
                         </select>
                     </Field>
-                    <Field label="Cancel Button Image">
+                    <Field label={t('inGameUi.cancelButtonImage')}>
                         <select className={inputCls} value={cd.cancelButtonImage?.id || ''}
                             onChange={e => {
                                 if (!e.target.value) { updateCD({ cancelButtonImage: null }); return; }
                                 updateCD({ cancelButtonImage: { type: 'image', id: e.target.value as any } });
                             }}>
-                            <option value="">None (solid color)</option>
+                            <option value="">{t('inGameUi.noneSolidColor')}</option>
                             {allImages.map((img: any) => (
                                 <option key={img.id} value={img.id}>{img.name || img.id}</option>
                             ))}
                         </select>
                     </Field>
-                    <Field label="Confirm Hover Image">
+                    <Field label={t('inGameUi.confirmHoverImage')}>
                         <select className={inputCls} value={cd.confirmHoverImage?.id || ''}
                             onChange={e => {
                                 if (!e.target.value) { updateCD({ confirmHoverImage: null }); return; }
                                 updateCD({ confirmHoverImage: { type: 'image', id: e.target.value as any } });
                             }}>
-                            <option value="">None</option>
+                            <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
                                 <option key={img.id} value={img.id}>{img.name || img.id}</option>
                             ))}
                         </select>
                     </Field>
-                    <Field label="Cancel Hover Image">
+                    <Field label={t('inGameUi.cancelHoverImage')}>
                         <select className={inputCls} value={cd.cancelHoverImage?.id || ''}
                             onChange={e => {
                                 if (!e.target.value) { updateCD({ cancelHoverImage: null }); return; }
                                 updateCD({ cancelHoverImage: { type: 'image', id: e.target.value as any } });
                             }}>
-                            <option value="">None</option>
+                            <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
                                 <option key={img.id} value={img.id}>{img.name || img.id}</option>
                             ))}
@@ -1147,17 +1226,17 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     </Field>
                     {(cd.confirmButtonImage || cd.cancelButtonImage) && (
                         <>
-                            <Field label="Button Image Sizing">
+                            <Field label={t('inGameUi.buttonImageSizing')}>
                                 <select className={inputCls} value={cd.buttonSizeMode ?? 'stretch'}
                                     onChange={e => updateCD({ buttonSizeMode: e.target.value as any })}>
-                                    <option value="stretch">Stretch</option>
-                                    <option value="contain">Contain</option>
-                                    <option value="cover">Cover</option>
-                                    <option value="nine-slice">Nine-Slice</option>
+                                    <option value="stretch">{t('inGameUi.sizeStretch')}</option>
+                                    <option value="contain">{t('inGameUi.sizeContain')}</option>
+                                    <option value="cover">{t('inGameUi.sizeCover')}</option>
+                                    <option value="nine-slice">{t('inGameUi.sizeNineSlice')}</option>
                                 </select>
                             </Field>
                             {cd.buttonSizeMode === 'nine-slice' && (
-                                <NumInput label="Button Slice (px)" value={cd.buttonSlice} fallback={10} min={1} onChange={v => updateCD({ buttonSlice: v })} />
+                                <NumInput label={t('inGameUi.buttonSlice')} value={cd.buttonSlice} fallback={10} min={1} onChange={v => updateCD({ buttonSlice: v })} />
                             )}
                         </>
                     )}
@@ -1165,19 +1244,19 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
 
                 {/* Font editors */}
                 <FontEditor
-                    label="Title Font"
+                    label={t('inGameUi.titleFont')}
                     font={cd.titleFont ?? defaultFontSettings}
                     onFontChange={(prop, value) => updateCD({ titleFont: { ...(cd.titleFont ?? defaultFontSettings), [prop]: value } })}
                     defaultAlign="center"
                 />
                 <FontEditor
-                    label="Message Font"
+                    label={t('inGameUi.messageFont')}
                     font={cd.messageFont ?? defaultFontSettings}
                     onFontChange={(prop, value) => updateCD({ messageFont: { ...(cd.messageFont ?? defaultFontSettings), [prop]: value } })}
                     defaultAlign="center"
                 />
                 <FontEditor
-                    label="Button Font"
+                    label={t('inGameUi.buttonFont')}
                     font={cd.buttonFont ?? defaultFontSettings}
                     onFontChange={(prop, value) => updateCD({ buttonFont: { ...(cd.buttonFont ?? defaultFontSettings), [prop]: value } })}
                     defaultAlign="center"
@@ -1218,6 +1297,7 @@ interface InGameUIEditorProps {
 }
 
 const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
+    const { t } = useTranslation('ui');
     const { dispatch } = useProject();
     const [selectedElement, setSelectedElement] = useState<InGameUIElement | null>('dialogueBox');
     const [showSnapGuides, setShowSnapGuides] = useState(false);
@@ -1295,6 +1375,14 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
         updateUI({ quickMenuX: u.x, quickMenuY: u.y, quickMenuWidth: u.width, quickMenuHeight: u.height });
     }, [updateUI]);
 
+    const handleDragQuickMenuButton = useCallback((key: QuickMenuButtonKey, u: { x: number; y: number; width: number; height: number }) => {
+        const prev = ui.quickMenuButtons || {};
+        updateUI({ quickMenuButtons: { ...prev, [key]: { ...prev[key], x: u.x, y: u.y, width: u.width, height: u.height } } });
+    }, [ui.quickMenuButtons, updateUI]);
+
+    const quickMenuButtonRects = useMemo(() => getQuickMenuButtonRects(ui, gameW, gameH), [ui, gameW, gameH]);
+    const quickMenuIndependent = !!ui.quickMenuIndependentLayout && selectedElement === 'quickMenu' && ui.quickMenuPosition !== 'hidden';
+
     const isHidden = (el: InGameUIElement) => el === 'quickMenu' && ui.quickMenuPosition === 'hidden';
 
     /* ─── Background image for stage ─── */
@@ -1310,7 +1398,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
         nameBox:       { rect: nameboxRect,    handler: handleDragNamebox,   preview: <NameBoxPreview ui={ui} project={project} /> },
         choiceButtons: { rect: choiceRect,     handler: handleDragChoice,    preview: <ChoiceButtonsPreview ui={ui} project={project} /> },
         inputBox:      { rect: inputRect,      handler: handleDragInput,     preview: <InputBoxPreview ui={ui} project={project} /> },
-        quickMenu:     { rect: quickMenuRect,  handler: handleDragQuickMenu, preview: <QuickMenuPreview ui={ui} /> },
+        quickMenu:     { rect: quickMenuRect,  handler: handleDragQuickMenu, preview: <QuickMenuPreview ui={ui} project={project} /> },
     }), [dialogueRect, nameboxRect, choiceRect, inputRect, quickMenuRect, ui, project,
          handleDragDialogue, handleDragNamebox, handleDragChoice, handleDragInput, handleDragQuickMenu]);
 
@@ -1323,9 +1411,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                 <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <ChatBubbleIcon className="w-5 h-5" />
-                        In-Game UI
+                        {t('inGameUi.header')}
                     </h2>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">Select an element, then drag &amp; resize on canvas. Hold <kbd className="px-1 bg-[var(--bg-tertiary)] rounded text-[10px]">Shift</kbd> to snap.</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">{t('inGameUi.selectHintPre')}<kbd className="px-1 bg-[var(--bg-tertiary)] rounded text-[10px]">Shift</kbd>{t('inGameUi.selectHintPost')}</p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -1341,8 +1429,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         >
                             <span className="flex-shrink-0">{el.icon}</span>
                             <div className="min-w-0">
-                                <span className="block text-sm font-medium truncate">{el.label}</span>
-                                <span className="block text-[10px] text-[var(--text-muted)] truncate">{el.description}</span>
+                                <span className="block text-sm font-medium truncate">{t('inGameUi.'+el.id)}</span>
+                                <span className="block text-[10px] text-[var(--text-muted)] truncate">{t('inGameUi.'+el.id+'Desc')}</span>
                             </div>
                         </button>
                     ))}
@@ -1365,8 +1453,42 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                 >
                     {showSnapGuides && <SnapGuideOverlay gridSize={5} />}
 
-                    {/* Only render the currently selected element */}
-                    {activeEl && (
+                    {/* When editing the Quick Menu, show the dialogue box (non-interactive, dimmed)
+                        for context so the author can see how the buttons sit relative to it. */}
+                    {selectedElement === 'quickMenu' && ui.quickMenuPosition !== 'hidden' && (
+                        <div
+                            className="absolute pointer-events-none"
+                            style={{
+                                left: `${dialogueRect.x}%`, top: `${dialogueRect.y}%`,
+                                width: `${dialogueRect.width}%`, height: `${dialogueRect.height}%`,
+                                opacity: 0.5, zIndex: 0,
+                            }}
+                        >
+                            <DialogueBoxPreview ui={ui} project={project} />
+                        </div>
+                    )}
+
+                    {/* Independent layout: one draggable per quick-menu button. */}
+                    {quickMenuIndependent && quickMenuButtonRects.map(b => (
+                        <ResizableDraggable
+                            key={b.key}
+                            x={b.rect.x} y={b.rect.y}
+                            width={b.rect.width} height={b.rect.height}
+                            anchorX={0} anchorY={0}
+                            parentSize={stageSize}
+                            isSelected={true}
+                            onSelect={e => { e.stopPropagation(); }}
+                            onUpdate={u => handleDragQuickMenuButton(b.key, u)}
+                            snapGrid={1}
+                            label={t('inGameUi.qmLabels.'+b.key)}
+                        >
+                            <QuickMenuButtonPreview ui={ui} project={project} btnKey={b.key} label={t('inGameUi.qmLabels.'+b.key)} />
+                        </ResizableDraggable>
+                    ))}
+
+                    {/* Only render the currently selected element (single grouped draggable).
+                        Skipped for the Quick Menu when independent per-button layout is active. */}
+                    {activeEl && !quickMenuIndependent && (
                         <ResizableDraggable
                             x={activeEl.rect.x} y={activeEl.rect.y}
                             width={activeEl.rect.width} height={activeEl.rect.height}
@@ -1376,7 +1498,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                             onSelect={e => { e.stopPropagation(); }}
                             onUpdate={activeEl.handler}
                             snapGrid={1}
-                            label={ELEMENTS.find(e => e.id === selectedElement)?.label}
+                            label={selectedElement ? t('inGameUi.'+selectedElement) : undefined}
                         >
                             {activeEl.preview}
                         </ResizableDraggable>
@@ -1389,7 +1511,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
                     {!activeEl && selectedElement !== 'confirmDialogs' && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <p className="text-sm text-white/30">Select an element from the sidebar</p>
+                            <p className="text-sm text-white/30">{t('inGameUi.selectFromSidebar')}</p>
                         </div>
                     )}
                 </div>

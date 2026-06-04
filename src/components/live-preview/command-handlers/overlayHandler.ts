@@ -28,6 +28,7 @@ export function handleShowText(
   const overlay: TextOverlay = {
     id: command.id,
     text: interpolatedText,
+    rawText: command.text,
     x: command.x,
     y: command.y,
     fontSize: command.fontSize,
@@ -46,6 +47,10 @@ export function handleShowText(
     transition: command.transition !== 'instant' ? command.transition : undefined,
     duration: command.duration,
     action: 'show',
+    rotation: command.rotation,
+    flipX: command.flipX,
+    flipY: command.flipY,
+    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
   };
 
   // If command specified a non-instant transition, wait for it before advancing
@@ -166,9 +171,12 @@ export function handleShowImage(
     opacity: command.opacity,
     scaleX: command.scaleX ?? 1,
     scaleY: command.scaleY ?? 1,
+    flipX: command.flipX,
+    flipY: command.flipY,
     transition: command.transition !== 'instant' ? command.transition : undefined,
     duration: command.duration,
     action: 'show',
+    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
   };
 
   const hasTransition = command.transition && command.transition !== 'instant';
@@ -264,8 +272,9 @@ export function handleShowButton(
   
   TweenManager.cancelForTarget(command.id, 'button');
   
-  // Check show conditions - if conditions not met, skip showing the button
-  if (command.showConditions && command.showConditions.length > 0) {
+  // Check show conditions - if conditions not met, skip showing the button.
+  // In live mode the button is always created and re-evaluated each render instead.
+  if (!command.liveConditions && command.showConditions && command.showConditions.length > 0) {
     const conditionsMet = evaluateConditions(command.showConditions, playerState.variables);
     if (!conditionsMet) {
       // Conditions not met - don't show the button, just advance
@@ -297,9 +306,13 @@ export function handleShowButton(
     clickSound: command.clickSound,
     waitForClick: command.waitForClick,
     quickMenuMode: command.quickMenuMode,
+    rotation: command.rotation,
+    flipX: command.flipX,
+    flipY: command.flipY,
     transition: command.transition !== 'instant' ? command.transition : undefined,
     duration: command.duration || 0.3,
     action: 'show',
+    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
   };
 
   const hasTransition = command.transition && command.transition !== 'instant';

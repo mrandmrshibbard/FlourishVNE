@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNProject } from '../types/project';
 import { VNBackground, VNImage, VNAudio, VNVideo } from '../features/assets/types';
@@ -212,6 +213,7 @@ interface AssetManagerProps {
 }
 
 const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => {
+    const { t } = useTranslation('assets');
     const { project: ctxProject, dispatch } = useProject();
     const project = projectProp || ctxProject;
     const toast = useToast();
@@ -351,12 +353,13 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                 } catch { fail++; }
             }
         }
-        if (fail > 0) toast.warning(`Upload: ${ok} succeeded, ${fail} failed.`);
+        if (fail > 0) toast.warning(t('toastUploadPartial', { ok, fail }));
         else if (ok > 0) {
             const cats = Array.from(categorized.keys());
-            toast.success(`Uploaded ${ok} file${ok > 1 ? 's' : ''}${cats.length > 1 ? ` across ${cats.join(', ')}` : ''}`);
+            const base = t('toastUploaded', { count: ok });
+            toast.success(cats.length > 1 ? base + t('toastAcross', { cats: cats.map(c => t(`categoriesLower.${c}`)).join(', ') }) : base);
         }
-    }, [addAsset, currentPath, toast, selectedCategory]);
+    }, [addAsset, currentPath, toast, selectedCategory, t]);
 
     const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -386,11 +389,11 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                     updates = { videoUrl: base64 };
                 }
                 dispatch({ type: 'UPDATE_ASSET', payload: { assetType, assetId, updates } });
-                toast.success('Asset replaced — all references preserved');
-            } catch { toast.error('Failed to replace asset'); }
+                toast.success(t('toastReplaced'));
+            } catch { toast.error(t('toastReplaceFailed')); }
         };
         input.click();
-    }, [dispatch, toast]);
+    }, [dispatch, toast, t]);
 
     const handleDeleteAsset = useCallback((assetId: string, assetName: string) => {
         setDeleteTarget({ type: 'asset', id: assetId, name: assetName });
@@ -512,9 +515,9 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             <div style={{ width: 'var(--sidebar-width)' }} className="bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col">
                 <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                        <PhotoIcon className="w-5 h-5" /> Assets
+                        <PhotoIcon className="w-5 h-5" /> {t('title')}
                     </h2>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">{totalAssetCount} total items</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">{t('totalItems', { count: totalAssetCount })}</p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -535,8 +538,8 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                                 <div className="flex items-center gap-3">
                                     <div className={info.color}>{info.icon}</div>
                                     <div className="text-left">
-                                        <div className="font-medium text-white text-sm">{info.label}</div>
-                                        <div className="text-xs text-[var(--text-secondary)]">{count} item{count !== 1 ? 's' : ''}</div>
+                                        <div className="font-medium text-white text-sm">{t(`categories.${cat}`)}</div>
+                                        <div className="text-xs text-[var(--text-secondary)]">{t('items', { count })}</div>
                                     </div>
                                 </div>
                                 {active && <ChevronRightIcon className="w-4 h-4 text-sky-400" />}
@@ -552,7 +555,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-sky-500/20 to-purple-500/20 hover:from-sky-500/30 hover:to-purple-500/30 text-white rounded-lg font-medium transition-all border border-dashed border-[var(--border-default)] hover:border-sky-400"
                     >
                         <UploadIcon className="w-4 h-4" />
-                        <span className="text-sm">Quick Upload</span>
+                        <span className="text-sm">{t('quickUpload')}</span>
                     </button>
                     <input ref={fileInputRef} type="file" accept={UNIVERSAL_ACCEPT} onChange={handleFileUpload} className="hidden" multiple />
                 </div>
@@ -587,7 +590,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                             <input
                                 type="text"
-                                placeholder={`Search ${ASSET_CATEGORIES[selectedCategory].label.toLowerCase()}...`}
+                                placeholder={t('searchPlaceholder', { category: t(`categoriesLower.${selectedCategory}`) })}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 className="w-full bg-[var(--bg-primary)] text-white pl-9 pr-8 py-1.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[var(--accent-lavender)]/50"
@@ -604,13 +607,13 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                             value={sortMode}
                             onChange={e => setSortMode(e.target.value as SortMode)}
                             className="bg-[var(--bg-primary)] text-white text-xs px-2 py-1.5 rounded-lg border border-[var(--border-default)] outline-none focus:ring-2 focus:ring-[var(--accent-lavender)]/50"
-                            title="Sort assets"
+                            title={t('sortAssets')}
                         >
-                            <option value="name-asc">Name A→Z</option>
-                            <option value="name-desc">Name Z→A</option>
-                            <option value="size-asc">Size ↑</option>
-                            <option value="size-desc">Size ↓</option>
-                            <option value="type">Type</option>
+                            <option value="name-asc">{t('sortNameAsc')}</option>
+                            <option value="name-desc">{t('sortNameDesc')}</option>
+                            <option value="size-asc">{t('sortSizeAsc')}</option>
+                            <option value="size-desc">{t('sortSizeDesc')}</option>
+                            <option value="type">{t('sortType')}</option>
                         </select>
 
                         {/* View toggle */}
@@ -618,14 +621,14 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                             <button
                                 onClick={() => setViewMode('grid')}
                                 className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-sky-500 text-white' : 'text-[var(--text-secondary)] hover:text-white hover:bg-[var(--bg-secondary)]'}`}
-                                title="Grid View"
+                                title={t('gridView')}
                             >
                                 <GridIcon className="w-4 h-4" />
                             </button>
                             <button
                                 onClick={() => setViewMode('list')}
                                 className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-sky-500 text-white' : 'text-[var(--text-secondary)] hover:text-white hover:bg-[var(--bg-secondary)]'}`}
-                                title="List View"
+                                title={t('listView')}
                             >
                                 <ListIcon className="w-4 h-4" />
                             </button>
@@ -635,7 +638,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                         <button
                             onClick={() => setCreatingFolder(true)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white rounded-lg text-sm font-medium transition-all border border-[var(--border-default)]"
-                            title="New Folder"
+                            title={t('newFolder')}
                         >
                             <FolderIcon className="w-4 h-4 text-yellow-500" />
                             <PlusIcon className="w-3 h-3" />
@@ -656,13 +659,13 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                     {/* Selection bar */}
                     {selectedAssetIds.size > 0 && (
                         <div className="flex items-center gap-3 bg-sky-500/10 border border-sky-500/30 rounded-lg px-3 py-1.5">
-                            <span className="text-sky-400 text-sm font-medium">{selectedAssetIds.size} selected</span>
+                            <span className="text-sky-400 text-sm font-medium">{t('selected', { count: selectedAssetIds.size })}</span>
                             <div className="flex-1" />
                             <button onClick={selectAll} className="text-xs text-sky-400 hover:text-sky-300 font-medium">
-                                {selectedAssetIds.size === filteredAssets.length ? 'Deselect All' : 'Select All'}
+                                {selectedAssetIds.size === filteredAssets.length ? t('deselectAll') : t('selectAll')}
                             </button>
                             <button onClick={handleDeleteSelected} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium">
-                                <TrashIcon className="w-3 h-3" /> Delete
+                                <TrashIcon className="w-3 h-3" /> {t('delete')}
                             </button>
                         </div>
                     )}
@@ -680,8 +683,8 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                         <div className="mb-4 flex items-center justify-center p-6 border-2 border-dashed border-sky-400 rounded-xl bg-sky-500/10 pointer-events-none">
                             <div className="text-center">
                                 <UploadIcon className="w-10 h-10 text-sky-400 mx-auto mb-2" />
-                                <p className="text-sky-300 font-medium">Drop files to upload</p>
-                                <p className="text-sky-400/60 text-xs mt-1">Files will be auto-sorted by type</p>
+                                <p className="text-sky-300 font-medium">{t('dropToUpload')}</p>
+                                <p className="text-sky-400/60 text-xs mt-1">{t('dropAutoSort')}</p>
                             </div>
                         </div>
                     )}
@@ -690,29 +693,29 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                     {isSearching && filteredAssets.length > 0 && (
                         <div className="mb-3 flex items-center gap-2 text-sm text-sky-400">
                             <SearchIcon className="w-4 h-4" />
-                            <span><span className="font-bold">{filteredAssets.length}</span> result{filteredAssets.length !== 1 ? 's' : ''} for &ldquo;{searchQuery}&rdquo;</span>
+                            <span>{t('results', { count: filteredAssets.length, query: searchQuery })}</span>
                         </div>
                     )}
 
                     {/* Folders */}
                     {!isSearching && (currentDirectory.children.length > 0 || creatingFolder) && (
                         <div className="mb-5">
-                            <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">Folders</h3>
+                            <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">{t('folders')}</h3>
                             <div className={viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3' : 'space-y-1.5'}>
                                 {creatingFolder && (
                                     <div className="bg-[var(--bg-primary)] rounded-lg p-3 border-2 border-dashed border-sky-500">
                                         <div className="flex flex-col items-center text-center">
                                             <FolderIcon className="w-10 h-10 text-yellow-500 mb-2" />
                                             <input
-                                                type="text" placeholder="Folder name" value={newFolderName}
+                                                type="text" placeholder={t('folderName')} value={newFolderName}
                                                 onChange={e => setNewFolderName(e.target.value)}
                                                 onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); else if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName(''); } }}
                                                 className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-sm outline-none ring-2 ring-sky-500 mb-2"
                                                 autoFocus
                                             />
                                             <div className="flex items-center gap-1.5 w-full">
-                                                <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">Create</button>
-                                                <button onClick={() => { setCreatingFolder(false); setNewFolderName(''); }} className="flex-1 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white px-2 py-1 rounded text-xs font-medium transition-colors">Cancel</button>
+                                                <button onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">{t('create')}</button>
+                                                <button onClick={() => { setCreatingFolder(false); setNewFolderName(''); }} className="flex-1 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white px-2 py-1 rounded text-xs font-medium transition-colors">{t('cancel')}</button>
                                             </div>
                                         </div>
                                     </div>
@@ -733,7 +736,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                     {filteredAssets.length > 0 ? (
                         <div>
                             {(!isSearching && currentDirectory.children.length > 0) && (
-                                <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">Files</h3>
+                                <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">{t('files')}</h3>
                             )}
                             <div className={viewMode === 'grid'
                                 ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3'
@@ -758,12 +761,12 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                             </div>
                         </div>
                     ) : isSearching ? (
-                        <EmptyState icon={<SearchIcon className="w-16 h-16 opacity-30" />} title="No results found" description={`No assets matching "${searchQuery}"`} />
+                        <EmptyState icon={<SearchIcon className="w-16 h-16 opacity-30" />} title={t('noResults')} description={t('noResultsDesc', { query: searchQuery })} />
                     ) : (
                         <EmptyState
                             icon={ASSET_CATEGORIES[selectedCategory].icon}
-                            title={`No ${ASSET_CATEGORIES[selectedCategory].label.toLowerCase()} yet`}
-                            description={`Drag & drop files here, or click Upload to add ${ASSET_CATEGORIES[selectedCategory].label.toLowerCase()}`}
+                            title={t('noAssetsYet', { category: t(`categoriesLower.${selectedCategory}`) })}
+                            description={t('noAssetsDesc', { category: t(`categoriesLower.${selectedCategory}`) })}
                             onDrop={handleFileDrop}
                         />
                     )}
@@ -787,18 +790,18 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             {selectedAssetIds.size > 1 && (
                 <div style={{ width: 'var(--inspector-width)' }} className="bg-[var(--bg-primary)] border-l border-[var(--border-subtle)] flex flex-col">
                     <div className="p-4 border-b border-[var(--border-subtle)]">
-                        <h3 className="text-lg font-bold text-white">Batch Selection</h3>
+                        <h3 className="text-lg font-bold text-white">{t('batchSelection')}</h3>
                     </div>
                     <div className="flex-1 p-4 space-y-4">
                         <div className="bg-[var(--bg-primary)] p-4 rounded-lg text-center">
                             <div className="text-3xl font-bold text-sky-400">{selectedAssetIds.size}</div>
-                            <div className="text-sm text-[var(--text-secondary)] mt-1">assets selected</div>
+                            <div className="text-sm text-[var(--text-secondary)] mt-1">{t('assetsSelected')}</div>
                         </div>
                         <button onClick={handleDeleteSelected} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-medium transition-all border border-red-500/30">
-                            <TrashIcon className="w-4 h-4" /> Delete Selected
+                            <TrashIcon className="w-4 h-4" /> {t('deleteSelected')}
                         </button>
                         <button onClick={() => setSelectedAssetIds(new Set())} className="w-full px-4 py-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white rounded-lg text-sm font-medium transition-colors">
-                            Clear Selection
+                            {t('clearSelection')}
                         </button>
                     </div>
                 </div>
@@ -812,15 +815,15 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             />
             <ConfirmDialog
                 isOpen={showDeleteConfirm}
-                title={deleteTarget?.type === 'folder' ? 'Delete Folder' : deleteTarget?.type === 'multi' ? 'Delete Assets' : 'Delete Asset'}
+                title={deleteTarget?.type === 'folder' ? t('deleteFolderTitle') : deleteTarget?.type === 'multi' ? t('deleteAssetsTitle') : t('deleteAssetTitle')}
                 message={
                     deleteTarget?.type === 'folder'
-                        ? `Delete "${deleteTarget.name}" and all its contents? This cannot be undone.`
+                        ? t('deleteFolderMsg', { name: deleteTarget.name })
                         : deleteTarget?.type === 'multi'
-                            ? `Delete ${deleteTarget.count} selected assets? This cannot be undone.`
-                            : `Delete "${deleteTarget?.name}"? Commands referencing this asset will be updated.`
+                            ? t('deleteAssetsMsg', { count: deleteTarget.count })
+                            : t('deleteAssetMsg', { name: deleteTarget?.name })
                 }
-                confirmText="Delete" cancelText="Cancel" danger
+                confirmText={t('delete')} cancelText={t('cancel')} danger
                 onConfirm={confirmDelete}
                 onCancel={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
             />
@@ -846,6 +849,7 @@ const AssetCard: React.FC<{
     onDragEnd: () => void;
     showPath?: boolean;
 }> = React.memo(({ asset, assetType, viewMode, isSelected, isRenaming, onSelect, onStartRenaming, onCommitRename, onDelete, onReplace, onMove, onDragStart, onDragEnd, showPath = false }) => {
+    const { t } = useTranslation('assets');
     const { inputProps: renameInputProps } = useInlineRename(asset.name, onCommitRename);
     const size = estimateDataUrlSize(getAssetUrl(asset));
 
@@ -905,10 +909,10 @@ const AssetCard: React.FC<{
 
                 {/* Hover Actions */}
                 <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ActionBtn icon={<UploadIcon className="w-3 h-3" />} title="Replace" onClick={onReplace} color="hover:text-amber-400" />
-                    <ActionBtn icon={<FolderIcon className="w-3 h-3" />} title="Move" onClick={onMove} color="hover:text-yellow-400" />
-                    <ActionBtn icon={<PencilIcon className="w-3 h-3" />} title="Rename" onClick={onStartRenaming} color="hover:text-sky-400" />
-                    <ActionBtn icon={<TrashIcon className="w-3 h-3" />} title="Delete" onClick={onDelete} color="hover:text-red-400" />
+                    <ActionBtn icon={<UploadIcon className="w-3 h-3" />} title={t('replace')} onClick={onReplace} color="hover:text-amber-400" />
+                    <ActionBtn icon={<FolderIcon className="w-3 h-3" />} title={t('move')} onClick={onMove} color="hover:text-yellow-400" />
+                    <ActionBtn icon={<PencilIcon className="w-3 h-3" />} title={t('rename')} onClick={onStartRenaming} color="hover:text-sky-400" />
+                    <ActionBtn icon={<TrashIcon className="w-3 h-3" />} title={t('delete')} onClick={onDelete} color="hover:text-red-400" />
                 </div>
             </div>
         );
@@ -950,10 +954,10 @@ const AssetCard: React.FC<{
             </div>
 
             <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <ActionBtn icon={<UploadIcon className="w-3.5 h-3.5" />} title="Replace" onClick={onReplace} color="hover:text-amber-400" />
-                <ActionBtn icon={<FolderIcon className="w-3.5 h-3.5" />} title="Move" onClick={onMove} color="hover:text-yellow-400" />
-                <ActionBtn icon={<PencilIcon className="w-3.5 h-3.5" />} title="Rename" onClick={onStartRenaming} color="hover:text-sky-400" />
-                <ActionBtn icon={<TrashIcon className="w-3.5 h-3.5" />} title="Delete" onClick={onDelete} color="hover:text-red-400" />
+                <ActionBtn icon={<UploadIcon className="w-3.5 h-3.5" />} title={t('replace')} onClick={onReplace} color="hover:text-amber-400" />
+                <ActionBtn icon={<FolderIcon className="w-3.5 h-3.5" />} title={t('move')} onClick={onMove} color="hover:text-yellow-400" />
+                <ActionBtn icon={<PencilIcon className="w-3.5 h-3.5" />} title={t('rename')} onClick={onStartRenaming} color="hover:text-sky-400" />
+                <ActionBtn icon={<TrashIcon className="w-3.5 h-3.5" />} title={t('delete')} onClick={onDelete} color="hover:text-red-400" />
             </div>
         </div>
     );
@@ -976,6 +980,7 @@ const FolderCard: React.FC<{
     onDelete: () => void;
     onDrop: (path: string) => void;
 }> = React.memo(({ folder, viewMode, onClick, onDelete, onDrop }) => {
+    const { t } = useTranslation('assets');
     const [isHovering, setIsHovering] = useState(false);
     const totalAssets = folder.assets.length + folder.children.reduce((acc, c) => acc + c.assets.length, 0);
 
@@ -995,9 +1000,9 @@ const FolderCard: React.FC<{
                 <div className="flex flex-col items-center text-center">
                     <FolderIcon className={`w-10 h-10 mb-1.5 ${isHovering ? 'text-sky-400' : 'text-yellow-500'}`} />
                     <div className="font-medium text-white text-xs truncate w-full">{folder.name}</div>
-                    <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">{totalAssets} item{totalAssets !== 1 ? 's' : ''}</div>
+                    <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">{t('items', { count: totalAssets })}</div>
                 </div>
-                <button onClick={e => { e.stopPropagation(); onDelete(); }} className="absolute top-1.5 right-1.5 p-1 rounded bg-[var(--bg-primary)]/80 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Folder">
+                <button onClick={e => { e.stopPropagation(); onDelete(); }} className="absolute top-1.5 right-1.5 p-1 rounded bg-[var(--bg-primary)]/80 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('deleteFolderAction')}>
                     <TrashIcon className="w-3 h-3" />
                 </button>
             </div>
@@ -1015,9 +1020,9 @@ const FolderCard: React.FC<{
             <FolderIcon className={`w-8 h-8 flex-shrink-0 ${isHovering ? 'text-sky-400' : 'text-yellow-500'}`} />
             <div className="flex-1 min-w-0">
                 <div className="font-medium text-white text-sm truncate">{folder.name}</div>
-                <div className="text-xs text-[var(--text-secondary)]">{totalAssets} item{totalAssets !== 1 ? 's' : ''}</div>
+                <div className="text-xs text-[var(--text-secondary)]">{t('items', { count: totalAssets })}</div>
             </div>
-            <button onClick={e => { e.stopPropagation(); onDelete(); }} className="p-1 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Folder">
+            <button onClick={e => { e.stopPropagation(); onDelete(); }} className="p-1 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('deleteFolderAction')}>
                 <TrashIcon className="w-4 h-4" />
             </button>
             <ChevronRightIcon className="w-4 h-4 text-[var(--text-muted)]" />
@@ -1033,6 +1038,7 @@ const EmptyState: React.FC<{
     description: string;
     onDrop?: (files: File[]) => void;
 }> = ({ icon, title, description, onDrop }) => {
+    const { t } = useTranslation('assets');
     const [isDragOver, setIsDragOver] = useState(false);
     return (
         <div
@@ -1049,7 +1055,7 @@ const EmptyState: React.FC<{
                 </div>
                 <h3 className="text-lg font-bold text-white mb-1">{title}</h3>
                 <p className="text-[var(--text-secondary)] text-sm">{description}</p>
-                {onDrop && <p className={`text-xs mt-3 ${isDragOver ? 'text-sky-300' : 'text-[var(--text-muted)]'}`}>{isDragOver ? 'Drop files here!' : 'Drag & drop files here'}</p>}
+                {onDrop && <p className={`text-xs mt-3 ${isDragOver ? 'text-sky-300' : 'text-[var(--text-muted)]'}`}>{isDragOver ? t('dropFilesHere') : t('dragDropHere')}</p>}
             </div>
         </div>
     );
@@ -1061,6 +1067,7 @@ const UploadButton: React.FC<{
     accept: string;
     onUpload: (name: string, dataUrl: string, filename: string) => void;
 }> = ({ accept, onUpload }) => {
+    const { t } = useTranslation('assets');
     const inputRef = useRef<HTMLInputElement>(null);
     const toast = useToast();
     const [isUploading, setIsUploading] = useState(false);
@@ -1081,8 +1088,8 @@ const UploadButton: React.FC<{
                 ok++;
             } catch { fail++; }
         }
-        if (fail > 0) toast.warning(`Upload: ${ok} succeeded, ${fail} failed.`);
-        else if (ok > 0) toast.success(`Uploaded ${ok} file${ok > 1 ? 's' : ''}`);
+        if (fail > 0) toast.warning(t('toastUploadPartial', { ok, fail }));
+        else if (ok > 0) toast.success(t('toastUploaded', { count: ok }));
         setIsUploading(false); setProgress(null);
         if (inputRef.current) inputRef.current.value = '';
     };
@@ -1106,7 +1113,7 @@ const UploadButton: React.FC<{
                             {progress && `${progress.current}/${progress.total}`}
                         </>
                     ) : (
-                        <><PlusIcon className="w-4 h-4" /> Upload</>
+                        <><PlusIcon className="w-4 h-4" /> {t('upload')}</>
                     )}
                 </span>
             </button>
@@ -1125,6 +1132,7 @@ const AssetInspector: React.FC<{
     onRename: () => void;
     onDelete: () => void;
 }> = ({ asset, assetType, project, onClose, onReplace, onRename, onDelete }) => {
+    const { t } = useTranslation('assets');
     const size = estimateDataUrlSize(getAssetUrl(asset));
     const usage = useMemo(() => findAssetUsage(project, asset.id), [project, asset.id]);
 
@@ -1132,7 +1140,7 @@ const AssetInspector: React.FC<{
         <div className="flex flex-col h-full">
             <div className="p-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white truncate flex-1" title={asset.name}>{asset.name}</h3>
-                <button onClick={onClose} className="p-1 text-[var(--text-secondary)] hover:text-white transition-colors ml-2" title="Close"><XMarkIcon className="w-4 h-4" /></button>
+                <button onClick={onClose} className="p-1 text-[var(--text-secondary)] hover:text-white transition-colors ml-2" title={t('close')}><XMarkIcon className="w-4 h-4" /></button>
             </div>
 
             <div className="flex-1 p-3 overflow-y-auto space-y-4">
@@ -1158,31 +1166,31 @@ const AssetInspector: React.FC<{
 
                 {/* Quick Actions */}
                 <div className="grid grid-cols-3 gap-1.5">
-                    <button onClick={onReplace} className="flex flex-col items-center gap-1 p-2 bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors" title="Replace file">
-                        <UploadIcon className="w-4 h-4 text-amber-400" /><span className="text-[10px] text-[var(--text-secondary)]">Replace</span>
+                    <button onClick={onReplace} className="flex flex-col items-center gap-1 p-2 bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors" title={t('replaceFile')}>
+                        <UploadIcon className="w-4 h-4 text-amber-400" /><span className="text-[10px] text-[var(--text-secondary)]">{t('replace')}</span>
                     </button>
-                    <button onClick={onRename} className="flex flex-col items-center gap-1 p-2 bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors" title="Rename">
-                        <PencilIcon className="w-4 h-4 text-sky-400" /><span className="text-[10px] text-[var(--text-secondary)]">Rename</span>
+                    <button onClick={onRename} className="flex flex-col items-center gap-1 p-2 bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors" title={t('rename')}>
+                        <PencilIcon className="w-4 h-4 text-sky-400" /><span className="text-[10px] text-[var(--text-secondary)]">{t('rename')}</span>
                     </button>
-                    <button onClick={onDelete} className="flex flex-col items-center gap-1 p-2 bg-[var(--bg-primary)] hover:bg-red-500/10 rounded-lg transition-colors" title="Delete">
-                        <TrashIcon className="w-4 h-4 text-red-400" /><span className="text-[10px] text-[var(--text-secondary)]">Delete</span>
+                    <button onClick={onDelete} className="flex flex-col items-center gap-1 p-2 bg-[var(--bg-primary)] hover:bg-red-500/10 rounded-lg transition-colors" title={t('delete')}>
+                        <TrashIcon className="w-4 h-4 text-red-400" /><span className="text-[10px] text-[var(--text-secondary)]">{t('delete')}</span>
                     </button>
                 </div>
 
                 {/* Metadata */}
                 <div>
-                    <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">Details</h4>
+                    <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">{t('details')}</h4>
                     <div className="bg-[var(--bg-primary)] rounded-lg divide-y divide-slate-800">
-                        <MetaRow label="Type" value={assetType.slice(0, -1)} />
-                        <MetaRow label="Size" value={formatFileSize(size)} />
-                        <MetaRow label="ID" value={asset.id} mono />
-                        {asset.path && <MetaRow label="Path" value={asset.path} mono />}
+                        <MetaRow label={t('metaType')} value={assetType.slice(0, -1)} />
+                        <MetaRow label={t('metaSize')} value={formatFileSize(size)} />
+                        <MetaRow label={t('metaId')} value={asset.id} mono />
+                        {asset.path && <MetaRow label={t('metaPath')} value={asset.path} mono />}
                     </div>
                 </div>
 
                 {/* Usage */}
                 <div>
-                    <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">Used In ({usage.length})</h4>
+                    <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 uppercase tracking-wider">{t('usedIn', { count: usage.length })}</h4>
                     {usage.length > 0 ? (
                         <div className="bg-[var(--bg-primary)] rounded-lg divide-y divide-slate-800 max-h-[200px] overflow-y-auto">
                             {usage.map((ref, i) => (
@@ -1193,7 +1201,7 @@ const AssetInspector: React.FC<{
                             ))}
                         </div>
                     ) : (
-                        <div className="bg-[var(--bg-primary)] rounded-lg p-3"><p className="text-xs text-[var(--text-muted)] italic text-center">Not referenced by any commands</p></div>
+                        <div className="bg-[var(--bg-primary)] rounded-lg p-3"><p className="text-xs text-[var(--text-muted)] italic text-center">{t('notReferenced')}</p></div>
                     )}
                 </div>
             </div>
@@ -1217,6 +1225,7 @@ const FolderSelectorModal: React.FC<{
     onSelect: (path: string) => void;
     onClose: () => void;
 }> = ({ isOpen, assetName, allAssets, onSelect, onClose }) => {
+    const { t } = useTranslation('assets');
     const [selectedPath, setSelectedPath] = useState('');
     const [customPath, setCustomPath] = useState('');
     const [showCustomInput, setShowCustomInput] = useState(false);
@@ -1236,8 +1245,8 @@ const FolderSelectorModal: React.FC<{
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
             <div className="bg-[var(--bg-primary)] rounded-xl shadow-2xl w-full max-w-md border border-[var(--border-subtle)]" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-[var(--border-subtle)]">
-                    <h3 className="text-lg font-bold text-white">Move Asset</h3>
-                    <p className="text-[var(--text-secondary)] text-sm mt-1">Move &ldquo;{assetName}&rdquo; to a folder</p>
+                    <h3 className="text-lg font-bold text-white">{t('moveAsset')}</h3>
+                    <p className="text-[var(--text-secondary)] text-sm mt-1">{t('moveAssetTo', { name: assetName })}</p>
                 </div>
 
                 <div className="p-5 space-y-3 max-h-80 overflow-y-auto">
@@ -1249,28 +1258,28 @@ const FolderSelectorModal: React.FC<{
                                         selectedPath === path ? 'bg-sky-500/20 border-2 border-sky-500' : 'bg-[var(--bg-secondary)] border-2 border-transparent hover:bg-[var(--bg-tertiary)]'
                                     }`}>
                                     <FolderIcon className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-                                    <span className="text-white text-sm font-medium">{path || '(Root)'}</span>
+                                    <span className="text-white text-sm font-medium">{path || t('root')}</span>
                                 </button>
                             ))}
                             <button onClick={() => setShowCustomInput(true)} className="w-full p-3 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white text-sm font-medium flex items-center justify-center gap-2">
-                                <PlusIcon className="w-4 h-4" /> New Folder Path
+                                <PlusIcon className="w-4 h-4" /> {t('newFolderPath')}
                             </button>
                         </>
                     ) : (
                         <div className="space-y-3">
-                            <label className="block text-sm font-medium text-[var(--text-secondary)]">Custom Path</label>
-                            <input type="text" value={customPath} onChange={e => setCustomPath(e.target.value)} placeholder="e.g., Characters/Heroes"
+                            <label className="block text-sm font-medium text-[var(--text-secondary)]">{t('customPath')}</label>
+                            <input type="text" value={customPath} onChange={e => setCustomPath(e.target.value)} placeholder={t('customPathPlaceholder')}
                                 className="w-full bg-[var(--bg-primary)] text-white px-4 py-2 rounded-lg outline-none focus:ring-2 focus:ring-[var(--accent-lavender)]" autoFocus />
-                            <button onClick={() => setShowCustomInput(false)} className="text-sky-400 hover:text-sky-300 text-sm font-medium">← Back to folder list</button>
+                            <button onClick={() => setShowCustomInput(false)} className="text-sky-400 hover:text-sky-300 text-sm font-medium">{t('backToFolderList')}</button>
                         </div>
                     )}
                 </div>
 
                 <div className="p-5 border-t border-[var(--border-subtle)] flex items-center gap-3">
-                    <button onClick={onClose} className="flex-1 px-4 py-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white rounded-lg font-medium transition-colors">Cancel</button>
+                    <button onClick={onClose} className="flex-1 px-4 py-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] text-white rounded-lg font-medium transition-colors">{t('cancel')}</button>
                     <button onClick={() => onSelect(showCustomInput ? customPath.trim() : selectedPath)}
                         className="flex-1 px-4 py-2 bg-gradient-to-r from-sky-500 to-purple-500 hover:from-sky-600 hover:to-purple-600 text-white rounded-lg font-medium transition-all">
-                        Move Here
+                        {t('moveHere')}
                     </button>
                 </div>
             </div>

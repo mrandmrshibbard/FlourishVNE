@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
 import NavigationTabs, { NavigationTab } from './NavigationTabs';
@@ -20,6 +21,7 @@ interface ManagerWindowProps {
  * Designed for multi-window workflows - strips away preview and inspector panels
  */
 const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
+    const { t } = useTranslation('components');
     const { project } = useProject();
     const [activeTab, setActiveTab] = useState<NavigationTab>(initialTab);
     
@@ -44,8 +46,8 @@ const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
         return (
             <div className="h-screen flex items-center justify-center bg-gradient-to-br from-[var(--bg-primary)] via-purple-900/20 to-[var(--bg-primary)]">
                 <div className="text-center">
-                    <div className="text-white text-xl mb-4">Loading project...</div>
-                    <div className="text-[var(--text-secondary)] text-sm">Initializing manager window</div>
+                    <div className="text-white text-xl mb-4">{t('managerWindow.loading')}</div>
+                    <div className="text-[var(--text-secondary)] text-sm">{t('managerWindow.initializing')}</div>
                 </div>
             </div>
         );
@@ -84,7 +86,7 @@ const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
                 <button
                     onClick={handleCloseWindow}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500 hover:bg-red-600 text-white transition-all"
-                    title="Close window"
+                    title={t('managerWindow.closeWindow')}
                 >
                     <XMarkIcon className="w-4 h-4" />
                 </button>
@@ -115,7 +117,7 @@ const ManagerWindow: React.FC<ManagerWindowProps> = ({ initialTab }) => {
                     />
                 )}
                 {activeTab === 'ui' && (
-                    <ErrorBoundary fallback={<div className="p-4 text-red-400">UI Manager failed to load. Check console.</div>}>
+                    <ErrorBoundary fallback={<div className="p-4 text-red-400">{t('managerWindow.uiManagerFailed')}</div>}>
                         <UIManager
                             project={project}
                             activeMenuScreenId={activeMenuScreenId}

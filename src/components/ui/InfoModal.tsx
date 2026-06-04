@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface InfoModalProps {
     isOpen: boolean;
@@ -8,13 +9,14 @@ interface InfoModalProps {
     closeLabel?: string;
 }
 
-const InfoModal: React.FC<InfoModalProps> = ({ 
-    isOpen, 
-    onClose, 
-    title, 
-    children, 
-    closeLabel = 'Close' 
+const InfoModal: React.FC<InfoModalProps> = ({
+    isOpen,
+    onClose,
+    title,
+    children,
+    closeLabel
 }) => {
+    const { t } = useTranslation('common');
     if (!isOpen) return null;
 
     const handleBackdropClick = (e: React.MouseEvent) => {
@@ -45,7 +47,7 @@ const InfoModal: React.FC<InfoModalProps> = ({
                         onClick={onClose} 
                         className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--accent-purple)] to-[var(--accent-blue)] hover:shadow-lg hover:shadow-[var(--accent-purple)]/20 transition-all text-white font-medium"
                     >
-                        {closeLabel}
+                        {closeLabel || t('close')}
                     </button>
                 </div>
             </div>

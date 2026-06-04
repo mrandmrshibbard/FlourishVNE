@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { VNProject, CGGalleryEntry, CGGalleryConfig } from '../../types/project';
 import { VNID } from '../../types';
@@ -56,6 +57,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
     screenId,
     onGenerate,
 }) => {
+    const { t } = useTranslation('ui');
     /* ----- state ----- */
     const [step, setStep] = useState<Step>('settings');
 
@@ -194,7 +196,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
 
     const renderStepIndicator = () => (
         <div className="flex items-center justify-center gap-2 mb-6">
-            {(['Settings', 'Select Images', 'Review'] as const).map((label, i) => (
+            {([t('cgWizard.stepSettings'), t('cgWizard.stepSelectImages'), t('cgWizard.stepReview')]).map((label, i) => (
                 <React.Fragment key={label}>
                     {i > 0 && <div className="w-8 h-px bg-slate-600" />}
                     <div className="flex items-center gap-1.5">
@@ -222,7 +224,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
     const renderSettings = () => (
         <div className="space-y-5">
             <div>
-                <label className="block text-sm font-medium mb-1">Grid Columns</label>
+                <label className="block text-sm font-medium mb-1">{t('cgWizard.gridColumns')}</label>
                 <div className="flex gap-2">
                     {[2, 3, 4, 5, 6].map(n => (
                         <button
@@ -239,12 +241,12 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                     ))}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                    How many thumbnails per row in the gallery grid
+                    {t('cgWizard.gridColumnsHint')}
                 </p>
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-1">Unlock Scope</label>
+                <label className="block text-sm font-medium mb-1">{t('cgWizard.unlockScope')}</label>
                 <div className="flex gap-2">
                     <button
                         onClick={() => setUnlockScope('global')}
@@ -254,9 +256,9 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                                 : 'bg-slate-800 border-slate-600 hover:bg-slate-700'
                         }`}
                     >
-                        <div className="font-semibold">Global</div>
+                        <div className="font-semibold">{t('cgWizard.global')}</div>
                         <div className="text-xs opacity-70">
-                            Unlocked CGs persist across all save slots
+                            {t('cgWizard.globalHint')}
                         </div>
                     </button>
                     <button
@@ -267,9 +269,9 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                                 : 'bg-slate-800 border-slate-600 hover:bg-slate-700'
                         }`}
                     >
-                        <div className="font-semibold">Per Save</div>
+                        <div className="font-semibold">{t('cgWizard.perSave')}</div>
                         <div className="text-xs opacity-70">
-                            Unlocked CGs are tied to individual saves
+                            {t('cgWizard.perSaveHint')}
                         </div>
                     </button>
                 </div>
@@ -277,8 +279,8 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
 
             <div className="flex items-center justify-between">
                 <div>
-                    <label className="block text-sm font-medium">Show Names</label>
-                    <p className="text-xs text-slate-500">Display entry names beneath thumbnails</p>
+                    <label className="block text-sm font-medium">{t('cgWizard.showNames')}</label>
+                    <p className="text-xs text-slate-500">{t('cgWizard.showNamesHint')}</p>
                 </div>
                 <button
                     onClick={() => setShowNames(!showNames)}
@@ -296,9 +298,9 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
 
             <div className="flex items-center justify-between">
                 <div>
-                    <label className="block text-sm font-medium">Locked By Default</label>
+                    <label className="block text-sm font-medium">{t('cgWizard.lockedByDefault')}</label>
                     <p className="text-xs text-slate-500">
-                        Entries start locked and require unlocking via variables
+                        {t('cgWizard.lockedByDefaultHint')}
                     </p>
                 </div>
                 <button
@@ -322,9 +324,9 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
         <div className="space-y-3">
             {availableAssets.length === 0 ? (
                 <div className="text-center py-8 text-slate-400">
-                    <p className="text-lg mb-1">No images or backgrounds found</p>
+                    <p className="text-lg mb-1">{t('cgWizard.noImages')}</p>
                     <p className="text-sm">
-                        Add some images or backgrounds to your project first, then come back.
+                        {t('cgWizard.noImagesHint')}
                     </p>
                 </div>
             ) : (
@@ -333,7 +335,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                     <div className="flex gap-2">
                         <input
                             type="text"
-                            placeholder="Search assets…"
+                            placeholder={t('cgWizard.searchAssets')}
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-purple-500"
@@ -342,13 +344,13 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                             onClick={selectAll}
                             className="text-xs text-purple-400 hover:text-purple-300 whitespace-nowrap"
                         >
-                            Select All
+                            {t('cgWizard.selectAll')}
                         </button>
                         <button
                             onClick={deselectAll}
                             className="text-xs text-slate-400 hover:text-slate-300 whitespace-nowrap"
                         >
-                            Clear
+                            {t('cgWizard.clear')}
                         </button>
                     </div>
 
@@ -383,7 +385,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                     </div>
 
                     <p className="text-xs text-slate-500 text-center">
-                        {selectedAssets.length} of {availableAssets.length} selected
+                        {t('cgWizard.selectedCount', { selected: selectedAssets.length, total: availableAssets.length })}
                     </p>
                 </>
             )}
@@ -399,29 +401,29 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
             <div className="space-y-4">
                 <div className="bg-slate-800/60 rounded-lg p-4 space-y-2 text-sm">
                     <div className="flex justify-between">
-                        <span className="text-slate-400">Columns</span>
+                        <span className="text-slate-400">{t('cgWizard.columns')}</span>
                         <span className="font-medium">{columns}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">Unlock Scope</span>
+                        <span className="text-slate-400">{t('cgWizard.unlockScope')}</span>
                         <span className="font-medium capitalize">{unlockScope}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">Show Names</span>
-                        <span className="font-medium">{showNames ? 'Yes' : 'No'}</span>
+                        <span className="text-slate-400">{t('cgWizard.showNames')}</span>
+                        <span className="font-medium">{showNames ? t('cgWizard.yes') : t('cgWizard.no')}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">Locked By Default</span>
-                        <span className="font-medium">{unlockableByDefault ? 'Yes' : 'No'}</span>
+                        <span className="text-slate-400">{t('cgWizard.lockedByDefault')}</span>
+                        <span className="font-medium">{unlockableByDefault ? t('cgWizard.yes') : t('cgWizard.no')}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">Entries</span>
+                        <span className="text-slate-400">{t('cgWizard.entries')}</span>
                         <span className="font-medium">{selectedAssets.length}</span>
                     </div>
                     {unlockableByDefault && (
                         <div className="flex justify-between">
-                            <span className="text-slate-400">Unlock Variables</span>
-                            <span className="font-medium text-purple-400">{selectedAssets.length} will be created</span>
+                            <span className="text-slate-400">{t('cgWizard.unlockVariables')}</span>
+                            <span className="font-medium text-purple-400">{t('cgWizard.willBeCreated', { count: selectedAssets.length })}</span>
                         </div>
                     )}
                 </div>
@@ -430,10 +432,10 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                 {unlockableByDefault && selectedAssets.length > 0 && (
                     <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3">
                         <div className="text-xs font-medium text-purple-300 mb-2">
-                            🔒 Unlock Variables
+                            {t('cgWizard.unlockVarsHeader')}
                         </div>
                         <p className="text-[11px] text-slate-400 mb-2">
-                            A boolean variable will be created for each entry. Set the variable to <span className="text-green-400 font-mono">true</span> in your scenes to unlock the CG.
+                            {t('cgWizard.unlockVarInfoPre')}<span className="text-green-400 font-mono">true</span>{t('cgWizard.unlockVarInfoPost')}
                         </p>
                         <div className="max-h-[100px] overflow-y-auto space-y-0.5">
                             {selectedAssets.map(asset => {
@@ -453,8 +455,8 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                 {selectedAssets.length > 0 && (
                     <div>
                         <label className="block text-sm font-medium mb-2">
-                            Entry Categories{' '}
-                            <span className="text-slate-500 font-normal">(optional)</span>
+                            {t('cgWizard.entryCategories')}{' '}
+                            <span className="text-slate-500 font-normal">{t('cgWizard.optional')}</span>
                         </label>
                         <div className="max-h-[200px] overflow-y-auto space-y-1 pr-1">
                             {selectedAssets.map(asset => (
@@ -467,7 +469,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                                     <span className="text-xs truncate flex-1">{asset.name}</span>
                                     <input
                                         type="text"
-                                        placeholder="Category"
+                                        placeholder={t('cgWizard.category')}
                                         value={categoryMap[asset.id] || ''}
                                         onChange={e => updateCategory(asset.id, e.target.value)}
                                         className="bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-xs w-28 focus:outline-none focus:border-purple-500"
@@ -480,7 +482,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
 
                 {/* Preview grid */}
                 <div>
-                    <label className="block text-sm font-medium mb-2">Preview</label>
+                    <label className="block text-sm font-medium mb-2">{t('cgWizard.preview')}</label>
                     <div
                         className="bg-[#0f172a] rounded-lg p-3"
                         style={{
@@ -518,7 +520,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <SparklesIcon className="w-5 h-5 text-purple-400" />
-                        CG Gallery Wizard
+                        {t('cgWizard.title')}
                     </h2>
                     <button
                         onClick={handleClose}
@@ -528,7 +530,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                     </button>
                 </div>
                 <p className="text-sm text-slate-400 mb-4">
-                    Create a CG art gallery from your project assets
+                    {t('cgWizard.subtitle')}
                 </p>
 
                 {renderStepIndicator()}
@@ -549,14 +551,14 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                             }
                             className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                         >
-                            ← Back
+                            {t('cgWizard.back')}
                         </button>
                     ) : (
                         <button
                             onClick={handleClose}
                             className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                         >
-                            Cancel
+                            {t('cgWizard.cancel')}
                         </button>
                     )}
 
@@ -566,7 +568,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                             disabled={selectedAssets.length === 0}
                             className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-all"
                         >
-                            <SparklesIcon className="w-4 h-4" /> Generate Gallery
+                            <SparklesIcon className="w-4 h-4" /> {t('cgWizard.generate')}
                         </button>
                     ) : (
                         <button
@@ -575,7 +577,7 @@ const CGGalleryWizard: React.FC<WizardProps> = ({
                             }
                             className="bg-purple-600 hover:bg-purple-500 px-6 py-2 rounded-lg font-semibold text-sm flex items-center gap-2 transition-colors"
                         >
-                            Next <ChevronRightIcon className="w-4 h-4" />
+                            {t('cgWizard.next')} <ChevronRightIcon className="w-4 h-4" />
                         </button>
                     )}
                 </div>

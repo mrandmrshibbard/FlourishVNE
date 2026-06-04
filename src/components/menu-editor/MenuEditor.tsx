@@ -1,4 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -9,14 +10,18 @@ import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
+import { GradientText } from '../ui/GradientText';
 import { PlusIcon, SparklesIcon } from '../icons';
 import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustomizationWizard';
 import CGGalleryWizard, { CGGalleryGeneratedConfig } from './CGGalleryWizard';
+import SystemWizard from './SystemWizard';
+import { applySystemWizardResult } from '../../features/systems/applySystem';
 import { HotSpotOverlay, HotZoneElementOverlay } from '../hot-zone/HotZoneOverlays';
 import { isHotSpotElement, isInteractiveElement } from '../../utils/hotZoneShims';
 
 // Safe wrapper for element rendering to prevent crashes.
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
+    const { t } = useTranslation('ui');
     try {
         return (
             <div style={{ opacity: element.opacity ?? 1, width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -25,15 +30,16 @@ const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject
         );
     } catch (err) {
         console.error('Error rendering UI element:', element.id, err);
-        return <div className="w-full h-full bg-red-500/20 text-red-300 text-xs p-1">Render Error</div>;
+        return <div className="w-full h-full bg-red-500/20 text-red-300 text-xs p-1">{t('menuEditor.renderError')}</div>;
     }
 };
 
 const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
+    const { t } = useTranslation('ui');
     if (!element) {
-        return <div className="w-full h-full bg-yellow-500/20">No element</div>;
+        return <div className="w-full h-full bg-yellow-500/20">{t('menuEditor.noElement')}</div>;
     }
-    
+
     switch (element.type) {
         case UIElementType.Button: {
             const btn = element as UIButtonElement;
@@ -55,7 +61,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 ) : (
                     <div className="absolute inset-0 w-full h-full rounded" style={{ backgroundColor: buttonBg }} />
                 )}
-                <span className="relative z-10" style={{...fontSettingsToStyle(btn.font), ...(extractTextGradientStyle(btn.font) || {})}}>{btn.text}</span>
+                <GradientText className="relative z-10" style={{...fontSettingsToStyle(btn.font), ...(extractTextGradientStyle(btn.font) || {})}}>{btn.text}</GradientText>
             </div>;
         }
         case UIElementType.Text: {
@@ -70,7 +76,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 className={`w-full h-full flex p-1 ${hAlignClass} ${vAlignClass}`}
                 style={txtStyle}
             >
-                <div><span style={extractTextGradientStyle(txt.font) || undefined}>{txt.text}</span></div>
+                <div><GradientText style={extractTextGradientStyle(txt.font)}>{txt.text}</GradientText></div>
             </div>;
         }
         case UIElementType.Image: {
@@ -137,8 +143,8 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 ? fontSettingsToStyle(slotEl.pageIndicatorFont)
                 : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
             const totalPages = Math.max(1, Math.ceil(slotEl.slotCount / 4));
-            const prevLabel = slotEl.prevButtonText ?? '◀ Prev';
-            const nextLabel = slotEl.nextButtonText ?? 'Next ▶';
+            const prevLabel = slotEl.prevButtonText ?? t('menuEditor.prev');
+            const nextLabel = slotEl.nextButtonText ?? t('menuEditor.next');
             return (
                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3%', padding: '2%', flex: '1 1 0', minHeight: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
@@ -152,7 +158,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                                         <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{slotEl.emptySlotText}</span>
                                     </div>
                                     {!slotEl.hideSlotLabel && (
-                                        <div style={{ position: 'absolute', top: '4px', left: '4px', ...baseFont, color: slotHeaderColor, fontWeight: 'bold', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.7)', zIndex: 10 }}>Slot {i + 1}</div>
+                                        <div style={{ position: 'absolute', top: '4px', left: '4px', ...baseFont, color: slotHeaderColor, fontWeight: 'bold', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.7)', zIndex: 10 }}>{t('menuEditor.slot', { n: i + 1 })}</div>
                                     )}
                                 </div>
                                 {!slotEl.hideInfoBar && (
@@ -164,7 +170,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     {totalPages > 1 && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '0.5rem 0', flexShrink: 0 }}>
                             <span style={{ ...navBtnStyle, opacity: 0.3 }}>{prevLabel}</span>
-                            <span style={pageIndicatorStyle}>Page 1 / {totalPages}</span>
+                            <span style={pageIndicatorStyle}>{t('menuEditor.page', { total: totalPages })}</span>
                             <span style={navBtnStyle}>{nextLabel}</span>
                         </div>
                     )}
@@ -190,14 +196,14 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             const tog = element as UISettingsToggleElement;
             return <div className="w-full h-full flex items-center gap-2" style={fontSettingsToStyle(tog.font)}>
                 <input type="checkbox" className="h-4 w-4" disabled style={{ accentColor: tog.checkboxColor || '#3b82f6', pointerEvents: 'none' as const }}/>
-                <span style={extractTextGradientStyle(tog.font) || undefined}>{tog.text}</span>
+                <GradientText style={extractTextGradientStyle(tog.font)}>{tog.text}</GradientText>
             </div>;
         case UIElementType.CharacterPreview:
              const charEl = element as UICharacterPreviewElement;
              const char = project.characters[charEl.characterId] as VNCharacter | undefined;
              if (!char) {
                  return <div className="w-full h-full border-2 border-dashed border-[var(--bg-tertiary)] flex items-center justify-center text-[var(--text-secondary)]">
-                     <span className="bg-black/50 p-1 rounded">No Character Selected</span>
+                     <span className="bg-black/50 p-1 rounded">{t('menuEditor.noCharacterSelected')}</span>
                  </div>;
              }
              
@@ -308,13 +314,13 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                         pointerEvents: 'none'
                     }}
                 />
-                <span style={{
+                <GradientText style={{
                     ...fontSettingsToStyle(checkbox.font),
                     ...(extractTextGradientStyle(checkbox.font) || {}),
                     color: checkbox.labelColor || '#f1f5f9'
                 }}>
                     {checkbox.label}
-                </span>
+                </GradientText>
             </div>;
         case UIElementType.AssetCycler:
             const cycler = element as UIAssetCyclerElement;
@@ -326,13 +332,13 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             return <div className="w-full h-full flex flex-col gap-1 items-center justify-center p-2 rounded" style={{ backgroundColor: cycler.backgroundColor || 'rgba(30, 41, 59, 0.8)' }}>
                 {cycler.label && (
                     <div style={{...fontSettingsToStyle(cycler.font), fontSize: `calc(var(--font-scale, 1) * ${(cycler.font?.size || 16) * 0.8}px)`, opacity: 0.8}} className="text-center">
-                        <span style={extractTextGradientStyle(cycler.font) || undefined}>{cycler.label}</span>
+                        <GradientText style={extractTextGradientStyle(cycler.font)}>{cycler.label}</GradientText>
                     </div>
                 )}
                 <div className="flex items-center gap-3 w-full">
                     <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `calc(var(--font-scale, 1) * ${cycler.arrowSize || 24}px)` }}>◀</div>
                     <div className="flex-1 text-center overflow-hidden" style={fontSettingsToStyle(cycler.font)}>
-                        <span style={extractTextGradientStyle(cycler.font) || undefined}>{cycler.showAssetName && firstAsset ? firstAsset.name : `1 / ${cycler.assetIds.length}`}</span>
+                        <GradientText style={extractTextGradientStyle(cycler.font)}>{cycler.showAssetName && firstAsset ? firstAsset.name : `1 / ${cycler.assetIds.length}`}</GradientText>
                     </div>
                     <div style={{ color: cycler.arrowColor || '#a855f7', fontSize: `calc(var(--font-scale, 1) * ${cycler.arrowSize || 24}px)` }}>▶</div>
                 </div>
@@ -376,11 +382,14 @@ const MenuEditor: React.FC<{
     selectedElementIds: VNID[],
     setSelectedElementIds: (ids: VNID[]) => void,
 }> = ({ activeScreenId, selectedElementIds, setSelectedElementIds }) => {
+    const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const toast = useToast();
     const screen = project.uiScreens[activeScreenId];
     const [showWizard, setShowWizard] = useState(false);
     const [showCGGalleryWizard, setShowCGGalleryWizard] = useState(false);
+    const [showShopWizard, setShowShopWizard] = useState(false);
+    const [showInventoryWizard, setShowInventoryWizard] = useState(false);
     const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
     const stageRef = useRef<HTMLDivElement>(null);
@@ -532,7 +541,7 @@ const MenuEditor: React.FC<{
     }, [screen, handleCopy, handleCut, handlePaste, handleSelectAll, handleDeleteSelected]);
 
     // Early return AFTER all hooks to satisfy Rules of Hooks
-    if (!screen) return <Panel title="Menu Editor">Screen not found</Panel>;
+    if (!screen) return <Panel title={t('menuEditor.title')}>{t('menuEditor.screenNotFound')}</Panel>;
 
     const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
         dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
@@ -815,8 +824,8 @@ const MenuEditor: React.FC<{
                     onClick={(e) => e.target === e.currentTarget && setShowTemplateSelector(false)}
                 >
                     <div className="bg-gradient-to-b from-[var(--bg-tertiary)] to-[var(--bg-secondary)] rounded-xl shadow-2xl w-full max-w-md p-6 m-4 border border-[var(--border-default)]">
-                        <h2 className="text-xl font-bold mb-2 text-center">✨ Template Wizard</h2>
-                        <p className="text-sm text-slate-400 text-center mb-6">Choose a template to get started quickly</p>
+                        <h2 className="text-xl font-bold mb-2 text-center">{t('menuEditor.templateWizard')}</h2>
+                        <p className="text-sm text-slate-400 text-center mb-6">{t('menuEditor.chooseTemplate')}</p>
                         
                         <div className="space-y-3">
                             <button
@@ -828,8 +837,8 @@ const MenuEditor: React.FC<{
                             >
                                 <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">👤</div>
                                 <div>
-                                    <div className="font-semibold">Character Customizer</div>
-                                    <div className="text-xs text-white/70">Create a character customization screen with layer cyclers</div>
+                                    <div className="font-semibold">{t('menuEditor.charCustomizer')}</div>
+                                    <div className="text-xs text-white/70">{t('menuEditor.charCustomizerDesc')}</div>
                                 </div>
                             </button>
                             
@@ -842,23 +851,8 @@ const MenuEditor: React.FC<{
                             >
                                 <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">🖼️</div>
                                 <div>
-                                    <div className="font-semibold">CG Gallery</div>
-                                    <div className="text-xs text-white/70">Create a CG art gallery with unlockable entries</div>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    setShowTemplateSelector(false);
-                                    // TODO: Open shop wizard
-                                    alert('Shop Template coming soon!');
-                                }}
-                                className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 p-4 rounded-lg flex items-center gap-4 text-left transition-all hover:scale-[1.02]"
-                            >
-                                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center text-2xl">🛒</div>
-                                <div>
-                                    <div className="font-semibold">Shop Template</div>
-                                    <div className="text-xs text-white/70">Create an in-game shop with items and currency</div>
+                                    <div className="font-semibold">{t('menuEditor.cgGallery')}</div>
+                                    <div className="text-xs text-white/70">{t('menuEditor.cgGalleryDesc')}</div>
                                 </div>
                             </button>
                         </div>
@@ -867,7 +861,7 @@ const MenuEditor: React.FC<{
                             onClick={() => setShowTemplateSelector(false)}
                             className="w-full mt-6 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                         >
-                            Cancel
+                            {t('menuEditor.cancel')}
                         </button>
                     </div>
                 </div>
@@ -889,6 +883,23 @@ const MenuEditor: React.FC<{
                 project={project}
                 screenId={activeScreenId}
                 onGenerate={handleCGGalleryGenerate}
+            />
+
+            {/* Shop & Inventory System Wizards — generate a dedicated screen of native
+                elements (items become registry items backed by count variables). */}
+            <SystemWizard
+                isOpen={showShopWizard}
+                kind="shop"
+                project={project}
+                onClose={() => setShowShopWizard(false)}
+                onGenerate={(result) => applySystemWizardResult(result, project, dispatch)}
+            />
+            <SystemWizard
+                isOpen={showInventoryWizard}
+                kind="inventory"
+                project={project}
+                onClose={() => setShowInventoryWizard(false)}
+                onGenerate={(result) => applySystemWizardResult(result, project, dispatch)}
             />
         </div>
     );

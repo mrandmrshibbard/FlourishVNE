@@ -28,6 +28,20 @@ export interface VNDefaultGameSettings {
     autoAdvanceDelay: number;
 }
 
+/** The six built-in quick-menu buttons that can be individually customized. */
+export type QuickMenuButtonKey =
+    | 'skipBackward' | 'log' | 'autoAdvance' | 'skipForward' | 'save' | 'load';
+
+/** Per-button customization for the quick menu (custom art + independent position). */
+export interface QuickMenuButtonConfig {
+    image?: { type: 'image' | 'video'; id: VNID } | null;
+    hoverImage?: { type: 'image' | 'video'; id: VNID } | null;
+    x?: number;       // % of canvas (independent layout); undefined = computed default
+    y?: number;       // % of canvas
+    width?: number;   // % of canvas width
+    height?: number;  // % of canvas height; art uses object-contain so it never distorts
+}
+
 export interface VNProjectUI {
     titleScreenId: VNID | null;
     settingsScreenId: VNID | null;
@@ -94,6 +108,11 @@ export interface VNProjectUI {
     quickMenuShowSkipForward?: boolean; // Show Skip Forward button (default true)
     quickMenuShowSave?: boolean; // Show Save button (default true)
     quickMenuShowLoad?: boolean; // Show Load button (default true)
+    /** When true, each quick-menu button can be placed independently (per-button x/y/width).
+     *  When false (default) the buttons render as a single grouped bar. */
+    quickMenuIndependentLayout?: boolean;
+    /** Per-button customization (custom art + independent position), keyed by button. */
+    quickMenuButtons?: Partial<Record<QuickMenuButtonKey, QuickMenuButtonConfig>>;
     // ─── Layout positions (percentages of game canvas) ─── //
     // Dialogue box position/size (percentages)
     dialogueBoxX?: number; // default: centre based on dialogueBoxWidth
@@ -484,6 +503,12 @@ export interface VNUIScreen {
     transitionInDuration?: number; // Duration for transition-in in milliseconds (default 300)
     transitionOutDuration?: number; // Duration for transition-out in milliseconds (default 300)
     showDialogue?: boolean; // Whether to show the dialogue box on this screen
+    /** When true the screen is a transparent pass-through overlay: empty areas let
+     *  clicks/taps fall through to the scene/game beneath, and only visible elements
+     *  capture input. Intended for the in-game HUD and ShowScreen overlays so the
+     *  player can still advance dialogue and interact with the scene. Defaults to
+     *  true for the Game HUD screen when unset. Leave false for modal screens. */
+    passThrough?: boolean; // default: true for the Game HUD screen, false otherwise
     /** Win-condition logic that fires actions when met. Available on any screen. */
     winCondition?: VNHotZoneWinCondition;
     /** Pre-migration backup of the original hot zone data, written automatically the first time this

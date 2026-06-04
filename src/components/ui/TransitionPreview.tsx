@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNTransition } from '../../types';
 
 interface TransitionPreviewProps {
@@ -10,6 +11,7 @@ interface TransitionPreviewProps {
  * Animated preview of transition effects
  */
 const TransitionPreview: React.FC<TransitionPreviewProps> = ({ transition, duration = 1 }) => {
+    const { t } = useTranslation('components');
     const [isAnimating, setIsAnimating] = useState(false);
     const [showNew, setShowNew] = useState(false);
 
@@ -79,24 +81,24 @@ const TransitionPreview: React.FC<TransitionPreviewProps> = ({ transition, durat
 
     const getTransitionDescription = (): string => {
         switch (transition) {
-            case 'fade': return 'Fades through black';
-            case 'dissolve': return 'Cross-dissolves smoothly';
-            case 'slide': return 'Slides in from right';
-            case 'iris-in': return 'Circular reveal from center';
-            case 'wipe-right': return 'Wipes from left to right';
-            case 'cross-fade': return 'Blends between images';
-            case 'instant': return 'Instant change, no animation';
+            case 'fade': return t('transitionPreview.fade');
+            case 'dissolve': return t('transitionPreview.dissolve');
+            case 'slide': return t('transitionPreview.slide');
+            case 'iris-in': return t('transitionPreview.irisIn');
+            case 'wipe-right': return t('transitionPreview.wipeRight');
+            case 'cross-fade': return t('transitionPreview.crossFade');
+            case 'instant': return t('transitionPreview.instant');
             default: return '';
         }
     };
 
     return (
-        <div className="transition-preview" onClick={playAnimation} title="Click to replay">
+        <div className="transition-preview" onClick={playAnimation} title={t('transitionPreview.clickToReplay')}>
             <div className="transition-preview__container">
                 {/* Old content (faded background) */}
                 <div className="transition-preview__old">
                     <div className="transition-preview__placeholder transition-preview__placeholder--old">
-                        Old
+                        {t('transitionPreview.old')}
                     </div>
                 </div>
                 
@@ -106,7 +108,7 @@ const TransitionPreview: React.FC<TransitionPreviewProps> = ({ transition, durat
                     style={getTransitionStyle()}
                 >
                     <div className="transition-preview__placeholder transition-preview__placeholder--new">
-                        New
+                        {t('transitionPreview.new')}
                     </div>
                 </div>
                 

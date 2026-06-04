@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface Release {
   tag_name: string;
@@ -38,6 +39,7 @@ export const ChangelogModal: React.FC<{
   visible: boolean;
   onClose: () => void;
 }> = ({ visible, onClose }) => {
+  const { t } = useTranslation('components');
   const [release, setRelease] = useState<Release | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export const ChangelogModal: React.FC<{
         setInstallState('installing');
       } else if (event.status === 'error') {
         setInstallState('error');
-        setInstallError(event.message || 'Unknown error');
+        setInstallError(event.message || t('changelog.unknownError'));
       }
     };
 
@@ -84,7 +86,7 @@ export const ChangelogModal: React.FC<{
       if (!isElectron) {
         setRelease(null);
         setLoading(false);
-        setError('Update notes are available in the desktop (Electron) app.');
+        setError(t('changelog.electronOnly'));
         return;
       }
 
@@ -115,9 +117,9 @@ export const ChangelogModal: React.FC<{
         .then(response => {
           if (!response.ok) {
             if (response.status === 404) {
-              throw new Error('No releases found. Check back later for updates!');
+              throw new Error(t('changelog.noReleases404'));
             }
-            throw new Error(`Failed to fetch changelog (${response.status})`);
+            throw new Error(t('changelog.fetchFailed', { status: response.status }));
           }
           return response.json();
         })
@@ -148,11 +150,11 @@ export const ChangelogModal: React.FC<{
       <div className="bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-semibold">Latest Changes</h2>
+            <h2 className="text-xl font-semibold">{t('changelog.title')}</h2>
             {currentVersion && (
               <p className="text-xs text-[var(--text-secondary)]">
-                Your version: v{currentVersion}
-                {hasUpdate && <span className="ml-2 text-[var(--accent-pink)]">→ Update available!</span>}
+                {t('changelog.yourVersion', { version: currentVersion })}
+                {hasUpdate && <span className="ml-2 text-[var(--accent-pink)]">{t('changelog.updateAvailable')}</span>}
               </p>
             )}
           </div>
@@ -164,22 +166,22 @@ export const ChangelogModal: React.FC<{
           </button>
         </div>
 
-        {loading && <p className="text-center py-8">Loading changelog...</p>}
-        {error && <p className="text-red-500 text-center py-8">Error: {error}</p>}
+        {loading && <p className="text-center py-8">{t('changelog.loading')}</p>}
+        {error && <p className="text-red-500 text-center py-8">{t('changelog.errorPrefix', { message: error })}</p>}
         {release && (
           <div>
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm text-[var(--text-secondary)]">
-                Version {release.tag_name} - {new Date(release.published_at).toLocaleDateString()}
+                {t('changelog.versionDate', { tag: release.tag_name, date: new Date(release.published_at).toLocaleDateString() })}
               </p>
               {hasUpdate && (
                 <span className="px-3 py-1 bg-[var(--accent-pink)]/20 text-[var(--accent-pink)] rounded-full text-xs font-medium">
-                  NEW
+                  {t('changelog.new')}
                 </span>
               )}
             </div>
             <div className="text-sm whitespace-pre-wrap bg-[var(--bg-primary)] p-4 rounded-lg border border-[var(--border-color)] select-text cursor-text">
-              {renderBodyWithLinks(release.body || 'No release notes available.')}
+              {renderBodyWithLinks(release.body || t('changelog.noNotes'))}
             </div>
             {release.html_url && (
               <div className="mt-4 flex items-center gap-3 flex-wrap">
@@ -196,24 +198,24 @@ export const ChangelogModal: React.FC<{
                           api.installUpdate().then((res: any) => {
                             if (res?.status === 'error') {
                               setInstallState('error');
-                              setInstallError(res.message || 'Update failed');
+                              setInstallError(res.message || t('changelog.updateFailed'));
                             }
                           }).catch(() => {
                             setInstallState('error');
-                            setInstallError('Failed to communicate with updater');
+                            setInstallError(t('changelog.updaterCommFailed'));
                           });
                         }
                       }}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg hover:shadow-[var(--accent-pink)]/25 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-60 disabled:cursor-wait"
                     >
                       {installState === 'downloading' ? (
-                        <>⏳ Downloading… {downloadPercent}%</>
+                        <>⏳ {t('changelog.downloading', { percent: downloadPercent })}</>
                       ) : installState === 'installing' ? (
-                        <>✨ Installing…</>
+                        <>✨ {t('changelog.installing')}</>
                       ) : installState === 'error' ? (
-                        <>🔄 Retry Update</>
+                        <>🔄 {t('changelog.retryUpdate')}</>
                       ) : (
-                        <>🔄 Restart &amp; Update</>
+                        <>🔄 {t('changelog.restartUpdate')}</>
                       )}
                     </button>
                     {installState === 'downloading' && (
@@ -238,7 +240,7 @@ export const ChangelogModal: React.FC<{
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-cyan)]/20 hover:bg-[var(--accent-cyan)]/30 text-[var(--accent-cyan)] rounded-lg text-sm font-medium transition-colors"
                   >
-                    📥 View on GitHub →
+                    📥 {t('changelog.viewGithub')}
                   </a>
                 )}
               </div>
@@ -248,7 +250,7 @@ export const ChangelogModal: React.FC<{
         
         {!loading && !release && !error && (
           <p className="text-center py-8 text-[var(--text-secondary)]">
-            No release information available yet.
+            {t('changelog.noInfo')}
           </p>
         )}
       </div>
