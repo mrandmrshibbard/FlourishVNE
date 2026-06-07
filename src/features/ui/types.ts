@@ -1,6 +1,6 @@
 import { VNID } from '../../types';
 import type { VNScreenOverlayEffect } from '../../types';
-import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign } from '../../types/shared';
+import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign, VNParallaxSettings } from '../../types/shared';
 
 import { VNTextShadow, VNTextGradient, VNTextBorder, ImageMapRegion } from '../scene/types';
 
@@ -226,6 +226,11 @@ interface BaseUIElement {
     x: number; y: number; width: number; height: number;
     anchorX: number; anchorY: number;
     opacity?: number; // 0-1, default 1 (fully opaque)
+    /** Stacking order among elements on the screen. Higher = nearer the viewer. Optional;
+     *  when undefined the element keeps its insertion order (back-compat, no migration). */
+    layer?: number;
+    /** Parallax depth (0/undefined = locked). The screen's `parallax` setting drives it. */
+    parallaxDepth?: number;
     conditions?: VNCondition[];
     disabledConditions?: VNCondition[];
     // Element-level transitions
@@ -268,6 +273,9 @@ export interface UIButtonElement extends BaseUIElement {
     hoverSoundId: VNID | null;
     backgroundColor?: string; // Background color when no image is set
     hoverBackgroundColor?: string; // Background color on hover when no image is set
+    /** Inner horizontal padding in % of the button width (default 0). Keeps left/right-aligned
+     *  text off the edge. */
+    paddingX?: number;
 }
 
 export interface UITextShadow {
@@ -298,7 +306,7 @@ export interface UITextElement extends BaseUIElement {
 }
 export interface UIImageElement extends BaseUIElement {
     type: UIElementType.Image;
-    background?: { type: 'image' | 'video', assetId: VNID } | { type: 'color', value: string }; // Image/video from assets or solid color
+    background?: { type: 'image' | 'video', assetId: VNID, loop?: boolean } | { type: 'color', value: string }; // Image/video from assets or solid color. `loop` (video only, default true): off = play once and hold last frame.
     image: UIAsset | null; // Deprecated, kept for backward compatibility
     objectFit?: 'contain' | 'cover' | 'fill'; // How the image/video should fit in the element
 }
@@ -387,6 +395,8 @@ export interface UIDropdownElement extends BaseUIElement {
     variableId: VNID; // Variable to set with the selected value
     options: DropdownOption[]; // List of options
     font: VNFontSettings;
+    /** Which side the disclosure arrow sits on (default 'right'; use 'left' for RTL layouts). */
+    arrowSide?: 'left' | 'right';
     backgroundColor?: string;
     borderColor?: string;
     hoverColor?: string;
@@ -489,10 +499,26 @@ export type VNUIElement =
     | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement
     | UIHotSpotElement | UIImageMapElement;
 
+/** An extra background plane on a screen (for multi-plane parallax backdrops). */
+export interface VNScreenBackgroundLayer {
+    id: VNID;
+    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean };
+    /** Stacking order vs. the main background and elements (default 0). */
+    layer?: number;
+    /** Parallax depth (0/undefined = locked). Driven by the screen's `parallax` setting. */
+    parallaxDepth?: number;
+    /** Entry transition for this background plane (plays once when the screen appears). */
+    transition?: VNScreenBgTransition;
+    transitionDuration?: number; // ms, default 400
+}
+
+/** Per-background entry transition for screen backgrounds (video + image). */
+export type VNScreenBgTransition = 'none' | 'fade' | 'crossfade' | 'dissolve' | 'slide' | 'iris' | 'wipe';
+
 export interface VNUIScreen {
     id: VNID;
     name:string;
-    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null };
+    background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean };
     music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     elements: Record<VNID, VNUIElement>;
@@ -511,6 +537,27 @@ export interface VNUIScreen {
     passThrough?: boolean; // default: true for the Game HUD screen, false otherwise
     /** Win-condition logic that fires actions when met. Available on any screen. */
     winCondition?: VNHotZoneWinCondition;
+    /** Optional parallax for this screen's elements (off by default). */
+    parallax?: VNParallaxSettings;
+    /** Parallax depth for the screen's own background (0/undefined = locked). Lets the
+     *  backdrop drift without needing a stretched image element. The background is
+     *  slightly over-scaled when this is set so the shift doesn't reveal its edges. */
+    backgroundParallaxDepth?: number;
+    /** Stacking order of the screen's own background (default 0 = behind 0-layer elements).
+     *  Lets you interleave the backdrop with element layers for multi-plane parallax (e.g.
+     *  a far element behind the background at a lower layer). */
+    backgroundLayer?: number;
+    /** Entry transition for the main background (video + image) — plays once when the screen
+     *  appears, independent of the whole-screen transition. */
+    backgroundTransition?: VNScreenBgTransition;
+    backgroundTransitionDuration?: number; // ms, default 400
+    /** Extra background planes layered with the main background for multi-plane parallax —
+     *  each renders at its own `layer` (zIndex) with `parallaxDepth`. Additive-optional. */
+    additionalBackgrounds?: VNScreenBackgroundLayer[];
+    /** When a pass-through HUD, render ABOVE the dialogue box + choices (default: below) so the
+     *  player can bring up and interact with this overlay while dialogue/choices are showing.
+     *  Empty areas still pass clicks through to advance dialogue. Additive-optional. */
+    hudAboveDialogue?: boolean;
     /** Pre-migration backup of the original hot zone data, written automatically the first time this
      *  screen is migrated to the unified schema. Lets us rebuild the screen verbatim if migration had
      *  a bug. Safe to delete by hand once you're confident the migration worked. */

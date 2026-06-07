@@ -27,7 +27,7 @@ export interface TweenableProperties {
     tintColor?: string;
 }
 
-export type TweenTargetType = 'character' | 'image' | 'text' | 'button' | 'imageMap' | 'screen';
+export type TweenTargetType = 'character' | 'image' | 'text' | 'button' | 'screen' | 'movie';
 
 export interface ActiveTween {
     /** Unique tween ID */

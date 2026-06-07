@@ -82,6 +82,17 @@
     "and": "E",
     "or": "OU"
   },
+  "inspectorGroups": {
+    "content": "Conteúdo",
+    "transform": "Transformar",
+    "appearance": "Aparência",
+    "effects": "Efeitos",
+    "media": "Mídia",
+    "animation": "Animação",
+    "audio": "Áudio",
+    "logic": "Lógica",
+    "conditions": "Condições"
+  },
   "manager": {
     "uiScreens": "Telas de UI",
     "inGameUi": "UI no jogo",
@@ -632,13 +643,15 @@
     "snow": "Neve",
     "ash": "Cinzas",
     "interactivity": "Interatividade",
-    "interactivityHint": "Pontos interativos, elementos arrastáveis e mapas de imagem funcionam em qualquer tela. Adicionar um alterna o editor para o modo Zona Interativa para edição detalhada.",
+    "interactivityHint": "Adicione um ponto interativo (uma zona de clique ou de soltar) ou um elemento interativo — uma imagem arrastável e clicável, mapa de imagem, botão ou texto. Escolha o tipo e o comportamento no inspetor.",
     "addHotSpot": "+ Adicionar ponto interativo",
     "addDraggable": "+ Adicionar elemento arrastável",
     "addImageMap": "+ Adicionar mapa de imagem",
+    "addInteractive": "+ Adicionar elemento interativo",
     "hotSpotName": "Ponto interativo {{n}}",
     "draggableName": "Arrastável {{n}}",
     "imageMapName": "Mapa de imagem {{n}}",
+    "interactiveName": "Interativo {{n}}",
     "effects": {
       "crtScanlines": "Linhas de varredura CRT",
       "chromaticGlitch": "Falha cromática",

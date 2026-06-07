@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
-import { VNUIScreen, VNHotZoneWinCondition, VNHotZoneElement, UIElementType, UIHotSpotElement, UIImageElement, UIImageMapElement } from '../../features/ui/types';
+import { VNUIScreen, VNHotZoneWinCondition, VNUIElement, UIElementType, UIHotSpotElement, UIImageElement, VNScreenBackgroundLayer } from '../../features/ui/types';
 import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
 import WinConditionEditor from '../ui/WinConditionEditor';
-import { deriveHotZoneElementsFromScreen } from '../../utils/hotZoneShims';
+import { isInteractiveElement } from '../../utils/interactiveElements';
 import { upsertOverlayEffect, type VNScreenOverlayEffectType, type VNEffectParams } from '../../types';
+import CollapsibleSection from '../ui/CollapsibleSection';
 
 const newInteractiveId = (prefix: string): VNID =>
     `${prefix}-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -68,133 +69,297 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
         });
     };
 
+    // Additional background planes (multi-plane parallax backdrops).
+    const addlBgs = screen.additionalBackgrounds || [];
+    const updateAddlBg = (id: VNID, patch: Partial<VNScreenBackgroundLayer>) =>
+        updateScreen({ additionalBackgrounds: addlBgs.map(b => b.id === id ? { ...b, ...patch } : b) });
+    const addAddlBg = () =>
+        updateScreen({ additionalBackgrounds: [...addlBgs, {
+            id: newInteractiveId('sbg'),
+            background: { type: 'image', assetId: null },
+            layer: addlBgs.length ? Math.max(...addlBgs.map(b => b.layer ?? 0)) + 1 : 1,
+        }] });
+    const removeAddlBg = (id: VNID) =>
+        updateScreen({ additionalBackgrounds: addlBgs.filter(b => b.id !== id) });
+
     return (
         <Panel title={t('screenInspector.title')} className="w-96 flex-shrink-0">
-            <div className="flex-grow overflow-y-auto pr-1">
+            <div className="flex-grow overflow-y-auto pr-1 space-y-2">
                 <FormField label={t('screenInspector.screenName')}>
                     <TextInput value={screen.name} onChange={e => updateScreen({ name: e.target.value })} disabled={isSpecialScreen} />
                 </FormField>
 
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.background')}</h3>
-                <div className="grid grid-cols-2 gap-2">
-                    <FormField label={t('screenInspector.type')}>
-                         <Select value={screen.background.type} onChange={e => {
-                            const newType = e.target.value as 'color' | 'image' | 'video';
-                            if (newType === 'color') {
-                                updateScreen({ background: { type: 'color', value: '#000000' }});
-                            } else {
-                                updateScreen({ background: { type: newType, assetId: null }});
-                            }
-                         }}>
-                            <option value="color">{t('screenInspector.bgColor')}</option>
-                            <option value="image">{t('screenInspector.bgImage')}</option>
-                            <option value="video">{t('screenInspector.bgVideo')}</option>
-                        </Select>
-                    </FormField>
-                    {screen.background.type === 'color' ? (
-                        <FormField label={t('screenInspector.colorValue')}>
-                            <ColorInput value={screen.background.value} onChange={val => updateScreen({ background: { type: 'color', value: val }})} className="p-1 h-10"/>
-                        </FormField>
-                    ) : (
-                         <AssetSelector label={t('screenInspector.asset')} assetType={screen.background.type === 'image' ? 'images' : 'videos'} allowVideo value={screen.background.assetId}
-                            onChange={id => {
-                                if (screen.background.type !== 'color') {
-                                    updateScreen({ background: { type: screen.background.type, assetId: id }});
+                <CollapsibleSection title={t('screenInspector.background')} defaultOpen>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label={t('screenInspector.type')}>
+                             <Select value={screen.background.type} onChange={e => {
+                                const newType = e.target.value as 'color' | 'image' | 'video';
+                                if (newType === 'color') {
+                                    updateScreen({ background: { type: 'color', value: '#000000' }});
+                                } else {
+                                    updateScreen({ background: { type: newType, assetId: null }});
                                 }
-                            }} />
+                             }}>
+                                <option value="color">{t('screenInspector.bgColor')}</option>
+                                <option value="image">{t('screenInspector.bgImage')}</option>
+                                <option value="video">{t('screenInspector.bgVideo')}</option>
+                            </Select>
+                        </FormField>
+                        {screen.background.type === 'color' ? (
+                            <FormField label={t('screenInspector.colorValue')}>
+                                <ColorInput value={screen.background.value} onChange={val => updateScreen({ background: { type: 'color', value: val }})} className="p-1 h-10"/>
+                            </FormField>
+                        ) : (
+                             <AssetSelector label={t('screenInspector.asset')} assetType={screen.background.type === 'image' ? 'images' : 'videos'} allowVideo value={screen.background.assetId}
+                                onChange={id => {
+                                    if (screen.background.type !== 'color') {
+                                        updateScreen({ background: { ...screen.background, type: screen.background.type, assetId: id }});
+                                    }
+                                }} />
+                        )}
+                    </div>
+                    {screen.background.type === 'video' && (
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-2">
+                            <input type="checkbox" checked={screen.background.loop ?? true}
+                                onChange={e => updateScreen({ background: { ...(screen.background as any), loop: e.target.checked } })} />
+                            Loop video <span className="text-[10px] text-slate-500">(off = play once, hold last frame)</span>
+                        </label>
                     )}
-                </div>
+                    {/* Background entry transition (fade/crossfade/dissolve/slide/iris/wipe) */}
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                        <FormField label="Transition">
+                            <Select value={screen.backgroundTransition || 'none'}
+                                onChange={e => updateScreen({ backgroundTransition: (e.target.value as any) === 'none' ? undefined : e.target.value as any })}>
+                                <option value="none">None</option>
+                                <option value="fade">Fade</option>
+                                <option value="crossfade">Crossfade</option>
+                                <option value="dissolve">Dissolve</option>
+                                <option value="slide">Slide</option>
+                                <option value="iris">Iris</option>
+                                <option value="wipe">Wipe</option>
+                            </Select>
+                        </FormField>
+                        {screen.backgroundTransition && screen.backgroundTransition !== 'none' && (
+                            <FormField label="Duration (ms)">
+                                <TextInput type="number" min="0" step="50" value={screen.backgroundTransitionDuration ?? 400}
+                                    onChange={e => updateScreen({ backgroundTransitionDuration: parseInt(e.target.value, 10) || undefined })} />
+                            </FormField>
+                        )}
+                    </div>
+                    {/* Main background layer + parallax depth */}
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                        <FormField label={`Layer: ${screen.backgroundLayer ?? 0}`}>
+                            <div className="flex items-center gap-1">
+                                <button type="button" title="Send background back a layer" onClick={() => updateScreen({ backgroundLayer: (screen.backgroundLayer ?? 0) - 1 || undefined })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↓</button>
+                                <input type="number" step="1" value={screen.backgroundLayer ?? 0} onChange={e => { const v = parseInt(e.target.value, 10); updateScreen({ backgroundLayer: Number.isNaN(v) ? undefined : (v || undefined) }); }} className="w-14 text-center bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded px-1 py-0.5 text-xs" />
+                                <button type="button" title="Bring background forward a layer" onClick={() => updateScreen({ backgroundLayer: (screen.backgroundLayer ?? 0) + 1 || undefined })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↑</button>
+                            </div>
+                        </FormField>
+                        <FormField label={`Depth: ${(screen.backgroundParallaxDepth ?? 0).toFixed(2)}`}>
+                            <input type="range" min="0" max="2" step="0.05" value={screen.backgroundParallaxDepth ?? 0} onChange={e => updateScreen({ backgroundParallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
+                        </FormField>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Layer orders the backdrop vs. elements; Depth drives parallax (set a Parallax mode below).</p>
 
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.music')}</h3>
-                 <div className="grid grid-cols-2 gap-2">
-                    <AssetSelector label={t('screenInspector.track')} assetType="audio" value={screen.music.audioId} onChange={id => updateScreen({ music: { ...screen.music, audioId: id } })} />
-                    <FormField label={t('screenInspector.playbackPolicy')}>
-                         <Select value={screen.music.policy} onChange={e => updateScreen({ music: { ...screen.music, policy: e.target.value as any }})}>
-                            <option value="continue">{t('screenInspector.continue')}</option>
-                            <option value="stop">{t('screenInspector.stopOnExit')}</option>
+                    {/* Additional background planes for multi-plane parallax */}
+                    <div className="mt-3 border-t border-slate-700/40 pt-2">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-slate-300">Additional backgrounds</span>
+                            <button type="button" onClick={addAddlBg} className="text-xs px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-200">+ Add</button>
+                        </div>
+                        <p className="text-[10px] text-[var(--text-muted)] mb-2">Extra backdrop planes layered with the main background — give each its own layer + depth for parallax scrolling.</p>
+                        {addlBgs.length === 0 && <p className="text-[10px] text-slate-500 italic">No additional backgrounds yet.</p>}
+                        <div className="space-y-2">
+                            {addlBgs.map((b, i) => (
+                                <div key={b.id} className="rounded border border-slate-700/60 p-2">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[11px] font-semibold text-slate-400">Plane {i + 1}</span>
+                                        <button type="button" onClick={() => removeAddlBg(b.id)} className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 hover:bg-red-600/50 text-red-200">Remove</button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <FormField label={t('screenInspector.type')}>
+                                            <Select value={b.background.type} onChange={e => {
+                                                const nt = e.target.value as 'color' | 'image' | 'video';
+                                                updateAddlBg(b.id, { background: nt === 'color' ? { type: 'color', value: '#000000' } : { type: nt, assetId: null } });
+                                            }}>
+                                                <option value="color">{t('screenInspector.bgColor')}</option>
+                                                <option value="image">{t('screenInspector.bgImage')}</option>
+                                                <option value="video">{t('screenInspector.bgVideo')}</option>
+                                            </Select>
+                                        </FormField>
+                                        {b.background.type === 'color' ? (
+                                            <FormField label={t('screenInspector.colorValue')}>
+                                                <ColorInput value={b.background.value} onChange={val => updateAddlBg(b.id, { background: { type: 'color', value: val } })} className="p-1 h-10" />
+                                            </FormField>
+                                        ) : (
+                                            <AssetSelector label={t('screenInspector.asset')} assetType={b.background.type === 'image' ? 'images' : 'videos'} allowVideo value={b.background.assetId}
+                                                onChange={id => { if (b.background.type !== 'color') updateAddlBg(b.id, { background: { ...b.background, type: b.background.type, assetId: id } }); }} />
+                                        )}
+                                    </div>
+                                    {b.background.type === 'video' && (
+                                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-1">
+                                            <input type="checkbox" checked={b.background.loop ?? true}
+                                                onChange={e => updateAddlBg(b.id, { background: { ...(b.background as any), loop: e.target.checked } })} />
+                                            Loop video
+                                        </label>
+                                    )}
+                                    <div className="grid grid-cols-2 gap-2 mt-1">
+                                        <FormField label={`Layer: ${b.layer ?? 0}`}>
+                                            <div className="flex items-center gap-1">
+                                                <button type="button" onClick={() => updateAddlBg(b.id, { layer: (b.layer ?? 0) - 1 })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↓</button>
+                                                <input type="number" step="1" value={b.layer ?? 0} onChange={e => { const v = parseInt(e.target.value, 10); updateAddlBg(b.id, { layer: Number.isNaN(v) ? 0 : v }); }} className="w-14 text-center bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded px-1 py-0.5 text-xs" />
+                                                <button type="button" onClick={() => updateAddlBg(b.id, { layer: (b.layer ?? 0) + 1 })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↑</button>
+                                            </div>
+                                        </FormField>
+                                        <FormField label={`Depth: ${(b.parallaxDepth ?? 0).toFixed(2)}`}>
+                                            <input type="range" min="0" max="2" step="0.05" value={b.parallaxDepth ?? 0} onChange={e => updateAddlBg(b.id, { parallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
+                                        </FormField>
+                                    </div>
+                                    <FormField label="Transition">
+                                        <Select value={b.transition || 'none'}
+                                            onChange={e => updateAddlBg(b.id, { transition: (e.target.value as any) === 'none' ? undefined : e.target.value as any })}>
+                                            <option value="none">None</option>
+                                            <option value="fade">Fade</option>
+                                            <option value="crossfade">Crossfade</option>
+                                            <option value="dissolve">Dissolve</option>
+                                            <option value="slide">Slide</option>
+                                            <option value="iris">Iris</option>
+                                            <option value="wipe">Wipe</option>
+                                        </Select>
+                                    </FormField>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('screenInspector.music')}>
+                     <div className="grid grid-cols-2 gap-2">
+                        <AssetSelector label={t('screenInspector.track')} assetType="audio" value={screen.music.audioId} onChange={id => updateScreen({ music: { ...screen.music, audioId: id } })} />
+                        <FormField label={t('screenInspector.playbackPolicy')}>
+                             <Select value={screen.music.policy} onChange={e => updateScreen({ music: { ...screen.music, policy: e.target.value as any }})}>
+                                <option value="continue">{t('screenInspector.continue')}</option>
+                                <option value="stop">{t('screenInspector.stopOnExit')}</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.music.volume ?? 1) * 100) })}>
+                        <input type="range" min="0" max="100" value={Math.round((screen.music.volume ?? 1) * 100)}
+                            onChange={e => updateScreen({ music: { ...screen.music, volume: parseInt(e.target.value) / 100 } })}
+                            className="w-full accent-purple-500" />
+                    </FormField>
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('screenInspector.ambientNoise')}>
+                     <div className="grid grid-cols-2 gap-2">
+                        <AssetSelector label={t('screenInspector.track')} assetType="audio" value={screen.ambientNoise.audioId} onChange={id => updateScreen({ ambientNoise: { ...screen.ambientNoise, audioId: id } })} />
+                        <FormField label={t('screenInspector.playbackPolicy')}>
+                             <Select value={screen.ambientNoise.policy} onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, policy: e.target.value as any }})}>
+                                <option value="continue">{t('screenInspector.continue')}</option>
+                                <option value="stop">{t('screenInspector.stopOnExit')}</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.ambientNoise.volume ?? 1) * 100) })}>
+                        <input type="range" min="0" max="100" value={Math.round((screen.ambientNoise.volume ?? 1) * 100)}
+                            onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, volume: parseInt(e.target.value) / 100 } })}
+                            className="w-full accent-purple-500" />
+                    </FormField>
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('screenInspector.transitions')}>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label={t('screenInspector.transitionIn')}>
+                            <Select value={screen.transitionIn || 'fade'} onChange={e => updateScreen({ transitionIn: e.target.value as any })}>
+                                <option value="none">{t('screenInspector.transNone')}</option>
+                                <option value="fade">{t('screenInspector.transFade')}</option>
+                                <option value="crossfade">{t('screenInspector.transCrossfade')}</option>
+                                <option value="slideUp">{t('screenInspector.transSlideUp')}</option>
+                                <option value="slideDown">{t('screenInspector.transSlideDown')}</option>
+                                <option value="slideLeft">{t('screenInspector.transSlideLeft')}</option>
+                                <option value="slideRight">{t('screenInspector.transSlideRight')}</option>
+                            </Select>
+                        </FormField>
+                        <FormField label={t('screenInspector.transitionOut')}>
+                            <Select value={screen.transitionOut || 'fade'} onChange={e => updateScreen({ transitionOut: e.target.value as any })}>
+                                <option value="none">{t('screenInspector.transNone')}</option>
+                                <option value="fade">{t('screenInspector.transFade')}</option>
+                                <option value="crossfade">{t('screenInspector.transCrossfade')}</option>
+                                <option value="slideUp">{t('screenInspector.transSlideUp')}</option>
+                                <option value="slideDown">{t('screenInspector.transSlideDown')}</option>
+                                <option value="slideLeft">{t('screenInspector.transSlideLeft')}</option>
+                                <option value="slideRight">{t('screenInspector.transSlideRight')}</option>
+                            </Select>
+                        </FormField>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField label={t('screenInspector.fadeInDuration')}>
+                            <TextInput type="number" value={screen.transitionInDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionInDuration: parseInt(e.target.value) || 300 })} />
+                        </FormField>
+                        <FormField label={t('screenInspector.fadeOutDuration')}>
+                            <TextInput type="number" value={screen.transitionOutDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionOutDuration: parseInt(e.target.value) || 300 })} />
+                        </FormField>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('screenInspector.dialogueBox')}>
+                    <FormField label={t('screenInspector.showDialogue')}>
+                        <input type="checkbox" checked={screen.showDialogue || false} onChange={e => updateScreen({ showDialogue: e.target.checked })} className="w-5 h-5" />
+                    </FormField>
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('screenInspector.overlayBehavior')}>
+                    <FormField label={t('screenInspector.passThrough')}>
+                        <input
+                            type="checkbox"
+                            checked={screen.passThrough ?? (screenId === project.ui.gameHudScreenId)}
+                            onChange={e => updateScreen({ passThrough: e.target.checked })}
+                            className="w-5 h-5"
+                        />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.passThroughHint')}</p>
+                    {(screen.passThrough ?? (screenId === project.ui.gameHudScreenId)) && (
+                        <FormField label="Show above dialogue & choices">
+                            <input
+                                type="checkbox"
+                                checked={screen.hudAboveDialogue ?? false}
+                                onChange={e => updateScreen({ hudAboveDialogue: e.target.checked || undefined })}
+                                className="w-5 h-5"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-0.5">Renders this HUD overlay on top of the dialogue box and choices so players can open and interact with it mid-dialogue. Empty areas still pass clicks through to advance.</p>
+                        </FormField>
+                    )}
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Parallax">
+                    <FormField label="Mode">
+                        <Select
+                            value={screen.parallax?.mode || 'off'}
+                            onChange={e => {
+                                const mode = e.target.value as NonNullable<VNUIScreen['parallax']>['mode'];
+                                updateScreen({ parallax: mode === 'off' ? undefined : { ...screen.parallax, mode } });
+                            }}
+                        >
+                            <option value="off">Off</option>
+                            <option value="mouse">Follow mouse</option>
+                            <option value="camera">Camera (pan/zoom)</option>
+                            <option value="both">Both</option>
                         </Select>
                     </FormField>
-                </div>
-                <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.music.volume ?? 1) * 100) })}>
-                    <input type="range" min="0" max="100" value={Math.round((screen.music.volume ?? 1) * 100)}
-                        onChange={e => updateScreen({ music: { ...screen.music, volume: parseInt(e.target.value) / 100 } })}
-                        className="w-full accent-purple-500" />
-                </FormField>
+                    {screen.parallax?.mode && screen.parallax.mode !== 'off' && (
+                        <FormField label={`Intensity: ${(screen.parallax.intensity ?? 1).toFixed(2)}×`}>
+                            <input type="range" min="0" max="3" step="0.05" value={screen.parallax.intensity ?? 1}
+                                onChange={e => updateScreen({ parallax: { ...screen.parallax, intensity: parseFloat(e.target.value) || 0 } })}
+                                className="w-full accent-purple-500" />
+                        </FormField>
+                    )}
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Shifts the background + elements by their Depth for a sense of depth. Set per-element depth in the element's Transform group.</p>
+                    {screen.parallax?.mode === 'camera' && (
+                        <p className="text-[10px] text-amber-400/80 mt-1">Screens have no camera (Pan/Zoom is a scene feature), so Camera mode has no effect here — use Follow mouse.</p>
+                    )}
+                </CollapsibleSection>
 
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.ambientNoise')}</h3>
-                 <div className="grid grid-cols-2 gap-2">
-                    <AssetSelector label={t('screenInspector.track')} assetType="audio" value={screen.ambientNoise.audioId} onChange={id => updateScreen({ ambientNoise: { ...screen.ambientNoise, audioId: id } })} />
-                    <FormField label={t('screenInspector.playbackPolicy')}>
-                         <Select value={screen.ambientNoise.policy} onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, policy: e.target.value as any }})}>
-                            <option value="continue">{t('screenInspector.continue')}</option>
-                            <option value="stop">{t('screenInspector.stopOnExit')}</option>
-                        </Select>
-                    </FormField>
-                </div>
-                <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.ambientNoise.volume ?? 1) * 100) })}>
-                    <input type="range" min="0" max="100" value={Math.round((screen.ambientNoise.volume ?? 1) * 100)}
-                        onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, volume: parseInt(e.target.value) / 100 } })}
-                        className="w-full accent-purple-500" />
-                </FormField>
-
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.transitions')}</h3>
-                <div className="grid grid-cols-2 gap-2">
-                    <FormField label={t('screenInspector.transitionIn')}>
-                        <Select value={screen.transitionIn || 'fade'} onChange={e => updateScreen({ transitionIn: e.target.value as any })}>
-                            <option value="none">{t('screenInspector.transNone')}</option>
-                            <option value="fade">{t('screenInspector.transFade')}</option>
-                            <option value="crossfade">{t('screenInspector.transCrossfade')}</option>
-                            <option value="slideUp">{t('screenInspector.transSlideUp')}</option>
-                            <option value="slideDown">{t('screenInspector.transSlideDown')}</option>
-                            <option value="slideLeft">{t('screenInspector.transSlideLeft')}</option>
-                            <option value="slideRight">{t('screenInspector.transSlideRight')}</option>
-                        </Select>
-                    </FormField>
-                    <FormField label={t('screenInspector.transitionOut')}>
-                        <Select value={screen.transitionOut || 'fade'} onChange={e => updateScreen({ transitionOut: e.target.value as any })}>
-                            <option value="none">{t('screenInspector.transNone')}</option>
-                            <option value="fade">{t('screenInspector.transFade')}</option>
-                            <option value="crossfade">{t('screenInspector.transCrossfade')}</option>
-                            <option value="slideUp">{t('screenInspector.transSlideUp')}</option>
-                            <option value="slideDown">{t('screenInspector.transSlideDown')}</option>
-                            <option value="slideLeft">{t('screenInspector.transSlideLeft')}</option>
-                            <option value="slideRight">{t('screenInspector.transSlideRight')}</option>
-                        </Select>
-                    </FormField>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <FormField label={t('screenInspector.fadeInDuration')}>
-                        <TextInput type="number" value={screen.transitionInDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionInDuration: parseInt(e.target.value) || 300 })} />
-                    </FormField>
-                    <FormField label={t('screenInspector.fadeOutDuration')}>
-                        <TextInput type="number" value={screen.transitionOutDuration ?? screen.transitionDuration ?? 300} onChange={e => updateScreen({ transitionOutDuration: parseInt(e.target.value) || 300 })} />
-                    </FormField>
-                </div>
-
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.dialogueBox')}</h3>
-                <FormField label={t('screenInspector.showDialogue')}>
-                    <input type="checkbox" checked={screen.showDialogue || false} onChange={e => updateScreen({ showDialogue: e.target.checked })} className="w-5 h-5" />
-                </FormField>
-
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.overlayBehavior')}</h3>
-                <FormField label={t('screenInspector.passThrough')}>
-                    <input
-                        type="checkbox"
-                        checked={screen.passThrough ?? (screenId === project.ui.gameHudScreenId)}
-                        onChange={e => updateScreen({ passThrough: e.target.checked })}
-                        className="w-5 h-5"
-                    />
-                </FormField>
-                <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.passThroughHint')}</p>
-
-                <hr className="border-slate-700 my-4" />
-                <h3 className="font-bold mb-2 text-slate-400">{t('screenInspector.screenEffects')}</h3>
+                <CollapsibleSection title={t('screenInspector.screenEffects')}>
 
                 {([
                     { type: 'crtScanlines' as const, label: 'CRT Scanlines',
@@ -370,14 +535,11 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </div>
                     );
                 })}
-            </div>
+                </CollapsibleSection>
 
-            {/* Interactivity — quick-add buttons that drop a default hot spot / draggable
-                element / image map onto the screen. As soon as one is added, the editor
-                routes to HotZoneEditor for detail editing (until Phase 3 brings overlays
-                directly into MenuEditor). */}
-            <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
-                <h3 className="text-sm font-bold text-purple-300 mb-2">{t('screenInspector.interactivity')}</h3>
+                {/* Interactivity — quick-add buttons that drop a default hot spot / draggable
+                    element / image map onto the screen. */}
+                <CollapsibleSection title={t('screenInspector.interactivity')}>
                 <p className="text-[10px] text-[var(--text-muted)] mb-2">
                     {t('screenInspector.interactivityHint')}
                 </p>
@@ -408,44 +570,22 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     <button
                         onClick={() => {
                             const id = newInteractiveId('hze');
-                            const draggableCount = Object.values(screen.elements).filter(
-                                (e: any) => e.draggable === true
+                            // Unified "interactive element": one draggable/clickable element that
+                            // can be an image, image map, button, text, etc. Created as an
+                            // interactive Image; the inspector's Element Type dropdown switches it
+                            // (e.g. to an Image Map with clickable regions) and the Draggable toggle
+                            // turns on dragging — replacing the old separate Draggable / Image Map adds.
+                            const count = Object.values(screen.elements).filter(
+                                (e: any) => e.interactive === true && e.type !== UIElementType.HotSpot
                             ).length;
-                            // Draggable image — stored as a `UIImageElement` with `interactive: true`
-                            // plus `draggable: true` and snap-back. The `interactive` flag keeps the
-                            // element in the hot zone editor even if `draggable` is toggled off later.
                             const newEl: UIImageElement = {
                                 id,
-                                name: t('screenInspector.draggableName', { n: draggableCount + 1 }),
+                                name: t('screenInspector.interactiveName', { n: count + 1 }),
                                 type: UIElementType.Image,
                                 background: { type: 'color', value: '#00000000' },
                                 image: null,
                                 objectFit: 'contain',
-                                x: 10, y: 10, width: 10, height: 10,
-                                anchorX: 0, anchorY: 0,
-                                interactive: true,
-                                draggable: true,
-                                snapBack: true,
-                            };
-                            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: newEl } });
-                        }}
-                        className="w-full text-left text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 px-2 py-1.5 rounded transition-colors"
-                    >
-                        {t('screenInspector.addDraggable')}
-                    </button>
-                    <button
-                        onClick={() => {
-                            const id = newInteractiveId('hze');
-                            const mapCount = Object.values(screen.elements).filter(
-                                (e: any) => e.type === UIElementType.ImageMap
-                            ).length;
-                            const newEl: UIImageMapElement = {
-                                id,
-                                name: t('screenInspector.imageMapName', { n: mapCount + 1 }),
-                                type: UIElementType.ImageMap,
-                                image: null,
-                                imageMapRegions: [],
-                                x: 10, y: 10, width: 60, height: 40,
+                                x: 20, y: 20, width: 20, height: 20,
                                 anchorX: 0, anchorY: 0,
                                 interactive: true,
                             };
@@ -453,25 +593,25 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         }}
                         className="w-full text-left text-xs bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 px-2 py-1.5 rounded transition-colors"
                     >
-                        {t('screenInspector.addImageMap')}
+                        {t('screenInspector.addInteractive')}
                     </button>
                 </div>
-            </div>
+                </CollapsibleSection>
 
-            {/* Win Condition — available on any screen. Setting one promotes the screen to
-                "interactive" without forcing a switch to the legacy hot zone editor. */}
-            <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
-                <WinConditionEditor
-                    winCondition={screen.winCondition}
-                    project={project}
-                    targetableElements={
-                        Object.values(deriveHotZoneElementsFromScreen(screen)).map((el: VNHotZoneElement) => ({
-                            id: el.id,
-                            name: el.name,
-                        }))
-                    }
-                    onChange={(next: VNHotZoneWinCondition | undefined) => updateScreen({ winCondition: next })}
-                />
+                {/* Win Condition — available on any screen. The targetable list is the screen's
+                    interactive elements (draggables / image maps), read from `screen.elements`. */}
+                <CollapsibleSection title="Win Condition">
+                    <WinConditionEditor
+                        winCondition={screen.winCondition}
+                        project={project}
+                        targetableElements={
+                            (Object.values(screen.elements || {}) as VNUIElement[])
+                                .filter(isInteractiveElement)
+                                .map(el => ({ id: el.id, name: el.name }))
+                        }
+                        onChange={(next: VNHotZoneWinCondition | undefined) => updateScreen({ winCondition: next })}
+                    />
+                </CollapsibleSection>
             </div>
         </Panel>
     );

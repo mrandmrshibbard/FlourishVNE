@@ -82,6 +82,17 @@
     "and": "AND",
     "or": "OR"
   },
+  "inspectorGroups": {
+    "content": "Content",
+    "transform": "Transform",
+    "appearance": "Appearance",
+    "effects": "Effects",
+    "media": "Media",
+    "animation": "Animation",
+    "audio": "Audio",
+    "logic": "Logic",
+    "conditions": "Conditions"
+  },
   "manager": {
     "uiScreens": "UI Screens",
     "inGameUi": "In-Game UI",
@@ -632,13 +643,15 @@
     "snow": "Snow",
     "ash": "Ash",
     "interactivity": "Interactivity",
-    "interactivityHint": "Hot spots, draggable elements, and image maps work on any screen. Adding one switches the editor into Hot Zone mode for detail editing.",
+    "interactivityHint": "Add a hot spot (a click or drop zone) or an interactive element — a draggable, clickable image, image map, button, or text. Pick its kind and behaviour in the inspector.",
     "addHotSpot": "+ Add Hot Spot",
     "addDraggable": "+ Add Draggable Element",
     "addImageMap": "+ Add Image Map",
+    "addInteractive": "+ Add Interactive Element",
     "hotSpotName": "Hot Spot {{n}}",
     "draggableName": "Draggable {{n}}",
     "imageMapName": "Image Map {{n}}",
+    "interactiveName": "Interactive {{n}}",
     "effects": {
       "crtScanlines": "CRT Scanlines",
       "chromaticGlitch": "Chromatic Glitch",

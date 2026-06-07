@@ -25,9 +25,10 @@ const SceneConfigEditor: React.FC<{
         );
     }
 
-    const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration'>>) => {
+    const updateScene = (updates: Partial<Pick<VNScene, 'conditions' | 'fallbackSceneId' | 'outTransition' | 'outTransitionDuration' | 'parallax'>>) => {
         dispatch({ type: 'UPDATE_SCENE_CONFIG', payload: { sceneId: activeSceneId, updates } });
     };
+    const px = activeScene.parallax;
 
     return (
         <Panel title={t('config.titleNamed', { name: activeScene.name })} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
@@ -68,6 +69,41 @@ const SceneConfigEditor: React.FC<{
                                     }}
                                 />
                             </FormField>
+                        )}
+                    </div>
+
+                    {/* Parallax */}
+                    <div className="mb-4">
+                        <h3 className="font-bold mb-2 text-[var(--accent-cyan)]">Parallax</h3>
+                        <p className="text-xs text-[var(--text-secondary)] mb-3">
+                            Shifts stage visuals by their per-command <em>Parallax depth</em> (set in a visual's Transform group) for a sense of depth. <em>Follow mouse</em> tracks the pointer; <em>Camera</em> reacts to Pan/Zoom Screen moves (nearer/higher-depth layers sweep past farther ones); <em>Both</em> combines them.
+                        </p>
+                        <FormField label="Mode">
+                            <Select
+                                value={px?.mode || 'off'}
+                                onChange={e => {
+                                    const mode = e.target.value as NonNullable<VNScene['parallax']>['mode'];
+                                    updateScene({ parallax: mode === 'off' ? undefined : { ...px, mode } });
+                                }}
+                            >
+                                <option value="off">Off</option>
+                                <option value="mouse">Follow mouse</option>
+                                <option value="camera">Camera (pan/zoom)</option>
+                                <option value="both">Both</option>
+                            </Select>
+                        </FormField>
+                        {px?.mode && px.mode !== 'off' && (
+                            <FormField label={`Intensity: ${(px.intensity ?? 1).toFixed(2)}×`}>
+                                <input
+                                    type="range" min="0" max="3" step="0.05"
+                                    value={px.intensity ?? 1}
+                                    onChange={e => updateScene({ parallax: { ...px, intensity: parseFloat(e.target.value) || 0 } })}
+                                    className="w-full accent-[var(--accent-cyan)]"
+                                />
+                            </FormField>
+                        )}
+                        {(px?.mode === 'camera' || px?.mode === 'both') && (
+                            <p className="text-[10px] text-[var(--text-secondary)] mt-1">Camera parallax is driven by <em>Pan/Zoom Screen</em> commands — depth-0 layers move with the camera, higher-depth layers move more. Add some pan to see it.</p>
                         )}
                     </div>
 

@@ -182,6 +182,8 @@ export function handleShowCharacter(
 
   const characterState = {
     charId: command.characterId,
+    layer: command.layer,
+    parallaxDepth: command.parallaxDepth,
     position: finalPosition,
     imageUrls,
     videoUrls,

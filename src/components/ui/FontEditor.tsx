@@ -234,7 +234,7 @@ const FontEditor: React.FC<FontEditorProps> = ({
                     </label>
                     {border.enabled && (
                         <div className="grid grid-cols-2 gap-1">
-                            <FormField label={t('fontEditor.width')}><TextInput type="number" value={border.width} onChange={e => updateBorder({ width: parseFloat(e.target.value) || 1 })} /></FormField>
+                            <FormField label={t('fontEditor.width')}><TextInput type="number" min="0" step="0.1" value={border.width} onChange={e => updateBorder({ width: parseFloat(e.target.value) || 0 })} /></FormField>
                             <FormField label={t('fontEditor.borderColor')}><ColorInput value={border.color} onChange={val => updateBorder({ color: val })} className="p-1 h-10" /></FormField>
                         </div>
                     )}

@@ -5,10 +5,8 @@ import {
   HideImageCommand,
   ShowButtonCommand,
   HideButtonCommand,
-  ShowImageMapCommand,
-  HideImageMapCommand,
 } from '../../../features/scene/types';
-import { TextOverlay, ImageOverlay, ButtonOverlay, ImageMapOverlay } from '../types/gameState';
+import { TextOverlay, ImageOverlay, ButtonOverlay } from '../types/gameState';
 import { interpolateVariables } from '../../../utils/variableInterpolation';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
@@ -27,6 +25,8 @@ export function handleShowText(
   const interpolatedText = interpolateVariables(command.text, playerState.variables, project);
   const overlay: TextOverlay = {
     id: command.id,
+    layer: command.layer,
+    parallaxDepth: command.parallaxDepth,
     text: interpolatedText,
     rawText: command.text,
     x: command.x,
@@ -159,6 +159,8 @@ export function handleShowImage(
 
   const overlay: ImageOverlay = {
     id: command.id,
+    layer: command.layer,
+    parallaxDepth: command.parallaxDepth,
     imageUrl: !isVideo ? imageUrl : undefined,
     videoUrl: isVideo ? imageUrl : undefined,
     isVideo,
@@ -284,6 +286,8 @@ export function handleShowButton(
 
   const buttonOverlay: ButtonOverlay = {
     id: command.id,
+    layer: command.layer,
+    parallaxDepth: command.parallaxDepth,
     text: command.text,
     x: command.x,
     y: command.y,
@@ -295,6 +299,8 @@ export function handleShowButton(
     textColor: command.textColor || '#ffffff',
     fontSize: command.fontSize || 18,
     fontWeight: command.fontWeight || 'normal',
+    textAlign: command.textAlign || 'center',
+    paddingX: command.paddingX ?? 0,
     borderRadius: command.borderRadius || 8,
     opacity: command.opacity ?? 1,
     imageUrl: command.image ? assetResolver(command.image.id, command.image.type) : null,
@@ -426,159 +432,6 @@ export function handleHideButton(
         stageState: {
           ...playerState.stageState,
           buttonOverlays: overlays.filter((o) => o.id !== command.targetCommandId),
-        },
-      },
-    };
-  }
-}
-
-/**
- * Handles showing an image map overlay with clickable regions
- */
-export function handleShowImageMap(
-  command: ShowImageMapCommand,
-  context: CommandContext
-): CommandResult {
-  const { assetResolver, playerState, setPlayerState, evaluateConditions } = context;
-
-  const imageUrl = assetResolver(command.imageId, 'image');
-  if (!imageUrl) {
-    console.warn(`Image map image not found: ${command.imageId}`);
-    return { advance: true };
-  }
-
-  const hoverImageUrl = command.hoverImageId ? assetResolver(command.hoverImageId, 'image') : undefined;
-
-  TweenManager.cancelForTarget(command.id, 'imageMap');
-
-  const overlay: ImageMapOverlay = {
-    id: command.id,
-    imageUrl,
-    hoverImageUrl: hoverImageUrl || undefined,
-    regions: command.regions.map(r => ({
-      id: r.id,
-      name: r.name,
-      shape: r.shape,
-      coords: r.coords,
-      actions: r.actions,
-      tooltip: r.tooltip,
-      cursor: r.cursor,
-      highlightColor: r.highlightColor,
-      conditions: r.conditions,
-    })),
-    x: command.x,
-    y: command.y,
-    width: command.width,
-    height: command.height,
-    opacity: command.opacity,
-    waitForClick: command.waitForClick,
-    transition: command.transition !== 'instant' ? command.transition : undefined,
-    duration: command.duration,
-    action: 'show',
-  };
-
-  const hasTransition = command.transition && command.transition !== 'instant';
-  const waitForClick = command.waitForClick;
-
-  let shouldAdvance = true;
-  let delay = 0;
-  let callback: (() => void) | undefined;
-
-  if (hasTransition && waitForClick) {
-    shouldAdvance = false;
-    delay = 0;
-    callback = () => {
-      setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
-    };
-  } else if (hasTransition) {
-    shouldAdvance = false;
-    delay = (command.duration ?? 0.5) * 1000 + 100;
-    callback = context.advance;
-  } else if (waitForClick) {
-    shouldAdvance = false;
-    callback = () => {
-      setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
-    };
-  }
-
-  return {
-    advance: shouldAdvance,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        imageMapOverlays: [...(playerState.stageState.imageMapOverlays || []), overlay],
-      },
-    },
-    delay,
-    callback,
-  };
-}
-
-/**
- * Handles hiding/removing an image map overlay
- */
-export function handleHideImageMap(
-  command: HideImageMapCommand,
-  context: CommandContext
-): CommandResult {
-  const { playerState, setPlayerState, advance } = context;
-
-  const overlays = playerState.stageState.imageMapOverlays || [];
-  const target = overlays.find((o) => o.id === command.targetCommandId);
-
-  if (!target) {
-    return { advance: true };
-  }
-
-  TweenManager.cancelForTarget(command.targetCommandId, 'imageMap');
-
-  if (command.transition && command.transition !== 'instant') {
-    const updated = overlays.map((o) =>
-      o.id === command.targetCommandId
-        ? {
-            ...o,
-            transition: command.transition,
-            duration: command.duration || 0.5,
-            action: 'hide' as const,
-          }
-        : o
-    );
-
-    const duration = (command.duration ?? 0.5) * 1000 + 100;
-
-    return {
-      advance: false,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          imageMapOverlays: updated,
-        },
-      },
-      delay: duration,
-      callback: () => {
-        setPlayerState((inner) =>
-          inner
-            ? {
-                ...inner,
-                stageState: {
-                  ...inner.stageState,
-                  imageMapOverlays: (inner.stageState.imageMapOverlays || []).filter(
-                    (o) => o.id !== command.targetCommandId
-                  ),
-                },
-              }
-            : null
-        );
-        advance();
-      },
-    };
-  } else {
-    return {
-      advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          imageMapOverlays: overlays.filter((o) => o.id !== command.targetCommandId),
         },
       },
     };

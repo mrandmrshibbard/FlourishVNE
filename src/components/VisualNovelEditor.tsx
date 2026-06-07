@@ -12,8 +12,8 @@ import UIManager from './UIManager';
 import ErrorBoundary from './ErrorBoundary';
 import ScreenInspector from './menu-editor/ScreenInspector';
 import UIElementInspector from './menu-editor/UIElementInspector';
-import { HotSpotProperties, HotZoneElementProperties } from './hot-zone/HotZoneInspectors';
-import { isHotSpotElement, isInteractiveElement, deriveHotZoneElementsFromScreen } from '../utils/hotZoneShims';
+import { HotSpotProperties, InteractiveElementProperties } from './interactive-elements/InteractiveElementInspectors';
+import { isHotSpotElement, isInteractiveElement } from '../utils/interactiveElements';
 import { VNUIElement } from '../features/ui/types';
 const AssetManager = React.lazy(() => import('./AssetManager'));
 const VariableManager = React.lazy(() => import('./VariableManager'));
@@ -210,10 +210,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 const selectedElement = activeScreen.elements[lastId] as VNUIElement | undefined;
 
                 // Dispatch on element type. Hot spots → HotSpotProperties.
-                // Image maps + draggable elements → HotZoneElementProperties.
+                // Image maps + draggable elements → InteractiveElementProperties.
                 // Everything else → the standard UIElementInspector.
                 if (selectedElement) {
-                    const targetable = Object.values(deriveHotZoneElementsFromScreen(activeScreen)).map(el => ({ id: el.id, name: el.name }));
+                    const targetable = (Object.values(activeScreen.elements || {}) as VNUIElement[])
+                        .filter(isInteractiveElement)
+                        .map(el => ({ id: el.id, name: el.name }));
                     const deleteSelectedElement = () => {
                         dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId: activeMenuScreenId, elementId: lastId } });
                         setSelectedUIElementIds([]);
@@ -234,7 +236,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     }
                     if (isInteractiveElement(selectedElement)) {
                         return (
-                            <HotZoneElementProperties
+                            <InteractiveElementProperties
                                 element={selectedElement}
                                 project={project}
                                 targetableElements={targetable}
@@ -600,6 +602,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 selectedUIElementIds={selectedUIElementIds}
                                 setSelectedUIElementIds={setSelectedUIElementIds}
                                 onEditorModeChange={setUiEditorMode}
+                                isPlaying={isPlaying}
                             />
                         </ErrorBoundary>
                     ) : activeTab === 'assets' ? (
@@ -634,7 +637,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             </main>
             {isPlaying && (
                 <ErrorBoundary panelName="Live Preview">
-                    <LivePreview onClose={() => setIsPlaying(false)} />
+                    <LivePreview onClose={() => {
+                        setIsPlaying(false);
+                        // Tell the editor canvases to remount their <video> backgrounds — the browser
+                        // evicts videos that sat behind the fullscreen preview and won't auto-resume.
+                        try { window.dispatchEvent(new CustomEvent('flourish:playended')); } catch { /* no-op */ }
+                    }} />
                 </ErrorBoundary>
             )}
             

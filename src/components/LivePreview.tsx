@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { combineConditions } from '../utils/conditionLogic';
-import { deriveHotSpotsFromScreen, deriveHotZoneElementsFromScreen } from '../utils/hotZoneShims';
+import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
 import { XMarkIcon, FilmIcon } from './icons';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
@@ -25,7 +25,7 @@ import {
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
-    ShowImageMapCommand, HideImageMapCommand, ShowHotSpotCommand, HideHotSpotCommand,
+    ShowHotSpotCommand, HideHotSpotCommand,
     TweenElementCommand, REACTIVE_VISUAL_TYPES,
 } from '../features/scene/types';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
@@ -179,8 +179,6 @@ import {
     handleSpawnParticles,
     handleStopParticles,
     handleCallCommonEvent,
-    handleShowImageMap,
-    handleHideImageMap,
     handleTweenElement,
 } from './live-preview/command-handlers';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
@@ -192,7 +190,6 @@ import {
     TextOverlay,
     ImageOverlay,
     ButtonOverlay,
-    ImageMapOverlay,
     HotSpotOverlay,
     StageCharacterState,
     StageState,
@@ -218,6 +215,32 @@ const defaultSettings: GameSettings = {
     enableSkip: true,
     autoAdvance: false,
     autoAdvanceDelay: 3,
+};
+
+// Max pixel shift at parallaxDepth=1, intensity=1, full pointer offset. Tunable.
+const PARALLAX_MAX_PX = 40;
+/** CSS entry animation for a Play Video, mapped from the command's transition. Plays once on mount. */
+const movieEntryAnim = (transition?: string, durationSec?: number): string | undefined => {
+    const d = durationSec ?? 0.5;
+    switch (transition) {
+        case undefined: case '': case 'instant': return undefined;
+        case 'slide': return `slide-in-right ${d}s ease-out forwards`;
+        case 'iris-in': return `iris-in ${d}s ease-out forwards`;
+        case 'wipe-right': return `wipe-right ${d}s ease-out forwards`;
+        default: return `dissolve-in ${d}s ease-out forwards`; // fade / cross-fade / dissolve
+    }
+};
+// Camera (pan) parallax: a pan of this many stage-% maps to a full unit of the parallax
+// var (i.e. ~PARALLAX_MAX_PX at depth/intensity 1). Lower = stronger camera parallax. Tunable.
+const CAMERA_PAN_REF = 30;
+/** CSS transform fragment that shifts a visual by its parallax depth. Reads the live
+ *  `--ppx`/`--ppy` vars (eased pointer offset × scene intensity, written on the stage each
+ *  frame), so this composes onto a visual's existing transform with no per-frame React work.
+ *  Returns '' when depth is 0/undefined (no parallax). */
+const parallaxTransform = (depth?: number): string => {
+    if (!depth) return '';
+    const d = depth * PARALLAX_MAX_PX;
+    return ` translate(calc(var(--ppx, 0) * ${d}px), calc(var(--ppy, 0) * ${d}px))`;
 };
 
 // --- Utility Functions (keeping these until they can be extracted) ---
@@ -314,7 +337,7 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
     const tWidth = tweenValues?.width ?? overlay.width;
     const tHeight = tweenValues?.height ?? overlay.height;
 
-    const _orient = buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY });
+    const _orient = `${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim();
     const baseStyle: React.CSSProperties = {
         left: `${tx}%`,
         top: `${ty}%`,
@@ -333,6 +356,8 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
         justifyContent: overlay.textAlign === 'left' ? 'flex-start' : overlay.textAlign === 'right' ? 'flex-end' : 'center',
         whiteSpace: overlay.width ? 'pre-wrap' : 'nowrap',
         overflow: 'hidden',
+        // Author stacking: text band (1) + layer. Default 0 → below characters (band 5), as today.
+        zIndex: 1 + (overlay.layer ?? 0) * 100,
     };
 
     // Apply text shadow / border / gradient via shared helper so editor & built game match.
@@ -473,6 +498,10 @@ const ButtonOverlayElement: React.FC<{
 
     const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
 
+    const btnAlign = overlay.textAlign || 'center';
+    const btnJustify = { left: 'flex-start', center: 'center', right: 'flex-end' }[btnAlign];
+    const btnPadX = `${overlay.paddingX ?? 0}%`;
+
     const containerStyle: React.CSSProperties = {
         position: 'absolute',
         left: `${bx}%`,
@@ -481,8 +510,10 @@ const ButtonOverlayElement: React.FC<{
         // When an image is the button, let the height follow the image's aspect ratio so the
         // box conforms to the art (no cropping, no distortion). Otherwise use the set height.
         height: displayImage ? 'auto' : `${bh}%`,
-        transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%) ${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}`.trim(),
+        transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%) ${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim(),
         pointerEvents: 'auto',
+        // Author stacking: button band (1) + layer. Default 0 → below characters (band 5), as today.
+        zIndex: 1 + (overlay.layer ?? 0) * 100,
     };
 
     // Pre-hide if showing WITH a transition that hasn't started yet
@@ -521,9 +552,13 @@ const ButtonOverlayElement: React.FC<{
             border: 'none',
             cursor: 'pointer',
             padding: 0,
+            paddingLeft: btnPadX,
+            paddingRight: btnPadX,
+            boxSizing: 'border-box',
+            textAlign: btnAlign,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: btnJustify,
             transition: 'transform 0.1s, box-shadow 0.1s',
             boxShadow: isHovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
             transform: isHovered ? 'translateY(-2px)' : 'none',
@@ -557,7 +592,7 @@ const ButtonOverlayElement: React.FC<{
                 )}
                 {overlay.text && (
                     <span style={displayImage
-                        ? { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 'normal', zIndex: 1 }
+                        ? { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: btnJustify, lineHeight: 'normal', zIndex: 1, paddingLeft: btnPadX, paddingRight: btnPadX, boxSizing: 'border-box', textAlign: btnAlign }
                         : { position: 'relative', zIndex: 1 }}>
                         {overlay.text}
                     </span>
@@ -690,7 +725,9 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
         top: `${iy}%`,
         width: `${iw}px`,
         height: `${ih}px`,
-        ...(isSlideTransition ? {} : { transform: 'translate(-50%, -50%)' }),
+        transform: `${isSlideTransition ? '' : 'translate(-50%, -50%)'}${parallaxTransform(overlay.parallaxDepth)}`.trim() || undefined,
+        // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
+        zIndex: 1 + (overlay.layer ?? 0) * 100,
     };
 
     // Only pre-hide if we're showing WITH a transition that hasn't started yet
@@ -736,246 +773,6 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
                     style={imageStyle} 
                 />
             )}
-        </div>
-    );
-};
-
-/** Renders a single image map region as a CSS overlay with click handling */
-const ImageMapRegionElement: React.FC<{
-    region: import('./live-preview/types/gameState').ImageMapRegionOverlay;
-    containerWidth: number;
-    containerHeight: number;
-    hasHoverImage?: boolean;
-    onAction: (action: VNUIAction) => void;
-    onAdvance?: () => void;
-    onCommitVariables?: () => void;
-    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
-    variables: Record<VNID, string | number | boolean>;
-    onRegionHover?: (regionId: string) => void;
-    onRegionLeave?: () => void;
-}> = ({ region, containerWidth, containerHeight, hasHoverImage, onAction, onAdvance, onCommitVariables, evaluateConditions, variables, onRegionHover, onRegionLeave }) => {
-    const [isHovered, setIsHovered] = useState(false);
-
-    if (region.conditions && region.conditions.length > 0) {
-        if (!evaluateConditions(region.conditions, variables)) return null;
-    }
-
-    const handleClick = () => {
-        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
-        const setVarActions = region.actions.filter(isVarMutation);
-        const otherActions = region.actions.filter(a => !isVarMutation(a));
-        setVarActions.forEach(a => onAction(a));
-        if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
-        otherActions.forEach(a => onAction(a));
-        if (onAdvance) onAdvance();
-    };
-
-    const highlightColor = region.highlightColor || 'rgba(100, 149, 237, 0.3)';
-    const cursor = region.cursor || 'pointer';
-
-    const handleMouseEnter = () => {
-        setIsHovered(true);
-        if (onRegionHover) onRegionHover(region.id);
-    };
-    const handleMouseLeave = () => {
-        setIsHovered(false);
-        if (onRegionLeave) onRegionLeave();
-    };
-
-    if (region.shape === 'rect' && region.coords.length >= 4) {
-        const [x, y, w, h] = region.coords;
-        return (
-            <div
-                style={{
-                    position: 'absolute',
-                    left: `${x}%`, top: `${y}%`,
-                    width: `${w}%`, height: `${h}%`,
-                    cursor,
-                    backgroundColor: isHovered && !hasHoverImage ? highlightColor : 'transparent',
-                    transition: 'background-color 0.15s',
-                    pointerEvents: 'auto',
-                    borderRadius: 2,
-                    zIndex: 2,
-                }}
-                title={region.tooltip}
-                onClick={handleClick}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-            />
-        );
-    }
-
-    if (region.shape === 'circle' && region.coords.length >= 3) {
-        const [cx, cy, r] = region.coords;
-        return (
-            <div
-                style={{
-                    position: 'absolute',
-                    left: `${cx - r}%`, top: `${cy - r}%`,
-                    width: `${r * 2}%`, height: `${r * 2}%`,
-                    borderRadius: '50%',
-                    cursor,
-                    backgroundColor: isHovered && !hasHoverImage ? highlightColor : 'transparent',
-                    transition: 'background-color 0.15s',
-                    pointerEvents: 'auto',
-                    zIndex: 2,
-                }}
-                title={region.tooltip}
-                onClick={handleClick}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-            />
-        );
-    }
-
-    if (region.shape === 'poly' && region.coords.length >= 6) {
-        const points = [];
-        for (let i = 0; i < region.coords.length; i += 2) {
-            points.push(`${(region.coords[i] / 100) * containerWidth},${(region.coords[i + 1] / 100) * containerHeight}`);
-        }
-        return (
-            <svg style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}>
-                <polygon
-                    points={points.join(' ')}
-                    fill={isHovered && !hasHoverImage ? highlightColor : 'transparent'}
-                    style={{ cursor, pointerEvents: 'auto', transition: 'fill 0.15s' }}
-                    onClick={handleClick}
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
-                >
-                    {region.tooltip && <title>{region.tooltip}</title>}
-                </polygon>
-            </svg>
-        );
-    }
-
-    return null;
-};
-
-/** Computes a CSS clip-path string for a given image map region */
-const getRegionClipPath = (region: import('./live-preview/types/gameState').ImageMapRegionOverlay): string | undefined => {
-    if (region.shape === 'rect' && region.coords.length >= 4) {
-        const [x, y, w, h] = region.coords;
-        return `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
-    }
-    if (region.shape === 'circle' && region.coords.length >= 3) {
-        const [cx, cy, r] = region.coords;
-        return `circle(${r}% at ${cx}% ${cy}%)`;
-    }
-    if (region.shape === 'poly' && region.coords.length >= 6) {
-        const points: string[] = [];
-        for (let i = 0; i < region.coords.length; i += 2) {
-            points.push(`${region.coords[i]}% ${region.coords[i + 1]}%`);
-        }
-        return `polygon(${points.join(', ')})`;
-    }
-    return undefined;
-};
-
-/** Renders a full image map overlay (image + clickable regions) */
-const ImageMapOverlayElement: React.FC<{
-    overlay: ImageMapOverlay;
-    onAction: (action: VNUIAction) => void;
-    onAdvance?: () => void;
-    onCommitVariables?: () => void;
-    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
-    variables: Record<VNID, string | number | boolean>;
-}> = ({ overlay, onAction, onAdvance, onCommitVariables, evaluateConditions, variables }) => {
-    const tweenValues = useTween(overlay.id, 'imageMap');
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-    const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
-    const hasTransition = overlay.transition && overlay.transition !== 'instant';
-    const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
-    const timeoutRef = useRef<number | null>(null);
-
-    useEffect(() => {
-        if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-        if (!overlay.transition || overlay.transition === 'instant') { setPlayTransition(false); return; }
-        if (overlay.action === 'show') {
-            setPlayTransition(false);
-            timeoutRef.current = window.setTimeout(() => { setPlayTransition(true); timeoutRef.current = null; }, 0);
-            return () => { if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; } };
-        }
-        setPlayTransition(true);
-        return () => { if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; } };
-    }, [overlay.id, overlay.transition, overlay.action]);
-
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const obs = new ResizeObserver(entries => {
-            for (const entry of entries) {
-                setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-            }
-        });
-        obs.observe(containerRef.current);
-        return () => obs.disconnect();
-    }, []);
-
-    const applyTransition = playTransition && overlay.transition && overlay.transition !== 'instant';
-    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
-    const animDuration = `${overlay.duration ?? 0.5}s`;
-
-    const containerStyle: React.CSSProperties = {
-        position: 'absolute',
-        left: `${tweenValues?.x ?? overlay.x}%`, top: `${tweenValues?.y ?? overlay.y}%`,
-        width: `${tweenValues?.width ?? overlay.width}%`, height: `${tweenValues?.height ?? overlay.height}%`,
-        opacity: tweenValues?.opacity ?? overlay.opacity,
-        pointerEvents: 'auto',
-    };
-
-    if (overlay.action === 'show' && hasTransition && !playTransition) {
-        containerStyle.opacity = 0;
-    }
-
-    return (
-        <div
-            ref={containerRef}
-            className={applyTransition ? transitionClass : ''}
-            style={{ ...containerStyle, ...(applyTransition ? { animationDuration: animDuration } : {}),
-                // A forwards-filled entrance animation animates opacity and would override the
-                // inline opacity, so disable it when a tween controls this element's opacity.
-                ...(tweenValues?.opacity !== undefined ? { animationName: 'none' } : {}) }}
-        >
-            <img src={overlay.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
-            {/* Ren'Py-style hover image: full-size overlay clipped to hovered region */}
-            {overlay.hoverImageUrl && hoveredRegionId && (() => {
-                const hoveredRegion = overlay.regions.find(r => r.id === hoveredRegionId);
-                if (!hoveredRegion) return null;
-                const clipPath = getRegionClipPath(hoveredRegion);
-                if (!clipPath) return null;
-                return (
-                    <img
-                        src={overlay.hoverImageUrl}
-                        alt=""
-                        style={{
-                            position: 'absolute',
-                            left: 0, top: 0,
-                            width: '100%', height: '100%',
-                            objectFit: 'contain',
-                            pointerEvents: 'none',
-                            clipPath,
-                            zIndex: 1,
-                        }}
-                    />
-                );
-            })()}
-            {overlay.regions.map(region => (
-                <ImageMapRegionElement
-                    key={region.id}
-                    region={region}
-                    containerWidth={containerSize.width}
-                    containerHeight={containerSize.height}
-                    hasHoverImage={!!overlay.hoverImageUrl}
-                    onAction={onAction}
-                    onAdvance={onAdvance}
-                    onCommitVariables={onCommitVariables}
-                    evaluateConditions={evaluateConditions}
-                    variables={variables}
-                    onRegionHover={setHoveredRegionId}
-                    onRegionLeave={() => setHoveredRegionId(null)}
-                />
-            ))}
         </div>
     );
 };
@@ -1936,28 +1733,35 @@ const ButtonElement: React.FC<{
     // Use stored backgroundColor or default purple theme color
     const buttonBg = element.backgroundColor || '#4D3273';
     const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? undefined : '#6B4C9A');
-    
+
+    // The incoming `style` carries the parallax transform (updated every frame via --ppx).
+    // The button's hover effect uses `transition-transform` — if both lived on the same
+    // element, that CSS transition would animate every parallax frame (janky "slow then fast"
+    // drift, out of step with same-depth elements). So the parallax transform goes on a
+    // non-transitioned WRAPPER, and the hover-scale stays on the inner <button>.
+    const { transform, overflow, ...wrapperStyle } = style;
     return (
-        <button
-            key={element.id}
-            style={{...style, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit'}}
-            className={`transition-transform transform hover:scale-105 relative flex items-center ${{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[element.font?.align || 'center']}`}
-            onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
-            onMouseLeave={() => setIsHovered(false)}
-            onClick={handleClick}
-        >
-            {displayUrl ? (
-                <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
-            ) : (
-                <div 
-                    className="absolute inset-0 w-full h-full rounded"
-                    style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }}
-                />
-            )}
-            <span className="relative z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), display: 'inline-block', pointerEvents: 'none'}}>
-                {interpolatedText}
-            </span>
-        </button>
+        <div key={element.id} style={{ ...wrapperStyle, transform }}>
+            <button
+                style={{ width: '100%', height: '100%', position: 'relative', overflow, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: 'border-box' }}
+                className={`transition-transform transform hover:scale-105 flex items-center ${{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[element.font?.align || 'center']}`}
+                onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
+                onMouseLeave={() => setIsHovered(false)}
+                onClick={handleClick}
+            >
+                {displayUrl ? (
+                    <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
+                ) : (
+                    <div
+                        className="absolute inset-0 w-full h-full rounded"
+                        style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }}
+                    />
+                )}
+                <span className="relative z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), display: 'inline-block', pointerEvents: 'none'}}>
+                    {interpolatedText}
+                </span>
+            </button>
+        </div>
     );
 };
 
@@ -2399,9 +2203,12 @@ const getTransitionStyle = (
     const delayMs = delay || 0;
     
     if (!transitionIn || transitionIn === 'none') return {};
-    
-    const transitionProp = `all ${durationMs}ms ease-out ${delayMs}ms`;
-    
+
+    // NB: do NOT transition `transform`. Parallax updates the element's transform every
+    // frame (via CSS vars); a `transition: all` would CSS-animate each step and fight the
+    // rAF easing (janky "slow then speeds up" drift). Only fade opacity/filter.
+    const transitionProp = `opacity ${durationMs}ms ease-out ${delayMs}ms, filter ${durationMs}ms ease-out ${delayMs}ms`;
+
     return {
         transition: transitionProp,
         animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`,
@@ -2562,7 +2369,7 @@ const HotZoneImageMapRenderer: React.FC<{
 };
 
 // --- Hot Zone Runtime Renderer ---
-const HotZoneRuntime: React.FC<{
+const InteractiveRuntime: React.FC<{
     screen: VNUIScreen;
     onAction: (action: VNUIAction) => void;
     variables: Record<VNID, string | number | boolean>;
@@ -2573,12 +2380,12 @@ const HotZoneRuntime: React.FC<{
 }> = ({ screen, onAction, variables, onVariableChange, evaluateConditions, assetResolver, playSound }) => {
     const { project } = useProject();
     // Derive the legacy hot zone shapes from the unified `screen.elements` map.
-    // Post-Phase-3, screens no longer carry separate `hotSpots` / `hotZoneElements`
+    // Post-Phase-3, screens no longer carry separate `hotSpots` / `interactiveElements`
     // maps; hot spots, image maps, and any draggable element are first-class
     // `VNUIElement` entries that we convert back to the shapes this runtime
     // expects via a derivation shim.
     const hotSpots = useMemo(() => deriveHotSpotsFromScreen(screen), [screen]);
-    const hotZoneElements = useMemo(() => deriveHotZoneElementsFromScreen(screen), [screen]);
+    const interactiveElements = useMemo(() => deriveInteractiveElementsFromScreen(screen), [screen]);
 
     // Track element positions during drag (runtime-only state)
     const [elementPositions, setElementPositions] = useState<Record<VNID, { x: number; y: number }>>({});
@@ -2658,7 +2465,7 @@ const HotZoneRuntime: React.FC<{
         if (!screen.winCondition) return;
         const wc = screen.winCondition;
         if (wc.type === 'allPlaced') {
-            const draggableElements = (Object.values(hotZoneElements) as VNHotZoneElement[]).filter(el => el.draggable);
+            const draggableElements = (Object.values(interactiveElements) as VNHotZoneElement[]).filter(el => el.draggable);
             const allPlaced = draggableElements.length > 0 && draggableElements.every(el => placedElements[el.id]);
             if (allPlaced) {
                 wc.actions.forEach(action => handleLocalAction(action));
@@ -2669,7 +2476,7 @@ const HotZoneRuntime: React.FC<{
                 wc.actions.forEach(action => handleLocalAction(action));
             }
         }
-    }, [placedElements, variables, screen.winCondition, hotZoneElements, handleLocalAction, evaluateConditions]);
+    }, [placedElements, variables, screen.winCondition, interactiveElements, handleLocalAction, evaluateConditions]);
 
     // Publish this screen's drag-drop hot spots to the global registry so draggables
     // from ANY surface (scene, HUD, other screens) can be dropped on them.
@@ -2729,7 +2536,7 @@ const HotZoneRuntime: React.FC<{
         };
         const onUp = () => {
             if (!dragOffset) { setDragState(null); return; }
-            const el = hotZoneElements[dragState.elementId] as VNHotZoneElement | undefined;
+            const el = interactiveElements[dragState.elementId] as VNHotZoneElement | undefined;
             if (!el) { setDragState(null); setDragOffset(null); return; }
 
             // Hit-test the GLOBAL registry (this screen's spots, other screens', and the
@@ -2762,7 +2569,7 @@ const HotZoneRuntime: React.FC<{
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    }, [dragState, dragOffset, containerSize, hotZoneElements, hotSpots, handleLocalAction]);
+    }, [dragState, dragOffset, containerSize, interactiveElements, hotSpots, handleLocalAction]);
 
     // Handle hot spot click/hover triggers
     const handleSpotClick = useCallback((spot: VNHotSpot) => {
@@ -2804,7 +2611,7 @@ const HotZoneRuntime: React.FC<{
                 );
             })}
             {/* Hot Zone Elements */}
-            {(Object.values(hotZoneElements) as VNHotZoneElement[]).map(el => {
+            {(Object.values(interactiveElements) as VNHotZoneElement[]).map(el => {
                 if (el.conditions && !evaluateConditions(el.conditions, variables)) return null;
                 // Hide-on-drop: when snap-to-center + hide-on-drop are on and element has been placed on a hot spot, omit rendering
                 if (el.snapToHotSpot && el.hideOnDrop && placedElements[el.id]) return null;
@@ -2922,7 +2729,9 @@ const UIScreenRenderer: React.FC<{
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
-    
+    const screenRootRef = React.useRef<HTMLDivElement>(null);
+    const screenSize = useStageSize(screenRootRef);
+
     // Cleanup video on unmount
     React.useEffect(() => {
         return () => {
@@ -2933,30 +2742,108 @@ const UIScreenRenderer: React.FC<{
             }
         };
     }, []);
-    
+
+    // Mouse parallax for screen elements — same eased-pointer → CSS-var approach as the
+    // scene stage, scoped to this screen's container (confined by its isolate context).
+    React.useEffect(() => {
+        const root = screenRootRef.current;
+        if (!root) return;
+        const px = screen?.parallax;
+        const active = px?.mode === 'mouse' || px?.mode === 'both';
+        const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!active || reduce) { root.style.setProperty('--ppx', '0'); root.style.setProperty('--ppy', '0'); return; }
+        const intensity = px?.intensity ?? 1;
+        const target = { x: 0, y: 0 };
+        const cur = { x: 0, y: 0 };
+        let raf = 0;
+        const onMove = (e: MouseEvent) => {
+            const r = root.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            target.x = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
+            target.y = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
+        };
+        const onLeave = () => { target.x = 0; target.y = 0; };
+        const tick = () => {
+            cur.x += (target.x - cur.x) * 0.08;
+            cur.y += (target.y - cur.y) * 0.08;
+            root.style.setProperty('--ppx', (cur.x * intensity).toFixed(4));
+            root.style.setProperty('--ppy', (cur.y * intensity).toFixed(4));
+            raf = requestAnimationFrame(tick);
+        };
+        window.addEventListener('mousemove', onMove);
+        root.addEventListener('mouseleave', onLeave);
+        raf = requestAnimationFrame(tick);
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('mousemove', onMove);
+            root.removeEventListener('mouseleave', onLeave);
+        };
+    }, [screen?.parallax?.mode, screen?.parallax?.intensity]);
+
     if (!screen) return <div className="text-red-500">Error: Screen {screenId} not found.</div>;
 
     // Pass-through (transparent HUD) screens let clicks fall through empty areas to the
     // scene; only visible elements capture input. Defaults to on for the Game HUD screen.
     const isPassThrough = screen.passThrough ?? (screenId === project.ui.gameHudScreenId);
 
-    const getBackgroundElement = () => {
-        if (screen.background.type === 'color') {
-            return <div className="absolute inset-0" style={{ backgroundColor: screen.background.value }} />;
+    // Over-scale a parallaxed screen background just enough that the max drift never reveals
+    // its edges: scale-1 = 2 × (depth × PARALLAX_MAX_PX × intensity) / smaller rendered dim.
+    const screenBgScale = (depth: number): number => {
+        if (!depth) return 1;
+        const intensity = Math.max(1, screen.parallax?.intensity ?? 1);
+        const maxShiftPx = depth * PARALLAX_MAX_PX * intensity * 1.1;
+        const minDim = Math.min(screenSize?.width || 1280, screenSize?.height || 720);
+        return 1 + (2 * maxShiftPx) / minDim;
+    };
+    // Build one background plane (used for the main bg + each additional plane). `videoRef`
+    // attaches only to the main bg so its playback is cleaned up on unmount.
+    // Entry-transition CSS for a background plane (plays once on mount). Reuses the shared
+    // background keyframes; fade/crossfade/dissolve all dissolve in.
+    const bgTransitionAnim = (transition?: string, durationMs?: number): string | undefined => {
+        const d = durationMs ?? 400;
+        switch (transition) {
+            case undefined: case '': case 'none': return undefined;
+            case 'slide': return `slide-in-right ${d}ms ease-out forwards`;
+            case 'iris': return `iris-in ${d}ms ease-out forwards`;
+            case 'wipe': return `wipe-right ${d}ms ease-out forwards`;
+            default: return `dissolve-in ${d}ms ease-out forwards`; // fade / crossfade / dissolve
         }
-        if (screen.background.assetId) {
-            const url = assetResolver(screen.background.assetId, screen.background.type);
+    };
+    const buildBgPlane = (
+        bg: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean },
+        depth: number, layer: number, key: string, videoRef?: React.RefObject<HTMLVideoElement>,
+        transition?: string, transitionDuration?: number
+    ): React.ReactNode => {
+        let node: React.ReactNode = null;
+        if (bg.type === 'color') {
+            node = <div className="absolute inset-0" style={{ backgroundColor: bg.value }} />;
+        } else if (bg.assetId) {
+            // Render based on the ACTUAL asset, not the declared type: a video can be selected
+            // under an 'image'-typed background (the image picker lists videos), which otherwise
+            // renders as a broken <img src=videoUrl>. Detect video by the asset's videoUrl/isVideo.
+            const asset: any = project.backgrounds[bg.assetId] || project.images?.[bg.assetId] || project.videos[bg.assetId];
+            const isVid = bg.type === 'video' || !!(asset && (asset.isVideo || asset.videoUrl));
+            const url = isVid ? assetResolver(bg.assetId, 'video') : assetResolver(bg.assetId, 'image');
             if (url) {
-                if (screen.background.type === 'image') {
-                    return <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />;
-                }
-                if (screen.background.type === 'video') {
-                    return <video ref={backgroundVideoRef} src={url} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" />;
-                }
+                // `loop` defaults to true (preserves existing behavior); off = play once and hold last frame.
+                node = isVid
+                    ? <video ref={videoRef} src={url} autoPlay loop={bg.loop ?? true} muted playsInline className="absolute inset-0 w-full h-full object-cover" />
+                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />;
             }
         }
-        return null;
+        if (!node) return null;
+        const inner = depth
+            ? <div className="absolute inset-0" style={{ transform: `scale(${screenBgScale(depth)})${parallaxTransform(depth)}`, transformOrigin: 'center' }}>{node}</div>
+            : node;
+        // Wrap with an explicit zIndex so the background participates in the layer system
+        // (default 0 = behind 0-layer elements, as before). `animation` plays the entry transition.
+        return <div key={key} className="absolute inset-0 overflow-hidden" style={{ zIndex: layer, animation: bgTransitionAnim(transition, transitionDuration) }}>{inner}</div>;
     };
+
+    const getBackgroundElement = () => <>
+        {buildBgPlane(screen.background, screen.backgroundParallaxDepth ?? 0, screen.backgroundLayer ?? 0, 'main-bg', backgroundVideoRef, screen.backgroundTransition, screen.backgroundTransitionDuration)}
+        {(screen.additionalBackgrounds || []).map(b => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, undefined, b.transition, b.transitionDuration))}
+    </>;
     
     const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject, onCommitVariables?: () => void) => {
         runtimeDebugLog('🎯 renderElement called:', element.type, element.name, element.id);
@@ -2982,8 +2869,14 @@ const UIScreenRenderer: React.FC<{
             position: 'absolute',
             left: `${element.x}%`, top: `${element.y}%`,
             width: `${element.width}%`, height: `${element.height}%`,
-            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)`,
+            // `translateZ(0)` promotes each element onto its own compositing layer. A <video>
+            // background is ALWAYS GPU-composited and (once it has a parallax/scale transform)
+            // will paint over non-composited siblings at the same z-index — which made buttons
+            // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
+            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)`,
             overflow: 'hidden', // Prevent content overflow when using cover
+            // Author-controlled stacking. Default 0 → insertion order (back-compat).
+            zIndex: element.layer ?? 0,
             opacity: (element.opacity ?? 1) * (isDisabled ? 0.45 : 1),
             // On a pass-through screen the wrapper is pointer-events:none, so each visible
             // element must opt back in to remain clickable.
@@ -3039,8 +2932,9 @@ const UIScreenRenderer: React.FC<{
                     return <div key={el.id} style={{ ...containerStyle, backgroundColor: bgValue }} />;
                 }
                 
-                // Otherwise it's an image or video asset
-                const url = bgValue ? (bgType === 'video' ? project.videos[bgValue]?.videoUrl : assetResolver(bgValue as VNID, 'image')) : null;
+                // Otherwise it's an image or video asset. Resolve via assetResolver so a video
+                // stored under any collection (videos/backgrounds/images) is found.
+                const url = bgValue ? assetResolver(bgValue as VNID, bgType === 'video' ? 'video' : 'image') : null;
                 
                 if (!url || url === '' || url === 'http://localhost:3000/') {
                     return <div key={el.id} style={containerStyle} className="bg-slate-800/50" />;
@@ -3081,11 +2975,11 @@ const UIScreenRenderer: React.FC<{
                                         }, 100);
                                     }
                                 }}
-                                src={url} 
+                                src={url}
                                 style={mediaStyle}
-                                autoPlay 
-                                loop 
-                                muted 
+                                autoPlay
+                                loop={(el.background as any)?.loop ?? true}
+                                muted
                                 playsInline
                             >
                                 <source src={url} type="video/webm" />
@@ -3431,6 +3325,8 @@ const UIScreenRenderer: React.FC<{
                                 border: `2px solid ${el.borderColor || '#475569'}`,
                                 borderRadius: '4px',
                                 padding: '8px 12px',
+                                direction: el.arrowSide === 'left' ? 'rtl' : 'ltr',
+                                textAlign: el.arrowSide === 'left' ? 'right' : 'left',
                             }}
                             onMouseEnter={(e) => {
                                 if (el.hoverColor) {
@@ -3548,17 +3444,29 @@ const UIScreenRenderer: React.FC<{
 
     return (
         <div
+            ref={screenRootRef}
             // Key is just the screenId — switching isClosing on the SAME screen must
             // not unmount/remount this div, or the crossfade will visibly flicker.
             key={screenId}
             className="absolute inset-0 w-full h-full"
             // Pass-through screens don't intercept clicks on empty areas — the scene
             // beneath stays interactive (dialogue advance, scene hot spots).
-            style={{ ...screenTransitionStyle, ...(isPassThrough ? { pointerEvents: 'none' } : {}) }}
+            // `isolation: isolate` confines element `layer` z-indices to this screen so a
+            // high-layer element can't paint above the dialogue/quick-menu bands.
+            style={{
+                isolation: 'isolate',
+                ...screenTransitionStyle,
+                ...(isPassThrough ? { pointerEvents: 'none' } : {}),
+                // Pass-through HUDs normally sit below the dialogue box (z20) + choices (z30). When
+                // `hudAboveDialogue` is set, lift this overlay above them (but below flash/history z50)
+                // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
+                // areas stay pointer-events:none, so clicks there still fall through to advance dialogue.
+                ...(isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {}),
+            }}
         >
             {/* Pass-through (HUD) screens skip their opaque background so the scene shows through. */}
             {!isPassThrough && getBackgroundElement()}
-            {/* Standard renderer skips interactive types — HotZoneRuntime owns them. */}
+            {/* Standard renderer skips interactive types — InteractiveRuntime owns them. */}
             {Object.values(screen.elements).map(element => {
                 const el = element as any;
                 if (el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true) return null;
@@ -3572,7 +3480,7 @@ const UIScreenRenderer: React.FC<{
                 ) ||
                 !!screen.winCondition
             ) && (
-                <HotZoneRuntime
+                <InteractiveRuntime
                     screen={screen}
                     onAction={onAction}
                     variables={variables}
@@ -3919,6 +3827,78 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Stage ref used for measuring pixel size for accurate slide animations
     const stageRef = useRef<HTMLDivElement | null>(null);
     const stageSize = useStageSize(stageRef);
+
+    // ── Parallax (scene stage): mouse and/or camera ───────────────────────────
+    // Each frame, write the eased offset to `--ppx`/`--ppy` (×intensity) on the stage
+    // container; visuals translate by `parallaxDepth` via those vars. Pure DOM writes (no
+    // React re-render). `mouse` follows the pointer; `camera` follows the live pan (so
+    // PanZoomScreen makes nearer layers sweep past farther ones); `both` sums them. Gated by
+    // the scene's `parallax.mode` + reduced-motion.
+    const sceneBasePanX = playerState?.stageState.screen.panX ?? 0;
+    const sceneBasePanY = playerState?.stageState.screen.panY ?? 0;
+    useEffect(() => {
+        const stage = stageRef.current;
+        if (!stage) return;
+        const scene = playerState ? project.scenes[playerState.currentSceneId] : null;
+        const px = scene?.parallax;
+        const wantMouse = px?.mode === 'mouse' || px?.mode === 'both';
+        const wantCamera = px?.mode === 'camera' || px?.mode === 'both';
+        const active = (wantMouse || wantCamera) && playerState?.mode === 'playing';
+        const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!active || reduce) {
+            stage.style.setProperty('--ppx', '0');
+            stage.style.setProperty('--ppy', '0');
+            return;
+        }
+        const intensity = px?.intensity ?? 1;
+        const mouseT = { x: 0, y: 0 };
+        const cur = { x: 0, y: 0 };
+        let raf = 0;
+        const onMove = (e: MouseEvent) => {
+            const r = stage.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            mouseT.x = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
+            mouseT.y = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
+        };
+        const onLeave = () => { mouseT.x = 0; mouseT.y = 0; };
+        const tick = () => {
+            // Mouse: ease the raw pointer (it's jumpy). Camera: take the live pan DIRECTLY —
+            // the PanZoom tween is already smooth and drives the base stage transform frame-
+            // for-frame, so easing it again would lag the sprites behind the backdrop (the
+            // "parallax happens for a second then they move together" bug). Sync it instead.
+            const mx = wantMouse ? mouseT.x : 0;
+            const my = wantMouse ? mouseT.y : 0;
+            cur.x += (mx - cur.x) * 0.08;
+            cur.y += (my - cur.y) * 0.08;
+            let cx = 0, cy = 0;
+            if (wantCamera) {
+                // Live pan: the active screen tween if one is running, else the committed/resting pan.
+                const tw = TweenManager.getCurrentValues('__screen__', 'screen');
+                const panX = (tw && tw.x != null) ? tw.x : sceneBasePanX;
+                const panY = (tw && tw.y != null) ? tw.y : sceneBasePanY;
+                cx = panX / CAMERA_PAN_REF;
+                cy = panY / CAMERA_PAN_REF;
+            }
+            stage.style.setProperty('--ppx', ((cur.x + cx) * intensity).toFixed(4));
+            stage.style.setProperty('--ppy', ((cur.y + cy) * intensity).toFixed(4));
+            raf = requestAnimationFrame(tick);
+        };
+        if (wantMouse) {
+            window.addEventListener('mousemove', onMove);
+            stage.addEventListener('mouseleave', onLeave);
+        }
+        raf = requestAnimationFrame(tick);
+        return () => {
+            cancelAnimationFrame(raf);
+            if (wantMouse) {
+                window.removeEventListener('mousemove', onMove);
+                stage.removeEventListener('mouseleave', onLeave);
+            }
+            stage.style.setProperty('--ppx', '0');
+            stage.style.setProperty('--ppy', '0');
+        };
+    }, [playerState?.currentSceneId, playerState?.mode, project.scenes, sceneBasePanX, sceneBasePanY]);
+
     // Play-container ref – measures the aspect-ratio box so we can set --font-scale
     const playContainerRef = useRef<HTMLDivElement | null>(null);
     const playContainerSize = useStageSize(playContainerRef);
@@ -3967,8 +3947,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         switch(type) {
             case 'audio': 
                 return project.audio[assetId]?.audioUrl || null;
-            case 'video': 
-                return project.videos[assetId]?.videoUrl || null;
+            case 'video':
+                // A "video" asset can live in the videos collection OR in backgrounds/images
+                // (a video uploaded under those Asset Manager tabs is stored there with a
+                // videoUrl). Resolve across all three so Play Video works regardless of where
+                // the asset was uploaded.
+                return project.videos[assetId]?.videoUrl
+                    || project.backgrounds[assetId]?.videoUrl
+                    || project.images?.[assetId]?.videoUrl
+                    || null;
             case 'image': {
                 // Check backgrounds first (primary source for UI images)
                 if (project.backgrounds[assetId]) {
@@ -4388,7 +4375,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             currentIndex: 0,
             commandStack: [],
             variables: initialVariables,
-            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], imageMapOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
+            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
             history: [],
             savedInputs: {},
             uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -5220,7 +5207,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     textOverlays: [],
                                     imageOverlays: [],
                                     buttonOverlays: [],
-                                    imageMapOverlays: [],
                                     movieOverlays: [],
                                     screen: {
                                         shake: { active: false, intensity: 0 },
@@ -5389,7 +5375,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         textOverlays: [],
                                         imageOverlays: [],
                                         buttonOverlays: [],
-                                        imageMapOverlays: [],
                                         movieOverlays: [],
                                         screen: {
                                             shake: { active: false, intensity: 0 },
@@ -5698,6 +5683,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const movieUrl = assetResolver(movieCmd.videoId, 'video');
                     const isOverlay = movieCmd.displayMode === 'overlay';
                     const shouldLoop = movieCmd.loop ?? false;
+                    const holdLastFrame = movieCmd.holdLastFrame ?? false;
+                    const movieTransition = movieCmd.transition;
+                    const movieTransitionDuration = movieCmd.transitionDuration;
 
                     if (isOverlay) {
                         // Overlay mode: add to stageState.movieOverlays (behind characters, above background)
@@ -5711,6 +5699,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     movieOverlays: [...existing, {
                                         url: movieUrl || '',
                                         loop: shouldLoop,
+                                        holdLastFrame,
+                                        transition: movieTransition,
+                                        transitionDuration: movieTransitionDuration,
+                                        commandId: movieCmd.id,
+                                        parallaxDepth: movieCmd.parallaxDepth,
                                         x: movieCmd.x,
                                         y: movieCmd.y,
                                         width: movieCmd.width,
@@ -5728,12 +5721,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             instantAdvance = false;
                             updatePlayerState(p => p ? {
                                 ...p,
-                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop },
+                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
                             } : null);
                         } else {
                             updatePlayerState(p => p ? {
                                 ...p,
-                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop },
+                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
                             } : null);
                         }
                     }
@@ -5996,16 +5989,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.HideButton: {
                     const result = handleHideButton(command as HideButtonCommand, commandContext);
-                    applyResult(result);
-                    break;
-                }
-                case CommandType.ShowImageMap: {
-                    const result = handleShowImageMap(command as ShowImageMapCommand, commandContext);
-                    applyResult(result);
-                    break;
-                }
-                case CommandType.HideImageMap: {
-                    const result = handleHideImageMap(command as HideImageMapCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -6275,7 +6258,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         newState.stageState = {
                             ...newState.stageState,
                             buttonOverlays: [],
-                            imageMapOverlays: [],
                             imageOverlays: [],
                             textOverlays: []
                         };
@@ -6652,7 +6634,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             stageState: {
                                                 ...p.stageState,
                                                 buttonOverlays: [],
-                                                imageMapOverlays: [],
                                                 imageOverlays: []
                                             }
                                         };
@@ -6683,7 +6664,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                             stageState: {
                                                 ...p.stageState,
                                                 buttonOverlays: [],
-                                                imageMapOverlays: [],
                                                 imageOverlays: []
                                             }
                                         };
@@ -6852,7 +6832,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             textOverlays: [], 
                             imageOverlays: [], 
                             buttonOverlays: [], 
-                            imageMapOverlays: [],
                             movieOverlays: [],
                             screen: { 
                                 shake: { active: false, intensity: 0 }, 
@@ -6925,7 +6904,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     textOverlays: [], 
                                     imageOverlays: [], 
                                     buttonOverlays: [], 
-                                    imageMapOverlays: [],
                                     movieOverlays: [],
                                     screen: { 
                                         shake: { active: false, intensity: 0 }, 
@@ -7255,7 +7233,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             stageState: {
                                 ...p.stageState,
                                 buttonOverlays: [],
-                                imageMapOverlays: [],
                                 imageOverlays: [],
                                 textOverlays: []
                             },
@@ -7562,6 +7539,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
         const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state.backgroundIsVideo;
         const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state.backgroundLoop;
+        const effBgDepth = (matchedBgLayer ? matchedBgLayer.parallaxDepth : state.backgroundParallaxDepth) ?? 0;
+        // Over-scale a parallaxed background just enough that its max drift never reveals the
+        // edges. Max shift (px) = depth × PARALLAX_MAX_PX × intensity; the margin each side is
+        // (scale-1)/2 × the smaller stage dimension, so scale-1 = 2 × maxShift / minDim (+safety).
+        const sceneParallaxIntensity = project.scenes[playerState.currentSceneId]?.parallax?.intensity ?? 1;
+        const bgParallaxScale = (depth: number): number => {
+            if (!depth) return 1;
+            const maxShiftPx = depth * PARALLAX_MAX_PX * Math.max(1, sceneParallaxIntensity) * 1.1;
+            const minDim = Math.min(stageSize?.width || 1280, stageSize?.height || 720);
+            return 1 + (2 * maxShiftPx) / minDim;
+        };
         const getPositionStyle = (position: VNPosition): React.CSSProperties => {
             if (typeof position === 'object') {
                 // Custom coordinates
@@ -7616,8 +7604,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             >
                 <div style={panZoomStyle}>
                     <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
-                        {effBgUrl && (
-                            effBgIsVideo ? (
+                        {effBgUrl && (() => {
+                            const bgMedia = effBgIsVideo ? (
                                 <video
                                     src={effBgUrl}
                                     autoPlay
@@ -7628,50 +7616,105 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 />
                             ) : (
                                 <img src={effBgUrl} alt="background" className="absolute w-full h-full object-cover"/>
-                            )
-                        )}
+                            );
+                            // Parallax: over-scale so the drift never reveals the backdrop's edges.
+                            const inner = effBgDepth
+                                ? <div className="absolute inset-0" style={{ transform: `scale(${bgParallaxScale(effBgDepth)})${parallaxTransform(effBgDepth)}`, transformOrigin: 'center' }}>{bgMedia}</div>
+                                : bgMedia;
+                            // The base background stays at the back (zIndex 0) so the transition
+                            // overlays (rendered just below at z0, later in DOM) always sit above it
+                            // — multi-plane LAYERING is done via stacked backgrounds (below), which
+                            // keeps fades working regardless of any stack layers.
+                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>{inner}</div>;
+                        })()}
                         {/* render background transition visuals here so characters render above them */}
                         {playerState?.uiState.transitionElement}
+                        {/* Stacked background planes (SetBackground `stack`): each its own backdrop at
+                            its layer/parallaxDepth, on top of the base bg — for multi-plane parallax. */}
+                        {(state.backgroundStack || []).map(plane => {
+                            if (!plane.url && !plane.color) return null;
+                            const planeMedia = plane.url ? (plane.isVideo ? (
+                                <video src={plane.url} autoPlay muted loop={plane.loop} playsInline className="absolute w-full h-full object-cover" />
+                            ) : (
+                                <img src={plane.url} alt="background layer" className="absolute w-full h-full object-cover" />
+                            )) : null;
+                            const d = plane.parallaxDepth ?? 0;
+                            const planeInner = d
+                                ? <div className="absolute inset-0" style={{ transform: `scale(${bgParallaxScale(d)})${parallaxTransform(d)}`, transformOrigin: 'center' }}>{planeMedia}</div>
+                                : planeMedia;
+                            // Entry transition (plays once on mount — the plane is keyed by commandId).
+                            const dur = plane.duration ?? 1;
+                            const anim = (() => {
+                                switch (plane.transition) {
+                                    case undefined: case '': case 'instant': return undefined;
+                                    case 'slide': return `slide-in-right ${dur}s forwards`;
+                                    case 'iris-in': return `iris-in ${dur}s forwards`;
+                                    case 'wipe-right': return `wipe-right ${dur}s forwards`;
+                                    default: return `dissolve-in ${dur}s forwards`; // fade / cross-fade / dissolve
+                                }
+                            })();
+                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim }}>{planeInner}</div>;
+                        })}
                         {/* Movie overlays (behind characters, above background) */}
                         {state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
                             if (!movie.url) return null;
                             const isCustom = movie.objectFit === 'custom';
-                            const videoStyle: React.CSSProperties = isCustom ? {
-                                left: `${movie.x ?? 0}%`,
-                                top: `${movie.y ?? 0}%`,
-                                width: `${movie.width ?? 100}%`,
-                                height: `${movie.height ?? 100}%`,
-                                objectFit: 'fill' as const,
-                                opacity: movie.opacity ?? 1,
-                                zIndex: 2,
-                            } : {
-                                inset: 0,
-                                width: '100%',
-                                height: '100%',
-                                objectFit: (movie.objectFit || 'cover') as React.CSSProperties['objectFit'],
-                                opacity: movie.opacity ?? 1,
-                                zIndex: 2,
-                            };
+                            const movieAnim = movieEntryAnim(movie.transition, movie.transitionDuration);
+                            // Live tween values (TweenElement targeting this movie), falling back to the command's values.
+                            const mtw = movie.commandId ? TweenManager.getCurrentValues(movie.commandId, 'movie') : null;
+                            const mX = mtw?.x ?? movie.x ?? 0;
+                            const mY = mtw?.y ?? movie.y ?? 0;
+                            const mW = mtw?.width ?? movie.width ?? 100;
+                            const mH = mtw?.height ?? movie.height ?? 100;
+                            const mOpacity = mtw?.opacity ?? movie.opacity ?? 1;
+                            const mRot = mtw?.rotation ?? 0;
+                            const mSX = mtw?.scaleX ?? 1;
+                            const mSY = mtw?.scaleY ?? 1;
+                            // Parallax shift (driven by the scene's parallax mode via --ppx/--ppy).
+                            const mPx = parallaxTransform(movie.parallaxDepth);
+                            const innerTransform = `${(mRot || mSX !== 1 || mSY !== 1) ? `rotate(${mRot}deg) scale(${mSX}, ${mSY})` : ''}${mPx}`.trim() || undefined;
+                            // The entry transition lives on the WRAPPER and the tweened opacity/transform on the
+                            // inner <video>. A CSS animation with `forwards` would otherwise override inline opacity,
+                            // which is why a tweened opacity looked like it did nothing when a transition was set.
+                            const containerStyle: React.CSSProperties = isCustom
+                                ? { position: 'absolute', left: `${mX}%`, top: `${mY}%`, width: `${mW}%`, height: `${mH}%`, zIndex: 2, animation: movieAnim }
+                                : { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 2, animation: movieAnim };
+                            // 'contain' keeps the video's aspect within its box — resizing never squishes it.
+                            const videoFit = (isCustom ? 'contain' : (movie.objectFit || 'cover')) as React.CSSProperties['objectFit'];
+                            // Fade-out: when a transition is set, the video fades to transparent on end before removal.
+                            const exitDur = (movie.transition && movie.transition !== 'instant') ? (movie.transitionDuration ?? 0.5) : 0;
+                            const removeOverlay = () => updatePlayerState(p => {
+                                if (!p) return null;
+                                const overlays = (p.stageState.movieOverlays || []).filter(o => o.commandId ? o.commandId !== movie.commandId : o !== movie);
+                                return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                            });
                             return (
-                                <video
-                                    key={`movie-overlay-${idx}-${movie.url}`}
-                                    src={movie.url}
-                                    autoPlay
-                                    muted
-                                    loop={movie.loop}
-                                    playsInline
-                                    className="absolute pointer-events-none"
-                                    style={videoStyle}
-                                    onEnded={() => {
-                                        if (movie.loop) return;
-                                        updatePlayerState(p => {
-                                            if (!p) return null;
-                                            const overlays = [...(p.stageState.movieOverlays || [])];
-                                            overlays.splice(idx, 1);
-                                            return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
-                                        });
-                                    }}
-                                />
+                                <div key={`movie-overlay-${idx}-${movie.url}`} className="pointer-events-none" style={containerStyle}>
+                                    <video
+                                        src={movie.url}
+                                        autoPlay
+                                        muted
+                                        loop={movie.loop}
+                                        playsInline
+                                        style={{ width: '100%', height: '100%', objectFit: videoFit, opacity: movie.exiting ? 0 : mOpacity, transform: innerTransform, transformOrigin: 'center', display: 'block', transition: movie.exiting ? `opacity ${exitDur}s ease-out` : undefined }}
+                                        onEnded={() => {
+                                            // Keep the overlay (frozen on its last frame) when looping or holding.
+                                            if (movie.loop || movie.holdLastFrame) return;
+                                            if (exitDur > 0 && !movie.exiting) {
+                                                // Mark exiting → CSS fades opacity to 0 → remove after the duration.
+                                                updatePlayerState(p => {
+                                                    if (!p) return null;
+                                                    const overlays = (p.stageState.movieOverlays || []).map(o => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
+                                                    return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                                                });
+                                                const tid = window.setTimeout(removeOverlay, exitDur * 1000);
+                                                activeEffectTimeoutsRef.current.push(tid);
+                                            } else {
+                                                removeOverlay();
+                                            }
+                                        }}
+                                    />
+                                </div>
                             );
                         })}
                         {(() => {
@@ -7947,13 +7990,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 const scaleY = (charFlipY ? -1 : 1) * charScale;
                                 transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
                             }
+                            transformStr = (transformStr + parallaxTransform(char.parallaxDepth)).trim();
 
                             return (
                                 <div
                                     key={`${char.charId}-${char.expressionId}-${char.imageUrls.join(',')}-${char.transition?.action ?? 'none'}`}
                                     className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
                                     style={{
-                                        ...positionStyle, animationDuration, ...slideStyle, zIndex: 5,
+                                        ...positionStyle, animationDuration, ...slideStyle, zIndex: 5 + (char.layer ?? 0) * 100,
                                         ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}),
                                         // A running/forwards-filled entrance animation animates opacity and would
                                         // override inline opacity, so disable it when a tween controls opacity.
@@ -8009,26 +8053,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 onAction={handleUIAction} 
                                 playSound={playSound} 
                                 onCommitVariables={commitUiVariablesToPlayerState}
-                                onAdvance={overlay.waitForClick ? () => {
-                                    updatePlayerState(p => {
-                                        if (!p) return null;
-                                        return {
-                                            ...p,
-                                            currentIndex: p.currentIndex + 1,
-                                            uiState: { ...p.uiState, isWaitingForInput: false }
-                                        };
-                                    });
-                                } : undefined}
-                            />
-                        ))}
-                        {(state.imageMapOverlays || []).map((overlay: ImageMapOverlay) => (
-                            <ImageMapOverlayElement
-                                key={overlay.id}
-                                overlay={overlay}
-                                onAction={handleUIAction}
-                                onCommitVariables={commitUiVariablesToPlayerState}
-                                evaluateConditions={evaluateConditions}
-                                variables={liveVars}
                                 onAdvance={overlay.waitForClick ? () => {
                                     updatePlayerState(p => {
                                         if (!p) return null;
@@ -8445,7 +8469,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // suppresses dialogue.
         const isHudPassThrough = currentHudScreen ? (currentHudScreen.passThrough ?? (currentHudScreenId === project.ui.gameHudScreenId)) : false;
         const shouldShowDialogueOnHud = currentHudScreen?.showDialogue || isHudPassThrough;
-        
+        // Fullscreen movie fade-out duration (0 = no fade) — when a transition is set, the movie
+        // layer fades to transparent on end before clearing, revealing the scene beneath.
+        const movieExitDur = (uiState.movieTransition && uiState.movieTransition !== 'instant') ? (uiState.movieTransitionDuration ?? 0.5) : 0;
+
         return <>
             {uiState.showHistory && (
                 <HistoryPanel 
@@ -8456,20 +8483,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             {uiState.movieUrl && (
                 <div
                     className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white"
+                    style={{ opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : undefined }}
                     onClick={() => {
                         if (!uiState.isWaitingForInput) return;
-                        updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
+                        updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
                     }}
                 >
                     <video
                         src={uiState.movieUrl}
                         autoPlay
+                        playsInline
+                        ref={(el) => {
+                            if (!el) return;
+                            // Prefer playing WITH sound; if the browser blocks autoplay-with-audio,
+                            // fall back to muted playback so the movie never silently shows nothing.
+                            el.play().catch(() => { el.muted = true; el.play().catch(() => {}); });
+                        }}
                         loop={uiState.movieLoop ?? false}
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) }}
                         onEnded={() => {
                             // If looping, onEnded won't fire (browser handles loop). Just in case:
                             if (uiState.movieLoop) return;
-                            if (uiState.isWaitingForInput) {
+                            // Hold last frame: leave the (now-ended) video frozen on its final frame.
+                            // In wait mode the player still clicks to continue; in non-wait the story
+                            // already advanced and the frame stays until a Stop Video.
+                            if (uiState.movieHoldLastFrame) return;
+                            const wasWaiting = uiState.isWaitingForInput;
+                            if (movieExitDur > 0 && !uiState.movieExiting) {
+                                // Fade the movie layer out, then clear (and advance if it was waiting).
+                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieExiting: true}} : null);
+                                const tid = window.setTimeout(() => {
+                                    updatePlayerState(p => p ? {...p, ...(wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}), uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                                }, movieExitDur * 1000);
+                                activeEffectTimeoutsRef.current.push(tid);
+                            } else if (wasWaiting) {
                                 updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
                             } else {
                                 updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false}} : null);
@@ -8706,7 +8753,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const activeHudScreen = hudScreenId ? project.uiScreens[hudScreenId] : null;
 
     const activeOverlayEffects: VNScreenOverlayEffect[] = normalizeOverlayEffects([
-        ...(playerState?.stageState.screen.overlayEffects ?? []),
+        // Scene screen-FX belong to the scene stage, which isn't rendered while paused.
+        // Including them in pause let a restored (Continue/load) effect fade in over the
+        // pause menu and black it out — so gate them to playing mode.
+        ...((playerState?.mode === 'playing' ? playerState?.stageState.screen.overlayEffects : []) ?? []),
         ...(activeHudScreen?.effects ?? []),
         ...(activeMenuScreen?.effects ?? []),
     ]);

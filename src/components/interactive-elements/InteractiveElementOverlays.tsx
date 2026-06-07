@@ -1,15 +1,12 @@
 /**
- * HotZoneOverlays
- * ────────────────
- * Canvas-overlay components for hot spots, image-map regions, and hot zone
- * elements (draggable images / buttons / text / etc.). Extracted from the
- * deprecated `HotZoneEditor.tsx` so it can be deleted in Phase 4.
+ * InteractiveElementOverlays
+ * ──────────────────────────
+ * Canvas-overlay components for hot spots, image-map regions, and interactive
+ * elements (draggable images / buttons / text / etc.) on a regular screen.
  *
- * These components still consume the legacy `VNHotSpot` / `VNHotZoneElement`
- * shapes — callers (MenuEditor, etc.) translate between the unified
- * `VNUIElement` types and these shapes via `src/utils/hotZoneShims.ts`.
- * A future Phase 4.5 can rewrite them to read typed elements directly and
- * retire the shim.
+ * The external API is typed against the unified `VNUIElement` types; internally
+ * the element overlay converts to the legacy `VNHotZoneElement` runtime layout
+ * so the per-type JSX can render unchanged — an implementation detail only.
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { VNID } from '../../types';
@@ -38,7 +35,9 @@ export const HotSpotOverlay: React.FC<{
     parentSize: { width: number; height: number };
     onSelect: (e: React.MouseEvent) => void;
     onUpdate: (updates: { x?: number; y?: number; width?: number; height?: number }) => void;
-}> = ({ spot, isSelected, parentSize, onSelect, onUpdate }) => {
+    onContextMenu?: (e: React.MouseEvent) => void;
+    zIndex?: number;
+}> = ({ spot, isSelected, parentSize, onSelect, onUpdate, onContextMenu, zIndex }) => {
     const triggerColors: Record<HotSpotTrigger, string> = {
         click: 'rgba(59, 130, 246, 0.3)',
         hover: 'rgba(234, 179, 8, 0.3)',
@@ -62,6 +61,8 @@ export const HotSpotOverlay: React.FC<{
             isSelected={isSelected}
             onSelect={onSelect}
             onUpdate={onUpdate}
+            onContextMenu={onContextMenu}
+            zIndex={zIndex}
             snapGrid={1}
         >
             <div
@@ -81,7 +82,7 @@ export const HotSpotOverlay: React.FC<{
 
 /** Internal helper: map a unified `VNUIElement` (image / button / text /
  *  text-input / image map / draggable image) into the legacy
- *  `VNHotZoneElement` shape that HotZoneElementOverlay's body renders.
+ *  `VNHotZoneElement` shape that InteractiveElementOverlay's body renders.
  *  Kept private to this module so the component has a typed external API. */
 function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
     const anyEl = el as any;
@@ -294,7 +295,7 @@ export const PolyRegionOverlay: React.FC<{
  *  text input / image map / draggable) on the canvas. Takes a unified
  *  `VNUIElement` and converts to the legacy `VNHotZoneElement` layout
  *  internally so the existing per-type JSX can render unchanged. */
-export const HotZoneElementOverlay: React.FC<{
+export const InteractiveElementOverlay: React.FC<{
     element: VNUIElement;
     project: VNProject;
     isSelected: boolean;
@@ -304,14 +305,19 @@ export const HotZoneElementOverlay: React.FC<{
     onRegionUpdate?: (regionIdx: number, coords: number[]) => void;
     selectedRegionIdx?: number | null;
     onSelectRegion?: (idx: number | null) => void;
-}> = ({ element: typedElement, project, isSelected, parentSize, onSelect, onUpdate, onRegionUpdate, selectedRegionIdx, onSelectRegion }) => {
+    onContextMenu?: (e: React.MouseEvent) => void;
+    zIndex?: number;
+}> = ({ element: typedElement, project, isSelected, parentSize, onSelect, onUpdate, onRegionUpdate, selectedRegionIdx, onSelectRegion, onContextMenu, zIndex }) => {
     const element = toLegacyHotZoneElement(typedElement);
     if (!element) return null;
     const imageUrl = project.images[element.imageId]?.imageUrl ||
                      project.backgrounds[element.imageId]?.imageUrl;
 
     const elType = element.elementType || 'image';
-    const videoUrl = element.videoId ? (project.videos[element.videoId]?.videoUrl) : null;
+    // A video asset can live in videos OR backgrounds/images (depends on the upload tab).
+    const videoUrl = element.videoId
+        ? (project.videos[element.videoId]?.videoUrl || (project.backgrounds[element.videoId] as any)?.videoUrl || (project.images[element.videoId] as any)?.videoUrl)
+        : null;
 
     // Compute the pixel size of this element on the canvas (for inner region drag/resize)
     const elementPixelSize = useMemo(() => ({
@@ -330,6 +336,8 @@ export const HotZoneElementOverlay: React.FC<{
             isSelected={isSelected}
             onSelect={onSelect}
             onUpdate={onUpdate}
+            onContextMenu={onContextMenu}
+            zIndex={zIndex}
             snapGrid={1}
             allowChildInteraction={elType === 'imageMap' && isSelected}
         >

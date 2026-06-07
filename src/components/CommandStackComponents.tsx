@@ -20,6 +20,7 @@ interface CommandStackItemProps {
     stackSize?: number;
     onSelect: () => void;
     onUnstack?: () => void;
+    onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export const CommandStackItem: React.FC<CommandStackItemProps> = ({
@@ -32,6 +33,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
     stackSize = 1,
     onSelect,
     onUnstack,
+    onContextMenu,
 }) => {
     const { t } = useTranslation(['commands', 'scenes']);
     const [showWarning, setShowWarning] = useState(false);
@@ -79,7 +81,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 return `■ Stop SFX`;
             case 'PlayMovie': {
                 const mode = (command as any).displayMode === 'overlay' ? '(overlay)' : '';
-                return `▶ ${project.videos[(command as any).videoId]?.name || 'N/A'} ${mode}`.trim();
+                return `▶ ${(project.videos[(command as any).videoId] || (project.backgrounds as any)[(command as any).videoId] || (project.images as any)?.[(command as any).videoId])?.name || 'N/A'} ${mode}`.trim();
             }
             case 'StopMovie':
                 return `■ Stop Movie`;
@@ -99,10 +101,6 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
                 return `Btn: "${((command as any).text || '').substring(0, 15)}"`;
             case 'HideButton':
                 return `Hide Button`;
-            case 'ShowImageMap':
-                return `Map: ${project.images?.[(command as any).imageId]?.name || 'N/A'} (${(command as any).regions?.length || 0} regions)`;
-            case 'HideImageMap':
-                return `Hide Image Map`;
             case 'PanZoomScreen':
                 return `Zoom: ${(command as any).zoom || 1}x`;
             case 'ResetScreenEffects':
@@ -138,6 +136,7 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
         <div className="relative group" data-command-id={command.id}>
             <div
                 onClick={onSelect}
+                onContextMenu={onContextMenu}
                 className={`
                     relative flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all
                     ${isSelected ? 'bg-sky-500/20 ring-2 ring-sky-500' : 'bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]'}
@@ -216,6 +215,7 @@ interface CommandStackRowProps {
     allCommands?: VNCommand[]; // Full command array for proper index calculation
     onSelectCommand: (index: number) => void;
     onUnstackCommand: (commandId: string) => void;
+    onCommandContextMenu?: (index: number, e: React.MouseEvent) => void;
 }
 
 export const CommandStackRow: React.FC<CommandStackRowProps> = ({
@@ -226,6 +226,7 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
     allCommands,
     onSelectCommand,
     onUnstackCommand,
+    onCommandContextMenu,
 }) => {
     const isStacked = commands.length > 1;
 
@@ -240,6 +241,7 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
                 isSelected={selectedCommandIndex === globalIndex}
                 isStacked={false}
                 onSelect={() => onSelectCommand(globalIndex)}
+                onContextMenu={onCommandContextMenu ? (e) => onCommandContextMenu(globalIndex, e) : undefined}
             />
         );
     }
@@ -264,6 +266,7 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
                             stackSize={commands.length}
                             onSelect={() => onSelectCommand(globalIndex)}
                             onUnstack={() => onUnstackCommand(command.id)}
+                            onContextMenu={onCommandContextMenu ? (e) => onCommandContextMenu(globalIndex, e) : undefined}
                         />
                     </div>
                 );

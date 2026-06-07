@@ -11,6 +11,7 @@ import StagingArea from './StagingArea';
 import CommandPalette from './CommandPalette';
 import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon, DuplicateIcon } from './icons';
 import { ContextMenu } from './ui/ContextMenu';
+import { CommandRadialProvider } from './inspector/CommandRadialContext';
 
 interface SceneManagerProps {
     project: VNProject;
@@ -115,6 +116,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     };
 
     return (
+        <CommandRadialProvider activeSceneId={activeSceneId} setSelectedCommandIndex={setSelectedCommandIndex}>
         <div className="flex h-full overflow-hidden">
             {/* Left Sidebar - Scene List (2/3) + Command Palette (1/3) */}
             <div className="panel border-r-2 border-[var(--border-subtle)] flex flex-col flex-shrink-0" style={{ width: 'var(--sidebar-width)', minWidth: '240px', maxWidth: '320px' }}>
@@ -234,6 +236,7 @@ const SceneManager: React.FC<SceneManagerProps> = ({
                 </div>
             </div>
         </div>
+        </CommandRadialProvider>
     );
 };
 

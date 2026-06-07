@@ -13,6 +13,10 @@ export async function handleSetBackground(
 ): Promise<CommandResult> {
   const { assetResolver, getAssetMetadata, setPlayerState, playerState, advance } = context;
 
+  // Parallax depth + stacking layer for the background (additive-optional; carried onto
+  // stageState at every commit site so the renderer can drift/order the backdrop).
+  const bgFx = { backgroundParallaxDepth: command.parallaxDepth, backgroundLayer: command.layer };
+
   // Live (reactive) background: register/replace a conditional layer instead of
   // committing a single background. The renderer picks the last layer whose conditions
   // match (over the base background). Live backgrounds swap instantly (no transition).
@@ -26,6 +30,8 @@ export async function handleSetBackground(
       color: command.backgroundColor,
       isVideo: meta.isVideo,
       loop: meta.loop,
+      parallaxDepth: command.parallaxDepth,
+      layer: command.layer,
     };
     const existing = playerState.stageState.backgroundLayers || [];
     return {
@@ -34,6 +40,35 @@ export async function handleSetBackground(
         stageState: {
           ...playerState.stageState,
           backgroundLayers: [...existing.filter(l => l.commandId !== command.id), layer],
+        },
+      },
+    };
+  }
+
+  // Stacked background: ADD this backdrop as its own persistent plane (keyed by command id)
+  // at its layer/parallaxDepth instead of replacing the base background. Enables multi-plane
+  // parallax scrolling. Stacked planes swap instantly (transitions apply to the base bg).
+  if (command.stack) {
+    const url = command.backgroundColor ? null : assetResolver(command.backgroundId, 'image');
+    const meta = command.backgroundColor ? { isVideo: false, loop: false } : getAssetMetadata(command.backgroundId, 'image');
+    const plane = {
+      commandId: command.id,
+      url: url || null,
+      color: command.backgroundColor,
+      isVideo: meta.isVideo,
+      loop: meta.loop,
+      parallaxDepth: command.parallaxDepth,
+      layer: command.layer,
+      transition: command.transition,
+      duration: command.duration,
+    };
+    const existing = playerState.stageState.backgroundStack || [];
+    return {
+      advance: true,
+      updates: {
+        stageState: {
+          ...playerState.stageState,
+          backgroundStack: [...existing.filter(p => p.commandId !== command.id), plane],
         },
       },
     };
@@ -50,6 +85,7 @@ export async function handleSetBackground(
         updates: {
           stageState: {
             ...playerState.stageState,
+            ...bgFx,
             backgroundUrl: null,
             backgroundIsVideo: false,
             backgroundColor: command.backgroundColor,
@@ -89,6 +125,7 @@ export async function handleSetBackground(
             ...p,
             stageState: {
               ...p.stageState,
+              ...bgFx,
               backgroundUrl: null,
               backgroundIsVideo: false,
               backgroundColor: command.backgroundColor,
@@ -195,6 +232,7 @@ export async function handleSetBackground(
             ...p,
             stageState: {
               ...p.stageState,
+              ...bgFx,
               backgroundUrl: null,
               backgroundIsVideo: false,
               backgroundColor: command.backgroundColor,
@@ -227,9 +265,10 @@ export async function handleSetBackground(
       updates: {
         stageState: {
           ...playerState.stageState,
+          ...bgFx,
           backgroundUrl: newUrl,
           backgroundIsVideo: isVideo,
-          backgroundLoop: loop,
+          backgroundLoop: command.loop ?? loop,
         },
       },
     };
@@ -321,9 +360,10 @@ export async function handleSetBackground(
               ...p,
               stageState: {
                 ...p.stageState,
+                ...bgFx,
                 backgroundUrl: newUrl,
                 backgroundIsVideo: isVideo,
-                backgroundLoop: loop,
+                backgroundLoop: command.loop ?? loop,
               },
               uiState: { ...p.uiState, transitionElement: el },
             };
@@ -373,9 +413,10 @@ export async function handleSetBackground(
           ...p,
           stageState: {
             ...p.stageState,
+            ...bgFx,
             backgroundUrl: newUrl,
             backgroundIsVideo: isVideo,
-            backgroundLoop: loop,
+            backgroundLoop: command.loop ?? loop,
           },
           uiState: { ...p.uiState, isTransitioning: false, transitionElement: null },
         };

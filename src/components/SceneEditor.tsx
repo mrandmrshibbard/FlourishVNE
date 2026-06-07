@@ -20,6 +20,7 @@ import {
     isCommandStacked
 } from '../features/scene/commandStackUtils';
 import { CommandStackRow, DragDropIndicator } from './CommandStackComponents';
+import { useCommandRadial } from './inspector/CommandRadialContext';
 
 const generateCommandId = () => `cmd-${Math.random().toString(36).substring(2, 9)}`;
 const generateBranchId = () => `branch-${Math.random().toString(36).substring(2, 9)}`;
@@ -79,7 +80,7 @@ const CommandItem: React.FC<{
             case CommandType.PlaySoundEffect:
                 return `Play SFX: ${project.audio[command.audioId]?.name || 'N/A'}`;
             case CommandType.PlayMovie:
-                return `Play Movie: ${project.videos[command.videoId]?.name || 'N/A'}${command.displayMode === 'overlay' ? ' (overlay)' : ''}`;
+                return `Play Movie: ${(project.videos[command.videoId] || (project.backgrounds as any)[command.videoId] || (project.images as any)?.[command.videoId])?.name || 'N/A'}${command.displayMode === 'overlay' ? ' (overlay)' : ''}`;
             case CommandType.StopMovie:
                 return `Stop Movie`;
             case CommandType.SetVariable:
@@ -389,7 +390,16 @@ const SceneEditor: React.FC<{
     const { project, dispatch } = useProject();
     const toast = useToast();
     const { t } = useTranslation(['scenes', 'common']);
+    const commandRadial = useCommandRadial();
     const activeScene = project.scenes[activeSceneId];
+    // Right-click a command row → open the group radial (only for migrated command types).
+    const handleCommandContextMenu = (index: number, e: React.MouseEvent) => {
+        const cmd = activeScene?.commands[index];
+        if (commandRadial && commandRadial.isGrouped(cmd)) {
+            e.preventDefault();
+            commandRadial.openByIndex(index, e.clientX, e.clientY);
+        }
+    };
     const dragItem = useRef<{ id: string; index: number; groupId?: string } | null>(null);
     const dragOverItem = useRef<number | null>(null);
     const [collapsedBranches, setCollapsedBranches] = useState<Set<string>>(new Set());
@@ -843,22 +853,35 @@ const SceneEditor: React.FC<{
                 const stackedCommands = stackCommands(commandsToStack, existingStackId);
                 
                 // Update both commands with full command objects
-                dispatch({ 
-                    type: 'UPDATE_COMMAND', 
-                    payload: { 
-                        sceneId: activeSceneId, 
-                        commandIndex: targetIndex, 
+                dispatch({
+                    type: 'UPDATE_COMMAND',
+                    payload: {
+                        sceneId: activeSceneId,
+                        commandIndex: targetIndex,
                         command: stackedCommands[0]
-                    } 
+                    }
                 });
-                dispatch({ 
-                    type: 'UPDATE_COMMAND', 
-                    payload: { 
-                        sceneId: activeSceneId, 
-                        commandIndex: draggedIndex, 
+                dispatch({
+                    type: 'UPDATE_COMMAND',
+                    payload: {
+                        sceneId: activeSceneId,
+                        commandIndex: draggedIndex,
                         command: stackedCommands[1]
-                    } 
+                    }
                 });
+
+                // CRITICAL: stacked commands must be CONTIGUOUS for the runtime to run them in
+                // parallel — a `runAsync` command advances immediately to the very NEXT command,
+                // so anything between them runs (and may block) before the rest of the stack.
+                // Move the dragged command to sit right after the target. (toIndex is applied
+                // after the from-removal splice, hence the from<target adjustment.)
+                const contiguousIndex = draggedIndex < targetIndex ? targetIndex : targetIndex + 1;
+                if (draggedIndex !== contiguousIndex) {
+                    dispatch({
+                        type: 'MOVE_COMMAND',
+                        payload: { sceneId: activeSceneId, fromIndex: draggedIndex, toIndex: contiguousIndex },
+                    });
+                }
             }
         } else {
             // Move command
@@ -1154,6 +1177,7 @@ const SceneEditor: React.FC<{
                                                 setSelectedVariableId(null);
                                             }}
                                             onUnstackCommand={handleUnstackCommand}
+                                            onCommandContextMenu={handleCommandContextMenu}
                                         />
                                     </div>
                                 );
@@ -1194,6 +1218,7 @@ const SceneEditor: React.FC<{
                                                 setSelectedCommandIndex(index);
                                                 setSelectedVariableId(null);
                                             }}
+                                            onContextMenu={(e) => handleCommandContextMenu(index, e)}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, cmd.id, index)}
                                             onDragOver={(e) => {

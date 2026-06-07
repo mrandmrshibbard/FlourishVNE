@@ -1,15 +1,13 @@
 /**
- * HotZoneInspectors
- * ──────────────────
- * Inspector panels for hot spots and hot zone elements (draggable images /
- * buttons / text / etc.). Extracted from the deprecated `HotZoneEditor.tsx`
- * so that file can be deleted in Phase 4.
+ * InteractiveElementInspectors
+ * ────────────────────────────
+ * Inspector panels for hot spots and interactive elements (draggable images /
+ * buttons / text / image maps / etc.) that live on a regular screen.
  *
- * These components consume the legacy `VNHotSpot` / `VNHotZoneElement`
- * shapes — callers (VisualNovelEditor's inspector dispatcher) translate
- * between the unified `VNUIElement` types and these shapes via
- * `src/utils/hotZoneShims.ts`. A future Phase 4.5 can rewrite them to
- * operate on typed elements directly.
+ * The external API is typed against the unified `VNUIElement` types. Internally
+ * these components still build patches in the legacy `VNHotSpot` /
+ * `VNHotZoneElement` runtime shapes and translate at the boundary, so the JSX
+ * can stay unchanged — purely an implementation detail, no save/load impact.
  */
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +25,7 @@ import {
     VNFontSettings,
 } from '../../features/ui/types';
 import { ImageMapRegion } from '../../features/scene/types';
+import { UIActionType } from '../../types/shared';
 import { PlusIcon, TrashIcon } from '../icons';
 import Panel from '../ui/Panel';
 import ConditionsEditor from '../ui/ConditionsEditor';
@@ -374,7 +373,55 @@ export const HotSpotProperties: React.FC<{
     );
 };
 
-export const HotZoneElementProperties: React.FC<{
+const CONVERT_DEFAULT_FONT: VNFontSettings = { family: 'sans-serif', size: 16, color: '#ffffff', weight: 'normal', italic: false };
+
+// Type-specific fields wiped when an interactive element changes kind. Base fields
+// (id/name/position/interactive/draggable/snap/actions/conditions/sounds) are preserved by
+// the reducer's shallow merge; the cleared keys become `undefined` and are dropped on JSON
+// export, so no stale data from the previous kind survives a save/load round-trip.
+const TYPE_SPECIFIC_FIELDS = [
+    'background', 'image', 'objectFit', 'text', 'font', 'textAlign', 'verticalAlign',
+    'action', 'hoverImage', 'backgroundColor', 'placeholder', 'variableId', 'borderColor',
+    'maxLength', 'imageMapRegions',
+];
+
+/** Convert an interactive element to a different kind in place, preserving shared base
+ *  fields and carrying over any compatible content (image asset, text, font, regions…).
+ *  Returns a `Partial<VNUIElement>` patch for the reducer (merged over the current element). */
+function convertInteractiveElementType(current: VNUIElement, newType: HotZoneElementType): Partial<VNUIElement> {
+    const legacy = toLegacyHotZoneElement(current);
+    const cleared: any = {};
+    for (const f of TYPE_SPECIFIC_FIELDS) cleared[f] = undefined;
+    const imgId = (legacy?.imageId as VNID) || '';
+    let typed: any;
+    switch (newType) {
+        case 'image':
+            typed = { type: UIElementType.Image, background: imgId ? { type: 'image', assetId: imgId } : { type: 'color', value: '#00000000' }, image: imgId ? { type: 'image', id: imgId } : null, objectFit: 'contain' };
+            break;
+        case 'video': {
+            const vid = legacy?.videoId as VNID | undefined;
+            typed = { type: UIElementType.Image, background: vid ? { type: 'video', assetId: vid } : { type: 'color', value: '#00000000' }, image: null, objectFit: 'contain' };
+            break;
+        }
+        case 'text':
+            typed = { type: UIElementType.Text, text: legacy?.text || legacy?.name || '', font: legacy?.font || CONVERT_DEFAULT_FONT, textAlign: 'center', verticalAlign: 'middle' };
+            break;
+        case 'button':
+            typed = { type: UIElementType.Button, text: legacy?.text || legacy?.name || '', font: legacy?.font || CONVERT_DEFAULT_FONT, action: (current as any).actions?.[0] || { type: UIActionType.None }, image: imgId ? { type: 'image', id: imgId } : null, hoverImage: null, backgroundColor: legacy?.backgroundColor };
+            break;
+        case 'textInput':
+            typed = { type: UIElementType.TextInput, placeholder: legacy?.placeholder || '', variableId: legacy?.variableId, font: legacy?.font || CONVERT_DEFAULT_FONT, backgroundColor: legacy?.backgroundColor, borderColor: legacy?.borderColor, maxLength: legacy?.maxLength };
+            break;
+        case 'imageMap':
+            typed = { type: UIElementType.ImageMap, image: imgId ? { type: 'image', id: imgId } : null, hoverImage: legacy?.hoverImageId ? { type: 'image', id: legacy.hoverImageId } : null, imageMapRegions: legacy?.imageMapRegions || [] };
+            break;
+        default:
+            typed = {};
+    }
+    return { ...cleared, ...typed };
+}
+
+export const InteractiveElementProperties: React.FC<{
     element: VNUIElement;
     project: VNProject;
     /** Names of draggable elements on the screen — used by the inner actions
@@ -436,7 +483,7 @@ export const HotZoneElementProperties: React.FC<{
                 <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.elementType')}</span>
                 <select
                     value={elType}
-                    onChange={e => onUpdate({ elementType: e.target.value as HotZoneElementType })}
+                    onChange={e => typedOnUpdate(convertInteractiveElementType(typedElement, e.target.value as HotZoneElementType))}
                     className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
                 >
                     <option value="image">{t('hotZone.typeImage')}</option>

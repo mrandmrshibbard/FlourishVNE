@@ -5,6 +5,19 @@ import { VNSetVariableOperator } from '../features/variables/types';
 export type VNTextAlign = 'left' | 'center' | 'right';
 export type VNVAlign = 'top' | 'middle' | 'bottom';
 
+/**
+ * Parallax configuration for a scene stage or a UI screen (author's choice of driver).
+ * `mode` 'off' (default/undefined) disables it. 'mouse' follows the pointer; 'camera'
+ * (Phase 3) ties depth to PanZoom camera moves; 'both' sums them. `intensity` scales the
+ * overall shift (default 1). Per-element movement = pointer/camera offset × intensity ×
+ * the element's `parallaxDepth`. Render-time only — never written to stored positions.
+ */
+export type VNParallaxMode = 'off' | 'mouse' | 'camera' | 'both';
+export interface VNParallaxSettings {
+    mode?: VNParallaxMode;
+    intensity?: number;
+}
+
 // Moved from scene/types.ts
 export type VNConditionOperator = '==' | '!=' | '>' | '<' | '>=' | '<=' | 'is true' | 'is false' | 'contains' | 'startsWith';
 

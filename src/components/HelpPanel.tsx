@@ -30,8 +30,6 @@ const COMMAND_DOC_META: { name: string; category: string; params: string[] }[] =
   { name: 'HideImage', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
   { name: 'ShowButton', category: 'Visual', params: ['text', 'x', 'y', 'width', 'height', 'backgroundColor', 'textColor', 'onClick', 'transition'] },
   { name: 'HideButton', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
-  { name: 'ShowImageMap', category: 'Visual', params: ['imageId', 'regions', 'x', 'y', 'width', 'height', 'opacity', 'waitForClick', 'transition', 'duration'] },
-  { name: 'HideImageMap', category: 'Visual', params: ['targetCommandId', 'transition', 'duration'] },
   { name: 'PlayMusic', category: 'Audio', params: ['audioId', 'loop', 'fadeDuration', 'volume'] },
   { name: 'StopMusic', category: 'Audio', params: ['fadeDuration'] },
   { name: 'PlaySoundEffect', category: 'Audio', params: ['audioId', 'volume'] },

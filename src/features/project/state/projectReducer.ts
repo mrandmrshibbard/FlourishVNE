@@ -1,5 +1,6 @@
 import { VNProject } from '../../../types/project';
 import { migrateProjectToUnifiedScreens } from '../../../utils/unifiedScreenMigration';
+import { migrateProjectRemoveLegacyCommands } from '../../../utils/legacyCommandMigration';
 
 export type ProjectAction_Project =
   | { type: 'SET_PROJECT'; payload: VNProject }
@@ -9,9 +10,10 @@ export type ProjectAction_Project =
 export const projectReducer = (state: VNProject, action: ProjectAction_Project): VNProject => {
   switch (action.type) {
     case 'SET_PROJECT':
-      // Every project that enters the store is migrated to the unified-screens schema.
-      // The migration is idempotent, so already-migrated projects pass through cheaply.
-      return migrateProjectToUnifiedScreens(action.payload);
+      // Every project that enters the store is run through the load migrations:
+      // unified-screens schema + removal of retired scene commands. Both are
+      // idempotent, so already-migrated projects pass through cheaply.
+      return migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload));
 
     case 'UPDATE_PROJECT': {
         return {

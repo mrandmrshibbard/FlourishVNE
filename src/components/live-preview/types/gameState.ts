@@ -13,6 +13,10 @@ export type StageSize = { width: number; height: number };
 
 export interface TextOverlay {
     id: VNID;
+    /** Author stacking order (from the command's `layer`). Higher = nearer the viewer. */
+    layer?: number;
+    /** Parallax depth (0/undefined = locked); from the source command/element. */
+    parallaxDepth?: number;
     text: string;
     /** Un-interpolated template (with {variable} tokens). When `live`, the renderer
      *  re-interpolates this against current variables each frame so values update live. */
@@ -46,6 +50,10 @@ export interface TextOverlay {
 
 export interface ImageOverlay {
     id: VNID;
+    /** Author stacking order (from the command's `layer`). Higher = nearer the viewer. */
+    layer?: number;
+    /** Parallax depth (0/undefined = locked); from the source command/element. */
+    parallaxDepth?: number;
     imageUrl?: string;
     videoUrl?: string;
     isVideo?: boolean;
@@ -70,6 +78,10 @@ export interface ImageOverlay {
 
 export interface ButtonOverlay {
     id: VNID;
+    /** Author stacking order (from the command's `layer`). Higher = nearer the viewer. */
+    layer?: number;
+    /** Parallax depth (0/undefined = locked); from the source command/element. */
+    parallaxDepth?: number;
     text: string;
     x: number;
     y: number;
@@ -81,6 +93,8 @@ export interface ButtonOverlay {
     textColor: string;
     fontSize: number;
     fontWeight: 'normal' | 'bold';
+    textAlign?: 'left' | 'center' | 'right';
+    paddingX?: number;
     borderRadius: number;
     opacity: number;
     imageUrl: string | null;
@@ -102,34 +116,6 @@ export interface ButtonOverlay {
     /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
-}
-
-export interface ImageMapRegionOverlay {
-    id: VNID;
-    name: string;
-    shape: 'rect' | 'circle' | 'poly';
-    coords: number[];
-    actions: import('../../../types/shared').VNUIAction[];
-    tooltip?: string;
-    cursor?: string;
-    highlightColor?: string;
-    conditions?: import('../../../types/shared').VNCondition[];
-}
-
-export interface ImageMapOverlay {
-    id: VNID;
-    imageUrl: string;
-    hoverImageUrl?: string;
-    regions: ImageMapRegionOverlay[];
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    opacity: number;
-    waitForClick?: boolean;
-    transition?: VNTransition;
-    duration?: number;
-    action?: 'show' | 'hide';
 }
 
 /** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
@@ -162,6 +148,10 @@ export interface StageCharacterTransition {
 
 export interface StageCharacterState {
     charId: VNID;
+    /** Author stacking order (from the ShowCharacter command's `layer`). Higher = nearer. */
+    layer?: number;
+    /** Parallax depth (0/undefined = locked); from the source command/element. */
+    parallaxDepth?: number;
     position: VNPosition;
     imageUrls: string[];
     videoUrls?: string[];
@@ -195,6 +185,25 @@ export interface BackgroundLayer {
     color?: string;
     isVideo?: boolean;
     loop?: boolean;
+    /** Parallax depth for this background candidate (0/undefined = locked). */
+    parallaxDepth?: number;
+    /** Stacking order of the background vs. stage visuals (default 0 = behind). */
+    layer?: number;
+}
+
+/** One stacked background plane (SetBackground with `stack: true`). Renders as its own
+ *  backdrop at `layer` (zIndex) with `parallaxDepth`, on top of the base background. */
+export interface BackgroundStackPlane {
+    commandId: VNID;
+    url: string | null;
+    color?: string;
+    isVideo?: boolean;
+    loop?: boolean;
+    parallaxDepth?: number;
+    layer?: number;
+    /** Entry transition for this plane (plays once on mount). */
+    transition?: string;
+    duration?: number;
 }
 
 export interface StageState {
@@ -203,19 +212,35 @@ export interface StageState {
     backgroundLoop?: boolean;
     /** Solid color background (used when backgroundColor is set on the SetBackground command) */
     backgroundColor?: string;
+    /** Parallax depth for the scene background (0/undefined = locked). Over-scaled when set so the shift never reveals edges. */
+    backgroundParallaxDepth?: number;
+    /** Stacking order of the scene background vs. stage visuals (default 0 = behind 0-layer overlays). */
+    backgroundLayer?: number;
     /** Live conditional background candidates; render picks the last whose conditions match, else the base background. */
     backgroundLayers?: BackgroundLayer[];
+    /** Stacked background planes (from SetBackground commands with `stack: true`), keyed by
+     *  commandId. Each renders as its own backdrop at its `layer`/`parallaxDepth` ON TOP of the
+     *  base background — enabling multi-plane parallax scrolling. Persist until scene change. */
+    backgroundStack?: BackgroundStackPlane[];
     characters: Record<VNID, StageCharacterState>;
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
-    imageMapOverlays: ImageMapOverlay[];
     /** Interactive scene hot spots (ShowHotSpot). Optional for back-compat with older saves. */
     hotSpotOverlays?: HotSpotOverlay[];
     /** Persistent movie overlays (transparent, looping) that play behind characters */
     movieOverlays?: Array<{
         url: string;
         loop: boolean;
+        holdLastFrame?: boolean;
+        transition?: string;
+        transitionDuration?: number;
+        /** Source PlayMovie command id — lets TweenElement target this movie. */
+        commandId?: string;
+        /** Set true while the overlay is fading out (before removal). */
+        exiting?: boolean;
+        /** Parallax depth — shifts the placed video with the scene's parallax (0 = locked). */
+        parallaxDepth?: number;
         x?: number;
         y?: number;
         width?: number;
@@ -286,6 +311,11 @@ export interface PlayerState {
         } | null;
         movieUrl: string | null;
         movieLoop?: boolean;
+        movieHoldLastFrame?: boolean;
+        movieTransition?: string;
+        movieTransitionDuration?: number;
+        /** Set true while a fullscreen movie is fading out (before clearing). */
+        movieExiting?: boolean;
         isWaitingForInput: boolean;
         isTransitioning: boolean;
         transitionElement: React.ReactNode | null;

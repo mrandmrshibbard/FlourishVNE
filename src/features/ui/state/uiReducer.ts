@@ -15,7 +15,7 @@ export type UIAction =
           property: keyof VNFontSettings;
           value: string | number | boolean;
       } }
-    | { type: 'ADD_UI_SCREEN', payload: { name: string; id?: VNID; screenType?: 'standard' | 'hotzone' } }
+    | { type: 'ADD_UI_SCREEN', payload: { name: string; id?: VNID } }
     | { type: 'UPDATE_UI_SCREEN', payload: { screenId: VNID, updates: Partial<VNUIScreen> } }
     | { type: 'DELETE_UI_SCREEN', payload: { screenId: VNID } }
     | { type: 'DUPLICATE_UI_SCREEN', payload: { screenId: VNID } }
@@ -82,11 +82,11 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
     }
 
     case 'ADD_UI_SCREEN': {
-        const { name, id, screenType } = action.payload;
+        const { name, id } = action.payload;
         const newId = id || `screen-${generateId()}`;
-        // After unification every screen uses the same editor; the "hotzone" label just
-        // pre-seeds empty maps so the user finds the hot zone tooling already initialized.
-        // No more `screenType: 'hotzone'` flag — that's reserved for legacy projects only.
+        // Unified schema: every screen uses the same editor and keeps all its widgets
+        // (including hot spots, image maps, and draggable elements) in `elements`. The
+        // legacy `screenType: 'hotzone'` split was retired; old projects are migrated on load.
         const newScreen: VNUIScreen = {
             id: newId,
             name,
@@ -95,7 +95,6 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
             ambientNoise: { audioId: null, policy: 'continue', volume: 0.8 },
             elements: {},
             effects: [],
-            ...(screenType === 'hotzone' ? { hotSpots: {}, hotZoneElements: {} } : {}),
         };
         return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen }};
     }

@@ -246,10 +246,57 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       uiScreens: newScreens
     };
   }
+  const RETIRED_COMMAND_TYPES = /* @__PURE__ */ new Set(["ShowImageMap", "HideImageMap"]);
+  function stripCommands(commands) {
+    if (!commands || commands.length === 0) return commands;
+    let hasRetired = false;
+    for (const c of commands) {
+      if (RETIRED_COMMAND_TYPES.has(c.type)) {
+        hasRetired = true;
+        break;
+      }
+    }
+    if (!hasRetired) return commands;
+    return commands.filter((c) => !RETIRED_COMMAND_TYPES.has(c.type));
+  }
+  function migrateProjectRemoveLegacyCommands(project) {
+    if (!project) return project;
+    let changed = false;
+    let scenes = project.scenes;
+    if (scenes) {
+      const next = {};
+      for (const [id, scene] of Object.entries(scenes)) {
+        const stripped = stripCommands(scene.commands);
+        if (stripped !== scene.commands) {
+          changed = true;
+          next[id] = { ...scene, commands: stripped };
+        } else {
+          next[id] = scene;
+        }
+      }
+      scenes = next;
+    }
+    let commonEvents = project.commonEvents;
+    if (commonEvents) {
+      const next = {};
+      for (const [id, ce] of Object.entries(commonEvents)) {
+        const stripped = stripCommands(ce == null ? void 0 : ce.commands);
+        if (stripped !== (ce == null ? void 0 : ce.commands)) {
+          changed = true;
+          next[id] = { ...ce, commands: stripped };
+        } else {
+          next[id] = ce;
+        }
+      }
+      commonEvents = next;
+    }
+    if (!changed) return project;
+    return { ...project, scenes, ...commonEvents ? { commonEvents } : {} };
+  }
   const projectReducer = (state, action) => {
     switch (action.type) {
       case "SET_PROJECT":
-        return migrateProjectToUnifiedScreens(action.payload);
+        return migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload));
       case "UPDATE_PROJECT": {
         return {
           ...state,
@@ -308,8 +355,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["SpawnParticles"] = "SpawnParticles";
     CommandType2["StopParticles"] = "StopParticles";
     CommandType2["CallCommonEvent"] = "CallCommonEvent";
-    CommandType2["ShowImageMap"] = "ShowImageMap";
-    CommandType2["HideImageMap"] = "HideImageMap";
     CommandType2["ShowHotSpot"] = "ShowHotSpot";
     CommandType2["HideHotSpot"] = "HideHotSpot";
     CommandType2["TweenElement"] = "TweenElement";
@@ -978,7 +1023,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
       }
       case "ADD_UI_SCREEN": {
-        const { name, id, screenType } = action.payload;
+        const { name, id } = action.payload;
         const newId = id || `screen-${generateId$3()}`;
         const newScreen = {
           id: newId,
@@ -987,8 +1032,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           music: { audioId: null, policy: "continue", volume: 0.8 },
           ambientNoise: { audioId: null, policy: "continue", volume: 0.8 },
           elements: {},
-          effects: [],
-          ...screenType === "hotzone" ? { hotSpots: {}, hotZoneElements: {} } : {}
+          effects: []
         };
         return { ...state, uiScreens: { ...state.uiScreens, [newId]: newScreen } };
       }
@@ -2015,7 +2059,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const toast = useToast();
     const [history, setHistory] = React2.useState(() => ({
       past: [],
-      present: migrateProjectToUnifiedScreens(initialProject),
+      present: migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)),
       future: []
     }));
     const [lastAutoSave, setLastAutoSave] = React2.useState(null);
@@ -2083,6 +2127,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       autoSave();
       const intervalId = setInterval(autoSave, AUTO_SAVE_INTERVAL);
       return () => clearInterval(intervalId);
+    }, []);
+    React2.useEffect(() => {
+      const id = setTimeout(() => {
+        saveProjectToIDB(history.present).then(() => setLastAutoSave(Date.now())).catch((err) => log.warn("Debounced auto-save failed:", err));
+      }, 1200);
+      return () => clearTimeout(id);
+    }, [history.present]);
+    React2.useEffect(() => {
+      return () => {
+        saveProjectToIDB(historyRef.current.present).catch((err) => log.warn("Save on editor exit failed:", err));
+      };
     }, []);
     React2.useEffect(() => {
       const handleBeforeUnload = () => {
@@ -2389,7 +2444,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return out;
   }
-  function deriveHotZoneElementsFromScreen(screen) {
+  function deriveInteractiveElementsFromScreen(screen) {
     const out = {};
     for (const el of Object.values(screen.elements || {})) {
       if (el.type === UIElementType.HotSpot) continue;
@@ -4261,6 +4316,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
     const characterState = {
       charId: command.characterId,
+      layer: command.layer,
+      parallaxDepth: command.parallaxDepth,
       position: finalPosition,
       imageUrls,
       videoUrls,
@@ -4393,6 +4450,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   }
   async function handleSetBackground(command, context) {
     const { assetResolver, getAssetMetadata, setPlayerState, playerState, advance } = context;
+    const bgFx = { backgroundParallaxDepth: command.parallaxDepth, backgroundLayer: command.layer };
     if (command.liveConditions) {
       const url = command.backgroundColor ? null : assetResolver(command.backgroundId, "image");
       const meta = command.backgroundColor ? { isVideo: false, loop: false } : getAssetMetadata(command.backgroundId, "image");
@@ -4402,7 +4460,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         url: url || null,
         color: command.backgroundColor,
         isVideo: meta.isVideo,
-        loop: meta.loop
+        loop: meta.loop,
+        parallaxDepth: command.parallaxDepth,
+        layer: command.layer
       };
       const existing = playerState.stageState.backgroundLayers || [];
       return {
@@ -4415,6 +4475,31 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       };
     }
+    if (command.stack) {
+      const url = command.backgroundColor ? null : assetResolver(command.backgroundId, "image");
+      const meta = command.backgroundColor ? { isVideo: false, loop: false } : getAssetMetadata(command.backgroundId, "image");
+      const plane = {
+        commandId: command.id,
+        url: url || null,
+        color: command.backgroundColor,
+        isVideo: meta.isVideo,
+        loop: meta.loop,
+        parallaxDepth: command.parallaxDepth,
+        layer: command.layer,
+        transition: command.transition,
+        duration: command.duration
+      };
+      const existing = playerState.stageState.backgroundStack || [];
+      return {
+        advance: true,
+        updates: {
+          stageState: {
+            ...playerState.stageState,
+            backgroundStack: [...existing.filter((p) => p.commandId !== command.id), plane]
+          }
+        }
+      };
+    }
     if (command.backgroundColor) {
       const duration2 = command.duration ?? 1;
       if (command.transition === "instant" || !command.transition) {
@@ -4423,6 +4508,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           updates: {
             stageState: {
               ...playerState.stageState,
+              ...bgFx,
               backgroundUrl: null,
               backgroundIsVideo: false,
               backgroundColor: command.backgroundColor
@@ -4459,6 +4545,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               ...p,
               stageState: {
                 ...p.stageState,
+                ...bgFx,
                 backgroundUrl: null,
                 backgroundIsVideo: false,
                 backgroundColor: command.backgroundColor
@@ -4564,6 +4651,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               ...p,
               stageState: {
                 ...p.stageState,
+                ...bgFx,
                 backgroundUrl: null,
                 backgroundIsVideo: false,
                 backgroundColor: command.backgroundColor
@@ -4590,9 +4678,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         updates: {
           stageState: {
             ...playerState.stageState,
+            ...bgFx,
             backgroundUrl: newUrl,
             backgroundIsVideo: isVideo,
-            backgroundLoop: loop
+            backgroundLoop: command.loop ?? loop
           }
         }
       };
@@ -4671,9 +4760,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ...p,
             stageState: {
               ...p.stageState,
+              ...bgFx,
               backgroundUrl: newUrl,
               backgroundIsVideo: isVideo,
-              backgroundLoop: loop
+              backgroundLoop: command.loop ?? loop
             },
             uiState: { ...p.uiState, transitionElement: el }
           };
@@ -4717,9 +4807,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ...p,
             stageState: {
               ...p.stageState,
+              ...bgFx,
               backgroundUrl: newUrl,
               backgroundIsVideo: isVideo,
-              backgroundLoop: loop
+              backgroundLoop: command.loop ?? loop
             },
             uiState: { ...p.uiState, isTransitioning: false, transitionElement: null }
           };
@@ -4838,6 +4929,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const interpolatedText = interpolateVariables(command.text, playerState.variables, project);
     const overlay = {
       id: command.id,
+      layer: command.layer,
+      parallaxDepth: command.parallaxDepth,
       text: interpolatedText,
       rawText: command.text,
       x: command.x,
@@ -4937,6 +5030,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     TweenManager.cancelForTarget(command.id, "image");
     const overlay = {
       id: command.id,
+      layer: command.layer,
+      parallaxDepth: command.parallaxDepth,
       imageUrl: !isVideo ? imageUrl : void 0,
       videoUrl: isVideo ? imageUrl : void 0,
       isVideo,
@@ -5030,6 +5125,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     const buttonOverlay = {
       id: command.id,
+      layer: command.layer,
+      parallaxDepth: command.parallaxDepth,
       text: command.text,
       x: command.x,
       y: command.y,
@@ -5041,6 +5138,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       textColor: command.textColor || "#ffffff",
       fontSize: command.fontSize || 18,
       fontWeight: command.fontWeight || "normal",
+      textAlign: command.textAlign || "center",
+      paddingX: command.paddingX ?? 0,
       borderRadius: command.borderRadius || 8,
       opacity: command.opacity ?? 1,
       imageUrl: command.image ? assetResolver(command.image.id, command.image.type) : null,
@@ -5145,127 +5244,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           stageState: {
             ...playerState.stageState,
             buttonOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
-          }
-        }
-      };
-    }
-  }
-  function handleShowImageMap(command, context) {
-    const { assetResolver, playerState, setPlayerState, evaluateConditions: evaluateConditions2 } = context;
-    const imageUrl = assetResolver(command.imageId, "image");
-    if (!imageUrl) {
-      console.warn(`Image map image not found: ${command.imageId}`);
-      return { advance: true };
-    }
-    const hoverImageUrl = command.hoverImageId ? assetResolver(command.hoverImageId, "image") : void 0;
-    TweenManager.cancelForTarget(command.id, "imageMap");
-    const overlay = {
-      id: command.id,
-      imageUrl,
-      hoverImageUrl: hoverImageUrl || void 0,
-      regions: command.regions.map((r) => ({
-        id: r.id,
-        name: r.name,
-        shape: r.shape,
-        coords: r.coords,
-        actions: r.actions,
-        tooltip: r.tooltip,
-        cursor: r.cursor,
-        highlightColor: r.highlightColor,
-        conditions: r.conditions
-      })),
-      x: command.x,
-      y: command.y,
-      width: command.width,
-      height: command.height,
-      opacity: command.opacity,
-      waitForClick: command.waitForClick,
-      transition: command.transition !== "instant" ? command.transition : void 0,
-      duration: command.duration,
-      action: "show"
-    };
-    const hasTransition = command.transition && command.transition !== "instant";
-    const waitForClick = command.waitForClick;
-    let shouldAdvance = true;
-    let delay = 0;
-    let callback;
-    if (hasTransition && waitForClick) {
-      shouldAdvance = false;
-      delay = 0;
-      callback = () => {
-        setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
-      };
-    } else if (hasTransition) {
-      shouldAdvance = false;
-      delay = (command.duration ?? 0.5) * 1e3 + 100;
-      callback = context.advance;
-    } else if (waitForClick) {
-      shouldAdvance = false;
-      callback = () => {
-        setPlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isWaitingForInput: true } } : null);
-      };
-    }
-    return {
-      advance: shouldAdvance,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          imageMapOverlays: [...playerState.stageState.imageMapOverlays || [], overlay]
-        }
-      },
-      delay,
-      callback
-    };
-  }
-  function handleHideImageMap(command, context) {
-    const { playerState, setPlayerState, advance } = context;
-    const overlays = playerState.stageState.imageMapOverlays || [];
-    const target = overlays.find((o) => o.id === command.targetCommandId);
-    if (!target) {
-      return { advance: true };
-    }
-    TweenManager.cancelForTarget(command.targetCommandId, "imageMap");
-    if (command.transition && command.transition !== "instant") {
-      const updated = overlays.map(
-        (o) => o.id === command.targetCommandId ? {
-          ...o,
-          transition: command.transition,
-          duration: command.duration || 0.5,
-          action: "hide"
-        } : o
-      );
-      const duration = (command.duration ?? 0.5) * 1e3 + 100;
-      return {
-        advance: false,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            imageMapOverlays: updated
-          }
-        },
-        delay: duration,
-        callback: () => {
-          setPlayerState(
-            (inner) => inner ? {
-              ...inner,
-              stageState: {
-                ...inner.stageState,
-                imageMapOverlays: (inner.stageState.imageMapOverlays || []).filter(
-                  (o) => o.id !== command.targetCommandId
-                )
-              }
-            } : null
-          );
-          advance();
-        }
-      };
-    } else {
-      return {
-        advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            imageMapOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
           }
         }
       };
@@ -5812,14 +5790,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (command.backgroundColor !== void 0) current.backgroundColor = (resting == null ? void 0 : resting.backgroundColor) ?? btn.backgroundColor;
         break;
       }
-      case "imageMap": {
-        const map = (state.imageMapOverlays || []).find((o) => o.id === command.targetId);
-        if (!map) break;
-        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? map.x;
-        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? map.y;
-        if (command.width !== void 0) current.width = (resting == null ? void 0 : resting.width) ?? map.width;
-        if (command.height !== void 0) current.height = (resting == null ? void 0 : resting.height) ?? map.height;
-        if (command.opacity !== void 0) current.opacity = (resting == null ? void 0 : resting.opacity) ?? map.opacity;
+      case "movie": {
+        let base = (state.movieOverlays || []).find((o) => o.commandId === command.targetId);
+        if (!base) {
+          for (const scene of Object.values(context.project.scenes)) {
+            const c = (scene.commands || []).find((cc) => cc.id === command.targetId);
+            if (c) {
+              base = c;
+              break;
+            }
+          }
+        }
+        if (!base) break;
+        if (command.x !== void 0) current.x = (resting == null ? void 0 : resting.x) ?? base.x ?? 0;
+        if (command.y !== void 0) current.y = (resting == null ? void 0 : resting.y) ?? base.y ?? 0;
+        if (command.width !== void 0) current.width = (resting == null ? void 0 : resting.width) ?? base.width ?? 100;
+        if (command.height !== void 0) current.height = (resting == null ? void 0 : resting.height) ?? base.height ?? 100;
+        if (command.opacity !== void 0) current.opacity = (resting == null ? void 0 : resting.opacity) ?? base.opacity ?? 1;
+        if (command.rotation !== void 0) current.rotation = (resting == null ? void 0 : resting.rotation) ?? 0;
+        if (command.scaleX !== void 0) current.scaleX = (resting == null ? void 0 : resting.scaleX) ?? 1;
+        if (command.scaleY !== void 0) current.scaleY = (resting == null ? void 0 : resting.scaleY) ?? 1;
         break;
       }
       case "screen": {
@@ -6136,6 +6126,30 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     autoAdvance: false,
     autoAdvanceDelay: 3
   };
+  const PARALLAX_MAX_PX = 40;
+  const movieEntryAnim = (transition, durationSec) => {
+    const d = durationSec ?? 0.5;
+    switch (transition) {
+      case void 0:
+      case "":
+      case "instant":
+        return void 0;
+      case "slide":
+        return `slide-in-right ${d}s ease-out forwards`;
+      case "iris-in":
+        return `iris-in ${d}s ease-out forwards`;
+      case "wipe-right":
+        return `wipe-right ${d}s ease-out forwards`;
+      default:
+        return `dissolve-in ${d}s ease-out forwards`;
+    }
+  };
+  const CAMERA_PAN_REF = 30;
+  const parallaxTransform = (depth) => {
+    if (!depth) return "";
+    const d = depth * PARALLAX_MAX_PX;
+    return ` translate(calc(var(--ppx, 0) * ${d}px), calc(var(--ppy, 0) * ${d}px))`;
+  };
   const buildSlideStyle = (x, _y, action, stageSize) => {
     const horizontalBias = x <= 50 ? -60 : 60;
     const startPercent = action === "show" ? horizontalBias : 0;
@@ -6201,7 +6215,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const tColor = (tweenValues == null ? void 0 : tweenValues.color) ?? overlay.color;
     const tWidth = (tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width;
     const tHeight = (tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height;
-    const _orient = buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY });
+    const _orient = `${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim();
     const baseStyle = {
       left: `${tx}%`,
       top: `${ty}%`,
@@ -6219,7 +6233,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       alignItems: overlay.verticalAlign === "top" ? "flex-start" : overlay.verticalAlign === "bottom" ? "flex-end" : "center",
       justifyContent: overlay.textAlign === "left" ? "flex-start" : overlay.textAlign === "right" ? "flex-end" : "center",
       whiteSpace: overlay.width ? "pre-wrap" : "nowrap",
-      overflow: "hidden"
+      overflow: "hidden",
+      // Author stacking: text band (1) + layer. Default 0 → below characters (band 5), as today.
+      zIndex: 1 + (overlay.layer ?? 0) * 100
     };
     const { containerStyle: effectsContainerStyle, gradientSpanStyle } = buildTextEffectStyles({
       textShadow: overlay.textShadow,
@@ -6313,6 +6329,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const bBorderRadius = (tweenValues == null ? void 0 : tweenValues.borderRadius) ?? overlay.borderRadius;
     const bBgColor = (tweenValues == null ? void 0 : tweenValues.backgroundColor) ?? overlay.backgroundColor;
     const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
+    const btnAlign = overlay.textAlign || "center";
+    const btnJustify = { left: "flex-start", center: "center", right: "flex-end" }[btnAlign];
+    const btnPadX = `${overlay.paddingX ?? 0}%`;
     const containerStyle = {
       position: "absolute",
       left: `${bx}%`,
@@ -6321,8 +6340,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       // When an image is the button, let the height follow the image's aspect ratio so the
       // box conforms to the art (no cropping, no distortion). Otherwise use the set height.
       height: displayImage ? "auto" : `${bh}%`,
-      transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%) ${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}`.trim(),
-      pointerEvents: "auto"
+      transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%) ${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim(),
+      pointerEvents: "auto",
+      // Author stacking: button band (1) + layer. Default 0 → below characters (band 5), as today.
+      zIndex: 1 + (overlay.layer ?? 0) * 100
     };
     if (overlay.action === "show" && hasTransition && !playTransition) {
       containerStyle.opacity = 0;
@@ -6356,9 +6377,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       border: "none",
       cursor: "pointer",
       padding: 0,
+      paddingLeft: btnPadX,
+      paddingRight: btnPadX,
+      boxSizing: "border-box",
+      textAlign: btnAlign,
       display: "flex",
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent: btnJustify,
       transition: "transform 0.1s, box-shadow 0.1s",
       boxShadow: isHovered ? "0 4px 12px rgba(0,0,0,0.3)" : "0 2px 4px rgba(0,0,0,0.2)",
       transform: isHovered ? "translateY(-2px)" : "none",
@@ -6387,7 +6412,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   style: { display: "block", width: "100%", height: "auto", objectFit: "contain", borderRadius: `${overlay.borderRadius}px` }
                 }
               ),
-              overlay.text && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: displayImage ? { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: "normal", zIndex: 1 } : { position: "relative", zIndex: 1 }, children: overlay.text })
+              overlay.text && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: displayImage ? { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: btnJustify, lineHeight: "normal", zIndex: 1, paddingLeft: btnPadX, paddingRight: btnPadX, boxSizing: "border-box", textAlign: btnAlign } : { position: "relative", zIndex: 1 }, children: overlay.text })
             ]
           }
         )
@@ -6494,7 +6519,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       top: `${iy}%`,
       width: `${iw}px`,
       height: `${ih}px`,
-      ...isSlideTransition ? {} : { transform: "translate(-50%, -50%)" }
+      transform: `${isSlideTransition ? "" : "translate(-50%, -50%)"}${parallaxTransform(overlay.parallaxDepth)}`.trim() || void 0,
+      // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
+      zIndex: 1 + (overlay.layer ?? 0) * 100
     };
     if (overlay.action === "show" && hasTransition && !playTransition) {
       containerStyle.opacity = 0;
@@ -6534,240 +6561,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         style: imageStyle
       }
     ) });
-  };
-  const ImageMapRegionElement = ({ region, containerWidth, containerHeight, hasHoverImage, onAction, onAdvance, onCommitVariables, evaluateConditions: evaluateConditions2, variables, onRegionHover, onRegionLeave }) => {
-    const [isHovered, setIsHovered] = React2.useState(false);
-    if (region.conditions && region.conditions.length > 0) {
-      if (!evaluateConditions2(region.conditions, variables)) return null;
-    }
-    const handleClick = () => {
-      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
-      const setVarActions = region.actions.filter(isVarMutation);
-      const otherActions = region.actions.filter((a) => !isVarMutation(a));
-      setVarActions.forEach((a) => onAction(a));
-      if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
-      otherActions.forEach((a) => onAction(a));
-      if (onAdvance) onAdvance();
-    };
-    const highlightColor = region.highlightColor || "rgba(100, 149, 237, 0.3)";
-    const cursor = region.cursor || "pointer";
-    const handleMouseEnter = () => {
-      setIsHovered(true);
-      if (onRegionHover) onRegionHover(region.id);
-    };
-    const handleMouseLeave = () => {
-      setIsHovered(false);
-      if (onRegionLeave) onRegionLeave();
-    };
-    if (region.shape === "rect" && region.coords.length >= 4) {
-      const [x, y, w, h] = region.coords;
-      return /* @__PURE__ */ jsxRuntime2.jsx(
-        "div",
-        {
-          style: {
-            position: "absolute",
-            left: `${x}%`,
-            top: `${y}%`,
-            width: `${w}%`,
-            height: `${h}%`,
-            cursor,
-            backgroundColor: isHovered && !hasHoverImage ? highlightColor : "transparent",
-            transition: "background-color 0.15s",
-            pointerEvents: "auto",
-            borderRadius: 2,
-            zIndex: 2
-          },
-          title: region.tooltip,
-          onClick: handleClick,
-          onMouseEnter: handleMouseEnter,
-          onMouseLeave: handleMouseLeave
-        }
-      );
-    }
-    if (region.shape === "circle" && region.coords.length >= 3) {
-      const [cx, cy, r] = region.coords;
-      return /* @__PURE__ */ jsxRuntime2.jsx(
-        "div",
-        {
-          style: {
-            position: "absolute",
-            left: `${cx - r}%`,
-            top: `${cy - r}%`,
-            width: `${r * 2}%`,
-            height: `${r * 2}%`,
-            borderRadius: "50%",
-            cursor,
-            backgroundColor: isHovered && !hasHoverImage ? highlightColor : "transparent",
-            transition: "background-color 0.15s",
-            pointerEvents: "auto",
-            zIndex: 2
-          },
-          title: region.tooltip,
-          onClick: handleClick,
-          onMouseEnter: handleMouseEnter,
-          onMouseLeave: handleMouseLeave
-        }
-      );
-    }
-    if (region.shape === "poly" && region.coords.length >= 6) {
-      const points = [];
-      for (let i = 0; i < region.coords.length; i += 2) {
-        points.push(`${region.coords[i] / 100 * containerWidth},${region.coords[i + 1] / 100 * containerHeight}`);
-      }
-      return /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 2 }, children: /* @__PURE__ */ jsxRuntime2.jsx(
-        "polygon",
-        {
-          points: points.join(" "),
-          fill: isHovered && !hasHoverImage ? highlightColor : "transparent",
-          style: { cursor, pointerEvents: "auto", transition: "fill 0.15s" },
-          onClick: handleClick,
-          onMouseEnter: handleMouseEnter,
-          onMouseLeave: handleMouseLeave,
-          children: region.tooltip && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: region.tooltip })
-        }
-      ) });
-    }
-    return null;
-  };
-  const getRegionClipPath = (region) => {
-    if (region.shape === "rect" && region.coords.length >= 4) {
-      const [x, y, w, h] = region.coords;
-      return `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
-    }
-    if (region.shape === "circle" && region.coords.length >= 3) {
-      const [cx, cy, r] = region.coords;
-      return `circle(${r}% at ${cx}% ${cy}%)`;
-    }
-    if (region.shape === "poly" && region.coords.length >= 6) {
-      const points = [];
-      for (let i = 0; i < region.coords.length; i += 2) {
-        points.push(`${region.coords[i]}% ${region.coords[i + 1]}%`);
-      }
-      return `polygon(${points.join(", ")})`;
-    }
-    return void 0;
-  };
-  const ImageMapOverlayElement = ({ overlay, onAction, onAdvance, onCommitVariables, evaluateConditions: evaluateConditions2, variables }) => {
-    const tweenValues = useTween(overlay.id, "imageMap");
-    const containerRef = React2.useRef(null);
-    const [containerSize, setContainerSize] = React2.useState({ width: 0, height: 0 });
-    const [hoveredRegionId, setHoveredRegionId] = React2.useState(null);
-    const hasTransition = overlay.transition && overlay.transition !== "instant";
-    const [playTransition, setPlayTransition] = React2.useState(overlay.action === "hide" && !!hasTransition);
-    const timeoutRef = React2.useRef(null);
-    React2.useEffect(() => {
-      if (timeoutRef.current !== null) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      if (!overlay.transition || overlay.transition === "instant") {
-        setPlayTransition(false);
-        return;
-      }
-      if (overlay.action === "show") {
-        setPlayTransition(false);
-        timeoutRef.current = window.setTimeout(() => {
-          setPlayTransition(true);
-          timeoutRef.current = null;
-        }, 0);
-        return () => {
-          if (timeoutRef.current !== null) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-          }
-        };
-      }
-      setPlayTransition(true);
-      return () => {
-        if (timeoutRef.current !== null) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-      };
-    }, [overlay.id, overlay.transition, overlay.action]);
-    React2.useEffect(() => {
-      if (!containerRef.current) return;
-      const obs = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-        }
-      });
-      obs.observe(containerRef.current);
-      return () => obs.disconnect();
-    }, []);
-    const applyTransition = playTransition && overlay.transition && overlay.transition !== "instant";
-    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === "hide") : "";
-    const animDuration = `${overlay.duration ?? 0.5}s`;
-    const containerStyle = {
-      position: "absolute",
-      left: `${(tweenValues == null ? void 0 : tweenValues.x) ?? overlay.x}%`,
-      top: `${(tweenValues == null ? void 0 : tweenValues.y) ?? overlay.y}%`,
-      width: `${(tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width}%`,
-      height: `${(tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height}%`,
-      opacity: (tweenValues == null ? void 0 : tweenValues.opacity) ?? overlay.opacity,
-      pointerEvents: "auto"
-    };
-    if (overlay.action === "show" && hasTransition && !playTransition) {
-      containerStyle.opacity = 0;
-    }
-    return /* @__PURE__ */ jsxRuntime2.jsxs(
-      "div",
-      {
-        ref: containerRef,
-        className: applyTransition ? transitionClass : "",
-        style: {
-          ...containerStyle,
-          ...applyTransition ? { animationDuration: animDuration } : {},
-          // A forwards-filled entrance animation animates opacity and would override the
-          // inline opacity, so disable it when a tween controls this element's opacity.
-          ...(tweenValues == null ? void 0 : tweenValues.opacity) !== void 0 ? { animationName: "none" } : {}
-        },
-        children: [
-          /* @__PURE__ */ jsxRuntime2.jsx("img", { src: overlay.imageUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" } }),
-          overlay.hoverImageUrl && hoveredRegionId && (() => {
-            const hoveredRegion = overlay.regions.find((r) => r.id === hoveredRegionId);
-            if (!hoveredRegion) return null;
-            const clipPath = getRegionClipPath(hoveredRegion);
-            if (!clipPath) return null;
-            return /* @__PURE__ */ jsxRuntime2.jsx(
-              "img",
-              {
-                src: overlay.hoverImageUrl,
-                alt: "",
-                style: {
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  pointerEvents: "none",
-                  clipPath,
-                  zIndex: 1
-                }
-              }
-            );
-          })(),
-          overlay.regions.map((region) => /* @__PURE__ */ jsxRuntime2.jsx(
-            ImageMapRegionElement,
-            {
-              region,
-              containerWidth: containerSize.width,
-              containerHeight: containerSize.height,
-              hasHoverImage: !!overlay.hoverImageUrl,
-              onAction,
-              onAdvance,
-              onCommitVariables,
-              evaluateConditions: evaluateConditions2,
-              variables,
-              onRegionHover: setHoveredRegionId,
-              onRegionLeave: () => setHoveredRegionId(null)
-            },
-            region.id
-          ))
-        ]
-      }
-    );
   };
   const HotSpotOverlayElement = ({ overlay, onAction, onAdvance, evaluateConditions: evaluateConditions2, variables, editTime }) => {
     const active = !overlay.conditions || overlay.conditions.length === 0 || evaluateConditions2(overlay.conditions, variables);
@@ -7511,11 +7304,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     const buttonBg = element.backgroundColor || "#4D3273";
     const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? void 0 : "#6B4C9A");
-    return /* @__PURE__ */ jsxRuntime2.jsxs(
+    const { transform, overflow, ...wrapperStyle } = style;
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...wrapperStyle, transform }, children: /* @__PURE__ */ jsxRuntime2.jsxs(
       "button",
       {
-        style: { ...style, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" },
-        className: `transition-transform transform hover:scale-105 relative flex items-center ${{ left: "justify-start", center: "justify-center", right: "justify-end" }[((_a = element.font) == null ? void 0 : _a.align) || "center"]}`,
+        style: { width: "100%", height: "100%", position: "relative", overflow, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit", paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: "border-box" },
+        className: `transition-transform transform hover:scale-105 flex items-center ${{ left: "justify-start", center: "justify-center", right: "justify-end" }[((_a = element.font) == null ? void 0 : _a.align) || "center"]}`,
         onMouseEnter: () => {
           try {
             playSound(element.hoverSoundId);
@@ -7535,9 +7329,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ),
           /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: { ...textStyle, ...extractTextGradientStyle(element.font) || {}, display: "inline-block", pointerEvents: "none" }, children: interpolatedText })
         ]
-      },
-      element.id
-    );
+      }
+    ) }, element.id);
   };
   const AssetCyclerElement = ({ element, style, variables, onVariableChange, project }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
@@ -7903,7 +7696,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const durationMs = duration || 300;
     const delayMs = delay || 0;
     if (!transitionIn || transitionIn === "none") return {};
-    const transitionProp = `all ${durationMs}ms ease-out ${delayMs}ms`;
+    const transitionProp = `opacity ${durationMs}ms ease-out ${delayMs}ms, filter ${durationMs}ms ease-out ${delayMs}ms`;
     return {
       transition: transitionProp,
       animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`
@@ -8058,10 +7851,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       })
     ] });
   };
-  const HotZoneRuntime = ({ screen, onAction, variables, onVariableChange, evaluateConditions: evaluateConditions2, assetResolver, playSound }) => {
+  const InteractiveRuntime = ({ screen, onAction, variables, onVariableChange, evaluateConditions: evaluateConditions2, assetResolver, playSound }) => {
     const { project } = useProject();
     const hotSpots = React2.useMemo(() => deriveHotSpotsFromScreen(screen), [screen]);
-    const hotZoneElements = React2.useMemo(() => deriveHotZoneElementsFromScreen(screen), [screen]);
+    const interactiveElements = React2.useMemo(() => deriveInteractiveElementsFromScreen(screen), [screen]);
     const [elementPositions, setElementPositions] = React2.useState({});
     const [dragState, setDragState] = React2.useState(null);
     const [dragOffset, setDragOffset] = React2.useState(null);
@@ -8122,7 +7915,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!screen.winCondition) return;
       const wc = screen.winCondition;
       if (wc.type === "allPlaced") {
-        const draggableElements = Object.values(hotZoneElements).filter((el) => el.draggable);
+        const draggableElements = Object.values(interactiveElements).filter((el) => el.draggable);
         const allPlaced = draggableElements.length > 0 && draggableElements.every((el) => placedElements[el.id]);
         if (allPlaced) {
           wc.actions.forEach((action) => handleLocalAction(action));
@@ -8133,7 +7926,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           wc.actions.forEach((action) => handleLocalAction(action));
         }
       }
-    }, [placedElements, variables, screen.winCondition, hotZoneElements, handleLocalAction, evaluateConditions2]);
+    }, [placedElements, variables, screen.winCondition, interactiveElements, handleLocalAction, evaluateConditions2]);
     React2.useEffect(() => {
       const unregs = [];
       for (const spot of Object.values(hotSpots)) {
@@ -8196,7 +7989,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           setDragState(null);
           return;
         }
-        const el = hotZoneElements[dragState.elementId];
+        const el = interactiveElements[dragState.elementId];
         if (!el) {
           setDragState(null);
           setDragOffset(null);
@@ -8225,7 +8018,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
       };
-    }, [dragState, dragOffset, containerSize, hotZoneElements, hotSpots, handleLocalAction]);
+    }, [dragState, dragOffset, containerSize, interactiveElements, hotSpots, handleLocalAction]);
     const handleSpotClick = React2.useCallback((spot) => {
       if (spot.trigger === "click") {
         spot.actions.forEach((a) => handleLocalAction(a));
@@ -8264,7 +8057,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             spot.id
           );
         }),
-        Object.values(hotZoneElements).map((el) => {
+        Object.values(interactiveElements).map((el) => {
           if (el.conditions && !evaluateConditions2(el.conditions, variables)) return null;
           if (el.snapToHotSpot && el.hideOnDrop && placedElements[el.id]) return null;
           const isDragging = (dragState == null ? void 0 : dragState.elementId) === el.id;
@@ -8369,9 +8162,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
   };
   const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables }) => {
+    var _a, _b;
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React2.useRef(null);
+    const screenRootRef = React2.useRef(null);
+    const screenSize = useStageSize(screenRootRef);
     React2.useEffect(() => {
       return () => {
         if (backgroundVideoRef.current) {
@@ -8381,31 +8177,101 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       };
     }, []);
+    React2.useEffect(() => {
+      const root = screenRootRef.current;
+      if (!root) return;
+      const px = screen == null ? void 0 : screen.parallax;
+      const active = (px == null ? void 0 : px.mode) === "mouse" || (px == null ? void 0 : px.mode) === "both";
+      const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!active || reduce) {
+        root.style.setProperty("--ppx", "0");
+        root.style.setProperty("--ppy", "0");
+        return;
+      }
+      const intensity = (px == null ? void 0 : px.intensity) ?? 1;
+      const target = { x: 0, y: 0 };
+      const cur = { x: 0, y: 0 };
+      let raf = 0;
+      const onMove = (e) => {
+        const r = root.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        target.x = Math.max(-1, Math.min(1, (e.clientX - r.left) / r.width * 2 - 1));
+        target.y = Math.max(-1, Math.min(1, (e.clientY - r.top) / r.height * 2 - 1));
+      };
+      const onLeave = () => {
+        target.x = 0;
+        target.y = 0;
+      };
+      const tick = () => {
+        cur.x += (target.x - cur.x) * 0.08;
+        cur.y += (target.y - cur.y) * 0.08;
+        root.style.setProperty("--ppx", (cur.x * intensity).toFixed(4));
+        root.style.setProperty("--ppy", (cur.y * intensity).toFixed(4));
+        raf = requestAnimationFrame(tick);
+      };
+      window.addEventListener("mousemove", onMove);
+      root.addEventListener("mouseleave", onLeave);
+      raf = requestAnimationFrame(tick);
+      return () => {
+        cancelAnimationFrame(raf);
+        window.removeEventListener("mousemove", onMove);
+        root.removeEventListener("mouseleave", onLeave);
+      };
+    }, [(_a = screen == null ? void 0 : screen.parallax) == null ? void 0 : _a.mode, (_b = screen == null ? void 0 : screen.parallax) == null ? void 0 : _b.intensity]);
     if (!screen) return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "text-red-500", children: [
       "Error: Screen ",
       screenId,
       " not found."
     ] });
     const isPassThrough = screen.passThrough ?? screenId === project.ui.gameHudScreenId;
-    const getBackgroundElement = () => {
-      if (screen.background.type === "color") {
-        return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { backgroundColor: screen.background.value } });
+    const screenBgScale = (depth) => {
+      var _a2;
+      if (!depth) return 1;
+      const intensity = Math.max(1, ((_a2 = screen.parallax) == null ? void 0 : _a2.intensity) ?? 1);
+      const maxShiftPx = depth * PARALLAX_MAX_PX * intensity * 1.1;
+      const minDim = Math.min((screenSize == null ? void 0 : screenSize.width) || 1280, (screenSize == null ? void 0 : screenSize.height) || 720);
+      return 1 + 2 * maxShiftPx / minDim;
+    };
+    const bgTransitionAnim = (transition, durationMs) => {
+      const d = durationMs ?? 400;
+      switch (transition) {
+        case void 0:
+        case "":
+        case "none":
+          return void 0;
+        case "slide":
+          return `slide-in-right ${d}ms ease-out forwards`;
+        case "iris":
+          return `iris-in ${d}ms ease-out forwards`;
+        case "wipe":
+          return `wipe-right ${d}ms ease-out forwards`;
+        default:
+          return `dissolve-in ${d}ms ease-out forwards`;
       }
-      if (screen.background.assetId) {
-        const url = assetResolver(screen.background.assetId, screen.background.type);
+    };
+    const buildBgPlane = (bg, depth, layer, key, videoRef, transition, transitionDuration) => {
+      var _a2;
+      let node = null;
+      if (bg.type === "color") {
+        node = /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { backgroundColor: bg.value } });
+      } else if (bg.assetId) {
+        const asset = project.backgrounds[bg.assetId] || ((_a2 = project.images) == null ? void 0 : _a2[bg.assetId]) || project.videos[bg.assetId];
+        const isVid = bg.type === "video" || !!(asset && (asset.isVideo || asset.videoUrl));
+        const url = isVid ? assetResolver(bg.assetId, "video") : assetResolver(bg.assetId, "image");
         if (url) {
-          if (screen.background.type === "image") {
-            return /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", className: "absolute inset-0 w-full h-full object-cover" });
-          }
-          if (screen.background.type === "video") {
-            return /* @__PURE__ */ jsxRuntime2.jsx("video", { ref: backgroundVideoRef, src: url, autoPlay: true, loop: true, muted: true, playsInline: true, className: "absolute inset-0 w-full h-full object-cover" });
-          }
+          node = isVid ? /* @__PURE__ */ jsxRuntime2.jsx("video", { ref: videoRef, src: url, autoPlay: true, loop: bg.loop ?? true, muted: true, playsInline: true, className: "absolute inset-0 w-full h-full object-cover" }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: "", className: "absolute inset-0 w-full h-full object-cover" });
         }
       }
-      return null;
+      if (!node) return null;
+      const inner = depth ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { transform: `scale(${screenBgScale(depth)})${parallaxTransform(depth)}`, transformOrigin: "center" }, children: node }) : node;
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: layer, animation: bgTransitionAnim(transition, transitionDuration) }, children: inner }, key);
     };
+    const getBackgroundElement = () => /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+      buildBgPlane(screen.background, screen.backgroundParallaxDepth ?? 0, screen.backgroundLayer ?? 0, "main-bg", backgroundVideoRef, screen.backgroundTransition, screen.backgroundTransitionDuration),
+      (screen.additionalBackgrounds || []).map((b) => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, void 0, b.transition, b.transitionDuration))
+    ] });
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
+      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
@@ -8422,9 +8288,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         top: `${element.y}%`,
         width: `${element.width}%`,
         height: `${element.height}%`,
-        transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)`,
+        // `translateZ(0)` promotes each element onto its own compositing layer. A <video>
+        // background is ALWAYS GPU-composited and (once it has a parallax/scale transform)
+        // will paint over non-composited siblings at the same z-index — which made buttons
+        // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
+        transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform(element.parallaxDepth)} translateZ(0)`,
         overflow: "hidden",
         // Prevent content overflow when using cover
+        // Author-controlled stacking. Default 0 → insertion order (back-compat).
+        zIndex: element.layer ?? 0,
         opacity: (element.opacity ?? 1) * (isDisabled ? 0.45 : 1),
         // On a pass-through screen the wrapper is pointer-events:none, so each visible
         // element must opt back in to remain clickable.
@@ -8443,7 +8315,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.Text: {
           const el = element;
-          const effectiveAlign = el.textAlign || ((_a = el.font) == null ? void 0 : _a.align) || "center";
+          const effectiveAlign = el.textAlign || ((_a2 = el.font) == null ? void 0 : _a2.align) || "center";
           const hAlignClass = { left: "justify-start", center: "justify-center", right: "justify-end" }[effectiveAlign];
           const vAlignClass = { top: "items-start", middle: "items-center", bottom: "items-end" }[el.verticalAlign || "middle"];
           const interpolatedText = interpolateVariables(el.text, variables2, project2);
@@ -8462,7 +8334,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         case UIElementType.Image: {
           const el = element;
-          const bgType = ((_b = el.background) == null ? void 0 : _b.type) || "image";
+          const bgType = ((_b2 = el.background) == null ? void 0 : _b2.type) || "image";
           const bgValue = ((_c = el.background) == null ? void 0 : _c.type) === "color" ? el.background.value : ((_d = el.background) == null ? void 0 : _d.type) ? el.background.assetId : ((_e = el.image) == null ? void 0 : _e.id) || null;
           const containerStyle = {
             ...style,
@@ -8471,7 +8343,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (bgType === "color" && typeof bgValue === "string") {
             return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...containerStyle, backgroundColor: bgValue } }, el.id);
           }
-          const url = bgValue ? bgType === "video" ? (_f = project2.videos[bgValue]) == null ? void 0 : _f.videoUrl : assetResolver(bgValue, "image") : null;
+          const url = bgValue ? assetResolver(bgValue, bgType === "video" ? "video" : "image") : null;
           if (!url || url === "" || url === "http://localhost:3000/") {
             return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: containerStyle, className: "bg-slate-800/50" }, el.id);
           }
@@ -8506,7 +8378,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 src: url,
                 style: mediaStyle,
                 autoPlay: true,
-                loop: true,
+                loop: ((_f = el.background) == null ? void 0 : _f.loop) ?? true,
                 muted: true,
                 playsInline: true,
                 children: [
@@ -8803,7 +8675,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     fontStyle: ((_q = el.font) == null ? void 0 : _q.italic) ? "italic" : "normal",
                     border: `2px solid ${el.borderColor || "#475569"}`,
                     borderRadius: "4px",
-                    padding: "8px 12px"
+                    padding: "8px 12px",
+                    direction: el.arrowSide === "left" ? "rtl" : "ltr",
+                    textAlign: el.arrowSide === "left" ? "right" : "left"
                   },
                   onMouseEnter: (e) => {
                     if (el.hoverColor) {
@@ -8913,8 +8787,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "div",
       {
+        ref: screenRootRef,
         className: "absolute inset-0 w-full h-full",
-        style: { ...screenTransitionStyle, ...isPassThrough ? { pointerEvents: "none" } : {} },
+        style: {
+          isolation: "isolate",
+          ...screenTransitionStyle,
+          ...isPassThrough ? { pointerEvents: "none" } : {},
+          // Pass-through HUDs normally sit below the dialogue box (z20) + choices (z30). When
+          // `hudAboveDialogue` is set, lift this overlay above them (but below flash/history z50)
+          // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
+          // areas stay pointer-events:none, so clicks there still fall through to advance dialogue.
+          ...isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {}
+        },
         children: [
           !isPassThrough && getBackgroundElement(),
           Object.values(screen.elements).map((element) => {
@@ -8925,7 +8809,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           (Object.values(screen.elements || {}).some(
             (el) => el.type === "HotSpot" || el.type === "ImageMap" || el.draggable === true
           ) || !!screen.winCondition) && /* @__PURE__ */ jsxRuntime2.jsx(
-            HotZoneRuntime,
+            InteractiveRuntime,
             {
               screen,
               onAction,
@@ -9220,6 +9104,68 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const ambientFadeInterval = React2.useRef(null);
     const stageRef = React2.useRef(null);
     const stageSize = useStageSize(stageRef);
+    const sceneBasePanX = (playerState == null ? void 0 : playerState.stageState.screen.panX) ?? 0;
+    const sceneBasePanY = (playerState == null ? void 0 : playerState.stageState.screen.panY) ?? 0;
+    React2.useEffect(() => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const scene = playerState ? project.scenes[playerState.currentSceneId] : null;
+      const px = scene == null ? void 0 : scene.parallax;
+      const wantMouse = (px == null ? void 0 : px.mode) === "mouse" || (px == null ? void 0 : px.mode) === "both";
+      const wantCamera = (px == null ? void 0 : px.mode) === "camera" || (px == null ? void 0 : px.mode) === "both";
+      const active = (wantMouse || wantCamera) && (playerState == null ? void 0 : playerState.mode) === "playing";
+      const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!active || reduce) {
+        stage.style.setProperty("--ppx", "0");
+        stage.style.setProperty("--ppy", "0");
+        return;
+      }
+      const intensity = (px == null ? void 0 : px.intensity) ?? 1;
+      const mouseT = { x: 0, y: 0 };
+      const cur = { x: 0, y: 0 };
+      let raf = 0;
+      const onMove = (e) => {
+        const r = stage.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        mouseT.x = Math.max(-1, Math.min(1, (e.clientX - r.left) / r.width * 2 - 1));
+        mouseT.y = Math.max(-1, Math.min(1, (e.clientY - r.top) / r.height * 2 - 1));
+      };
+      const onLeave = () => {
+        mouseT.x = 0;
+        mouseT.y = 0;
+      };
+      const tick = () => {
+        const mx = wantMouse ? mouseT.x : 0;
+        const my = wantMouse ? mouseT.y : 0;
+        cur.x += (mx - cur.x) * 0.08;
+        cur.y += (my - cur.y) * 0.08;
+        let cx = 0, cy = 0;
+        if (wantCamera) {
+          const tw = TweenManager.getCurrentValues("__screen__", "screen");
+          const panX = tw && tw.x != null ? tw.x : sceneBasePanX;
+          const panY = tw && tw.y != null ? tw.y : sceneBasePanY;
+          cx = panX / CAMERA_PAN_REF;
+          cy = panY / CAMERA_PAN_REF;
+        }
+        stage.style.setProperty("--ppx", ((cur.x + cx) * intensity).toFixed(4));
+        stage.style.setProperty("--ppy", ((cur.y + cy) * intensity).toFixed(4));
+        raf = requestAnimationFrame(tick);
+      };
+      if (wantMouse) {
+        window.addEventListener("mousemove", onMove);
+        stage.addEventListener("mouseleave", onLeave);
+      }
+      raf = requestAnimationFrame(tick);
+      return () => {
+        cancelAnimationFrame(raf);
+        if (wantMouse) {
+          window.removeEventListener("mousemove", onMove);
+          stage.removeEventListener("mouseleave", onLeave);
+        }
+        stage.style.setProperty("--ppx", "0");
+        stage.style.setProperty("--ppy", "0");
+      };
+    }, [playerState == null ? void 0 : playerState.currentSceneId, playerState == null ? void 0 : playerState.mode, project.scenes, sceneBasePanX, sceneBasePanY]);
     const playContainerRef = React2.useRef(null);
     const playContainerSize = useStageSize(playContainerRef);
     const audioCtxRef = React2.useRef(null);
@@ -9248,13 +9194,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const [shakeTrigger, setShakeTrigger] = React2.useState(0);
     const [activeCreditRoll, setActiveCreditRoll] = React2.useState(null);
     const assetResolver = React2.useCallback((assetId, type) => {
-      var _a2, _b2, _c2;
+      var _a2, _b2, _c2, _d2, _e, _f;
       if (!assetId) return null;
       switch (type) {
         case "audio":
           return ((_a2 = project.audio[assetId]) == null ? void 0 : _a2.audioUrl) || null;
         case "video":
-          return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || null;
+          return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.backgrounds[assetId]) == null ? void 0 : _c2.videoUrl) || ((_e = (_d2 = project.images) == null ? void 0 : _d2[assetId]) == null ? void 0 : _e.videoUrl) || null;
         case "image": {
           if (project.backgrounds[assetId]) {
             const bg = project.backgrounds[assetId];
@@ -9265,7 +9211,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             return img.videoUrl || img.imageUrl || null;
           }
           if (project.videos[assetId]) {
-            return ((_c2 = project.videos[assetId]) == null ? void 0 : _c2.videoUrl) || null;
+            return ((_f = project.videos[assetId]) == null ? void 0 : _f.videoUrl) || null;
           }
           for (const charId in project.characters) {
             const char = project.characters[charId];
@@ -9639,7 +9585,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         currentIndex: 0,
         commandStack: [],
         variables: initialVariables,
-        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], imageMapOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
+        stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
         history: [],
         savedInputs: {},
         uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -10367,7 +10313,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     textOverlays: [],
                     imageOverlays: [],
                     buttonOverlays: [],
-                    imageMapOverlays: [],
                     movieOverlays: [],
                     screen: {
                       shake: { active: false, intensity: 0 },
@@ -10503,7 +10448,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       textOverlays: [],
                       imageOverlays: [],
                       buttonOverlays: [],
-                      imageMapOverlays: [],
                       movieOverlays: [],
                       screen: {
                         shake: { active: false, intensity: 0 },
@@ -10783,6 +10727,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const movieUrl = assetResolver(movieCmd.videoId, "video");
               const isOverlay = movieCmd.displayMode === "overlay";
               const shouldLoop = movieCmd.loop ?? false;
+              const holdLastFrame = movieCmd.holdLastFrame ?? false;
+              const movieTransition = movieCmd.transition;
+              const movieTransitionDuration = movieCmd.transitionDuration;
               if (isOverlay) {
                 updatePlayerState((p) => {
                   if (!p) return null;
@@ -10794,6 +10741,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       movieOverlays: [...existing, {
                         url: movieUrl || "",
                         loop: shouldLoop,
+                        holdLastFrame,
+                        transition: movieTransition,
+                        transitionDuration: movieTransitionDuration,
+                        commandId: movieCmd.id,
+                        parallaxDepth: movieCmd.parallaxDepth,
                         x: movieCmd.x,
                         y: movieCmd.y,
                         width: movieCmd.width,
@@ -10809,12 +10761,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   instantAdvance = false;
                   updatePlayerState((p) => p ? {
                     ...p,
-                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop }
+                    uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
                   } : null);
                 } else {
                   updatePlayerState((p) => p ? {
                     ...p,
-                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop }
+                    uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false }
                   } : null);
                 }
               }
@@ -11043,16 +10995,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.HideButton: {
               const result = handleHideButton(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.ShowImageMap: {
-              const result = handleShowImageMap(command, commandContext);
-              applyResult(result);
-              break;
-            }
-            case CommandType.HideImageMap: {
-              const result = handleHideImageMap(command, commandContext);
               applyResult(result);
               break;
             }
@@ -11289,7 +11231,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               newState.stageState = {
                 ...newState.stageState,
                 buttonOverlays: [],
-                imageMapOverlays: [],
                 imageOverlays: [],
                 textOverlays: []
               };
@@ -11588,7 +11529,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         stageState: {
                           ...p.stageState,
                           buttonOverlays: [],
-                          imageMapOverlays: [],
                           imageOverlays: []
                         }
                       };
@@ -11618,7 +11558,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         stageState: {
                           ...p.stageState,
                           buttonOverlays: [],
-                          imageMapOverlays: [],
                           imageOverlays: []
                         }
                       };
@@ -11762,7 +11701,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 textOverlays: [],
                 imageOverlays: [],
                 buttonOverlays: [],
-                imageMapOverlays: [],
                 movieOverlays: [],
                 screen: {
                   shake: { active: false, intensity: 0 },
@@ -11827,7 +11765,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     textOverlays: [],
                     imageOverlays: [],
                     buttonOverlays: [],
-                    imageMapOverlays: [],
                     movieOverlays: [],
                     screen: {
                       shake: { active: false, intensity: 0 },
@@ -12110,7 +12047,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 stageState: {
                   ...p.stageState,
                   buttonOverlays: [],
-                  imageMapOverlays: [],
                   imageOverlays: [],
                   textOverlays: []
                 },
@@ -12354,6 +12290,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     }, [playerState == null ? void 0 : playerState.uiState.isSkipping, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, settings.enableSkip, handleDialogueAdvance]);
     const renderStage = () => {
+      var _a2, _b2;
       if (!playerState) return null;
       const state = playerState.stageState;
       const liveVars = mergeDirtyUiVariables(playerState.variables);
@@ -12362,6 +12299,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
       const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state.backgroundIsVideo;
       const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state.backgroundLoop;
+      const effBgDepth = (matchedBgLayer ? matchedBgLayer.parallaxDepth : state.backgroundParallaxDepth) ?? 0;
+      const sceneParallaxIntensity = ((_b2 = (_a2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a2.parallax) == null ? void 0 : _b2.intensity) ?? 1;
+      const bgParallaxScale = (depth) => {
+        if (!depth) return 1;
+        const maxShiftPx = depth * PARALLAX_MAX_PX * Math.max(1, sceneParallaxIntensity) * 1.1;
+        const minDim = Math.min((stageSize == null ? void 0 : stageSize.width) || 1280, (stageSize == null ? void 0 : stageSize.height) || 720);
+        return 1 + 2 * maxShiftPx / minDim;
+      };
       const getPositionStyle2 = (position) => {
         if (typeof position === "object") {
           return {
@@ -12409,38 +12354,70 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           style: { cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? "pointer" : "default" },
           children: [
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: panZoomStyle, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: `w-full h-full ${shakeClass} z-10`, style: { ...shakeIntensityStyle, backgroundColor: effBgColor }, children: [
-              effBgUrl && (effBgIsVideo ? /* @__PURE__ */ jsxRuntime2.jsx(
-                "video",
-                {
-                  src: effBgUrl,
-                  autoPlay: true,
-                  muted: true,
-                  loop: effBgLoop,
-                  playsInline: true,
-                  className: "absolute w-full h-full object-cover"
-                }
-              ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: effBgUrl, alt: "background", className: "absolute w-full h-full object-cover" })),
+              effBgUrl && (() => {
+                const bgMedia = effBgIsVideo ? /* @__PURE__ */ jsxRuntime2.jsx(
+                  "video",
+                  {
+                    src: effBgUrl,
+                    autoPlay: true,
+                    muted: true,
+                    loop: effBgLoop,
+                    playsInline: true,
+                    className: "absolute w-full h-full object-cover"
+                  }
+                ) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: effBgUrl, alt: "background", className: "absolute w-full h-full object-cover" });
+                const inner = effBgDepth ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { transform: `scale(${bgParallaxScale(effBgDepth)})${parallaxTransform(effBgDepth)}`, transformOrigin: "center" }, children: bgMedia }) : bgMedia;
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: 0 }, children: inner });
+              })(),
               playerState == null ? void 0 : playerState.uiState.transitionElement,
+              (state.backgroundStack || []).map((plane) => {
+                if (!plane.url && !plane.color) return null;
+                const planeMedia = plane.url ? plane.isVideo ? /* @__PURE__ */ jsxRuntime2.jsx("video", { src: plane.url, autoPlay: true, muted: true, loop: plane.loop, playsInline: true, className: "absolute w-full h-full object-cover" }) : /* @__PURE__ */ jsxRuntime2.jsx("img", { src: plane.url, alt: "background layer", className: "absolute w-full h-full object-cover" }) : null;
+                const d = plane.parallaxDepth ?? 0;
+                const planeInner = d ? /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { transform: `scale(${bgParallaxScale(d)})${parallaxTransform(d)}`, transformOrigin: "center" }, children: planeMedia }) : planeMedia;
+                const dur = plane.duration ?? 1;
+                const anim = (() => {
+                  switch (plane.transition) {
+                    case void 0:
+                    case "":
+                    case "instant":
+                      return void 0;
+                    case "slide":
+                      return `slide-in-right ${dur}s forwards`;
+                    case "iris-in":
+                      return `iris-in ${dur}s forwards`;
+                    case "wipe-right":
+                      return `wipe-right ${dur}s forwards`;
+                    default:
+                      return `dissolve-in ${dur}s forwards`;
+                  }
+                })();
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 overflow-hidden", style: { zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim }, children: planeInner }, plane.commandId);
+              }),
               state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
                 if (!movie.url) return null;
                 const isCustom = movie.objectFit === "custom";
-                const videoStyle = isCustom ? {
-                  left: `${movie.x ?? 0}%`,
-                  top: `${movie.y ?? 0}%`,
-                  width: `${movie.width ?? 100}%`,
-                  height: `${movie.height ?? 100}%`,
-                  objectFit: "fill",
-                  opacity: movie.opacity ?? 1,
-                  zIndex: 2
-                } : {
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: movie.objectFit || "cover",
-                  opacity: movie.opacity ?? 1,
-                  zIndex: 2
-                };
-                return /* @__PURE__ */ jsxRuntime2.jsx(
+                const movieAnim = movieEntryAnim(movie.transition, movie.transitionDuration);
+                const mtw = movie.commandId ? TweenManager.getCurrentValues(movie.commandId, "movie") : null;
+                const mX = (mtw == null ? void 0 : mtw.x) ?? movie.x ?? 0;
+                const mY = (mtw == null ? void 0 : mtw.y) ?? movie.y ?? 0;
+                const mW = (mtw == null ? void 0 : mtw.width) ?? movie.width ?? 100;
+                const mH = (mtw == null ? void 0 : mtw.height) ?? movie.height ?? 100;
+                const mOpacity = (mtw == null ? void 0 : mtw.opacity) ?? movie.opacity ?? 1;
+                const mRot = (mtw == null ? void 0 : mtw.rotation) ?? 0;
+                const mSX = (mtw == null ? void 0 : mtw.scaleX) ?? 1;
+                const mSY = (mtw == null ? void 0 : mtw.scaleY) ?? 1;
+                const mPx = parallaxTransform(movie.parallaxDepth);
+                const innerTransform = `${mRot || mSX !== 1 || mSY !== 1 ? `rotate(${mRot}deg) scale(${mSX}, ${mSY})` : ""}${mPx}`.trim() || void 0;
+                const containerStyle = isCustom ? { position: "absolute", left: `${mX}%`, top: `${mY}%`, width: `${mW}%`, height: `${mH}%`, zIndex: 2, animation: movieAnim } : { position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 2, animation: movieAnim };
+                const videoFit = isCustom ? "contain" : movie.objectFit || "cover";
+                const exitDur = movie.transition && movie.transition !== "instant" ? movie.transitionDuration ?? 0.5 : 0;
+                const removeOverlay = () => updatePlayerState((p) => {
+                  if (!p) return null;
+                  const overlays = (p.stageState.movieOverlays || []).filter((o) => o.commandId ? o.commandId !== movie.commandId : o !== movie);
+                  return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                });
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "pointer-events-none", style: containerStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
                   "video",
                   {
                     src: movie.url,
@@ -12448,26 +12425,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     muted: true,
                     loop: movie.loop,
                     playsInline: true,
-                    className: "absolute pointer-events-none",
-                    style: videoStyle,
+                    style: { width: "100%", height: "100%", objectFit: videoFit, opacity: movie.exiting ? 0 : mOpacity, transform: innerTransform, transformOrigin: "center", display: "block", transition: movie.exiting ? `opacity ${exitDur}s ease-out` : void 0 },
                     onEnded: () => {
-                      if (movie.loop) return;
-                      updatePlayerState((p) => {
-                        if (!p) return null;
-                        const overlays = [...p.stageState.movieOverlays || []];
-                        overlays.splice(idx, 1);
-                        return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
-                      });
+                      if (movie.loop || movie.holdLastFrame) return;
+                      if (exitDur > 0 && !movie.exiting) {
+                        updatePlayerState((p) => {
+                          if (!p) return null;
+                          const overlays = (p.stageState.movieOverlays || []).map((o) => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
+                          return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                        });
+                        const tid = window.setTimeout(removeOverlay, exitDur * 1e3);
+                        activeEffectTimeoutsRef.current.push(tid);
+                      } else {
+                        removeOverlay();
+                      }
                     }
-                  },
-                  `movie-overlay-${idx}-${movie.url}`
-                );
+                  }
+                ) }, `movie-overlay-${idx}-${movie.url}`);
               }),
               (() => {
                 const allChars = Object.values(state.characters).filter((c) => !c.live || !c.conditions || evaluateConditions2(c.conditions, liveVars));
                 const arranged = project.autoArrangeCharacters ? computeArrangedPositions(allChars.filter((c) => !c.charId.startsWith("__ghost")).map((c) => ({ id: c.charId, position: c.position }))) : null;
                 return allChars.map((char) => {
-                  var _a2, _b2;
+                  var _a3, _b3;
                   let transitionClass = "";
                   let animationDuration = "1s";
                   let slideStyle = {};
@@ -12522,7 +12502,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                           startOffsetX = startCoords.x - endCoords.x;
                           startOffsetY = startCoords.y - endCoords.y;
                         }
-                        if (startOffsetX === 0 && ((_a2 = char.transition) == null ? void 0 : _a2.action) === "show") {
+                        if (startOffsetX === 0 && ((_a3 = char.transition) == null ? void 0 : _a3.action) === "show") {
                           let endX = 50;
                           if (typeof endPos === "object") endX = endPos.x;
                           else if (typeof endPos === "string") {
@@ -12670,6 +12650,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     const scaleY = (charFlipY ? -1 : 1) * charScale;
                     transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
                   }
+                  transformStr = (transformStr + parallaxTransform(char.parallaxDepth)).trim();
                   return /* @__PURE__ */ jsxRuntime2.jsx(
                     "div",
                     {
@@ -12678,7 +12659,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         ...positionStyle,
                         animationDuration,
                         ...slideStyle,
-                        zIndex: 5,
+                        zIndex: 5 + (char.layer ?? 0) * 100,
                         ...transformStr ? { transform: transformStr, transformOrigin: "center bottom" } : {},
                         // A running/forwards-filled entrance animation animates opacity and would
                         // override inline opacity, so disable it when a tween controls opacity.
@@ -12686,7 +12667,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                       },
                       children: wrappedContent
                     },
-                    `${char.charId}-${char.expressionId}-${char.imageUrls.join(",")}-${((_b2 = char.transition) == null ? void 0 : _b2.action) ?? "none"}`
+                    `${char.charId}-${char.expressionId}-${char.imageUrls.join(",")}-${((_b3 = char.transition) == null ? void 0 : _b3.action) ?? "none"}`
                   );
                 });
               })(),
@@ -12732,27 +12713,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   onAction: handleUIAction,
                   playSound,
                   onCommitVariables: commitUiVariablesToPlayerState,
-                  onAdvance: overlay.waitForClick ? () => {
-                    updatePlayerState((p) => {
-                      if (!p) return null;
-                      return {
-                        ...p,
-                        currentIndex: p.currentIndex + 1,
-                        uiState: { ...p.uiState, isWaitingForInput: false }
-                      };
-                    });
-                  } : void 0
-                },
-                overlay.id
-              )),
-              (state.imageMapOverlays || []).map((overlay) => /* @__PURE__ */ jsxRuntime2.jsx(
-                ImageMapOverlayElement,
-                {
-                  overlay,
-                  onAction: handleUIAction,
-                  onCommitVariables: commitUiVariablesToPlayerState,
-                  evaluateConditions: evaluateConditions2,
-                  variables: liveVars,
                   onAdvance: overlay.waitForClick ? () => {
                     updatePlayerState((p) => {
                       if (!p) return null;
@@ -13078,6 +13038,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const currentHudScreen = currentHudScreenId ? project.uiScreens[currentHudScreenId] : null;
       const isHudPassThrough = currentHudScreen ? currentHudScreen.passThrough ?? currentHudScreenId === project.ui.gameHudScreenId : false;
       const shouldShowDialogueOnHud = (currentHudScreen == null ? void 0 : currentHudScreen.showDialogue) || isHudPassThrough;
+      const movieExitDur = uiState.movieTransition && uiState.movieTransition !== "instant" ? uiState.movieTransitionDuration ?? 0.5 : 0;
       return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
         uiState.showHistory && /* @__PURE__ */ jsxRuntime2.jsx(
           HistoryPanel,
@@ -13090,9 +13051,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           "div",
           {
             className: "absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white",
+            style: { opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : void 0 },
             onClick: () => {
               if (!uiState.isWaitingForInput) return;
-              updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false } } : null);
+              updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
             },
             children: [
               /* @__PURE__ */ jsxRuntime2.jsx(
@@ -13100,11 +13062,28 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 {
                   src: uiState.movieUrl,
                   autoPlay: true,
+                  playsInline: true,
+                  ref: (el) => {
+                    if (!el) return;
+                    el.play().catch(() => {
+                      el.muted = true;
+                      el.play().catch(() => {
+                      });
+                    });
+                  },
                   loop: uiState.movieLoop ?? false,
-                  style: { width: "100%", height: "100%", objectFit: "contain" },
+                  style: { width: "100%", height: "100%", objectFit: "contain", animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) },
                   onEnded: () => {
                     if (uiState.movieLoop) return;
-                    if (uiState.isWaitingForInput) {
+                    if (uiState.movieHoldLastFrame) return;
+                    const wasWaiting = uiState.isWaitingForInput;
+                    if (movieExitDur > 0 && !uiState.movieExiting) {
+                      updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieExiting: true } } : null);
+                      const tid = window.setTimeout(() => {
+                        updatePlayerState((p) => p ? { ...p, ...wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false } } : null);
+                      }, movieExitDur * 1e3);
+                      activeEffectTimeoutsRef.current.push(tid);
+                    } else if (wasWaiting) {
                       updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false } } : null);
                     } else {
                       updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : null);
@@ -13357,7 +13336,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const activeMenuScreen = currentScreenId ? project.uiScreens[currentScreenId] : null;
     const activeHudScreen = hudScreenId ? project.uiScreens[hudScreenId] : null;
     const activeOverlayEffects = normalizeOverlayEffects([
-      ...(playerState == null ? void 0 : playerState.stageState.screen.overlayEffects) ?? [],
+      // Scene screen-FX belong to the scene stage, which isn't rendered while paused.
+      // Including them in pause let a restored (Continue/load) effect fade in over the
+      // pause menu and black it out — so gate them to playing mode.
+      ...((playerState == null ? void 0 : playerState.mode) === "playing" ? playerState == null ? void 0 : playerState.stageState.screen.overlayEffects : []) ?? [],
       ...(activeHudScreen == null ? void 0 : activeHudScreen.effects) ?? [],
       ...(activeMenuScreen == null ? void 0 : activeMenuScreen.effects) ?? []
     ]);

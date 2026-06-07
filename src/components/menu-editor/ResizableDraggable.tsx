@@ -24,11 +24,15 @@ export interface ResizableDraggableProps {
     locked?: boolean;
     /** If true, children can receive pointer events (for nested interactive content) */
     allowChildInteraction?: boolean;
+    /** Right-click handler (used to open the element radial menu). */
+    onContextMenu?: (e: React.MouseEvent) => void;
+    /** Stacking order on the canvas (mirrors the element's `layer`). */
+    zIndex?: number;
 }
 
 const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     x, y, width, height, anchorX, anchorY, parentSize, isSelected, onSelect, onUpdate, children,
-    snapGrid = 1, showSnapGuides, label, locked, allowChildInteraction,
+    snapGrid = 1, showSnapGuides, label, locked, allowChildInteraction, onContextMenu, zIndex,
 }) => {
 
     const ref = useRef<HTMLDivElement>(null);
@@ -134,6 +138,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
         width: `${safeWidth}%`, height: `${safeHeight}%`,
         transform: `translate(-${safeAnchorX * 100}%, -${safeAnchorY * 100}%)`,
         cursor: locked ? 'default' : isDragging ? 'grabbing' : 'grab',
+        zIndex,
     };
 
     const handleClasses = "absolute bg-sky-400 border border-slate-900 rounded-full";
@@ -151,7 +156,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     const isInteracting = isDragging || !!isResizing;
 
     return (
-        <div ref={ref} style={style} onMouseDown={(e) => handleMouseDown(e, 'drag')}>
+        <div ref={ref} style={style} onMouseDown={(e) => handleMouseDown(e, 'drag')} onContextMenu={onContextMenu}>
             <div className={`relative w-full h-full ${isSelected ? 'outline outline-2 outline-sky-400 outline-offset-2' : ''}`}>
                 <div style={{ pointerEvents: allowChildInteraction ? 'auto' : 'none', width: '100%', height: '100%' }}>
                     {children}

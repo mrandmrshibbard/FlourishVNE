@@ -16,8 +16,9 @@ import CharacterCustomizationWizard, { GeneratedConfig } from './CharacterCustom
 import CGGalleryWizard, { CGGalleryGeneratedConfig } from './CGGalleryWizard';
 import SystemWizard from './SystemWizard';
 import { applySystemWizardResult } from '../../features/systems/applySystem';
-import { HotSpotOverlay, HotZoneElementOverlay } from '../hot-zone/HotZoneOverlays';
-import { isHotSpotElement, isInteractiveElement } from '../../utils/hotZoneShims';
+import { HotSpotOverlay, InteractiveElementOverlay } from '../interactive-elements/InteractiveElementOverlays';
+import { isHotSpotElement, isInteractiveElement } from '../../utils/interactiveElements';
+import { useElementRadial } from './ElementRadialContext';
 
 // Safe wrapper for element rendering to prevent crashes.
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
@@ -48,13 +49,13 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             // Resolve button image background (same logic as LivePreview)
             const btnImageUrl = btn.image ? (
                 btn.image.type === 'video'
-                    ? project.videos[btn.image.id]?.videoUrl
+                    ? (project.videos[btn.image.id]?.videoUrl || (project.backgrounds[btn.image.id] as any)?.videoUrl || (project.images[btn.image.id] as any)?.videoUrl)
                     : project.images[btn.image.id]?.imageUrl || project.backgrounds[btn.image.id]?.imageUrl
             ) : null;
             const btnAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[btn.font?.align || 'center'];
             return <div
                 className={`w-full h-full border border-white/20 rounded flex items-center ${btnAlignClass} relative overflow-hidden`}
-                style={{ pointerEvents: 'none' }}
+                style={{ pointerEvents: 'none', paddingLeft: `${btn.paddingX ?? 0}%`, paddingRight: `${btn.paddingX ?? 0}%`, boxSizing: 'border-box' }}
             >
                 {btnImageUrl ? (
                     <img src={btnImageUrl} alt="" className="absolute inset-0 w-full h-full object-fill" />
@@ -94,8 +95,9 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             
             // Otherwise it's an image or video asset
             const url = bgValue ? (
-                bgType === 'video' ? project.videos[bgValue]?.videoUrl : 
-                project.images[bgValue]?.imageUrl || project.backgrounds[bgValue]?.imageUrl
+                bgType === 'video'
+                    ? (project.videos[bgValue]?.videoUrl || (project.backgrounds[bgValue] as any)?.videoUrl || (project.images[bgValue] as any)?.videoUrl)
+                    : project.images[bgValue]?.imageUrl || project.backgrounds[bgValue]?.imageUrl
             ) : null;
             
             if (!url) {
@@ -292,6 +294,8 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                         ...fontSettingsToStyle(dropdown.font),
                         backgroundColor: dropdown.backgroundColor || '#1e293b',
                         borderColor: dropdown.borderColor || '#475569',
+                        direction: dropdown.arrowSide === 'left' ? 'rtl' : 'ltr',
+                        textAlign: dropdown.arrowSide === 'left' ? 'right' : 'left',
                         pointerEvents: 'none'
                     }}
                 >
@@ -377,16 +381,26 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
 }
 
 
-const MenuEditor: React.FC<{ 
+const MenuEditor: React.FC<{
     activeScreenId: VNID,
     selectedElementIds: VNID[],
     setSelectedElementIds: (ids: VNID[]) => void,
-}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds }) => {
+    /** True while the Live Preview overlay is open — canvas drops its <video> backgrounds then. */
+    isPlaying?: boolean,
+}> = ({ activeScreenId, selectedElementIds, setSelectedElementIds, isPlaying }) => {
     const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const toast = useToast();
     const screen = project.uiScreens[activeScreenId];
     const [showWizard, setShowWizard] = useState(false);
+    // Bumped when Test Play closes so the canvas <video> backgrounds remount (the browser evicts
+    // a video that sat behind the fullscreen preview and won't auto-resume otherwise).
+    const [videoReloadNonce, setVideoReloadNonce] = useState(0);
+    useEffect(() => {
+        const onPlayEnded = () => setVideoReloadNonce(n => n + 1);
+        window.addEventListener('flourish:playended', onPlayEnded);
+        return () => window.removeEventListener('flourish:playended', onPlayEnded);
+    }, []);
     const [showCGGalleryWizard, setShowCGGalleryWizard] = useState(false);
     const [showShopWizard, setShowShopWizard] = useState(false);
     const [showInventoryWizard, setShowInventoryWizard] = useState(false);
@@ -578,6 +592,8 @@ const MenuEditor: React.FC<{
     };
 
     // --- Selection helpers ---
+    const elementRadial = useElementRadial();
+
     const handleSelectElement = (elementId: VNID, e: React.MouseEvent) => {
         if (e.ctrlKey || e.metaKey) {
             // Toggle element in multi-select
@@ -590,6 +606,13 @@ const MenuEditor: React.FC<{
             // Single select
             setSelectedElementIds([elementId]);
         }
+    };
+
+    // Right-click an element on the canvas → open its group radial menu.
+    const handleElementContextMenu = (elementId: VNID, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elementRadial?.openByElementId(elementId, e.clientX, e.clientY);
     };
 
     const handleWizardGenerate = (config: GeneratedConfig) => {
@@ -697,14 +720,17 @@ const MenuEditor: React.FC<{
         }
     };
     
+    // Resolve the background by the ACTUAL asset, not the declared type — a video can be picked
+    // under an 'image' background (the image picker lists videos), which must still render as a video.
+    const bgAssetId = screen.background.type !== 'color' ? screen.background.assetId : null;
+    const bgAsset: any = bgAssetId ? (project.backgrounds[bgAssetId] || project.images?.[bgAssetId] || project.videos[bgAssetId]) : null;
+    const bgIsVideo = !!(bgAsset && (bgAsset.isVideo || bgAsset.videoUrl));
+    const mainBgVideoUrl = bgIsVideo ? bgAsset.videoUrl : null;
     const getBackground = () => {
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
-        if (screen.background.assetId) {
-             const url = screen.background.type === 'image' 
-                ? (project.backgrounds[screen.background.assetId]?.imageUrl || project.images?.[screen.background.assetId]?.imageUrl)
-                : project.videos[screen.background.assetId]?.videoUrl;
-            if (url) return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' };
-        }
+        // Video backgrounds can't be a CSS background-image — they render as a <video> child below.
+        if (bgIsVideo) return {};
+        if (bgAsset?.imageUrl) return { backgroundImage: `url(${bgAsset.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' };
         return {};
     };
 
@@ -719,6 +745,9 @@ const MenuEditor: React.FC<{
                     onMouseDown={() => setSelectedElementIds([])}
                     style={{
                         ...getBackground(),
+                        // Confine element `layer` z-indices to this canvas (own stacking context)
+                        // so a layered element never floats above the editor chrome.
+                        isolation: 'isolate',
                         aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`,
                         maxWidth: '100%',
                         maxHeight: '100%',
@@ -726,9 +755,39 @@ const MenuEditor: React.FC<{
                         '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1,
                     } as React.CSSProperties}
                 >
+                    {/* Main video background — CSS can't show a video, so render a real <video>.
+                        Dropped while Test Play is open (it's covered by the overlay): the browser
+                        evicts an offscreen video behind a fullscreen overlay and won't re-fire
+                        autoPlay, leaving it broken/blank on return — so we unmount it during play
+                        and let it mount fresh when the editor is shown again. */}
+                    {mainBgVideoUrl && !isPlaying && (
+                        <video key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0 }} />
+                    )}
+
+                    {/* Additional background planes (multi-plane parallax) — shown at their layer
+                        so the author can arrange them. Static here (no parallax drift). */}
+                    {(screen.additionalBackgrounds || []).map(b => {
+                        if (b.background.type === 'color') {
+                            return <div key={b.id} className="absolute inset-0" style={{ zIndex: b.layer ?? 0, backgroundColor: b.background.value }} />;
+                        }
+                        // Detect video by the actual asset, not the declared type.
+                        const planeAsset: any = b.background.assetId ? (project.backgrounds[b.background.assetId] || project.images?.[b.background.assetId] || project.videos[b.background.assetId]) : null;
+                        const planeIsVideo = !!(planeAsset && (planeAsset.isVideo || planeAsset.videoUrl));
+                        const url = planeAsset ? (planeIsVideo ? planeAsset.videoUrl : planeAsset.imageUrl) : null;
+                        if (!url) return null;
+                        const planeScale = b.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } as const : undefined;
+                        return (
+                            <div key={b.id} className="absolute inset-0 overflow-hidden" style={{ zIndex: b.layer ?? 0 }}>
+                                {planeIsVideo
+                                    ? (!isPlaying && <video key={`v-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={url} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={planeScale} />)
+                                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" style={planeScale} />}
+                            </div>
+                        );
+                    })}
+
                     {/* Standard UI elements (non-interactive). Hot spots, image maps, and any
-                        draggable element are skipped here — they render via the dedicated hot zone
-                        overlays below using shapes derived from `screen.elements`. */}
+                        draggable element are skipped here — they render via the dedicated
+                        interactive-element overlays below, read from `screen.elements`. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => {
                         if (isInteractiveElement(element)) return null;
                         return (
@@ -744,6 +803,8 @@ const MenuEditor: React.FC<{
                                     handleSelectElement(element.id, e);
                                 }}
                                 onUpdate={updates => handleUpdateElement(element.id, updates)}
+                                onContextMenu={(e) => handleElementContextMenu(element.id, e)}
+                                zIndex={(element as any).layer ?? 0}
                                 snapGrid={1}
                             >
                                 <SafeUIElementRenderer element={element} project={project} />
@@ -751,7 +812,7 @@ const MenuEditor: React.FC<{
                         );
                     })}
 
-                    {/* Hot zone overlays. Hot spots, image maps, and draggables are typed
+                    {/* Interactive-element overlays. Hot spots, image maps, and draggables are typed
                         entries in screen.elements — the overlay components consume them directly. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((el: VNUIElement) => {
                         if (isHotSpotElement(el)) {
@@ -766,12 +827,14 @@ const MenuEditor: React.FC<{
                                         handleSelectElement(el.id, e);
                                     }}
                                     onUpdate={updates => handleUpdateInteractive(el.id, updates)}
+                                    onContextMenu={(e) => handleElementContextMenu(el.id, e)}
+                                    zIndex={(el as any).layer ?? 0}
                                 />
                             );
                         }
                         if (isInteractiveElement(el)) {
                             return (
-                                <HotZoneElementOverlay
+                                <InteractiveElementOverlay
                                     key={el.id}
                                     element={el}
                                     project={project}
@@ -782,6 +845,8 @@ const MenuEditor: React.FC<{
                                         handleSelectElement(el.id, e);
                                     }}
                                     onUpdate={updates => handleUpdateInteractive(el.id, updates)}
+                                    onContextMenu={(e) => handleElementContextMenu(el.id, e)}
+                                    zIndex={(el as any).layer ?? 0}
                                 />
                             );
                         }

@@ -1,6 +1,6 @@
 import { VNID, VNPosition, VNTransition } from '../../types';
 import { VNSetVariableOperator } from '../variables/types';
-import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction } from '../../types/shared';
+import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction, VNParallaxSettings } from '../../types/shared';
 import type { VNScreenOverlayEffectType, VNSnowAshVariant } from '../../types';
 import type { EasingType } from '../../components/live-preview/systems/easingFunctions';
 
@@ -77,8 +77,6 @@ export enum CommandType {
     SpawnParticles = 'SpawnParticles', // Spawn a particle effect on stage
     StopParticles = 'StopParticles', // Stop/clear particle effects
     CallCommonEvent = 'CallCommonEvent', // Invoke a reusable Common Event
-    ShowImageMap = 'ShowImageMap', // DEPRECATED — inert legacy command (superseded by ShowHotSpot). Kept for backward-compat loading.
-    HideImageMap = 'HideImageMap', // DEPRECATED — inert legacy command. Kept for backward-compat loading.
     ShowHotSpot = 'ShowHotSpot', // Place an interactive hot spot on the scene (click / hover / drop target)
     HideHotSpot = 'HideHotSpot', // Remove a scene hot spot
     TweenElement = 'TweenElement', // Animate position/size/opacity/etc. of an on-stage element over time
@@ -111,6 +109,19 @@ interface BaseCommand {
      */
     liveConditions?: boolean;
     modifiers?: CommandModifiers;
+    /**
+     * Stage stacking order for visual commands (ShowImage/ShowCharacter/ShowText/
+     * ShowButton/PlayMovie/hot spots/image maps). Higher = nearer the viewer. Optional;
+     * when undefined the visual uses its default type-band order (back-compat, no
+     * migration). Confined to the scene stage — never overlaps the dialogue/HUD bands.
+     */
+    layer?: number;
+    /**
+     * Parallax depth for visual commands. 0/undefined = locked (no parallax). Higher moves
+     * more with the pointer/camera. Render-time offset only; composes with `layer`. The
+     * scene's `parallax` setting decides whether/how it's driven.
+     */
+    parallaxDepth?: number;
 }
 
 /**
@@ -151,6 +162,16 @@ export interface SetBackgroundCommand extends BaseCommand {
     backgroundColor?: string;
     transition: VNTransition;
     duration: number; // in seconds
+    /** Loop the video while shown (additive; SetBackground reads the asset's loop flag when unset). */
+    loop?: boolean;
+    /**
+     * When true, this background is ADDED as its own persistent plane (keyed by command id)
+     * at its `layer`/`parallaxDepth` instead of replacing the base background. Lets authors
+     * stack multiple backdrops for multi-plane parallax scrolling. Default/undefined = the
+     * normal replace behavior. Each stacked plane plays its own entry transition once on
+     * mount. Additive-optional — older projects/saves are unaffected.
+     */
+    stack?: boolean;
 }
 
 /**
@@ -297,6 +318,13 @@ export interface PlayMovieCommand extends BaseCommand {
     displayMode?: 'fullscreen' | 'overlay';
     /** Whether the movie loops continuously */
     loop?: boolean;
+    /** When the (non-looping) movie ends, freeze on its last frame instead of clearing/advancing.
+     *  Lets a one-shot clip hold its final frame (e.g. a video transition that should stay). */
+    holdLastFrame?: boolean;
+    /** Entry transition for the movie when it appears (fade/dissolve/etc.). Default = instant. */
+    transition?: VNTransition;
+    /** Entry transition duration in seconds (default 0.5). */
+    transitionDuration?: number;
     /** X position as percentage (0-100). Default: 0 (left edge) */
     x?: number;
     /** Y position as percentage (0-100). Default: 0 (top edge) */
@@ -459,6 +487,8 @@ export interface ShowButtonCommand extends BaseCommand {
     textColor?: string;
     fontSize?: number;
     fontWeight?: 'normal' | 'bold';
+    textAlign?: 'left' | 'center' | 'right'; // horizontal text alignment, default 'center'
+    paddingX?: number; // inner horizontal padding in % of button width; keeps non-centered text off the edge; default 0
     borderRadius?: number; // pixels
     opacity?: number; // 0-1, default 1
     // Images (optional)
@@ -697,32 +727,6 @@ export interface ImageMapRegion {
     conditions?: VNCondition[];
 }
 
-export interface ShowImageMapCommand extends BaseCommand {
-    type: CommandType.ShowImageMap;
-    /** Background image for the image map */
-    imageId: VNID;
-    /** Hover state image (shown clipped to the hovered region, Ren'Py-style) */
-    hoverImageId?: VNID;
-    /** Clickable regions overlaid on the image */
-    regions: ImageMapRegion[];
-    x: number; // percentage
-    y: number; // percentage
-    width: number; // percentage
-    height: number; // percentage
-    opacity: number; // 0-1
-    /** Whether to pause command execution until a region is clicked */
-    waitForClick: boolean;
-    transition: VNTransition;
-    duration: number; // in seconds
-}
-
-export interface HideImageMapCommand extends BaseCommand {
-    type: CommandType.HideImageMap;
-    targetCommandId: VNID;
-    transition: VNTransition;
-    duration: number; // in seconds
-}
-
 /** An interactive hot spot placed on the scene stage. Click/hover fires its actions;
  *  a drag-drop spot is a drop target reachable from any surface via the drop-target
  *  registry (e.g. drag an item from the HUD onto it). Mirrors screen hot spots. */
@@ -755,7 +759,7 @@ export interface HideHotSpotCommand extends BaseCommand {
 }
 
 /** Target element type for tween commands */
-export type TweenTargetType = 'character' | 'image' | 'text' | 'button' | 'imageMap' | 'screen';
+export type TweenTargetType = 'character' | 'image' | 'text' | 'button' | 'screen' | 'movie';
 
 /**
  * Tween command — smoothly animates properties of an on-stage element over time.
@@ -816,7 +820,6 @@ export type VNCommand =
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
-  | ShowImageMapCommand | HideImageMapCommand
   | ShowHotSpotCommand | HideHotSpotCommand
   | TweenElementCommand;
 
@@ -828,4 +831,6 @@ export interface VNScene {
     fallbackSceneId?: VNID;         // Jump here if conditions fail
     outTransition?: 'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'; // How this scene exits
     outTransitionDuration?: number;  // Exit transition duration in seconds (default 0.5)
+    /** Optional parallax for this scene's stage (off by default). */
+    parallax?: VNParallaxSettings;
 }

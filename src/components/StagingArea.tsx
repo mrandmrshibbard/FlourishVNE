@@ -16,6 +16,7 @@ import { VNCharacterLayer } from '../features/character/types';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
+import { useCommandRadial } from './inspector/CommandRadialContext';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
 import { GradientText } from './ui/GradientText';
 
@@ -57,6 +58,7 @@ import { interpolateVariables } from '../utils/variableInterpolation';
 
 interface TextOverlay {
     id: VNID;
+    layer?: number;
     text: string;
     x: number;
     y: number;
@@ -80,6 +82,7 @@ interface TextOverlay {
 
 interface ImageOverlay {
     id: VNID;
+    layer?: number;
     imageUrl: string;
     x: number;
     y: number;
@@ -95,6 +98,7 @@ interface ImageOverlay {
 
 interface ButtonOverlay {
     id: VNID;
+    layer?: number;
     text: string;
     x: number;
     y: number;
@@ -104,6 +108,8 @@ interface ButtonOverlay {
     textColor: string;
     fontSize: number;
     fontWeight: string;
+    textAlign: 'left' | 'center' | 'right';
+    paddingX: number;
     borderRadius: number;
     imageUrl?: string;
     hoverImageUrl?: string;
@@ -114,6 +120,7 @@ interface ButtonOverlay {
 
 interface StageCharacterState {
     charId: VNID;
+    layer?: number;
     position: VNPosition;
     imageUrls: string[];
     transition?: VNTransition;
@@ -126,6 +133,10 @@ interface StageCharacterState {
 
 interface StageState {
     backgroundUrl: string | null;
+    /** True when backgroundUrl points at a video asset (render <video>, not <img>). */
+    backgroundIsVideo?: boolean;
+    /** Stacked background planes (SetBackground with `stack`) — shown in editor at their layer. */
+    backgroundStack?: { commandId: string; url: string | null; color?: string; parallaxDepth?: number; layer?: number; isVideo?: boolean }[];
     characters: Record<VNID, StageCharacterState>;
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
@@ -155,6 +166,7 @@ interface StageState {
         height: number;
         opacity: number;
         objectFit: string;
+        sourceCommandId?: string;
     } | null;
     flash: { color: string } | null;
     choices: ChoiceOption[] | null;
@@ -171,8 +183,17 @@ const StagingArea: React.FC<{
     style?: React.CSSProperties;
 }> = ({ project, activeSceneId, selectedCommandIndex, className, style }) => {
     const { dispatch } = useProject();
+    const commandRadial = useCommandRadial();
     const [showCommandIndicators, setShowCommandIndicators] = React.useState(true);
     const [showVariableState, setShowVariableState] = React.useState(false);
+    // Bumped when Test Play closes so the canvas <video> remounts (the browser evicts a video
+    // that sat behind the fullscreen preview and won't auto-resume otherwise).
+    const [videoReloadNonce, setVideoReloadNonce] = React.useState(0);
+    React.useEffect(() => {
+        const onPlayEnded = () => setVideoReloadNonce(n => n + 1);
+        window.addEventListener('flourish:playended', onPlayEnded);
+        return () => window.removeEventListener('flourish:playended', onPlayEnded);
+    }, []);
     const stageRef = React.useRef<HTMLDivElement>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = React.useState({ width: 1280, height: 720 }); // Default 16:9 at 720p
@@ -263,6 +284,8 @@ const StagingArea: React.FC<{
 
         // Initialize states
         let backgroundUrl: string | null = null;
+        let backgroundIsVideo = false;
+        let backgroundStack: NonNullable<StageState['backgroundStack']> = [];
         let characters: Record<VNID, StageCharacterState> = {};
         let textOverlays: TextOverlay[] = [];
         let imageOverlays: ImageOverlay[] = [];
@@ -292,13 +315,36 @@ const StagingArea: React.FC<{
             }
 
             switch (command.type) {
-                case CommandType.SetBackground:
-                    backgroundUrl = project.backgrounds[command.backgroundId]?.imageUrl || 
-                                   project.backgrounds[command.backgroundId]?.videoUrl ||
-                                   project.images?.[command.backgroundId]?.imageUrl || 
-                                   project.images?.[command.backgroundId]?.videoUrl ||
-                                   null;
+                case CommandType.SetBackground: {
+                    // Resolve across collections AND detect whether the asset is actually a video
+                    // (a video can be uploaded under the Backgrounds/Images tab, and the image picker
+                    // lists videos — so render by the ACTUAL asset, not the declared type).
+                    const bgAsset = command.backgroundColor ? null : (
+                        project.backgrounds[command.backgroundId] ||
+                        project.images?.[command.backgroundId] ||
+                        (project.videos?.[command.backgroundId] as any) ||
+                        null
+                    );
+                    const bgIsVid = !!(bgAsset && ((bgAsset as any).isVideo || (bgAsset as any).videoUrl) && !(bgAsset as any).imageUrl);
+                    const resolvedBgUrl = command.backgroundColor ? null : (
+                        bgIsVid
+                            ? ((bgAsset as any)?.videoUrl || null)
+                            : ((bgAsset as any)?.imageUrl || (bgAsset as any)?.videoUrl || null)
+                    );
+                    if (command.stack) {
+                        // Stacked plane: add/replace its own plane (keyed by command id) instead
+                        // of replacing the base background — mirrors the runtime so the editor
+                        // shows every stacked backdrop.
+                        backgroundStack = [
+                            ...backgroundStack.filter(p => p.commandId !== command.id),
+                            { commandId: command.id, url: resolvedBgUrl, color: command.backgroundColor, parallaxDepth: command.parallaxDepth, layer: command.layer, isVideo: bgIsVid },
+                        ];
+                    } else {
+                        backgroundUrl = resolvedBgUrl;
+                        backgroundIsVideo = bgIsVid;
+                    }
                     break;
+                }
                 case CommandType.ShowCharacter:
                     const charData = project.characters[command.characterId];
                     const exprData = charData?.expressions[command.expressionId];
@@ -312,7 +358,7 @@ const StagingArea: React.FC<{
                                 if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
                             }
                         });
-                        characters[command.characterId] = { charId: command.characterId, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY };
+                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY };
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -342,7 +388,7 @@ const StagingArea: React.FC<{
                 case CommandType.ResetScreenEffects: screen = { ...screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0 }; break;
                 case CommandType.ShowText:
                     textOverlays.push({
-                        id: command.id, text: command.text, x: command.x, y: command.y,
+                        id: command.id, layer: command.layer, text: command.text, x: command.x, y: command.y,
                         fontSize: command.fontSize, fontFamily: command.fontFamily, color: command.color,
                         width: command.width, height: command.height, textAlign: command.textAlign, verticalAlign: command.verticalAlign,
                         fontWeight: command.fontWeight, fontStyle: command.fontStyle, letterSpacing: command.letterSpacing,
@@ -357,7 +403,7 @@ const StagingArea: React.FC<{
                     const imageUrl = project.images[command.imageId]?.imageUrl || project.backgrounds[command.imageId]?.imageUrl;
                     if (imageUrl) {
                         imageOverlays.push({
-                            id: command.id, imageUrl, x: command.x, y: command.y,
+                            id: command.id, layer: command.layer, imageUrl, x: command.x, y: command.y,
                             width: command.width, height: command.height, rotation: command.rotation, opacity: command.opacity,
                             scaleX: command.scaleX ?? 1, scaleY: command.scaleY ?? 1,
                             flipX: command.flipX, flipY: command.flipY,
@@ -385,6 +431,7 @@ const StagingArea: React.FC<{
                         const hoverImageUrl = resolveBtnAsset(buttonCmd.hoverImage);
                         buttonOverlays.push({
                             id: buttonCmd.id,
+                            layer: buttonCmd.layer,
                             text: buttonCmd.text,
                             x: buttonCmd.x,
                             y: buttonCmd.y,
@@ -397,6 +444,8 @@ const StagingArea: React.FC<{
                             textColor: buttonCmd.textColor || '#ffffff',
                             fontSize: buttonCmd.fontSize || 18,
                             fontWeight: buttonCmd.fontWeight || 'normal',
+                            textAlign: buttonCmd.textAlign || 'center',
+                            paddingX: buttonCmd.paddingX ?? 0,
                             borderRadius: buttonCmd.borderRadius ?? 8,
                             imageUrl,
                             hoverImageUrl,
@@ -435,7 +484,10 @@ const StagingArea: React.FC<{
                     break;
                 case CommandType.PlayMovie: {
                     const movieCmd = currentCommand as PlayMovieCommand;
-                    const videoAsset = project.videos[movieCmd.videoId];
+                    // A video can live in videos OR backgrounds/images (uploaded under those tabs).
+                    const videoAsset = (project.videos[movieCmd.videoId]
+                        || (project.backgrounds as any)[movieCmd.videoId]
+                        || (project.images as any)?.[movieCmd.videoId]) as any;
                     const videoUrl = videoAsset?.videoUrl || null;
                     movie = {
                         videoUrl: videoUrl || '',
@@ -447,6 +499,7 @@ const StagingArea: React.FC<{
                         height: movieCmd.height ?? 100,
                         opacity: movieCmd.opacity ?? 1,
                         objectFit: movieCmd.objectFit || 'cover',
+                        sourceCommandId: movieCmd.id,
                     };
                     break;
                 }
@@ -471,12 +524,12 @@ const StagingArea: React.FC<{
             }
         }
 
-        setStageState({ backgroundUrl, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, textInput, commandIndicator, variables: currentVariables });
+        setStageState({ backgroundUrl, backgroundIsVideo, backgroundStack, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, textInput, commandIndicator, variables: currentVariables });
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
     // --- Drag-to-Position State ---
-    type DragKind = 'character' | 'text' | 'image' | 'button' | 'hotspot';
+    type DragKind = 'character' | 'text' | 'image' | 'button' | 'hotspot' | 'movie';
     const [overlayDrag, setOverlayDrag] = useState<{
         kind: DragKind;
         overlayId: string;
@@ -878,8 +931,14 @@ const StagingArea: React.FC<{
                         </div>
                     </div>
                 )}
-                {/* Dialogue box – percentage positioned (matching InGameUIEditor) */}
+                {/* Dialogue box – percentage positioned (matching InGameUIEditor).
+                    Right-click opens the radial for the underlying Dialogue COMMAND
+                    (text/speaker/effect/logic) — not the dialogue-box styling, which
+                    lives in the In-Game UI editor. */}
                 <div className="absolute z-20"
+                     onContextMenu={commandRadial && selectedCommandIndex !== null
+                         ? (e) => { e.preventDefault(); commandRadial.openByIndex(selectedCommandIndex, e.clientX, e.clientY); }
+                         : undefined}
                      style={{
                          left: `${dialogueXPct}%`,
                          top: `${dialogueYPct}%`,
@@ -1094,18 +1153,41 @@ const StagingArea: React.FC<{
             }}
         >
             <div ref={containerRef} className="w-full h-full flex items-center justify-center p-2">
-                <div 
+                <div
                     ref={stageRef}
-                    className="relative bg-[var(--bg-primary)]/50 rounded-md overflow-hidden" 
-                    style={{ width: stageSize.width, height: stageSize.height, '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
+                    className="relative bg-[var(--bg-primary)]/50 rounded-md overflow-hidden"
+                    // `isolation: isolate` makes the stage its own stacking context so per-element
+                    // `layer` z-indices stay confined here (mirroring the runtime's panZoom transform
+                    // context) and never float overlays above the editor chrome.
+                    style={{ isolation: 'isolate', width: stageSize.width, height: stageSize.height, '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}
                 >
-                    {stageState.backgroundUrl && <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />}
+                    {stageState.backgroundUrl && (stageState.backgroundIsVideo
+                        ? <video key={`stage-bg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={stageState.backgroundUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" />
+                        : <img src={stageState.backgroundUrl} alt="background" className="absolute inset-0 w-full h-full object-cover" />
+                    )}
+
+                    {/* Stacked background planes (SetBackground `stack`): shown at their layer so the
+                        author can arrange multi-plane parallax backdrops. Static (no parallax drift)
+                        in the editor — over-scaled to match the runtime's at-rest framing when a depth
+                        is set. */}
+                    {(stageState.backgroundStack || []).map(plane => {
+                        if (!plane.url && !plane.color) return null;
+                        return (
+                            <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color }}>
+                                {plane.url && (plane.isVideo
+                                    ? <video key={`stage-bgplane-${plane.commandId}-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={plane.url} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
+                                    : <img src={plane.url} alt="background layer" className="absolute inset-0 w-full h-full object-cover" style={plane.parallaxDepth ? { transform: 'scale(1.15)', transformOrigin: 'center' } : undefined} />
+                                )}
+                            </div>
+                        );
+                    })}
 
                 {/* Movie/video - renders BEHIND characters (z-index 2) */}
                 {stageState.movie && stageState.movie.videoUrl && (
                     stageState.movie.displayMode === 'fullscreen' ? (
                         <video
-                            key={`stage-movie-${stageState.movie.videoUrl}`}
+                            key={`stage-movie-fs-${videoReloadNonce}`}
+                            ref={(el) => { if (el) el.play().catch(() => {}); }}
                             src={stageState.movie.videoUrl}
                             autoPlay
                             muted
@@ -1121,9 +1203,45 @@ const StagingArea: React.FC<{
                                 zIndex: 2,
                             }}
                         />
-                    ) : (
+                    ) : stageState.movie.objectFit === 'custom' ? (() => {
+                        // Placed (resizable) video: draggable + resize handle on the canvas. The video
+                        // uses object-fit:contain so resizing never squishes it.
+                        const m = stageState.movie!;
+                        const cmdId = m.sourceCommandId || '';
+                        const isDragging = overlayDrag?.kind === 'movie' && overlayDrag.overlayId === cmdId;
+                        const isResizing = overlayResize?.kind === 'movie' && overlayResize.overlayId === cmdId;
+                        const dispX = isDragging && overlayDragOffset ? overlayDragOffset.x : m.x;
+                        const dispY = isDragging && overlayDragOffset ? overlayDragOffset.y : m.y;
+                        const dispW = isResizing && overlayResizeSize ? overlayResizeSize.width : m.width;
+                        const dispH = isResizing && overlayResizeSize ? overlayResizeSize.height : m.height;
+                        return (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: `${dispX}%`, top: `${dispY}%`,
+                                    width: `${dispW}%`, height: `${dispH}%`,
+                                    opacity: m.opacity,
+                                    zIndex: (isDragging || isResizing) ? 100000 : 2,
+                                    cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
+                                }}
+                                onMouseDown={cmdId ? (e) => handleOverlayMouseDown(e, 'movie', cmdId, m.x, m.y) : undefined}
+                                onContextMenu={commandRadial && cmdId ? (e) => { e.preventDefault(); commandRadial.openById(cmdId, e.clientX, e.clientY); } : undefined}
+                            >
+                                <video key={`stage-movie-custom-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={m.videoUrl} autoPlay muted loop playsInline
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
+                                {cmdId && (
+                                    <div
+                                        onMouseDown={e => handleOverlayResizeMouseDown(e, 'movie', cmdId, m.width, m.height)}
+                                        title="Drag to resize"
+                                        style={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff', boxShadow: '0 0 3px rgba(0,0,0,0.6)', cursor: 'nwse-resize', zIndex: 60 }}
+                                    />
+                                )}
+                            </div>
+                        );
+                    })() : (
                         <video
-                            key={`stage-movie-${stageState.movie.videoUrl}`}
+                            key={`stage-movie-nc-${videoReloadNonce}`}
+                            ref={(el) => { if (el) el.play().catch(() => {}); }}
                             src={stageState.movie.videoUrl}
                             autoPlay
                             muted
@@ -1131,10 +1249,9 @@ const StagingArea: React.FC<{
                             playsInline
                             className="absolute pointer-events-none"
                             style={{
-                                left: `${stageState.movie.x}%`,
-                                top: `${stageState.movie.y}%`,
-                                width: `${stageState.movie.width}%`,
-                                height: `${stageState.movie.height}%`,
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
                                 objectFit: (stageState.movie.objectFit || 'cover') as React.CSSProperties['objectFit'],
                                 opacity: stageState.movie.opacity,
                                 zIndex: 2,
@@ -1187,10 +1304,11 @@ const StagingArea: React.FC<{
                             className="absolute w-auto aspect-[3/4]"
                             style={{
                                 ...finalStyle,
-                                zIndex: isDragging ? 50 : undefined,
+                                zIndex: isDragging ? 100000 : 5 + (char.layer ?? 0) * 100,
                                 cursor: char.sourceCommandId ? (isDragging ? 'grabbing' : 'grab') : undefined,
                             }}
                             onMouseDown={char.sourceCommandId ? (e) => handleCharMouseDown(e, char) : undefined}
+                            onContextMenu={(commandRadial && char.sourceCommandId) ? (e) => { e.preventDefault(); commandRadial.openById(char.sourceCommandId!, e.clientX, e.clientY); } : undefined}
                         >
                             {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
                             {/* Resize handle (bottom-right) — drag to scale the character sprite. */}
@@ -1235,7 +1353,7 @@ const StagingArea: React.FC<{
                         textAlign: o.textAlign,
                         letterSpacing: o.letterSpacing ? `${o.letterSpacing}px` : undefined,
                         cursor: isDragging ? 'grabbing' : 'grab',
-                        zIndex: isDragging ? 50 : undefined,
+                        zIndex: isDragging ? 100000 : 1 + (o.layer ?? 0) * 100,
                      };
                      // Apply text shadow / border / gradient via shared helper so editor matches gameplay.
                      // When a gradient is active the shadow is moved to the gradient span as drop-shadow
@@ -1248,7 +1366,8 @@ const StagingArea: React.FC<{
                      Object.assign(textStyle, effectsContainerStyle);
                      return (
                          <React.Fragment key={o.id}>
-                             <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}>
+                             <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}
+                                 onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}>
                                  {/* GradientText forces Chromium to re-clip the gradient when colors change live. */}
                                  {gradientSpanStyle ? <GradientText style={gradientSpanStyle}>{o.text}</GradientText> : <span>{o.text}</span>}
                              </div>
@@ -1277,9 +1396,10 @@ const StagingArea: React.FC<{
                                      transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX * (o.flipX ? -1 : 1)}, ${o.scaleY * (o.flipY ? -1 : 1)})`,
                                      opacity: o.opacity,
                                      cursor: isDragging ? 'grabbing' : 'grab',
-                                     zIndex: isDragging ? 50 : undefined,
+                                     zIndex: isDragging ? 100000 : 1 + (o.layer ?? 0) * 100,
                                  }}
                                  onMouseDown={e => handleOverlayMouseDown(e, 'image', o.id, o.x, o.y)}
+                                 onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}
                              >
                                  <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />
                              </div>
@@ -1314,9 +1434,10 @@ const StagingArea: React.FC<{
                                     height: btn.imageUrl ? 'auto' : `${displayH}%`,
                                     transform: `translate(-50%, -50%) ${buildOrientationTransform({ rotation: btn.rotation, flipX: btn.flipX, flipY: btn.flipY })}`.trim(),
                                     cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
-                                    zIndex: (isDragging || isResizing) ? 50 : undefined,
+                                    zIndex: (isDragging || isResizing) ? 100000 : 1 + (btn.layer ?? 0) * 100,
                                 }}
                                 onMouseDown={e => handleOverlayMouseDown(e, 'button', btn.id, btn.x, btn.y)}
+                                onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(btn.id, e.clientX, e.clientY); } : undefined}
                             >
                                 {/* Resize handle (bottom-right corner) — drag to scale the button. */}
                                 <div
@@ -1339,21 +1460,29 @@ const StagingArea: React.FC<{
                                 {btn.imageUrl ? (
                                     <div className="relative" style={{ width: '100%' }}>
                                         <img src={btn.imageUrl} alt="" style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'contain', borderRadius: `${scaledBorderRadius}px` }} />
-                                        <div className="absolute inset-0 flex items-center justify-center" style={{
+                                        <div className={`absolute inset-0 flex items-center ${ { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[btn.textAlign] }`} style={{
                                             color: btn.textColor,
                                             fontSize: `${scaledButtonFontSize}px`,
                                             fontWeight: btn.fontWeight,
+                                            paddingLeft: `${btn.paddingX}%`,
+                                            paddingRight: `${btn.paddingX}%`,
+                                            boxSizing: 'border-box',
+                                            textAlign: btn.textAlign,
                                         }}>
                                             {btn.text}
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center" style={{
+                                    <div className={`w-full h-full flex items-center ${ { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[btn.textAlign] }`} style={{
                                         backgroundColor: btn.backgroundColor,
                                         color: btn.textColor,
                                         fontSize: `${scaledButtonFontSize}px`,
                                         fontWeight: btn.fontWeight,
                                         borderRadius: `${scaledBorderRadius}px`,
+                                        paddingLeft: `${btn.paddingX}%`,
+                                        paddingRight: `${btn.paddingX}%`,
+                                        boxSizing: 'border-box',
+                                        textAlign: btn.textAlign,
                                     }}>
                                         {btn.text}
                                     </div>

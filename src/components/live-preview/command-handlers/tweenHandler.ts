@@ -80,14 +80,28 @@ function captureCurrentValues(
             if (command.backgroundColor !== undefined) current.backgroundColor = resting?.backgroundColor ?? btn.backgroundColor;
             break;
         }
-        case 'imageMap': {
-            const map = (state.imageMapOverlays || []).find(o => o.id === command.targetId);
-            if (!map) break;
-            if (command.x !== undefined) current.x = resting?.x ?? map.x;
-            if (command.y !== undefined) current.y = resting?.y ?? map.y;
-            if (command.width !== undefined) current.width = resting?.width ?? map.width;
-            if (command.height !== undefined) current.height = resting?.height ?? map.height;
-            if (command.opacity !== undefined) current.opacity = resting?.opacity ?? map.opacity;
+        case 'movie': {
+            // Prefer the live overlay; fall back to the source PlayMovie command's own values when
+            // the overlay isn't on stage yet (e.g. the Tween is STACKED to run alongside the Play
+            // Video, so its overlay hasn't committed when `from` is captured). Without this, `from`
+            // is undefined and the property (e.g. opacity) is skipped — the tween appears to do nothing.
+            let base: any = (state.movieOverlays || []).find(o => o.commandId === command.targetId);
+            if (!base) {
+                for (const scene of Object.values(context.project.scenes) as any[]) {
+                    const c = (scene.commands || []).find((cc: any) => cc.id === command.targetId);
+                    if (c) { base = c; break; }
+                }
+            }
+            if (!base) break;
+            if (command.x !== undefined) current.x = resting?.x ?? base.x ?? 0;
+            if (command.y !== undefined) current.y = resting?.y ?? base.y ?? 0;
+            if (command.width !== undefined) current.width = resting?.width ?? base.width ?? 100;
+            if (command.height !== undefined) current.height = resting?.height ?? base.height ?? 100;
+            if (command.opacity !== undefined) current.opacity = resting?.opacity ?? base.opacity ?? 1;
+            // Movies have no persistent rotation/scale, so tween from the identity (0 / 1).
+            if (command.rotation !== undefined) current.rotation = resting?.rotation ?? 0;
+            if (command.scaleX !== undefined) current.scaleX = resting?.scaleX ?? 1;
+            if (command.scaleY !== undefined) current.scaleY = resting?.scaleY ?? 1;
             break;
         }
         case 'screen': {

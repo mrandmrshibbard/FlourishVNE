@@ -3,7 +3,7 @@
  * ANY surface (the HUD, any pass-through screen / ShowScreen overlay, or the scene)
  * be dropped onto an interactive hot spot on ANY OTHER surface.
  *
- * Drag-drop used to be per-screen: each screen's HotZoneRuntime only hit-tested its
+ * Drag-drop used to be per-screen: each screen's interactive runtime only hit-tested its
  * own hot spots, so a HUD item could never reach a scene target. Every surface now
  * registers its drag-drop targets here, and the runtime that owns the dragged element
  * hit-tests this shared registry on drop. All surfaces are full-canvas overlays using

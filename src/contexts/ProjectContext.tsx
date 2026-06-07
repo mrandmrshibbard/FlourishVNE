@@ -7,6 +7,7 @@ import { createLogger } from '../utils/logger';
 import { WorkflowTracker } from '../features/analytics/WorkflowTracker';
 import { useToast } from './ToastContext';
 import { migrateProjectToUnifiedScreens } from '../utils/unifiedScreenMigration';
+import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigration';
 
 interface UndoRedoState {
   past: VNProject[];
@@ -46,7 +47,7 @@ export const ProjectProvider: React.FC<{
   // or stranded hot zone data never makes it into `screen.elements`.
   const [history, setHistory] = useState<UndoRedoState>(() => ({
     past: [],
-    present: migrateProjectToUnifiedScreens(initialProject),
+    present: migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)),
     future: []
   }));
   const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
@@ -128,6 +129,28 @@ export const ProjectProvider: React.FC<{
 
     const intervalId = setInterval(autoSave, AUTO_SAVE_INTERVAL);
     return () => clearInterval(intervalId);
+  }, []);
+
+  // Debounced save after every change so the auto-save always reflects the latest work.
+  // The 2-minute interval alone meant edits made shortly before closing (e.g. wiring a
+  // freshly-added asset into a command) were never persisted, so reloading the last
+  // auto-save came back missing them. Saves ~1.2s after edits settle.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      saveProjectToIDB(history.present)
+        .then(() => setLastAutoSave(Date.now()))
+        .catch(err => log.warn('Debounced auto-save failed:', err));
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [history.present]);
+
+  // Flush the latest state when the editor unmounts (e.g. returning to the Hub). React
+  // unmount is not a browser unload, so `beforeunload` doesn't fire here — without this,
+  // the last batch of edits before leaving the editor would be lost.
+  useEffect(() => {
+    return () => {
+      saveProjectToIDB(historyRef.current.present).catch(err => log.warn('Save on editor exit failed:', err));
+    };
   }, []);
 
   useEffect(() => {

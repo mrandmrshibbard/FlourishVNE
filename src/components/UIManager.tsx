@@ -3,10 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
-import { VNUIScreen, VNUIElement, VNHotZoneElement, VNHotSpot, UIElementType } from '../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType } from '../features/ui/types';
 import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
 import InGameUIEditor from './InGameUIEditor';
+import { ElementRadialProvider, useElementRadial } from './menu-editor/ElementRadialContext';
 import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon, ChatBubbleIcon, ChevronRightIcon, ChevronDownIcon } from './icons';
 import ConfirmationModal from './ui/ConfirmationModal';
 import UIScreenThemeSelector from './UIScreenThemeSelector';
@@ -38,6 +39,10 @@ interface UIManagerProps {
     selectedUIElementIds: VNID[];
     setSelectedUIElementIds: (ids: VNID[]) => void;
     onEditorModeChange?: (mode: UIEditorMode) => void;
+    /** True while the Live Preview overlay is open — the canvas drops its <video> backgrounds
+     *  then (they're covered anyway) and remounts them fresh on return, avoiding the evicted/
+     *  broken video state the browser leaves behind a fullscreen overlay. */
+    isPlaying?: boolean;
 }
 
 const UIManager: React.FC<UIManagerProps> = ({
@@ -46,7 +51,8 @@ const UIManager: React.FC<UIManagerProps> = ({
     setActiveMenuScreenId,
     selectedUIElementIds,
     setSelectedUIElementIds,
-    onEditorModeChange
+    onEditorModeChange,
+    isPlaying
 }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('ui');
@@ -85,17 +91,9 @@ const UIManager: React.FC<UIManagerProps> = ({
         });
     }, []);
 
-    const handleSelectChildElement = useCallback((screenId: VNID, elementId: VNID, isHotZoneChild: boolean) => {
+    const handleSelectChildElement = useCallback((screenId: VNID, elementId: VNID) => {
         setActiveMenuScreenId(screenId);
-        // For standard screens we can drive selection through the existing prop;
-        // hot zone editors carry their own internal selection state, so navigation
-        // is the value here — drill-in selection across the boundary will come
-        // when we unify the two screen types.
-        if (!isHotZoneChild) {
-            setSelectedUIElementIds([elementId]);
-        } else {
-            setSelectedUIElementIds([]);
-        }
+        setSelectedUIElementIds([elementId]);
     }, [setActiveMenuScreenId, setSelectedUIElementIds]);
 
     const uiScreensArray = useMemo(() => Object.values(project.uiScreens) as VNUIScreen[], [project.uiScreens]);
@@ -166,6 +164,7 @@ const UIManager: React.FC<UIManagerProps> = ({
     }, [pendingRestore, project.ui.titleScreenId, project.uiScreens, setActiveMenuScreenId, setSelectedUIElementIds]);
 
     return (
+        <ElementRadialProvider activeScreenId={activeMenuScreenId} selectElement={(id) => setSelectedUIElementIds(id ? [id] : [])}>
         <div className="flex flex-col h-full">
             {/* Mode toggle bar */}
             <div className="flex items-center gap-1 bg-[var(--bg-primary)] border-b border-[var(--border-subtle)] px-3 py-1.5 flex-shrink-0">
@@ -222,7 +221,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                                             selectedElementIds={activeMenuScreenId === screen.id ? selectedUIElementIds : []}
                                             onToggleExpanded={() => toggleScreenExpanded(screen.id)}
                                             onSelect={() => setActiveMenuScreenId(screen.id)}
-                                            onSelectChild={(elementId, isHotZoneChild) => handleSelectChildElement(screen.id, elementId, isHotZoneChild)}
+                                            onSelectChild={(elementId) => handleSelectChildElement(screen.id, elementId)}
                                             onStartRenaming={() => setRenamingId(screen.id)}
                                             onCommitRename={(name) => handleRenameUIScreen(screen.id, name)}
                                             onDelete={() => handleDeleteUIScreen(screen.id)}
@@ -259,6 +258,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                                     activeScreenId={activeMenuScreenId}
                                     selectedElementIds={selectedUIElementIds}
                                     setSelectedElementIds={setSelectedUIElementIds}
+                                    isPlaying={isPlaying}
                                 />
                             ) : (
                                 <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
@@ -283,6 +283,7 @@ const UIManager: React.FC<UIManagerProps> = ({
                 )}
             </div>
         </div>
+        </ElementRadialProvider>
     );
 };
 
@@ -295,7 +296,7 @@ interface UIScreenItemProps {
     selectedElementIds: VNID[];
     onToggleExpanded: () => void;
     onSelect: () => void;
-    onSelectChild: (elementId: VNID, isHotZoneChild: boolean) => void;
+    onSelectChild: (elementId: VNID) => void;
     onStartRenaming: () => void;
     onCommitRename: (name: string) => void;
     onDelete: () => void;
@@ -319,14 +320,13 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 }) => {
     const { t } = useTranslation('ui');
     const { inputProps: renameInputProps } = useInlineRename(screen.name, onCommitRename);
+    const elementRadial = useElementRadial();
 
-    const isHotZone = screen.screenType === 'hotzone';
-    const standardElements = !isHotZone ? (Object.values(screen.elements || {}) as VNUIElement[]) : [];
-    const hotZoneElements = isHotZone ? (Object.values(screen.hotZoneElements || {}) as VNHotZoneElement[]) : [];
-    const hotSpots = isHotZone ? (Object.values(screen.hotSpots || {}) as VNHotSpot[]) : [];
-    const childCount = isHotZone
-        ? hotZoneElements.length + hotSpots.length + (screen.winCondition ? 1 : 0)
-        : standardElements.length;
+    // Unified schema: every screen keeps all its widgets (incl. hot spots, image maps,
+    // draggable elements) in `screen.elements`. The legacy `screenType: 'hotzone'` split
+    // was retired and migrated away, so there's a single element list here.
+    const elements = Object.values(screen.elements || {}) as VNUIElement[];
+    const childCount = elements.length + (screen.winCondition ? 1 : 0);
     const hasChildren = childCount > 0;
 
     return (
@@ -365,9 +365,6 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                     ) : (
                         <span className="text-sm flex items-center gap-1">
                             {screen.name}
-                            {isHotZone && (
-                                <span className="text-[10px] bg-purple-500/30 text-purple-300 px-1 rounded">HZ</span>
-                            )}
                             {hasChildren && (
                                 <span className="text-[10px] text-[var(--text-muted)] ml-1">{childCount}</span>
                             )}
@@ -412,37 +409,18 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
 
             {isExpanded && hasChildren && (
                 <div className="ml-6 mt-0.5 mb-1 border-l border-[var(--border-subtle)] pl-2 space-y-0.5">
-                    {!isHotZone && standardElements.map(el => (
+                    {elements.map(el => (
                         <ScreenChildRow
                             key={el.id}
                             name={el.name || t('manager.unnamed')}
                             typeLabel={ELEMENT_TYPE_LABEL[el.type] || el.type.slice(0, 3).toUpperCase()}
                             badgeClass="bg-sky-500/20 text-sky-300"
                             isSelected={selectedElementIds.includes(el.id)}
-                            onClick={() => onSelectChild(el.id, false)}
+                            onClick={() => onSelectChild(el.id)}
+                            onContextMenu={isSelected ? (e) => { e.preventDefault(); onSelectChild(el.id); elementRadial?.openByElementId(el.id, e.clientX, e.clientY); } : undefined}
                         />
                     ))}
-                    {isHotZone && hotZoneElements.map(el => (
-                        <ScreenChildRow
-                            key={el.id}
-                            name={el.name || t('manager.unnamed')}
-                            typeLabel={(el.elementType || 'image').slice(0, 3).toUpperCase()}
-                            badgeClass="bg-purple-500/20 text-purple-300"
-                            isSelected={false}
-                            onClick={() => onSelectChild(el.id, true)}
-                        />
-                    ))}
-                    {isHotZone && hotSpots.map(spot => (
-                        <ScreenChildRow
-                            key={spot.id}
-                            name={spot.name || t('manager.unnamed')}
-                            typeLabel="HOT"
-                            badgeClass="bg-emerald-500/20 text-emerald-300"
-                            isSelected={false}
-                            onClick={() => onSelectChild(spot.id, true)}
-                        />
-                    ))}
-                    {isHotZone && screen.winCondition && (
+                    {screen.winCondition && (
                         <ScreenChildRow
                             key="__winCondition"
                             name={t('manager.win', { type: screen.winCondition.type === 'allPlaced' ? t('manager.winAllPlaced') : t('manager.winVariableCheck') })}
@@ -464,11 +442,13 @@ interface ScreenChildRowProps {
     badgeClass: string;
     isSelected: boolean;
     onClick: () => void;
+    onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-const ScreenChildRow: React.FC<ScreenChildRowProps> = ({ name, typeLabel, badgeClass, isSelected, onClick }) => (
+const ScreenChildRow: React.FC<ScreenChildRowProps> = ({ name, typeLabel, badgeClass, isSelected, onClick, onContextMenu }) => (
     <div
         onClick={(e) => { e.stopPropagation(); onClick(); }}
+        onContextMenu={onContextMenu}
         className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded cursor-pointer text-xs transition-colors ${
             isSelected
                 ? 'bg-sky-500/20 text-sky-200'

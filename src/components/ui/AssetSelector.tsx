@@ -16,7 +16,17 @@ const AssetSelector: React.FC<{
     const { t } = useTranslation('components');
     const { project } = useProject();
     const assets = project[assetType];
-    
+
+    // Video assets can live in the videos collection OR in backgrounds/images (a video uploaded
+    // under those Asset Manager tabs is stored there with a videoUrl). When picking a video,
+    // list them all so the asset is selectable regardless of which tab it was uploaded under.
+    const isVideoPicker = assetType === 'videos';
+    const videoAssets = isVideoPicker ? [
+        ...Object.values(project.videos || {}),
+        ...Object.values(project.backgrounds || {}).filter((a: any) => a.isVideo || a.videoUrl),
+        ...Object.values(project.images || {}).filter((a: any) => a.isVideo || a.videoUrl),
+    ] as any[] : [];
+
     // For images, show backgrounds, images, and optionally videos
     const showAllImageTypes = assetType === 'images';
     const hasBackgrounds = showAllImageTypes && Object.keys(project.backgrounds || {}).length > 0;
@@ -51,6 +61,10 @@ const AssetSelector: React.FC<{
                             </optgroup>
                         )}
                     </>
+                ) : isVideoPicker ? (
+                    videoAssets.map((asset: any) => (
+                        <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))
                 ) : (
                     Object.values(assets || {}).map((asset: any) => (
                         <option key={asset.id} value={asset.id}>{asset.name}</option>

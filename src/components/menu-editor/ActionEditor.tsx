@@ -12,7 +12,7 @@ import { FormField, Select, TextInput } from '../ui/Form';
 import ConditionsEditor from '../ui/ConditionsEditor';
 
 /** Action types offered by the menu/screen ActionEditor dropdown, in display order.
- *  (Intentionally excludes PlayAnimation / ChangeImage, which are hot-zone-only.) */
+ *  (Intentionally excludes PlayAnimation / ChangeImage, which are interactive-element-only.) */
 const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
     UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
