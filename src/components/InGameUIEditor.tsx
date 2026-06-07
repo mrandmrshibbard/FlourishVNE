@@ -9,13 +9,16 @@
  */
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { VNProject } from '../types/project';
-import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, QuickMenuButtonKey, QuickMenuButtonConfig } from '../features/ui/types';
+import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton } from '../features/ui/types';
+import { VNID } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import FontEditor, { defaultFontSettings } from './ui/FontEditor';
 import { useTranslation } from 'react-i18next';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import { GradientText } from './ui/GradientText';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
+import ActionEditor from './menu-editor/ActionEditor';
+import { UIActionType, VNUIAction } from '../types/shared';
 import {
     ChatBubbleIcon, BookmarkSquareIcon, SparklesIcon, PencilIcon,
     ChevronDownIcon, QuestionMarkIcon,
@@ -187,26 +190,29 @@ function getQuickMenuVisibleButtons(ui: VNProjectUI) {
     return QUICK_MENU_BUTTONS.filter(b => (ui as any)[b.showKey] !== false);
 }
 
-/** Per-button rects for independent layout — mirrors the runtime default spread. */
+/** Per-button rects for independent layout — mirrors the runtime default spread, including the
+ *  author-defined custom buttons (appended after the built-ins, exactly as the engine orders them). */
 function getQuickMenuButtonRects(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     const group = getQuickMenuRect(ui, gameW, gameH);
-    const visible = getQuickMenuVisibleButtons(ui);
-    const count = visible.length || 1;
-    const slotW = group.width / count;
     const cfgs = ui.quickMenuButtons || {};
-    return visible.map((b, i) => {
-        const cfg = cfgs[b.key] || {};
-        return {
-            key: b.key,
-            label: b.label,
-            rect: {
-                x: cfg.x ?? (group.x + i * slotW),
-                y: cfg.y ?? group.y,
-                width: cfg.width ?? Math.max(4, slotW - 1),
-                height: cfg.height ?? group.height,
-            },
-        };
-    });
+    const combined = [
+        ...getQuickMenuVisibleButtons(ui).map(b => ({ key: b.key as string, label: b.label, cfg: (cfgs[b.key] || {}) as QuickMenuButtonConfig, isCustom: false })),
+        ...(ui.quickMenuCustomButtons || []).filter(c => c.show !== false).map(c => ({ key: c.id as string, label: c.label, cfg: c as QuickMenuButtonConfig, isCustom: true })),
+    ];
+    const count = combined.length || 1;
+    const slotW = group.width / count;
+    return combined.map((b, i) => ({
+        key: b.key,
+        label: b.label,
+        isCustom: b.isCustom,
+        cfg: b.cfg,
+        rect: {
+            x: b.cfg.x ?? (group.x + i * slotW),
+            y: b.cfg.y ?? group.y,
+            width: b.cfg.width ?? Math.max(4, slotW - 1),
+            height: b.cfg.height ?? group.height,
+        },
+    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -455,16 +461,44 @@ const QuickMenuPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ u
                     </div>
                 );
             })}
+            {/* Author-defined custom buttons render inline after the built-ins (grouped layout). */}
+            {(ui.quickMenuCustomButtons || []).filter(c => c.show !== false).map(cb => {
+                const art = resolveQmArt(project, cb.image as any);
+                if (art) {
+                    return <img key={cb.id} src={art} alt={cb.label} draggable={false}
+                        style={{ height: '75%', width: 'auto', objectFit: 'contain', display: 'block' }} />;
+                }
+                return (
+                    <div key={cb.id} style={{
+                        backgroundColor: bgColor,
+                        borderRadius: `calc(var(--font-scale,1) * ${br}px)`,
+                        fontSize: 'calc(var(--font-scale,1) * 12px)',
+                        padding: 'calc(var(--font-scale,1) * 10px) calc(var(--font-scale,1) * 10px)',
+                        color: 'rgba(255,255,255,0.8)',
+                        border: '1px solid rgba(148,163,184,0.2)',
+                    }}>
+                        {cb.label}
+                    </div>
+                );
+            })}
         </div>
     );
 };
 
 /** A single quick-menu button preview (fills its container) — used for the per-button
  *  draggables in independent layout. Shows custom art (object-contain) or a default pill. */
-const QuickMenuButtonPreview: React.FC<{ ui: VNProjectUI; project: VNProject; btnKey: QuickMenuButtonKey; label: string }> = ({ ui, project, btnKey, label }) => {
-    const cfg = (ui.quickMenuButtons || {})[btnKey] || {};
+const QuickMenuButtonPreview: React.FC<{ ui: VNProjectUI; project: VNProject; label: string; btnKey?: QuickMenuButtonKey; cfg?: QuickMenuButtonConfig }> = ({ ui, project, btnKey, label, cfg: cfgProp }) => {
+    const cfg = cfgProp ?? (btnKey ? (ui.quickMenuButtons || {})[btnKey] || {} : {});
     const art = resolveQmArt(project, cfg.image as any);
     if (art) {
+        // Mirror the engine's "fit to content": art shrinks to its fitted rect, centered, so the
+        // editor preview matches the in-game footprint/hitbox.
+        if (cfg.fitToContent) {
+            return <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <img src={art} alt={label} draggable={false}
+                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }} />
+            </div>;
+        }
         return <img src={art} alt={label} draggable={false}
             style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />;
     }
@@ -1031,16 +1065,93 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                                             </select>
                                         </Field>
                                         {ui.quickMenuIndependentLayout && (
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <NumInput label={t('inGameUi.width')} value={cfg.width} fallback={8} min={1} max={100} onChange={v => updateBtn({ width: v })} />
-                                                <NumInput label={t('inGameUi.height')} value={cfg.height} fallback={4} min={1} max={100} onChange={v => updateBtn({ height: v })} />
-                                            </div>
+                                            <>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <NumInput label={t('inGameUi.width')} value={cfg.width} fallback={8} min={1} max={100} onChange={v => updateBtn({ width: v })} />
+                                                    <NumInput label={t('inGameUi.height')} value={cfg.height} fallback={4} min={1} max={100} onChange={v => updateBtn({ height: v })} />
+                                                </div>
+                                                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                                                    <input type="checkbox" checked={!!cfg.fitToContent} onChange={e => updateBtn({ fitToContent: e.target.checked })} className="cursor-pointer" />
+                                                    {t('inGameUi.fitToContent')}
+                                                </label>
+                                            </>
                                         )}
+                                        {/* Custom action: overrides the button's built-in behavior. None = keep default. */}
+                                        <div className="pt-1 border-t border-[var(--border-subtle)]">
+                                            <span className="text-[11px] font-semibold text-sky-400">{t('inGameUi.customAction')}</span>
+                                            <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('inGameUi.customActionHint')}</p>
+                                            <ActionEditor
+                                                action={cfg.action ?? { type: UIActionType.None } as VNUIAction}
+                                                onActionChange={(a) => updateBtn({ action: a.type === UIActionType.None ? undefined : a })}
+                                            />
+                                        </div>
                                     </>
                                 )}
                             </div>
                         );
                     })}
+                </div>
+
+                {/* ── Author-defined custom buttons (run their own action) ── */}
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-3">{t('inGameUi.customButtonsHeader')}</h4>
+                <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.customButtonsHint')}</p>
+                <div className="space-y-2">
+                    {(ui.quickMenuCustomButtons || []).map(cb => {
+                        const updateCustom = (patch: Partial<QuickMenuCustomButton>) =>
+                            onUpdate({ quickMenuCustomButtons: (ui.quickMenuCustomButtons || []).map(c => c.id === cb.id ? { ...c, ...patch } : c) });
+                        const shown = cb.show !== false;
+                        return (
+                            <div key={cb.id} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                    <input type="checkbox" checked={shown} onChange={e => updateCustom({ show: e.target.checked })} className="cursor-pointer" title={t('inGameUi.visible')} />
+                                    <input className={inputCls} value={cb.label} placeholder={t('inGameUi.buttonLabel')} onChange={e => updateCustom({ label: e.target.value })} />
+                                    <button className="text-[var(--accent-coral)] hover:opacity-80 px-1 text-sm" title={t('inGameUi.removeButton')}
+                                        onClick={() => onUpdate({ quickMenuCustomButtons: (ui.quickMenuCustomButtons || []).filter(c => c.id !== cb.id) })}>✕</button>
+                                </div>
+                                {shown && (
+                                    <>
+                                        <Field label={t('inGameUi.image')}>
+                                            <select className={inputCls} value={cb.image?.id || ''}
+                                                onChange={e => { const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null; updateCustom({ image: asset ? { type: 'image', id: asset.id } : null }); }}>
+                                                <option value="">{t('inGameUi.noneDefaultStyle')}</option>
+                                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                            </select>
+                                        </Field>
+                                        <Field label={t('inGameUi.hoverImage')}>
+                                            <select className={inputCls} value={cb.hoverImage?.id || ''}
+                                                onChange={e => { const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null; updateCustom({ hoverImage: asset ? { type: 'image', id: asset.id } : null }); }}>
+                                                <option value="">{t('inGameUi.none')}</option>
+                                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                            </select>
+                                        </Field>
+                                        {ui.quickMenuIndependentLayout && (
+                                            <>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <NumInput label={t('inGameUi.width')} value={cb.width} fallback={8} min={1} max={100} onChange={v => updateCustom({ width: v })} />
+                                                    <NumInput label={t('inGameUi.height')} value={cb.height} fallback={4} min={1} max={100} onChange={v => updateCustom({ height: v })} />
+                                                </div>
+                                                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                                                    <input type="checkbox" checked={!!cb.fitToContent} onChange={e => updateCustom({ fitToContent: e.target.checked })} className="cursor-pointer" />
+                                                    {t('inGameUi.fitToContent')}
+                                                </label>
+                                            </>
+                                        )}
+                                        <div className="pt-1 border-t border-[var(--border-subtle)]">
+                                            <span className="text-[11px] font-semibold text-sky-400">{t('inGameUi.buttonAction')}</span>
+                                            <ActionEditor
+                                                action={cb.action ?? { type: UIActionType.None } as VNUIAction}
+                                                onActionChange={(a) => updateCustom({ action: a.type === UIActionType.None ? undefined : a })}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
+                    <button
+                        className="w-full text-xs py-1.5 rounded border border-dashed border-[var(--accent-purple)] text-[var(--accent-purple)] hover:bg-[var(--bg-secondary)]"
+                        onClick={() => onUpdate({ quickMenuCustomButtons: [...(ui.quickMenuCustomButtons || []), { id: ('qmc-' + Math.random().toString(36).slice(2, 9)) as VNID, label: 'New Button', action: { type: UIActionType.None } as VNUIAction }] })}
+                    >+ {t('inGameUi.addCustomButton')}</button>
                 </div>
             </div>
         );
@@ -1375,10 +1486,15 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
         updateUI({ quickMenuX: u.x, quickMenuY: u.y, quickMenuWidth: u.width, quickMenuHeight: u.height });
     }, [updateUI]);
 
-    const handleDragQuickMenuButton = useCallback((key: QuickMenuButtonKey, u: { x: number; y: number; width: number; height: number }) => {
-        const prev = ui.quickMenuButtons || {};
-        updateUI({ quickMenuButtons: { ...prev, [key]: { ...prev[key], x: u.x, y: u.y, width: u.width, height: u.height } } });
-    }, [ui.quickMenuButtons, updateUI]);
+    const handleDragQuickMenuButton = useCallback((key: string, isCustom: boolean, u: { x: number; y: number; width: number; height: number }) => {
+        if (isCustom) {
+            const customs = ui.quickMenuCustomButtons || [];
+            updateUI({ quickMenuCustomButtons: customs.map(c => c.id === key ? { ...c, x: u.x, y: u.y, width: u.width, height: u.height } : c) });
+        } else {
+            const prev = ui.quickMenuButtons || {};
+            updateUI({ quickMenuButtons: { ...prev, [key as QuickMenuButtonKey]: { ...prev[key as QuickMenuButtonKey], x: u.x, y: u.y, width: u.width, height: u.height } } });
+        }
+    }, [ui.quickMenuButtons, ui.quickMenuCustomButtons, updateUI]);
 
     const quickMenuButtonRects = useMemo(() => getQuickMenuButtonRects(ui, gameW, gameH), [ui, gameW, gameH]);
     const quickMenuIndependent = !!ui.quickMenuIndependentLayout && selectedElement === 'quickMenu' && ui.quickMenuPosition !== 'hidden';
@@ -1469,7 +1585,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                     )}
 
                     {/* Independent layout: one draggable per quick-menu button. */}
-                    {quickMenuIndependent && quickMenuButtonRects.map(b => (
+                    {quickMenuIndependent && quickMenuButtonRects.map(b => {
+                        const lbl = b.isCustom ? b.label : t('inGameUi.qmLabels.'+b.key);
+                        return (
                         <ResizableDraggable
                             key={b.key}
                             x={b.rect.x} y={b.rect.y}
@@ -1478,13 +1596,16 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                             parentSize={stageSize}
                             isSelected={true}
                             onSelect={e => { e.stopPropagation(); }}
-                            onUpdate={u => handleDragQuickMenuButton(b.key, u)}
+                            onUpdate={u => handleDragQuickMenuButton(b.key, b.isCustom, u)}
                             snapGrid={1}
-                            label={t('inGameUi.qmLabels.'+b.key)}
+                            label={lbl}
                         >
-                            <QuickMenuButtonPreview ui={ui} project={project} btnKey={b.key} label={t('inGameUi.qmLabels.'+b.key)} />
+                            <QuickMenuButtonPreview ui={ui} project={project} label={lbl}
+                                btnKey={b.isCustom ? undefined : (b.key as QuickMenuButtonKey)}
+                                cfg={b.isCustom ? b.cfg : undefined} />
                         </ResizableDraggable>
-                    ))}
+                        );
+                    })}
 
                     {/* Only render the currently selected element (single grouped draggable).
                         Skipped for the Quick Menu when independent per-button layout is active. */}

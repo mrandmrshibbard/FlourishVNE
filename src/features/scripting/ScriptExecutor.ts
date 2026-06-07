@@ -18,6 +18,8 @@ export interface ScriptRuntimeContext {
     project: VNProject;
     variables: Record<VNID, string | number | boolean>;
     currentSceneId: VNID;
+    /** Arguments for this script (by param name), defaults already applied. Exposed as game.args. */
+    args?: Record<string, string | number | boolean>;
     /** Callbacks for side-effects */
     onSetVariable: (nameOrId: string, value: string | number | boolean) => void;
     onJumpToScene: (nameOrId: string) => void;
@@ -26,7 +28,11 @@ export interface ScriptRuntimeContext {
     onPlaySFX: (nameOrId: string, volume?: number) => void;
     onPlayMusic: (nameOrId: string, loop?: boolean, volume?: number) => void;
     onStopMusic: (fadeDuration?: number) => void;
-    onNotify: (message: string, type?: 'info' | 'warning' | 'error') => void;
+    onNotify: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+    /** Run another script by name or ID (script-to-script). Optional; no-op if not provided. */
+    onRunScript?: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
+    /** Call a Common Event by name or ID. Optional; no-op if not provided. */
+    onCallCommonEvent?: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
 }
 
 /**
@@ -56,6 +62,14 @@ export function executeScript(
         return varNameToId[nameOrId.toLowerCase()];
     };
 
+    // Resolve an item by id or (case-insensitive) name.
+    const resolveItem = (nameOrId: string): { id: VNID; name: string; countVariableId: VNID; unique?: boolean } | undefined => {
+        const items = (context.project.items || {}) as Record<string, { id: VNID; name: string; countVariableId: VNID; unique?: boolean }>;
+        if (items[nameOrId]) return items[nameOrId];
+        const lower = nameOrId.toLowerCase();
+        return Object.values(items).find(it => it.name.toLowerCase() === lower);
+    };
+
     // Build the game API
     const gameAPI: ScriptAPI = {
         getVariable: (nameOrId: string) => {
@@ -83,6 +97,66 @@ export function executeScript(
             return result;
         },
 
+        // Documented alias of getAllVariables() (name → value map).
+        getVariables: () => {
+            const result: Record<string, string | number | boolean> = {};
+            for (const [id, val] of Object.entries(context.variables)) {
+                const name = varIdToName[id] || id;
+                result[name] = val;
+            }
+            return result;
+        },
+
+        getScenes: () => {
+            return Object.values(context.project.scenes || {}).map((s: any) => s.name);
+        },
+
+        getCharacters: () => {
+            return Object.entries(context.project.characters || {}).map(([id, c]: [string, any]) => ({ id, name: c.name }));
+        },
+
+        // ── Inventory (items are sugar over a number "count" variable) ──
+        getItemCount: (nameOrId: string) => {
+            const item = resolveItem(nameOrId);
+            if (!item) return 0;
+            const v = context.variables[item.countVariableId];
+            return typeof v === 'number' ? v : Number(v) || 0;
+        },
+
+        hasItem: (nameOrId: string) => {
+            const item = resolveItem(nameOrId);
+            if (!item) return false;
+            const v = context.variables[item.countVariableId];
+            return (typeof v === 'number' ? v : Number(v) || 0) > 0;
+        },
+
+        addItem: (nameOrId: string, amount: number = 1) => {
+            const item = resolveItem(nameOrId);
+            if (!item) { console.warn(`[Script] addItem: unknown item "${nameOrId}"`); return; }
+            const cur = Number(context.variables[item.countVariableId]) || 0;
+            let next = cur + amount;
+            if (item.unique) next = Math.min(1, Math.max(0, next));
+            context.variables[item.countVariableId] = next;
+            context.onSetVariable(item.countVariableId, next);
+        },
+
+        removeItem: (nameOrId: string, amount: number = 1) => {
+            const item = resolveItem(nameOrId);
+            if (!item) { console.warn(`[Script] removeItem: unknown item "${nameOrId}"`); return; }
+            const cur = Number(context.variables[item.countVariableId]) || 0;
+            const next = Math.max(0, cur - amount);
+            context.variables[item.countVariableId] = next;
+            context.onSetVariable(item.countVariableId, next);
+        },
+
+        getItems: () => {
+            return Object.values(context.project.items || {}).map((it: any) => ({
+                id: it.id,
+                name: it.name,
+                count: Number(context.variables[it.countVariableId]) || 0,
+            }));
+        },
+
         showDialogue: (characterName: string, text: string) => {
             context.onShowDialogue(characterName, text);
         },
@@ -95,6 +169,14 @@ export function executeScript(
         jumpToLabel: (labelId: string) => {
             navigationRequest = { type: 'label', target: labelId };
             context.onJumpToLabel(labelId);
+        },
+
+        runScript: (nameOrId: string, args?: Record<string, string | number | boolean>) => {
+            context.onRunScript?.(nameOrId, args);
+        },
+
+        callCommonEvent: (nameOrId: string, args?: Record<string, string | number | boolean>) => {
+            context.onCallCommonEvent?.(nameOrId, args);
         },
 
         playSFX: (nameOrId: string, volume?: number) => {
@@ -113,12 +195,14 @@ export function executeScript(
             console.log('[Script]', ...args);
         },
 
-        notify: (message: string, type?: 'info' | 'warning' | 'error') => {
+        notify: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => {
             context.onNotify(message, type);
         },
 
         currentScene: context.project.scenes[context.currentSceneId]?.name || '',
         currentSceneId: context.currentSceneId,
+
+        args: context.args || {},
 
         wait: (seconds: number) => {
             return new Promise(resolve => setTimeout(resolve, seconds * 1000));
@@ -128,6 +212,10 @@ export function executeScript(
             return Math.floor(Math.random() * (max - min + 1)) + min;
         },
 
+        // Top-level convenience aliases (the doc referenced game.clamp / game.lerp).
+        clamp: (value: number, min: number, max: number) => Math.min(Math.max(value, min), max),
+        lerp: (start: number, end: number, t: number) => start + (end - start) * t,
+
         math: {
             clamp: (value: number, min: number, max: number) => Math.min(Math.max(value, min), max),
             lerp: (start: number, end: number, t: number) => start + (end - start) * t,
@@ -136,14 +224,31 @@ export function executeScript(
     };
 
     try {
+        // Quick-hardening guard: reject the prototype-chain escape that reaches the Function
+        // constructor via an object's constructor (e.g. ({}).constructor.constructor("...")()).
+        // The Function-constructor sandbox can't fully prevent this, so we statically reject the
+        // `.constructor` access pattern before running. (Regex-only — see roadmap Phase 4 for real
+        // isolation; this just stops the trivial escape.)
+        if (/\.\s*constructor\b/.test(script.code) || /\[\s*['"]constructor['"]\s*\]/.test(script.code)) {
+            return {
+                success: false,
+                error: 'Access to ".constructor" is blocked in the script sandbox.',
+                duration: performance.now() - startTime,
+            };
+        }
+
         // Create a sandboxed function.
         // The script code receives `game` as its only argument.
-        // We block access to dangerous globals.
+        // We block access to dangerous globals. `wait()` still works because the gameAPI.wait
+        // closure (defined in THIS module scope) captures the real setTimeout — shadowing the
+        // name only affects code written inside the sandboxed function body.
         const blockedGlobals = [
             'document', 'window', 'globalThis', 'self',
             'fetch', 'XMLHttpRequest', 'WebSocket',
             'localStorage', 'sessionStorage', 'indexedDB',
             'eval', 'Function',
+            'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+            'requestAnimationFrame', 'queueMicrotask',
         ];
 
         const blockStatements = blockedGlobals
@@ -225,6 +330,14 @@ export function validateScript(code: string): ScriptValidationResult {
         // Warn about fetch
         if (/\bfetch\s*\(/.test(line)) {
             warnings.push({ line: lineNum, column: 1, message: 'fetch() is not available in the sandbox', severity: 'warning' });
+        }
+        // Warn about the .constructor escape (blocked at runtime)
+        if (/\.\s*constructor\b/.test(line) || /\[\s*['"]constructor['"]\s*\]/.test(line)) {
+            warnings.push({ line: lineNum, column: 1, message: '".constructor" access is blocked in the sandbox', severity: 'warning' });
+        }
+        // Warn about timers (blocked); use game.wait(seconds) instead
+        if (/\b(setTimeout|setInterval)\s*\(/.test(line)) {
+            warnings.push({ line: lineNum, column: 1, message: 'setTimeout/setInterval are blocked — use game.wait(seconds)', severity: 'warning' });
         }
     });
 

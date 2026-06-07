@@ -53,6 +53,13 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     : project.images[btn.image.id]?.imageUrl || project.backgrounds[btn.image.id]?.imageUrl
             ) : null;
             const btnAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[btn.font?.align || 'center'];
+            // WYSIWYG with the engine's "fit to content": art shrinks to its fitted rect, centered.
+            if (btn.fitToContent && btnImageUrl) {
+                return <div className="w-full h-full flex items-center justify-center overflow-hidden" style={{ pointerEvents: 'none' }}>
+                    <img src={btnImageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }} />
+                    {btn.text && <GradientText className="absolute" style={{...fontSettingsToStyle(btn.font), ...(extractTextGradientStyle(btn.font) || {})}}>{btn.text}</GradientText>}
+                </div>;
+            }
             return <div
                 className={`w-full h-full border border-white/20 rounded flex items-center ${btnAlignClass} relative overflow-hidden`}
                 style={{ pointerEvents: 'none', paddingLeft: `${btn.paddingX ?? 0}%`, paddingRight: `${btn.paddingX ?? 0}%`, boxSizing: 'border-box' }}
@@ -107,25 +114,27 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             }
             
             const objectFit = img.objectFit || 'contain';
-            
+            // WYSIWYG with the engine's "fit to content": media shrinks to its fitted rect, centered.
+            const fit = !!img.fitToContent;
+            const mediaStyle: React.CSSProperties = fit
+                ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit, display: 'block' }
+                : { width: '100%', height: '100%', objectFit };
+
             if (bgType === 'video') {
-                return <video 
-                    src={url} 
-                    autoPlay 
-                    muted 
-                    loop 
+                const v = <video
+                    src={url}
+                    autoPlay
+                    muted
+                    loop
                     playsInline
-                    className="w-full h-full pointer-events-none" 
-                    style={{ objectFit }}
+                    className="pointer-events-none"
+                    style={mediaStyle}
                 />;
+                return fit ? <div className="w-full h-full flex items-center justify-center overflow-hidden">{v}</div> : <div className="w-full h-full">{v}</div>;
             }
-            
-            return <img 
-                src={url} 
-                alt="" 
-                className="w-full h-full" 
-                style={{ objectFit }}
-            />;
+
+            const im = <img src={url} alt="" style={mediaStyle} />;
+            return fit ? <div className="w-full h-full flex items-center justify-center overflow-hidden">{im}</div> : <div className="w-full h-full">{im}</div>;
         }
         case UIElementType.SaveSlotGrid: {
             const slotEl = element as UISaveSlotGridElement;
@@ -726,11 +735,16 @@ const MenuEditor: React.FC<{
     const bgAsset: any = bgAssetId ? (project.backgrounds[bgAssetId] || project.images?.[bgAssetId] || project.videos[bgAssetId]) : null;
     const bgIsVideo = !!(bgAsset && (bgAsset.isVideo || bgAsset.videoUrl));
     const mainBgVideoUrl = bgIsVideo ? bgAsset.videoUrl : null;
+    // The engine over-scales a parallaxed main background (so drift never reveals its edges).
+    // Mirror that here for WYSIWYG, using the same flat scale the additional-plane preview uses.
+    const mainBgParallax = (screen.backgroundParallaxDepth ?? 0) > 0;
+    const parallaxActive = !!screen.parallax?.mode && screen.parallax.mode !== 'off';
     const getBackground = () => {
         if (screen.background.type === 'color') return { backgroundColor: screen.background.value };
         // Video backgrounds can't be a CSS background-image — they render as a <video> child below.
         if (bgIsVideo) return {};
-        if (bgAsset?.imageUrl) return { backgroundImage: `url(${bgAsset.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+        // A parallaxed image bg is rendered as a scaled <div> layer below instead of on the stage.
+        if (bgAsset?.imageUrl && !mainBgParallax) return { backgroundImage: `url(${bgAsset.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' };
         return {};
     };
 
@@ -761,7 +775,22 @@ const MenuEditor: React.FC<{
                         autoPlay, leaving it broken/blank on return — so we unmount it during play
                         and let it mount fresh when the editor is shown again. */}
                     {mainBgVideoUrl && !isPlaying && (
-                        <video key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0 }} />
+                        <video key={`mainbg-${videoReloadNonce}`} ref={(el) => { if (el) el.play().catch(() => {}); }} src={mainBgVideoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" style={{ zIndex: 0, transform: mainBgParallax ? 'scale(1.15)' : undefined, transformOrigin: 'center' }} />
+                    )}
+
+                    {/* Parallaxed image main background — scaled layer mirroring the engine's over-scale. */}
+                    {!bgIsVideo && mainBgParallax && bgAsset?.imageUrl && (
+                        <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
+                            <img src={bgAsset.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'scale(1.15)', transformOrigin: 'center' }} />
+                        </div>
+                    )}
+
+                    {/* Parallax indicator: warns the author that elements with a parallax depth will
+                        drift in-game (the editor canvas shows them at rest). */}
+                    {parallaxActive && (
+                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-purple-900/80 text-purple-200 text-[10px] font-medium pointer-events-none flex items-center gap-1" style={{ zIndex: 99999 }}>
+                            <SparklesIcon className="w-3 h-3" /> {t('menuEditor.parallaxActive', { mode: screen.parallax!.mode })}
+                        </div>
                     )}
 
                     {/* Additional background planes (multi-plane parallax) — shown at their layer

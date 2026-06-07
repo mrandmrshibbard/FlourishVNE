@@ -177,6 +177,7 @@ export function handleShowImage(
     flipY: command.flipY,
     transition: command.transition !== 'instant' ? command.transition : undefined,
     duration: command.duration,
+    fitToContent: command.fitToContent,
     action: 'show',
     ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
   };

@@ -40,6 +40,23 @@ export interface QuickMenuButtonConfig {
     y?: number;       // % of canvas
     width?: number;   // % of canvas width
     height?: number;  // % of canvas height; art uses object-contain so it never distorts
+    /** When true (independent layout, custom art), the clickable area + visible art shrink to the
+     *  fitted image rect — no oversized hitbox/empty margin around the icon. Additive-optional;
+     *  undefined/false = legacy (art fills the slot box, whole box clickable). */
+    fitToContent?: boolean;
+    /** Optional custom action that OVERRIDES the button's built-in behavior. When set (and not
+     *  `None`), clicking runs this action through the normal UI-action pipeline instead of the
+     *  hard-coded skip/log/auto/save/load handler. Additive-optional; undefined/None = default. */
+    action?: VNUIAction;
+}
+
+/** An author-defined extra Quick Menu button. Reuses QuickMenuButtonConfig (art / position / size /
+ *  fitToContent / action) and adds an id + label. Its `action` is its behavior (None = does nothing). */
+export interface QuickMenuCustomButton extends QuickMenuButtonConfig {
+    id: VNID;
+    label: string;
+    /** Visible in the quick menu. Default true (undefined = shown). */
+    show?: boolean;
 }
 
 export interface VNProjectUI {
@@ -113,6 +130,10 @@ export interface VNProjectUI {
     quickMenuIndependentLayout?: boolean;
     /** Per-button customization (custom art + independent position), keyed by button. */
     quickMenuButtons?: Partial<Record<QuickMenuButtonKey, QuickMenuButtonConfig>>;
+    /** Author-defined EXTRA quick-menu buttons (beyond the 6 built-ins). Each runs its own action.
+     *  In grouped layout they sit inline after the built-ins; in independent layout they can be
+     *  moved/resized like any other quick-menu button. Additive-optional. */
+    quickMenuCustomButtons?: QuickMenuCustomButton[];
     // ─── Layout positions (percentages of game canvas) ─── //
     // Dialogue box position/size (percentages)
     dialogueBoxX?: number; // default: centre based on dialogueBoxWidth
@@ -231,6 +252,12 @@ interface BaseUIElement {
     layer?: number;
     /** Parallax depth (0/undefined = locked). The screen's `parallax` setting drives it. */
     parallaxDepth?: number;
+    /** When true, the element's rendered media is fit (object-contain, undistorted) to its box
+     *  and BOTH the visible footprint and the clickable area shrink to the fitted art — so there
+     *  is no empty/letterbox margin (visible dead-space or stray click target) around it.
+     *  Additive-optional: undefined/false = legacy behavior (media fills the box). Only affects
+     *  media/art-bearing elements (Image, or Button with a background image). */
+    fitToContent?: boolean;
     conditions?: VNCondition[];
     disabledConditions?: VNCondition[];
     // Element-level transitions

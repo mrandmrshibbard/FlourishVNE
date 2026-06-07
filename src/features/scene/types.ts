@@ -457,6 +457,9 @@ export interface ShowImageCommand extends BaseCommand {
     flipY?: boolean;    // mirror vertically (composed with scaleY)
     transition: VNTransition;
     duration: number; // in seconds
+    /** When true, width/height act as a max bound and the displayed image + its footprint shrink
+     *  to the fitted (undistorted) art — no empty margin around it. Additive-optional. */
+    fitToContent?: boolean;
 }
 
 export interface HideTextCommand extends BaseCommand {
@@ -621,6 +624,8 @@ export interface RunScriptCommand extends BaseCommand {
     scriptId: VNID;
     /** Whether to wait for async scripts to complete before advancing */
     waitForCompletion: boolean;
+    /** Argument values for the script's params, keyed by param ID. Additive/optional. */
+    arguments?: Record<VNID, string | number | boolean>;
 }
 
 /**

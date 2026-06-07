@@ -94,6 +94,7 @@ interface ImageOverlay {
     scaleY: number;
     flipX?: boolean;
     flipY?: boolean;
+    fitToContent?: boolean;
 }
 
 interface ButtonOverlay {
@@ -406,7 +407,7 @@ const StagingArea: React.FC<{
                             id: command.id, layer: command.layer, imageUrl, x: command.x, y: command.y,
                             width: command.width, height: command.height, rotation: command.rotation, opacity: command.opacity,
                             scaleX: command.scaleX ?? 1, scaleY: command.scaleY ?? 1,
-                            flipX: command.flipX, flipY: command.flipY,
+                            flipX: command.flipX, flipY: command.flipY, fitToContent: command.fitToContent,
                         });
                     }
                     break;
@@ -1388,11 +1389,13 @@ const StagingArea: React.FC<{
                          <React.Fragment key={o.id}>
                              <div
                                  style={{
-                                     position: 'absolute', 
-                                     left: `${displayX}%`, 
+                                     position: 'absolute',
+                                     left: `${displayX}%`,
                                      top: `${displayY}%`,
-                                     width: `${pxToPercentWidth(o.width)}%`, 
-                                     height: `${pxToPercentHeight(o.height)}%`,
+                                     // "Fit to content": box shrinks to the fitted art (width/height become a max bound).
+                                     ...(o.fitToContent
+                                         ? { width: 'auto', height: 'auto', maxWidth: `${pxToPercentWidth(o.width)}%`, maxHeight: `${pxToPercentHeight(o.height)}%` }
+                                         : { width: `${pxToPercentWidth(o.width)}%`, height: `${pxToPercentHeight(o.height)}%` }),
                                      transform: `translate(-50%, -50%) rotate(${o.rotation}deg) scale(${o.scaleX * (o.flipX ? -1 : 1)}, ${o.scaleY * (o.flipY ? -1 : 1)})`,
                                      opacity: o.opacity,
                                      cursor: isDragging ? 'grabbing' : 'grab',
@@ -1401,7 +1404,9 @@ const StagingArea: React.FC<{
                                  onMouseDown={e => handleOverlayMouseDown(e, 'image', o.id, o.x, o.y)}
                                  onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}
                              >
-                                 <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />
+                                 {o.fitToContent
+                                     ? <img src={o.imageUrl} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                                     : <img src={o.imageUrl} alt="" className="w-full h-full object-contain" />}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"

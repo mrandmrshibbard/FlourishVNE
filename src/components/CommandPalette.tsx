@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CommandType } from '../features/scene/types';
 import { ChevronDownIcon, ChevronRightIcon } from './icons';
+import { pluginManager } from '../features/plugins/PluginManagerService';
 
 // Command category definitions with color coding
 export const COMMAND_CATEGORIES = {
@@ -75,6 +76,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
     const formatCommandName = (commandType: CommandType): string =>
         t(`names.${commandType}`, { defaultValue: commandType.replace(/([A-Z])/g, ' $1').trim() });
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set(Object.keys(COMMAND_CATEGORIES)));
+    // Re-render when plugins register/unregister custom commands.
+    const [, forceTick] = useState(0);
+    useEffect(() => {
+        const cb = () => forceTick(t => t + 1);
+        pluginManager.addListener(cb);
+        return () => pluginManager.removeListener(cb);
+    }, []);
+    const customCommands = pluginManager.getRegisteredCommands();
 
     const toggleCategory = (category: string) => {
         setCollapsedCategories(prev => {
@@ -140,6 +149,37 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                         </div>
                     );
                 })}
+
+                {/* Plugin-provided custom commands */}
+                {customCommands.length > 0 && (() => {
+                    const isCollapsed = collapsedCategories.has('Plugins');
+                    return (
+                        <div key="Plugins" className="space-y-0.5">
+                            <button
+                                onClick={() => toggleCategory('Plugins')}
+                                className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold bg-violet-600/30 text-violet-200 hover:opacity-80 transition-opacity"
+                            >
+                                {isCollapsed ? <ChevronRightIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />}
+                                🧩 Plugins
+                            </button>
+                            {!isCollapsed && (
+                                <div className="space-y-0.5 pl-2">
+                                    {customCommands.map(cmd => (
+                                        <div
+                                            key={cmd.type}
+                                            draggable
+                                            onDragStart={(e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/vn-command-type', cmd.type); onDragStart(cmd.type as unknown as CommandType); }}
+                                            className="px-1.5 py-0.5 rounded text-xs border cursor-move bg-violet-500/20 border-violet-500 text-violet-300 hover:opacity-80 transition-opacity"
+                                            title={cmd.description || cmd.displayName}
+                                        >
+                                            {cmd.displayName}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );

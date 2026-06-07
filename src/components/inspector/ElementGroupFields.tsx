@@ -120,6 +120,12 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 onChange={n => updateElement({ layer: n })}
             />
             <ParallaxDepthControl value={element.parallaxDepth} onChange={n => updateElement({ parallaxDepth: n })} />
+            {(element.type === UIElementType.Image || (element.type === UIElementType.Button && !!(element as UIButtonElement).image)) && (
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)] mt-1">
+                    <input type="checkbox" checked={!!element.fitToContent} onChange={e => updateElement({ fitToContent: e.target.checked })} className="cursor-pointer" />
+                    {t('elementInspector.fitToContent')}
+                </label>
+            )}
         </>
     );
     const renderOpacityField = () => (

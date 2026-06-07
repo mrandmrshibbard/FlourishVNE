@@ -2,6 +2,7 @@ import { CommandType } from '../features/scene/types';
 import { VNProject } from '../types/project';
 import { VNCommand } from '../features/scene/types';
 import { UIActionType } from '../types/shared';
+import { pluginManager } from '../features/plugins/PluginManagerService';
 
 
 const generateId = () => `opt-${Math.random().toString(36).substring(2, 9)}`;
@@ -12,7 +13,15 @@ type CreateCommandOptions = {
     branchId?: string;
 };
 
-export const createCommand = (type: CommandType, project: VNProject, options: CreateCommandOptions = {}): Omit<VNCommand, 'id'> | null => {
+export const createCommand = (type: CommandType | string, project: VNProject, options: CreateCommandOptions = {}): Omit<VNCommand, 'id'> | null => {
+    // Custom command registered by a plugin (type = "pluginId.command"): build a command
+    // object carrying the parameter defaults under `params`.
+    const customDef = pluginManager.getCommand(type as string);
+    if (customDef) {
+        const params: Record<string, any> = {};
+        for (const p of customDef.parameters || []) params[p.name] = p.defaultValue ?? (p.type === 'number' ? 0 : p.type === 'boolean' ? false : '');
+        return { type, params } as unknown as Omit<VNCommand, 'id'>;
+    }
     const firstCharId = Object.keys(project.characters)[0];
     const firstBgId = Object.keys(project.backgrounds)[0];
     const firstImageId = Object.keys(project.images || {})[0];

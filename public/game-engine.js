@@ -42,6 +42,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["ToggleAutoAdvance"] = "ToggleAutoAdvance";
     UIActionType2["ToggleSkip"] = "ToggleSkip";
     UIActionType2["SkipBackward"] = "SkipBackward";
+    UIActionType2["CallCommonEvent"] = "CallCommonEvent";
     return UIActionType2;
   })(UIActionType || {});
   const RESET_ALL_VARIABLES = "__ALL_VARIABLES__";
@@ -1483,16 +1484,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const commonEvents = state.commonEvents || {};
         const existing = commonEvents[commonEventId];
         if (!existing) return state;
+        const stripArg = (cmd) => {
+          if (cmd.type === "CallCommonEvent" && cmd.commonEventId === commonEventId && cmd.arguments && parameterId in cmd.arguments) {
+            const { [parameterId]: _drop, ...restArgs } = cmd.arguments;
+            return { ...cmd, arguments: restArgs };
+          }
+          return cmd;
+        };
+        const newScenes = {};
+        for (const sceneId in state.scenes) {
+          const scene = state.scenes[sceneId];
+          newScenes[sceneId] = { ...scene, commands: scene.commands.map(stripArg) };
+        }
+        const updatedEvents = {};
+        for (const ceId in commonEvents) {
+          const ce = commonEvents[ceId];
+          updatedEvents[ceId] = { ...ce, commands: ce.commands.map(stripArg) };
+        }
+        updatedEvents[commonEventId] = {
+          ...updatedEvents[commonEventId],
+          parameters: existing.parameters.filter((p) => p.id !== parameterId),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
         return {
           ...state,
-          commonEvents: {
-            ...commonEvents,
-            [commonEventId]: {
-              ...existing,
-              parameters: existing.parameters.filter((p) => p.id !== parameterId),
-              updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-            }
-          }
+          scenes: newScenes,
+          commonEvents: updatedEvents
         };
       }
       default:
@@ -1599,6 +1616,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           pluginRegistry: {
             ...registry,
             [pluginId]: { ...existing, ...entry }
+          }
+        };
+      }
+      case "SET_PLUGIN_STORAGE": {
+        const { pluginId, key, value } = action.payload;
+        const storage = state.pluginStorage || {};
+        const pluginBucket = storage[pluginId] || {};
+        return {
+          ...state,
+          pluginStorage: {
+            ...storage,
+            [pluginId]: { ...pluginBucket, [key]: value }
           }
         };
       }
@@ -2048,6 +2077,376 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
+  const ENGINE_VERSION = "2.0.0";
+  const compareVersions = (a, b) => {
+    const pa = a.split(".").map(Number);
+    const pb = b.split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  };
+  class PluginManagerService {
+    constructor() {
+      this.loadedPlugins = /* @__PURE__ */ new Map();
+      this.registeredCommands = /* @__PURE__ */ new Map();
+      this.registeredEffects = /* @__PURE__ */ new Map();
+      this.listeners = /* @__PURE__ */ new Set();
+      this.host = null;
+      this.runtime = null;
+    }
+    static getInstance() {
+      if (!PluginManagerService.instance) {
+        PluginManagerService.instance = new PluginManagerService();
+      }
+      return PluginManagerService.instance;
+    }
+    /** Set the editor-level host bridge (project/dispatch/toast). Called once at app mount. */
+    setHost(bridge) {
+      this.host = bridge;
+    }
+    /** Set (or clear with null) the runtime bridge for live variable access during play. */
+    setRuntime(bridge) {
+      this.runtime = bridge;
+    }
+    // ── Lifecycle (signatures match PluginManagerUI usage) ────────────────────
+    /**
+     * Install a plugin from source: validate, check deps/engine, dispatch INSTALL,
+     * load hooks, and fire onLoad/onEnable. Returns the created VNPlugin (throws on error).
+     */
+    loadPlugin(source, project, dispatch) {
+      var _a, _b;
+      const manifest = this.extractManifest(source);
+      if (!manifest) throw new Error("Plugin must define a `manifest` object.");
+      const { valid, errors } = validatePluginManifest(manifest);
+      if (!valid) throw new Error(errors.join(" "));
+      if ((project.plugins || {})[manifest.id]) {
+        throw new Error(`A plugin with id "${manifest.id}" is already installed.`);
+      }
+      if (manifest.engineVersion && compareVersions(manifest.engineVersion, ENGINE_VERSION) > 0) {
+        throw new Error(`Requires engine ${manifest.engineVersion}+ (current: ${ENGINE_VERSION}).`);
+      }
+      for (const dep of manifest.dependencies || []) {
+        if (!(project.plugins || {})[dep]) {
+          throw new Error(`Missing dependency: "${dep}". Install it first.`);
+        }
+      }
+      const plugin = createPlugin(manifest, source, {});
+      dispatch({ type: "INSTALL_PLUGIN", payload: { plugin } });
+      const api = this.createPluginAPI(manifest);
+      const hooks = this.parsePluginSource(source, api);
+      this.loadedPlugins.set(manifest.id, { hooks, api });
+      try {
+        (_a = hooks.onLoad) == null ? void 0 : _a.call(hooks, api);
+      } catch (e) {
+        console.error(`[Plugin ${manifest.id}] onLoad failed:`, e);
+      }
+      try {
+        (_b = hooks.onEnable) == null ? void 0 : _b.call(hooks, api);
+      } catch (e) {
+        console.error(`[Plugin ${manifest.id}] onEnable failed:`, e);
+      }
+      this.notifyListeners();
+      return plugin;
+    }
+    enablePlugin(pluginId, project, dispatch) {
+      var _a, _b, _c, _d;
+      dispatch({ type: "ENABLE_PLUGIN", payload: { pluginId } });
+      const plugin = (project.plugins || {})[pluginId];
+      if (!plugin) return;
+      let loaded = this.loadedPlugins.get(pluginId);
+      if (!loaded) {
+        const api = this.createPluginAPI(plugin.manifest);
+        const hooks = this.parsePluginSource(plugin.source, api);
+        loaded = { hooks, api };
+        this.loadedPlugins.set(pluginId, loaded);
+        try {
+          (_b = (_a = loaded.hooks).onLoad) == null ? void 0 : _b.call(_a, loaded.api);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      try {
+        (_d = (_c = loaded.hooks).onEnable) == null ? void 0 : _d.call(_c, loaded.api);
+      } catch (e) {
+        console.error(`[Plugin ${pluginId}] onEnable failed:`, e);
+      }
+      this.notifyListeners();
+    }
+    disablePlugin(pluginId, _project, dispatch) {
+      var _a, _b;
+      dispatch({ type: "DISABLE_PLUGIN", payload: { pluginId } });
+      const loaded = this.loadedPlugins.get(pluginId);
+      try {
+        (_b = loaded == null ? void 0 : (_a = loaded.hooks).onDisable) == null ? void 0 : _b.call(_a, loaded.api);
+      } catch (e) {
+        console.error(`[Plugin ${pluginId}] onDisable failed:`, e);
+      }
+      this.unregisterFor(pluginId);
+      this.loadedPlugins.delete(pluginId);
+      this.notifyListeners();
+    }
+    uninstallPlugin(pluginId, dispatch) {
+      var _a, _b;
+      const loaded = this.loadedPlugins.get(pluginId);
+      try {
+        (_b = loaded == null ? void 0 : (_a = loaded.hooks).onUninstall) == null ? void 0 : _b.call(_a, loaded.api);
+      } catch (e) {
+        console.error(`[Plugin ${pluginId}] onUninstall failed:`, e);
+      }
+      this.unregisterFor(pluginId);
+      this.loadedPlugins.delete(pluginId);
+      dispatch({ type: "UNINSTALL_PLUGIN", payload: { pluginId } });
+      this.notifyListeners();
+    }
+    /** Ensure exactly the project's enabled plugins are loaded (load missing, unload stale). */
+    ensureLoaded(project) {
+      var _a, _b;
+      const plugins = project.plugins || {};
+      const enabledIds = new Set(Object.values(plugins).filter((p) => p.state === "enabled").map((p) => p.manifest.id));
+      for (const id of Array.from(this.loadedPlugins.keys())) {
+        if (!enabledIds.has(id)) {
+          this.unregisterFor(id);
+          this.loadedPlugins.delete(id);
+        }
+      }
+      for (const plugin of Object.values(plugins)) {
+        if (plugin.state !== "enabled") continue;
+        if (this.loadedPlugins.has(plugin.manifest.id)) continue;
+        try {
+          const api = this.createPluginAPI(plugin.manifest);
+          const hooks = this.parsePluginSource(plugin.source, api);
+          this.loadedPlugins.set(plugin.manifest.id, { hooks, api });
+          (_a = hooks.onLoad) == null ? void 0 : _a.call(hooks, api);
+          (_b = hooks.onEnable) == null ? void 0 : _b.call(hooks, api);
+        } catch (e) {
+          console.error(`[Plugin ${plugin.manifest.id}] failed to load:`, e);
+        }
+      }
+      this.notifyListeners();
+    }
+    unregisterFor(pluginId) {
+      for (const [key, v] of Array.from(this.registeredCommands.entries())) {
+        if (v.pluginId === pluginId) this.registeredCommands.delete(key);
+      }
+      for (const [key, v] of Array.from(this.registeredEffects.entries())) {
+        if (v.pluginId === pluginId) this.registeredEffects.delete(key);
+      }
+    }
+    // ── Registries (read by the palette / inspector / executor) ───────────────
+    getRegisteredCommands() {
+      return Array.from(this.registeredCommands.values()).map((v) => v.def);
+    }
+    getCommand(type) {
+      var _a;
+      return (_a = this.registeredCommands.get(type)) == null ? void 0 : _a.def;
+    }
+    getRegisteredEffects() {
+      return Array.from(this.registeredEffects.values()).map((v) => v.def);
+    }
+    getEffect(type) {
+      var _a;
+      return (_a = this.registeredEffects.get(type)) == null ? void 0 : _a.def;
+    }
+    /** Get the live PluginAPI for a loaded plugin (used to run a custom command's handler). */
+    getApi(pluginId) {
+      var _a;
+      return (_a = this.loadedPlugins.get(pluginId)) == null ? void 0 : _a.api;
+    }
+    /** The plugin id that owns a registered command type (e.g. "pluginId.cmd" → "pluginId"). */
+    getCommandOwner(type) {
+      var _a;
+      return (_a = this.registeredCommands.get(type)) == null ? void 0 : _a.pluginId;
+    }
+    // ── Hooks ─────────────────────────────────────────────────────────────────
+    /** Invoke a lifecycle hook across all loaded plugins (synchronous; errors isolated). */
+    invokeHook(hookName, ...args) {
+      for (const [pluginId, loaded] of this.loadedPlugins.entries()) {
+        const fn = loaded.hooks[hookName];
+        if (typeof fn === "function") {
+          try {
+            fn(loaded.api, ...args);
+          } catch (err) {
+            console.error(`[PluginManager] Hook ${hookName} failed for ${pluginId}:`, err);
+          }
+        }
+      }
+    }
+    // ── Listeners ─────────────────────────────────────────────────────────────
+    addListener(cb) {
+      this.listeners.add(cb);
+    }
+    removeListener(cb) {
+      this.listeners.delete(cb);
+    }
+    notifyListeners() {
+      this.listeners.forEach((cb) => {
+        try {
+          cb();
+        } catch {
+        }
+      });
+    }
+    // ── Source parsing / sandbox ──────────────────────────────────────────────
+    /** Extract just the manifest from source (run in a throwaway sandbox), for validation. */
+    extractManifest(source) {
+      try {
+        const fn = new Function(`
+                "use strict";
+                ${this.sandboxPreamble()}
+                ${source}
+                return typeof manifest !== 'undefined' ? manifest : (typeof plugin !== 'undefined' && plugin ? plugin.manifest : undefined);
+            `);
+        return fn() || null;
+      } catch (err) {
+        console.error("[PluginManager] Failed to read manifest:", err);
+        return null;
+      }
+    }
+    sandboxPreamble() {
+      const blocked = [
+        "document",
+        "window",
+        "globalThis",
+        "self",
+        "fetch",
+        "XMLHttpRequest",
+        "WebSocket",
+        "localStorage",
+        "sessionStorage",
+        "indexedDB",
+        "eval",
+        "Function",
+        "setTimeout",
+        "setInterval",
+        "clearTimeout",
+        "clearInterval",
+        "requestAnimationFrame",
+        "queueMicrotask",
+        "importScripts",
+        "require"
+      ];
+      return blocked.map((g) => `var ${g} = undefined;`).join("\n");
+    }
+    parsePluginSource(source, api) {
+      var _a;
+      try {
+        if (/\.\s*constructor\b/.test(source)) {
+          throw new Error('Access to ".constructor" is blocked in the plugin sandbox.');
+        }
+        const hooksFn = new Function("api", `
+                "use strict";
+                ${this.sandboxPreamble()}
+                ${source}
+                return typeof plugin !== 'undefined' ? plugin : {};
+            `);
+        return hooksFn(api) || {};
+      } catch (err) {
+        console.error("[PluginManager] Failed to parse plugin source:", err);
+        (_a = this.host) == null ? void 0 : _a.notify(`Plugin failed to load: ${err.message}`, "error");
+        return {};
+      }
+    }
+    // ── PluginAPI ─────────────────────────────────────────────────────────────
+    createPluginAPI(manifest) {
+      const pluginId = manifest.id;
+      const self = this;
+      const project = () => {
+        var _a;
+        return ((_a = self.host) == null ? void 0 : _a.getProject()) || null;
+      };
+      return {
+        manifest,
+        getVariable: (nameOrId) => {
+          if (self.runtime) return self.runtime.getVariable(nameOrId);
+          const p = project();
+          if (!p) return void 0;
+          const v = p.variables[nameOrId] || Object.values(p.variables).find((x) => x.name.toLowerCase() === nameOrId.toLowerCase());
+          return v ? v.defaultValue : void 0;
+        },
+        setVariable: (nameOrId, value) => {
+          if (self.runtime) {
+            self.runtime.setVariable(nameOrId, value);
+            return;
+          }
+          console.warn(`[Plugin ${pluginId}] setVariable("${nameOrId}") ignored — only writable during gameplay.`);
+        },
+        getProjectInfo: () => {
+          const p = project();
+          return {
+            title: (p == null ? void 0 : p.title) || "",
+            version: p == null ? void 0 : p.version,
+            sceneCount: p ? Object.keys(p.scenes).length : 0,
+            characterCount: p ? Object.keys(p.characters).length : 0
+          };
+        },
+        getScenes: () => {
+          const p = project();
+          return p ? Object.entries(p.scenes).map(([id, scene]) => ({ id, name: scene.name })) : [];
+        },
+        getCharacters: () => {
+          const p = project();
+          return p ? Object.entries(p.characters).map(([id, char]) => ({ id, name: char.name })) : [];
+        },
+        notify: (message, type) => {
+          var _a, _b, _c;
+          (_c = ((_a = self.runtime) == null ? void 0 : _a.notify) || ((_b = self.host) == null ? void 0 : _b.notify)) == null ? void 0 : _c(message, type);
+        },
+        log: (...args) => console.log(`[Plugin ${pluginId}]`, ...args),
+        getConfig: () => {
+          var _a, _b, _c;
+          const defaults = {};
+          for (const f of manifest.settings || []) if (f.defaultValue !== void 0) defaults[f.name] = f.defaultValue;
+          const saved = ((_c = (_b = (_a = project()) == null ? void 0 : _a.plugins) == null ? void 0 : _b[pluginId]) == null ? void 0 : _c.config) || {};
+          return { ...defaults, ...saved };
+        },
+        getStorage: (key) => {
+          var _a, _b;
+          const p = project();
+          return (_b = (_a = p == null ? void 0 : p.pluginStorage) == null ? void 0 : _a[pluginId]) == null ? void 0 : _b[key];
+        },
+        setStorage: (key, value) => {
+          var _a;
+          (_a = self.host) == null ? void 0 : _a.dispatch({ type: "SET_PLUGIN_STORAGE", payload: { pluginId, key, value } });
+        },
+        registerCommand: (commandDef) => {
+          const fullType = commandDef.type.startsWith(pluginId + ".") ? commandDef.type : `${pluginId}.${commandDef.type}`;
+          self.registeredCommands.set(fullType, { def: { ...commandDef, type: fullType }, pluginId });
+          self.notifyListeners();
+        },
+        registerEffect: (effectDef) => {
+          const fullType = effectDef.type.startsWith(pluginId + ".") ? effectDef.type : `${pluginId}.${effectDef.type}`;
+          self.registeredEffects.set(fullType, { def: { ...effectDef, type: fullType }, pluginId });
+          self.notifyListeners();
+        }
+      };
+    }
+  }
+  function createPlugin(manifest, source, config = {}) {
+    return {
+      manifest,
+      state: "enabled",
+      installedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      config,
+      source
+    };
+  }
+  function validatePluginManifest(manifest) {
+    const errors = [];
+    if (!manifest.id || !/^[a-z0-9.-]+$/i.test(manifest.id)) {
+      errors.push("Plugin ID must contain only alphanumeric characters, dots, and hyphens.");
+    }
+    if (!manifest.name || manifest.name.trim().length === 0) errors.push("Plugin name is required.");
+    if (!manifest.version || !/^\d+\.\d+\.\d+/.test(manifest.version)) {
+      errors.push("Plugin version must follow semantic versioning (e.g. 1.0.0).");
+    }
+    if (!manifest.description) errors.push("Plugin description is required.");
+    if (!manifest.author) errors.push("Plugin author is required.");
+    if (!manifest.category) errors.push("Plugin category is required.");
+    return { valid: errors.length === 0, errors };
+  }
+  const pluginManager = PluginManagerService.getInstance();
   const log = createLogger("ProjectContext");
   const AUTO_SAVE_INTERVAL = 2 * 60 * 1e3;
   const COALESCE_MS = 300;
@@ -2198,6 +2597,23 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         window.__FLOURISH_PROJECT__ = history.present;
       }
     }, [history.present]);
+    React2.useEffect(() => {
+      pluginManager.setHost({
+        getProject: () => historyRef.current.present,
+        dispatch: dispatchWithHistory,
+        notify: (message, type = "info") => {
+          try {
+            toast.addToast(message, type);
+          } catch {
+          }
+        }
+      });
+      try {
+        pluginManager.ensureLoaded(historyRef.current.present);
+      } catch (e) {
+        log.warn("Plugin ensureLoaded failed:", e);
+      }
+    }, [dispatchWithHistory, toast]);
     return /* @__PURE__ */ jsxRuntime2.jsx(ProjectContext.Provider, { value: {
       project: history.present,
       dispatch: dispatchWithHistory,
@@ -5048,6 +5464,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       flipY: command.flipY,
       transition: command.transition !== "instant" ? command.transition : void 0,
       duration: command.duration,
+      fitToContent: command.fitToContent,
       action: "show",
       ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
     };
@@ -5366,6 +5783,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if ((_a2 = context.project.variables) == null ? void 0 : _a2[nameOrId]) return nameOrId;
       return varNameToId[nameOrId.toLowerCase()];
     };
+    const resolveItem = (nameOrId) => {
+      const items = context.project.items || {};
+      if (items[nameOrId]) return items[nameOrId];
+      const lower = nameOrId.toLowerCase();
+      return Object.values(items).find((it) => it.name.toLowerCase() === lower);
+    };
     const gameAPI = {
       getVariable: (nameOrId) => {
         const id = resolveVarId(nameOrId);
@@ -5389,6 +5812,64 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         return result;
       },
+      // Documented alias of getAllVariables() (name → value map).
+      getVariables: () => {
+        const result = {};
+        for (const [id, val] of Object.entries(context.variables)) {
+          const name = varIdToName[id] || id;
+          result[name] = val;
+        }
+        return result;
+      },
+      getScenes: () => {
+        return Object.values(context.project.scenes || {}).map((s) => s.name);
+      },
+      getCharacters: () => {
+        return Object.entries(context.project.characters || {}).map(([id, c]) => ({ id, name: c.name }));
+      },
+      // ── Inventory (items are sugar over a number "count" variable) ──
+      getItemCount: (nameOrId) => {
+        const item = resolveItem(nameOrId);
+        if (!item) return 0;
+        const v = context.variables[item.countVariableId];
+        return typeof v === "number" ? v : Number(v) || 0;
+      },
+      hasItem: (nameOrId) => {
+        const item = resolveItem(nameOrId);
+        if (!item) return false;
+        const v = context.variables[item.countVariableId];
+        return (typeof v === "number" ? v : Number(v) || 0) > 0;
+      },
+      addItem: (nameOrId, amount = 1) => {
+        const item = resolveItem(nameOrId);
+        if (!item) {
+          console.warn(`[Script] addItem: unknown item "${nameOrId}"`);
+          return;
+        }
+        const cur = Number(context.variables[item.countVariableId]) || 0;
+        let next = cur + amount;
+        if (item.unique) next = Math.min(1, Math.max(0, next));
+        context.variables[item.countVariableId] = next;
+        context.onSetVariable(item.countVariableId, next);
+      },
+      removeItem: (nameOrId, amount = 1) => {
+        const item = resolveItem(nameOrId);
+        if (!item) {
+          console.warn(`[Script] removeItem: unknown item "${nameOrId}"`);
+          return;
+        }
+        const cur = Number(context.variables[item.countVariableId]) || 0;
+        const next = Math.max(0, cur - amount);
+        context.variables[item.countVariableId] = next;
+        context.onSetVariable(item.countVariableId, next);
+      },
+      getItems: () => {
+        return Object.values(context.project.items || {}).map((it) => ({
+          id: it.id,
+          name: it.name,
+          count: Number(context.variables[it.countVariableId]) || 0
+        }));
+      },
       showDialogue: (characterName, text) => {
         context.onShowDialogue(characterName, text);
       },
@@ -5399,6 +5880,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       jumpToLabel: (labelId) => {
         navigationRequest = { type: "label", target: labelId };
         context.onJumpToLabel(labelId);
+      },
+      runScript: (nameOrId, args) => {
+        var _a2;
+        (_a2 = context.onRunScript) == null ? void 0 : _a2.call(context, nameOrId, args);
+      },
+      callCommonEvent: (nameOrId, args) => {
+        var _a2;
+        (_a2 = context.onCallCommonEvent) == null ? void 0 : _a2.call(context, nameOrId, args);
       },
       playSFX: (nameOrId, volume) => {
         context.onPlaySFX(nameOrId, volume);
@@ -5417,12 +5906,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       },
       currentScene: ((_a = context.project.scenes[context.currentSceneId]) == null ? void 0 : _a.name) || "",
       currentSceneId: context.currentSceneId,
+      args: context.args || {},
       wait: (seconds) => {
         return new Promise((resolve) => setTimeout(resolve, seconds * 1e3));
       },
       random: (min, max) => {
         return Math.floor(Math.random() * (max - min + 1)) + min;
       },
+      // Top-level convenience aliases (the doc referenced game.clamp / game.lerp).
+      clamp: (value, min, max) => Math.min(Math.max(value, min), max),
+      lerp: (start, end, t) => start + (end - start) * t,
       math: {
         clamp: (value, min, max) => Math.min(Math.max(value, min), max),
         lerp: (start, end, t) => start + (end - start) * t,
@@ -5430,6 +5923,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
     try {
+      if (/\.\s*constructor\b/.test(script.code) || /\[\s*['"]constructor['"]\s*\]/.test(script.code)) {
+        return {
+          success: false,
+          error: 'Access to ".constructor" is blocked in the script sandbox.',
+          duration: performance.now() - startTime
+        };
+      }
       const blockedGlobals = [
         "document",
         "window",
@@ -5442,7 +5942,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         "sessionStorage",
         "indexedDB",
         "eval",
-        "Function"
+        "Function",
+        "setTimeout",
+        "setInterval",
+        "clearTimeout",
+        "clearInterval",
+        "requestAnimationFrame",
+        "queueMicrotask"
       ];
       const blockStatements = blockedGlobals.map((g) => `var ${g} = undefined;`).join("\n");
       const wrappedCode = `
@@ -5470,10 +5976,117 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
     }
   }
-  const handleRunScript = (command, context) => {
+  const MAX_CALL_DEPTH = 32;
+  function handleCallCommonEvent(command, context) {
+    var _a, _b, _c;
     const { project, playerState } = context;
+    const commonEvents = project.commonEvents || {};
+    const commonEvent = commonEvents[command.commonEventId];
+    if (!commonEvent) {
+      console.warn(`[CallCommonEvent] Common event not found: ${command.commonEventId}`);
+      return { advance: true };
+    }
+    if (!commonEvent.enabled) {
+      console.warn(`[CallCommonEvent] Common event is disabled: ${commonEvent.name}`);
+      return { advance: true };
+    }
+    if (!commonEvent.commands || commonEvent.commands.length === 0) {
+      console.warn(`[CallCommonEvent] Common event has no commands: ${commonEvent.name}`);
+      return { advance: true };
+    }
+    if (playerState.commandStack.length >= MAX_CALL_DEPTH) {
+      console.error(`[CallCommonEvent] Max call depth (${MAX_CALL_DEPTH}) reached calling "${commonEvent.name}"`);
+      (_a = context.notify) == null ? void 0 : _a.call(context, `Common Event call depth limit reached ("${commonEvent.name}")`, "error");
+      return { advance: true };
+    }
+    if (playerState.commandStack.some((frame) => frame.commonEventId === commonEvent.id)) {
+      console.error(`[CallCommonEvent] Cycle detected — "${commonEvent.name}" is already on the call stack`);
+      (_b = context.notify) == null ? void 0 : _b.call(context, `Common Event cycle blocked ("${commonEvent.name}")`, "error");
+      return { advance: true };
+    }
+    const variableOverrides = {};
+    const savedVariables = {};
+    const clearedVariables = [];
+    if (commonEvent.parameters && commonEvent.parameters.length > 0) {
+      for (const param of commonEvent.parameters) {
+        const raw = (_c = command.arguments) == null ? void 0 : _c[param.id];
+        const value = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
+        variableOverrides[param.id] = value;
+        if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) {
+          savedVariables[param.id] = playerState.variables[param.id];
+        } else {
+          clearedVariables.push(param.id);
+        }
+      }
+    }
+    const newStack = [
+      ...playerState.commandStack,
+      {
+        sceneId: playerState.currentSceneId,
+        commands: playerState.currentCommands,
+        index: playerState.currentIndex + 1,
+        commonEventId: commonEvent.id,
+        ...Object.keys(savedVariables).length > 0 ? { savedVariables } : {},
+        ...clearedVariables.length > 0 ? { clearedVariables } : {}
+      }
+    ];
+    return {
+      advance: false,
+      // We handle navigation ourselves
+      updates: {
+        currentCommands: commonEvent.commands,
+        currentIndex: 0,
+        commandStack: newStack,
+        // Merge parameter arguments into variables
+        ...Object.keys(variableOverrides).length > 0 ? { variables: { ...playerState.variables, ...variableOverrides } } : {}
+      }
+    };
+  }
+  function coerceParam(value, type) {
+    if (type === "number") {
+      const n = typeof value === "number" ? value : parseFloat(String(value));
+      return isNaN(n) ? 0 : n;
+    }
+    if (type === "boolean") {
+      if (typeof value === "boolean") return value;
+      return value === "true" || value === 1 || value === "1";
+    }
+    return String(value);
+  }
+  const MAX_SCRIPT_DEPTH = 16;
+  function findScript(project, nameOrId) {
     const scripts = project.scripts || {};
-    const script = scripts[command.scriptId];
+    if (scripts[nameOrId]) return scripts[nameOrId];
+    const lower = nameOrId.toLowerCase();
+    return Object.values(scripts).find((s) => s.name.toLowerCase() === lower);
+  }
+  function coerceValue(value, type) {
+    if (type === "number") {
+      const n = typeof value === "number" ? value : parseFloat(String(value));
+      return isNaN(n) ? 0 : n;
+    }
+    if (type === "boolean") {
+      if (typeof value === "boolean") return value;
+      return value === "true" || value === 1 || value === "1";
+    }
+    return String(value);
+  }
+  function resolveArgs(script, supplied) {
+    const out = {};
+    for (const p of script.params || []) {
+      let v;
+      if (supplied) {
+        if (p.id in supplied) v = supplied[p.id];
+        else if (p.name in supplied) v = supplied[p.name];
+      }
+      out[p.name] = v !== void 0 ? coerceValue(v, p.type) : p.defaultValue;
+    }
+    return out;
+  }
+  const handleRunScript = (command, context) => {
+    var _a;
+    const { project, playerState } = context;
+    const script = (project.scripts || {})[command.scriptId];
     if (!script) {
       console.warn(`[RunScript] Script not found: ${command.scriptId}`);
       return { advance: true };
@@ -5486,94 +6099,203 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     for (const [id, scene] of Object.entries(project.scenes)) {
       sceneNameToId[scene.name.toLowerCase()] = id;
     }
-    const variableUpdates = { ...playerState.variables };
-    const runtimeContext = {
-      project,
-      variables: { ...playerState.variables },
-      currentSceneId: playerState.currentSceneId || project.startSceneId,
-      onSetVariable: (nameOrId, value) => {
-        let varId = nameOrId;
-        if (!project.variables[nameOrId]) {
-          for (const [id, variable] of Object.entries(project.variables)) {
-            if (variable.name.toLowerCase() === nameOrId.toLowerCase()) {
-              varId = id;
-              break;
-            }
-          }
-        }
-        variableUpdates[varId] = value;
-      },
-      onJumpToScene: (nameOrId) => {
-      },
-      onJumpToLabel: (labelId) => {
-      },
-      onShowDialogue: (characterName, text) => {
-        console.log(`[Script Dialogue] ${characterName}: ${text}`);
-      },
-      onPlaySFX: (nameOrId, volume) => {
-        let audioId = nameOrId;
-        if (!project.audio[nameOrId]) {
-          for (const [id, audio] of Object.entries(project.audio)) {
-            if (audio.name.toLowerCase() === nameOrId.toLowerCase()) {
-              audioId = id;
-              break;
-            }
-          }
-        }
-        context.playSound(audioId, volume);
-      },
-      onPlayMusic: (nameOrId, loop, volume) => {
-        console.log(`[Script] playMusic: ${nameOrId} loop=${loop} vol=${volume}`);
-      },
-      onStopMusic: (fadeDuration) => {
-        if (context.musicAudioRef.current) {
-          context.fadeAudio(context.musicAudioRef.current, 0, fadeDuration || 1);
-        }
-      },
-      onNotify: (message, type) => {
-        console.log(`[Script Notify] [${type || "info"}] ${message}`);
+    const resolveAudioId = (nameOrId) => {
+      if (project.audio[nameOrId]) return nameOrId;
+      const lower = nameOrId.toLowerCase();
+      for (const [id, audio] of Object.entries(project.audio)) {
+        if (audio.name.toLowerCase() === lower) return id;
       }
+      return nameOrId;
     };
-    const result = executeScript(script, runtimeContext);
-    if (!result.success) {
-      console.error(`[RunScript] Script "${script.name}" failed:`, result.error);
-      if (result.stack) console.error(result.stack);
-    } else {
-      console.log(`[RunScript] Script "${script.name}" completed in ${result.duration.toFixed(1)}ms`);
-    }
-    const commandResult = {
-      advance: true,
-      updates: {}
+    const resolveVarId = (nameOrId) => {
+      if (project.variables[nameOrId]) return nameOrId;
+      const lower = nameOrId.toLowerCase();
+      for (const [id, variable] of Object.entries(project.variables)) {
+        if (variable.name.toLowerCase() === lower) return id;
+      }
+      return nameOrId;
     };
-    if (Object.keys(variableUpdates).length > 0) {
-      commandResult.updates.variables = variableUpdates;
+    const variableUpdates = { ...playerState.variables };
+    let dialogueUpdate;
+    let musicStateUpdate;
+    let navigationRequest;
+    let pendingCommonEvent;
+    const playMusicImperative = (nameOrId, loop, volume) => {
+      const audioId = resolveAudioId(nameOrId);
+      const url = context.assetResolver(audioId, "audio");
+      const audio = context.musicAudioRef.current;
+      if (!url || !audio) {
+        console.warn(`[Script] playMusic: no audio for "${nameOrId}"`);
+        return;
+      }
+      const currentSrcPath = audio.src ? new URL(audio.src, window.location.href).pathname : null;
+      const newSrcPath = new URL(url, window.location.href).pathname;
+      const isNewTrack = currentSrcPath !== newSrcPath;
+      const target = typeof volume === "number" ? volume : context.settings.musicVolume;
+      const startPlayback = () => {
+        audio.loop = !!loop;
+        audio.volume = 0;
+        audio.play().then(() => context.fadeAudio(audio, target, 1)).catch((e) => console.error("[Script] playMusic failed:", e));
+      };
+      if (isNewTrack) {
+        audio.src = url;
+        audio.load();
+        audio.addEventListener("canplaythrough", startPlayback, { once: true });
+      } else if (audio.paused) {
+        startPlayback();
+      }
+      musicStateUpdate = { audioId, loop: !!loop, currentTime: 0, isPlaying: true };
+    };
+    const runScriptInternal = (scr, args, depth) => {
+      var _a2, _b;
+      if (depth > MAX_SCRIPT_DEPTH) {
+        console.error(`[RunScript] Recursion limit (${MAX_SCRIPT_DEPTH}) reached at "${scr.name}"`);
+        (_a2 = context.notify) == null ? void 0 : _a2.call(context, `Script recursion limit reached ("${scr.name}")`, "error");
+        return;
+      }
+      const runtimeContext = {
+        project,
+        variables: variableUpdates,
+        // reads see prior accumulated writes
+        currentSceneId: playerState.currentSceneId || project.startSceneId,
+        args,
+        onSetVariable: (nameOrId, value) => {
+          variableUpdates[resolveVarId(nameOrId)] = value;
+        },
+        onJumpToScene: () => {
+        },
+        onJumpToLabel: () => {
+        },
+        onShowDialogue: (characterName, text) => {
+          const match = Object.values(project.characters).find((c) => c.name.toLowerCase() === characterName.toLowerCase());
+          dialogueUpdate = {
+            characterName: characterName || "Narrator",
+            characterColor: (match == null ? void 0 : match.color) || "#FFFFFF",
+            characterId: (match == null ? void 0 : match.id) || null,
+            text
+          };
+        },
+        onPlaySFX: (nameOrId, volume) => {
+          context.playSound(resolveAudioId(nameOrId), volume);
+        },
+        onPlayMusic: (nameOrId, loop, volume) => {
+          playMusicImperative(nameOrId, loop, volume);
+        },
+        onStopMusic: (fadeDuration) => {
+          if (context.musicAudioRef.current) {
+            context.fadeAudio(context.musicAudioRef.current, 0, fadeDuration || 1);
+          }
+          musicStateUpdate = { audioId: null, loop: false, currentTime: 0, isPlaying: false };
+        },
+        onNotify: (message, type) => {
+          var _a3;
+          (_a3 = context.notify) == null ? void 0 : _a3.call(context, message, type);
+        },
+        onRunScript: (nameOrId, a) => {
+          const target = findScript(project, nameOrId);
+          if (!target) {
+            console.warn(`[Script] runScript: script not found "${nameOrId}"`);
+            return;
+          }
+          if (!target.enabled) return;
+          runScriptInternal(target, resolveArgs(target, a), depth + 1);
+        },
+        onCallCommonEvent: (nameOrId, a) => {
+          const events = project.commonEvents || {};
+          let ce = events[nameOrId];
+          if (!ce) {
+            const lower = nameOrId.toLowerCase();
+            ce = Object.values(events).find((e) => e.name.toLowerCase() === lower);
+          }
+          if (!ce || !ce.enabled) {
+            console.warn(`[Script] callCommonEvent: not found/disabled "${nameOrId}"`);
+            return;
+          }
+          const overrides = {};
+          for (const param of ce.parameters || []) {
+            let v;
+            if (a) {
+              if (param.id in a) v = a[param.id];
+              else if (param.name in a) v = a[param.name];
+            }
+            overrides[param.id] = v !== void 0 ? v : param.defaultValue;
+          }
+          pendingCommonEvent = { commonEventId: ce.id, variableOverrides: overrides };
+        }
+      };
+      const result = executeScript(scr, runtimeContext);
+      if (!result.success) {
+        console.error(`[RunScript] Script "${scr.name}" failed:`, result.error);
+        if (result.stack) console.error(result.stack);
+        (_b = context.notify) == null ? void 0 : _b.call(context, `Script "${scr.name}" error: ${result.error}`, "error");
+      } else {
+        console.log(`[RunScript] Script "${scr.name}" completed in ${result.duration.toFixed(1)}ms`);
+      }
+      if (result.navigationRequest) navigationRequest = result.navigationRequest;
+    };
+    runScriptInternal(script, resolveArgs(script, command.arguments), 0);
+    const updates = {};
+    if (Object.keys(variableUpdates).length > 0) updates.variables = variableUpdates;
+    if (dialogueUpdate) updates.uiState = { ...updates.uiState || {}, dialogue: dialogueUpdate };
+    if (musicStateUpdate) updates.musicState = musicStateUpdate;
+    if (pendingCommonEvent) {
+      const ce = (project.commonEvents || {})[pendingCommonEvent.commonEventId];
+      const onStack = playerState.commandStack.some((f) => f.commonEventId === pendingCommonEvent.commonEventId);
+      if (playerState.commandStack.length >= MAX_CALL_DEPTH || onStack) {
+        console.error(`[Script] callCommonEvent blocked (depth/cycle): "${(ce == null ? void 0 : ce.name) || pendingCommonEvent.commonEventId}"`);
+        (_a = context.notify) == null ? void 0 : _a.call(context, `Common Event call blocked (depth/cycle): "${(ce == null ? void 0 : ce.name) || ""}"`, "error");
+      } else if (ce && ce.commands && ce.commands.length > 0) {
+        const savedVariables = {};
+        const clearedVariables = [];
+        for (const k of Object.keys(pendingCommonEvent.variableOverrides)) {
+          if (Object.prototype.hasOwnProperty.call(variableUpdates, k)) savedVariables[k] = variableUpdates[k];
+          else clearedVariables.push(k);
+        }
+        const newStack = [
+          ...playerState.commandStack,
+          {
+            sceneId: playerState.currentSceneId,
+            commands: playerState.currentCommands,
+            index: playerState.currentIndex + 1,
+            commonEventId: ce.id,
+            ...Object.keys(savedVariables).length > 0 ? { savedVariables } : {},
+            ...clearedVariables.length > 0 ? { clearedVariables } : {}
+          }
+        ];
+        return {
+          advance: false,
+          updates: {
+            ...updates,
+            currentCommands: ce.commands,
+            currentIndex: 0,
+            commandStack: newStack,
+            variables: { ...variableUpdates, ...pendingCommonEvent.variableOverrides }
+          }
+        };
+      }
     }
-    if (result.navigationRequest) {
-      if (result.navigationRequest.type === "scene") {
-        const target = result.navigationRequest.target;
+    if (navigationRequest) {
+      if (navigationRequest.type === "scene") {
+        const target = navigationRequest.target;
         let sceneId = target;
-        if (!project.scenes[target]) {
-          sceneId = sceneNameToId[target.toLowerCase()] || target;
-        }
+        if (!project.scenes[target]) sceneId = sceneNameToId[target.toLowerCase()] || target;
         if (project.scenes[sceneId]) {
-          commandResult.updates.currentSceneId = sceneId;
-          commandResult.updates.currentCommands = project.scenes[sceneId].commands;
-          commandResult.updates.currentIndex = 0;
+          updates.currentSceneId = sceneId;
+          updates.currentCommands = project.scenes[sceneId].commands;
+          updates.currentIndex = 0;
         }
-      } else if (result.navigationRequest.type === "label") {
+      } else if (navigationRequest.type === "label") {
         const currentSceneId = playerState.currentSceneId || project.startSceneId;
         const scene = project.scenes[currentSceneId];
         if (scene) {
           const labelIndex = scene.commands.findIndex(
-            (cmd) => cmd.type === "Label" && cmd.labelId === result.navigationRequest.target
+            (cmd) => cmd.type === "Label" && cmd.labelId === navigationRequest.target
           );
-          if (labelIndex >= 0) {
-            commandResult.updates.currentIndex = labelIndex + 1;
-          }
+          if (labelIndex >= 0) updates.currentIndex = labelIndex + 1;
         }
       }
     }
-    return commandResult;
+    return { advance: true, updates };
   };
   function handleSpawnParticles(command, context) {
     var _a, _b;
@@ -5680,53 +6402,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ...playerState.stageState,
           particleEffects: currentEffects
         }
-      }
-    };
-  }
-  function handleCallCommonEvent(command, context) {
-    const { project, playerState } = context;
-    const commonEvents = project.commonEvents || {};
-    const commonEvent = commonEvents[command.commonEventId];
-    if (!commonEvent) {
-      console.warn(`[CallCommonEvent] Common event not found: ${command.commonEventId}`);
-      return { advance: true };
-    }
-    if (!commonEvent.enabled) {
-      console.warn(`[CallCommonEvent] Common event is disabled: ${commonEvent.name}`);
-      return { advance: true };
-    }
-    if (!commonEvent.commands || commonEvent.commands.length === 0) {
-      console.warn(`[CallCommonEvent] Common event has no commands: ${commonEvent.name}`);
-      return { advance: true };
-    }
-    const variableOverrides = {};
-    if (commonEvent.parameters && command.arguments) {
-      for (const param of commonEvent.parameters) {
-        const argValue = command.arguments[param.id];
-        if (argValue !== void 0) {
-          variableOverrides[param.id] = argValue;
-        } else {
-          variableOverrides[param.id] = param.defaultValue;
-        }
-      }
-    }
-    const newStack = [
-      ...playerState.commandStack,
-      {
-        sceneId: playerState.currentSceneId,
-        commands: playerState.currentCommands,
-        index: playerState.currentIndex + 1
-      }
-    ];
-    return {
-      advance: false,
-      // We handle navigation ourselves
-      updates: {
-        currentCommands: commonEvent.commands,
-        currentIndex: 0,
-        commandStack: newStack,
-        // Merge parameter arguments into variables
-        ...Object.keys(variableOverrides).length > 0 ? { variables: { ...playerState.variables, ...variableOverrides } } : {}
       }
     };
   }
@@ -6514,11 +7189,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const iRotation = (tweenValues == null ? void 0 : tweenValues.rotation) ?? overlay.rotation;
     const iScaleX = (tweenValues == null ? void 0 : tweenValues.scaleX) ?? overlay.scaleX;
     const iScaleY = (tweenValues == null ? void 0 : tweenValues.scaleY) ?? overlay.scaleY;
+    const fit = !!overlay.fitToContent;
     const containerStyle = {
       left: `${ix}%`,
       top: `${iy}%`,
-      width: `${iw}px`,
-      height: `${ih}px`,
+      ...fit ? { width: "auto", height: "auto", maxWidth: `${iw}px`, maxHeight: `${ih}px` } : { width: `${iw}px`, height: `${ih}px` },
       transform: `${isSlideTransition ? "" : "translate(-50%, -50%)"}${parallaxTransform(overlay.parallaxDepth)}`.trim() || void 0,
       // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
       zIndex: 1 + (overlay.layer ?? 0) * 100
@@ -6529,12 +7204,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const iFlipX = overlay.flipX ? -1 : 1;
     const iFlipY = overlay.flipY ? -1 : 1;
     const imageStyle = {
-      width: "100%",
-      height: "100%",
+      ...fit ? { display: "block", width: "auto", height: "auto", maxWidth: `${iw}px`, maxHeight: `${ih}px` } : { width: "100%", height: "100%" },
       transform: `rotate(${iRotation}deg) scale(${iScaleX * iFlipX}, ${iScaleY * iFlipY})`,
       transformOrigin: "center center",
       opacity: iOpacity
     };
+    const mediaCls = `${fit ? "" : "absolute inset-0 w-full h-full "}object-contain pointer-events-none`;
     const className = `absolute${applyTransition ? ` ${transitionClass} transition-base` : ""}`;
     const style = {
       ...containerStyle,
@@ -6549,7 +7224,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         muted: true,
         loop: overlay.videoLoop,
         playsInline: true,
-        className: "absolute inset-0 w-full h-full object-contain pointer-events-none",
+        className: mediaCls,
         style: imageStyle
       }
     ) : /* @__PURE__ */ jsxRuntime2.jsx(
@@ -6557,7 +7232,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       {
         src: overlay.imageUrl,
         alt: "",
-        className: "absolute inset-0 w-full h-full object-contain pointer-events-none",
+        className: mediaCls,
         style: imageStyle
       }
     ) });
@@ -7305,6 +7980,30 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const buttonBg = element.backgroundColor || "#4D3273";
     const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? void 0 : "#6B4C9A");
     const { transform, overflow, ...wrapperStyle } = style;
+    const fit = !!element.fitToContent && !!displayUrl;
+    const interactive = wrapperStyle.pointerEvents !== "none";
+    if (fit) {
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...wrapperStyle, transform, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }, children: /* @__PURE__ */ jsxRuntime2.jsxs(
+        "button",
+        {
+          style: { maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", padding: 0, border: "none", background: "transparent", position: "relative", display: "block", lineHeight: 0, cursor: interactive ? "pointer" : "default", pointerEvents: interactive ? "auto" : "none" },
+          className: "transition-transform transform hover:scale-105",
+          onMouseEnter: () => {
+            try {
+              playSound(element.hoverSoundId);
+            } catch (e) {
+            }
+            setIsHovered(true);
+          },
+          onMouseLeave: () => setIsHovered(false),
+          onClick: handleClick,
+          children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("img", { src: displayUrl, alt: element.text, draggable: false, style: { display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: "contain" } }),
+            interpolatedText && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "absolute inset-0 flex items-center justify-center z-10", style: { ...textStyle, ...extractTextGradientStyle(element.font) || {}, pointerEvents: "none" }, children: interpolatedText })
+          ]
+        }
+      ) }, element.id);
+    }
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...wrapperStyle, transform }, children: /* @__PURE__ */ jsxRuntime2.jsxs(
       "button",
       {
@@ -8336,24 +9035,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const el = element;
           const bgType = ((_b2 = el.background) == null ? void 0 : _b2.type) || "image";
           const bgValue = ((_c = el.background) == null ? void 0 : _c.type) === "color" ? el.background.value : ((_d = el.background) == null ? void 0 : _d.type) ? el.background.assetId : ((_e = el.image) == null ? void 0 : _e.id) || null;
+          const fit = !!el.fitToContent;
           const containerStyle = {
             ...style,
-            overflow: "hidden"
+            overflow: "hidden",
+            ...fit ? { display: "flex", alignItems: "center", justifyContent: "center" } : {}
           };
           if (bgType === "color" && typeof bgValue === "string") {
-            return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...containerStyle, backgroundColor: bgValue } }, el.id);
+            return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, overflow: "hidden", backgroundColor: bgValue } }, el.id);
           }
           const url = bgValue ? assetResolver(bgValue, bgType === "video" ? "video" : "image") : null;
           if (!url || url === "" || url === "http://localhost:3000/") {
             return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: containerStyle, className: "bg-slate-800/50" }, el.id);
           }
           const isVideo = bgType === "video";
-          const mediaStyle = {
-            width: "100%",
-            height: "100%",
-            objectFit: el.objectFit || "contain",
-            display: "block"
-          };
+          const mediaStyle = fit ? { maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: el.objectFit || "contain", display: "block" } : { width: "100%", height: "100%", objectFit: el.objectFit || "contain", display: "block" };
           if (isVideo) {
             return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: containerStyle, children: /* @__PURE__ */ jsxRuntime2.jsxs(
               "video",
@@ -8988,9 +9684,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     );
   };
-  const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false }) => {
+  const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
     var _a, _b, _c, _d;
     const { project } = useProject();
+    const toast = useToast();
+    const notify = React2.useCallback((message, type = "info") => {
+      try {
+        toast.addToast(message, type);
+      } catch {
+        console.log(`[notify] [${type}] ${message}`);
+      }
+    }, [toast]);
     const getValidTitleScreenId = React2.useCallback(() => {
       if (project.ui.titleScreenId && project.uiScreens[project.ui.titleScreenId]) {
         return project.ui.titleScreenId;
@@ -9034,6 +9738,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return next;
       });
     }, []);
+    const hudStackRef = React2.useRef([]);
+    hudStackRef.current = hudStack;
+    const projectRef = React2.useRef(project);
+    projectRef.current = project;
     React2.useEffect(() => {
       playerStateRef.current = playerState;
       if ((playerState == null ? void 0 : playerState.mode) === "playing") {
@@ -10264,6 +10972,246 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       }
     }, [settings.sfxVolume]);
+    const prevLifecycleSceneRef = React2.useRef(null);
+    const autoRanSceneRef = React2.useRef(null);
+    const runLifecycleScripts = React2.useCallback((trigger, sceneId) => {
+      const scripts = Object.values(project.scripts || {}).filter((s) => s.enabled && s.trigger === trigger);
+      if (scripts.length === 0) return;
+      const store = variableStoreRef.current;
+      const baseVars = store ? store.snapshot().globals : { ...(playerState == null ? void 0 : playerState.variables) || {} };
+      const variableUpdates = { ...baseVars };
+      const resolveVarId = (nameOrId) => {
+        if (project.variables[nameOrId]) return nameOrId;
+        const lower = nameOrId.toLowerCase();
+        for (const [id, v] of Object.entries(project.variables)) if (v.name.toLowerCase() === lower) return id;
+        return nameOrId;
+      };
+      const resolveAudioId = (nameOrId) => {
+        if (project.audio[nameOrId]) return nameOrId;
+        const lower = nameOrId.toLowerCase();
+        for (const [id, a] of Object.entries(project.audio)) if (a.name.toLowerCase() === lower) return id;
+        return nameOrId;
+      };
+      for (const scr of scripts) {
+        const ctx = {
+          project,
+          variables: variableUpdates,
+          currentSceneId: sceneId,
+          args: {},
+          onSetVariable: (nameOrId, value) => {
+            variableUpdates[resolveVarId(nameOrId)] = value;
+          },
+          onJumpToScene: () => {
+          },
+          onJumpToLabel: () => {
+          },
+          onShowDialogue: (characterName, text) => {
+            const match = Object.values(project.characters).find((c) => c.name.toLowerCase() === (characterName || "").toLowerCase());
+            updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: characterName || "Narrator", characterColor: (match == null ? void 0 : match.color) || "#FFFFFF", characterId: (match == null ? void 0 : match.id) || null, text } } } : null);
+          },
+          onPlaySFX: (nameOrId, volume) => {
+            playSound(resolveAudioId(nameOrId), volume);
+          },
+          onPlayMusic: (nameOrId, loop, volume) => {
+            const url = assetResolver(resolveAudioId(nameOrId), "audio");
+            const audio = musicAudioRef.current;
+            if (!url || !audio) return;
+            audio.src = url;
+            audio.load();
+            audio.loop = !!loop;
+            audio.volume = 0;
+            audio.play().then(() => fadeAudio(audio, typeof volume === "number" ? volume : settings.musicVolume, 1)).catch(() => {
+            });
+          },
+          onStopMusic: (fade) => {
+            if (musicAudioRef.current) fadeAudio(musicAudioRef.current, 0, fade || 1);
+          },
+          onNotify: (message, type) => {
+            notify(message, type);
+          },
+          onRunScript: () => {
+          },
+          onCallCommonEvent: () => {
+          }
+        };
+        const result = executeScript(scr, ctx);
+        if (!result.success) {
+          console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
+          notify(`Script "${scr.name}" error: ${result.error}`, "error");
+        }
+      }
+      if (store) {
+        store.applyWrites(Object.entries(variableUpdates).map(([variableId, value]) => ({ variableId, value, scope: "global", sourceCommandId: `lifecycle-${trigger}` })));
+      }
+      updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...variableUpdates } } : null);
+    }, [project, playerState == null ? void 0 : playerState.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify]);
+    React2.useEffect(() => {
+      if (!playerState || playerState.mode !== "playing") {
+        prevLifecycleSceneRef.current = null;
+        return;
+      }
+      const sceneId = playerState.currentSceneId;
+      if (!sceneId) return;
+      const prev = prevLifecycleSceneRef.current;
+      if (prev === sceneId) return;
+      if (prev) runLifecycleScripts("onSceneExit", prev);
+      runLifecycleScripts("onSceneEnter", sceneId);
+      try {
+        pluginManager.invokeHook("onSceneChange", prev || "", sceneId);
+      } catch {
+      }
+      prevLifecycleSceneRef.current = sceneId;
+    }, [playerState == null ? void 0 : playerState.currentSceneId, playerState == null ? void 0 : playerState.mode, runLifecycleScripts]);
+    const parallelStateRef = React2.useRef(/* @__PURE__ */ new Map());
+    const parallelWarnedRef = React2.useRef(/* @__PURE__ */ new Set());
+    React2.useEffect(() => {
+      const ALLOWED = /* @__PURE__ */ new Set([
+        CommandType.SetVariable,
+        CommandType.RunScript,
+        CommandType.Wait,
+        CommandType.PlayMusic,
+        CommandType.StopMusic,
+        CommandType.PlaySoundEffect,
+        CommandType.StopSoundEffect
+      ]);
+      const isTruthy = (v) => !(v === void 0 || v === null || v === false || v === 0 || v === "" || v === "false");
+      const tick = () => {
+        var _a2, _b2;
+        const ps = playerStateRef.current;
+        if (!ps || ps.mode !== "playing") return;
+        if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
+        const events = Object.values(project.commonEvents || {});
+        const active = events.filter((ce) => ce.enabled && ce.trigger === "parallel" && ce.commands && ce.commands.length > 0 && (!ce.conditionVariableId || isTruthy(ps.variables[ce.conditionVariableId])));
+        const activeIds = new Set(active.map((c) => c.id));
+        for (const id of Array.from(parallelStateRef.current.keys())) {
+          if (!activeIds.has(id)) parallelStateRef.current.delete(id);
+        }
+        if (active.length === 0) return;
+        const now = Date.now();
+        let varAccum = null;
+        let musicAccum = null;
+        const buildCtx = () => ({
+          project,
+          playerState: { ...ps, variables: { ...ps.variables, ...varAccum || {} } },
+          assetResolver,
+          getAssetMetadata,
+          musicAudioRef,
+          fadeAudio,
+          playSound,
+          stopAllSfx,
+          stopSfx,
+          settings,
+          advance: () => {
+          },
+          setPlayerState: updatePlayerState,
+          activeEffectTimeoutsRef,
+          evaluateConditions: evaluateConditions2,
+          notify
+        });
+        for (const ce of active) {
+          let st = parallelStateRef.current.get(ce.id);
+          if (!st) {
+            st = { index: 0 };
+            parallelStateRef.current.set(ce.id, st);
+          }
+          if (st.waitUntil && now < st.waitUntil) continue;
+          st.waitUntil = void 0;
+          const cmds = ce.commands;
+          if (st.index >= cmds.length) st.index = 0;
+          const cmd = cmds[st.index];
+          st.index = (st.index + 1) % cmds.length;
+          if (!cmd) continue;
+          if (cmd.type === CommandType.Wait) {
+            const secs = typeof cmd.duration === "number" ? cmd.duration : 0;
+            st.waitUntil = now + Math.max(0, secs) * 1e3;
+            continue;
+          }
+          if (!ALLOWED.has(cmd.type)) {
+            const key = `${ce.id}:${cmd.type}`;
+            if (!parallelWarnedRef.current.has(key)) {
+              parallelWarnedRef.current.add(key);
+              console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
+            }
+            continue;
+          }
+          try {
+            const ctx = buildCtx();
+            let result = null;
+            switch (cmd.type) {
+              case CommandType.SetVariable:
+                result = handleSetVariable(cmd, ctx);
+                break;
+              case CommandType.RunScript:
+                result = handleRunScript(cmd, ctx);
+                break;
+              case CommandType.PlayMusic:
+                result = handlePlayMusic(cmd, ctx);
+                break;
+              case CommandType.StopMusic:
+                result = handleStopMusic(cmd, ctx);
+                break;
+              case CommandType.PlaySoundEffect:
+                result = handlePlaySoundEffect(cmd, ctx);
+                break;
+              case CommandType.StopSoundEffect:
+                result = handleStopSoundEffect(cmd, ctx);
+                break;
+            }
+            if ((_a2 = result == null ? void 0 : result.updates) == null ? void 0 : _a2.variables) varAccum = { ...varAccum || {}, ...result.updates.variables };
+            if ((_b2 = result == null ? void 0 : result.updates) == null ? void 0 : _b2.musicState) musicAccum = { ...musicAccum || {}, ...result.updates.musicState };
+          } catch (e) {
+            console.error(`[Parallel CE "${ce.name}"] command error:`, e);
+          }
+        }
+        if (varAccum || musicAccum) {
+          updatePlayerState((p) => p ? {
+            ...p,
+            ...varAccum ? { variables: { ...p.variables, ...varAccum } } : {},
+            ...musicAccum ? { musicState: { ...p.musicState, ...musicAccum } } : {}
+          } : null);
+        }
+      };
+      const interval = window.setInterval(tick, 120);
+      return () => window.clearInterval(interval);
+    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions2, notify]);
+    React2.useEffect(() => {
+      const resolveVarId = (nameOrId) => {
+        const p = projectRef.current;
+        if (p.variables[nameOrId]) return nameOrId;
+        const lower = nameOrId.toLowerCase();
+        for (const [id, v] of Object.entries(p.variables)) if (v.name.toLowerCase() === lower) return id;
+        return nameOrId;
+      };
+      pluginManager.setRuntime({
+        getVariable: (nameOrId) => {
+          var _a2;
+          const id = resolveVarId(nameOrId);
+          const store = variableStoreRef.current;
+          const v = store ? store.get(id) : (_a2 = playerStateRef.current) == null ? void 0 : _a2.variables[id];
+          return v === null ? void 0 : v;
+        },
+        setVariable: (nameOrId, value) => {
+          var _a2, _b2;
+          const id = resolveVarId(nameOrId);
+          const old = (_a2 = playerStateRef.current) == null ? void 0 : _a2.variables[id];
+          (_b2 = variableStoreRef.current) == null ? void 0 : _b2.applyWrites([{ variableId: id, value, scope: "global", sourceCommandId: "plugin" }]);
+          updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, [id]: value } } : null);
+          if (old !== value) {
+            try {
+              pluginManager.invokeHook("onVariableChange", id, old, value);
+            } catch {
+            }
+          }
+        },
+        notify: (message, type) => notify(message, type)
+      });
+      pluginManager.ensureLoaded(projectRef.current);
+      try {
+        pluginManager.invokeHook("onRuntimeInit");
+      } catch {
+      }
+      return () => pluginManager.setRuntime(null);
+    }, [updatePlayerState, notify]);
     React2.useEffect(() => {
       var _a2;
       const scheduler = commandSchedulerRef.current;
@@ -10283,14 +11231,34 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const variableStore = new RuntimeVariableStore({ globals: { ...baseVariables } });
       variableStoreRef.current = variableStore;
       const getRuntimeVariables = () => variableStore.snapshot().globals;
+      if (playerState.currentIndex === 0 && playerState.commandStack.length === 0 && autoRanSceneRef.current !== playerState.currentSceneId) {
+        autoRanSceneRef.current = playerState.currentSceneId;
+        const autoVars = getRuntimeVariables();
+        const isTruthy = (v) => !(v === void 0 || v === null || v === false || v === 0 || v === "" || v === "false");
+        const autoCmds = Object.values(project.commonEvents || {}).filter((ce) => ce.enabled && ce.trigger === "auto" && (!ce.conditionVariableId || isTruthy(autoVars[ce.conditionVariableId]))).flatMap((ce) => ce.commands || []);
+        if (autoCmds.length > 0) {
+          updatePlayerState((p) => {
+            if (!p) return null;
+            const newStack = [...p.commandStack, { sceneId: p.currentSceneId, commands: p.currentCommands, index: 0 }];
+            return { ...p, commandStack: newStack, currentCommands: autoCmds, currentIndex: 0 };
+          });
+          return;
+        }
+      }
       const command = playerState.currentCommands[playerState.currentIndex];
       if (!command) {
         if (playerState.commandStack.length > 0) {
-          const popped = playerState.commandStack[playerState.commandStack.length - 1];
           updatePlayerState((p) => {
-            if (!p) return null;
+            if (!p || p.commandStack.length === 0) return p;
+            const frame = p.commandStack[p.commandStack.length - 1];
             const newStack = p.commandStack.slice(0, -1);
-            return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
+            let variables = p.variables;
+            if (frame.savedVariables || frame.clearedVariables) {
+              variables = { ...p.variables };
+              if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+              if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+            }
+            return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
           });
         } else {
           runtimeDebugLog("End of scene - trying to advance to next scene");
@@ -10423,11 +11391,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const nextIndex = playerState.currentIndex + 1;
         if (nextIndex >= playerState.currentCommands.length) {
           if (playerState.commandStack.length > 0) {
-            const popped = playerState.commandStack[playerState.commandStack.length - 1];
             updatePlayerState((p) => {
-              if (!p) return null;
+              if (!p || p.commandStack.length === 0) return p;
+              const frame = p.commandStack[p.commandStack.length - 1];
               const newStack = p.commandStack.slice(0, -1);
-              return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
+              let variables = p.variables;
+              if (frame.savedVariables || frame.clearedVariables) {
+                variables = { ...p.variables };
+                if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+                if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+              }
+              return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
             });
           } else {
             const sceneIds = Object.keys(project.scenes);
@@ -10510,14 +11484,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         advance,
         setPlayerState: updatePlayerState,
         activeEffectTimeoutsRef,
-        evaluateConditions: evaluateConditions2
+        evaluateConditions: evaluateConditions2,
+        notify
       };
       let instantAdvance = true;
       (async () => {
         var _a3;
         try {
           const applyResult = (result) => {
-            var _a4, _b2, _c2;
+            var _a4, _b2, _c2, _d2;
             const variableStore2 = variableStoreRef.current;
             const previousSceneId = playerState == null ? void 0 : playerState.currentSceneId;
             if (((_a4 = result.updates) == null ? void 0 : _a4.variables) && variableStore2) {
@@ -10529,10 +11504,21 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }));
               variableStore2.applyWrites(writes);
             }
+            if ((_b2 = result.updates) == null ? void 0 : _b2.variables) {
+              const prevVars = (playerState == null ? void 0 : playerState.variables) || {};
+              for (const [vid, val] of Object.entries(result.updates.variables)) {
+                if (prevVars[vid] !== val) {
+                  try {
+                    pluginManager.invokeHook("onVariableChange", vid, prevVars[vid], val);
+                  } catch {
+                  }
+                }
+              }
+            }
             if (result.updates) {
-              const isSceneChange = ((_b2 = result.updates) == null ? void 0 : _b2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
+              const isSceneChange = ((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
-                var _a5, _b3, _c3, _d2, _e, _f, _g, _h, _i, _j;
+                var _a5, _b3, _c3, _d3, _e, _f, _g, _h, _i, _j;
                 if (!p) return null;
                 let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
                 if (isSceneChange) {
@@ -10543,7 +11529,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 return {
                   ...p,
                   ...((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                  ...((_d2 = result.updates) == null ? void 0 : _d2.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                  ...((_d3 = result.updates) == null ? void 0 : _d3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
                   ...((_e = result.updates) == null ? void 0 : _e.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
                   ...((_f = result.updates) == null ? void 0 : _f.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
                   ...((_g = result.updates) == null ? void 0 : _g.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
@@ -10552,7 +11538,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   ...((_j = result.updates) == null ? void 0 : _j.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
               });
-              if (((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
+              if (((_d2 = result.updates) == null ? void 0 : _d2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
                 runtimeDebugLog("[Scene Cleanup] Scene changed from", previousSceneId, "to", result.updates.currentSceneId, "- clearing UI stacks");
                 setScreenStack([]);
                 setHudStack([]);
@@ -10614,6 +11600,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               };
             });
             return;
+          }
+          try {
+            pluginManager.invokeHook("onBeforeCommand", command);
+          } catch {
           }
           switch (command.type) {
             case CommandType.Group: {
@@ -11071,6 +12061,31 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               applyResult(result);
               break;
             }
+            default: {
+              const customDef = pluginManager.getCommand(command.type);
+              if (customDef) {
+                const ownerId = pluginManager.getCommandOwner(command.type);
+                const api = ownerId ? pluginManager.getApi(ownerId) : void 0;
+                if (api) {
+                  try {
+                    const params = command.params || command.parameters || {};
+                    const ret = customDef.handler(params, api);
+                    if (ret && typeof ret.then === "function") {
+                      ret.catch((e) => console.error(`[Custom command ${command.type}] handler error:`, e));
+                    } else if (ret && ret.advance === false) {
+                      instantAdvance = false;
+                    }
+                  } catch (e) {
+                    console.error(`[Custom command ${command.type}] handler error:`, e);
+                  }
+                }
+              }
+              break;
+            }
+          }
+          try {
+            pluginManager.invokeHook("onAfterCommand", command, null);
+          } catch {
           }
           runtimeDebugLog("[DEBUG] Command execution complete:", command.type, "| shouldRunAsync:", shouldRunAsync, "| instantAdvance:", instantAdvance);
           if (shouldRunAsync) {
@@ -11366,7 +12381,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action);
     };
     const executeUIAction = (action) => {
-      var _a2, _b2;
+      var _a2, _b2, _c2;
       if (!playerState && action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -11638,6 +12653,27 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         } else {
           performQuit();
         }
+      } else if (action.type === UIActionType.ExitGame) {
+        const audio = musicAudioRef.current;
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.src = "";
+        }
+        stopAllSfx();
+        if (isStandalone) {
+          const electronAPI = window.electronAPI;
+          if (electronAPI == null ? void 0 : electronAPI.quitApp) {
+            electronAPI.quitApp();
+            return;
+          }
+          try {
+            window.close();
+          } catch {
+          }
+          return;
+        }
+        onClose();
       } else if (action.type === UIActionType.ContinueGame) {
         const doLoad = async () => {
           const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
@@ -12088,6 +13124,42 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             window.location.href = openUrlAction.url;
           }
         }
+      } else if (action.type === UIActionType.CallCommonEvent) {
+        const ccAction = action;
+        const ce = (project.commonEvents || {})[ccAction.commonEventId];
+        if (!ce || !ce.enabled || !ce.commands || ce.commands.length === 0) {
+          runtimeDebugWarn("[CallCommonEvent action] event not found / disabled / empty");
+          return;
+        }
+        if (!playerState || playerState.mode !== "playing") {
+          notify("Call Common Event only works during gameplay", "warning");
+          return;
+        }
+        if (playerState.commandStack.length >= MAX_CALL_DEPTH || playerState.commandStack.some((f) => f.commonEventId === ce.id)) {
+          notify(`Common Event call blocked (depth/cycle): "${ce.name}"`, "error");
+          return;
+        }
+        const overrides = {};
+        const savedVariables = {};
+        const clearedVariables = [];
+        for (const param of ce.parameters || []) {
+          const raw = (_c2 = ccAction.arguments) == null ? void 0 : _c2[param.id];
+          overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
+          if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
+          else clearedVariables.push(param.id);
+        }
+        updatePlayerState((p) => {
+          if (!p) return null;
+          const newStack = [...p.commandStack, {
+            sceneId: p.currentSceneId,
+            commands: p.currentCommands,
+            index: p.currentIndex + 1,
+            commonEventId: ce.id,
+            ...Object.keys(savedVariables).length > 0 ? { savedVariables } : {},
+            ...clearedVariables.length > 0 ? { clearedVariables } : {}
+          }];
+          return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
+        });
       } else if (action.type === UIActionType.ShowLog) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: true } } : null);
       } else if (action.type === UIActionType.ToggleAutoAdvance) {
@@ -13165,6 +14237,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             };
             const hasHistory = playerState.history.length > 0;
             const qmButtonCfgs = project.ui.quickMenuButtons || {};
+            const qmCustomButtons = project.ui.quickMenuCustomButtons || [];
+            const qmCfgFor = (key) => qmButtonCfgs[key] || qmCustomButtons.find((cb) => cb.id === key);
             const iconCls = "w-3.5 h-3.5";
             const descriptors = [
               {
@@ -13250,30 +14324,55 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: "rgba(255,255,255,0.8)" }
               }
             ];
-            const visible = descriptors.filter((d) => d.show);
+            const customDescriptors = qmCustomButtons.filter((cb) => cb.show !== false).map((cb) => ({
+              key: cb.id,
+              show: true,
+              onClick: (e) => {
+                e.stopPropagation();
+                if (cb.action && cb.action.type !== UIActionType.None) handleUIAction(cb.action);
+              },
+              title: cb.label,
+              label: cb.label,
+              icon: null,
+              pillClassName: `${pillBase} hover:brightness-125`,
+              pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: "rgba(255,255,255,0.8)" }
+            }));
+            const visible = [...descriptors, ...customDescriptors].filter((d) => d.show);
+            const qmOnClick = (d) => {
+              const cfg = qmCfgFor(d.key);
+              if ((cfg == null ? void 0 : cfg.action) && cfg.action.type !== UIActionType.None) {
+                return (e) => {
+                  e.stopPropagation();
+                  handleUIAction(cfg.action);
+                };
+              }
+              return d.onClick;
+            };
             if (project.ui.quickMenuIndependentLayout) {
               const count = visible.length || 1;
               const slotW = qmWPct / count;
               return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0", style: { pointerEvents: "none", zIndex: qmZIndex }, children: visible.map((d, i) => {
-                const cfg = qmButtonCfgs[d.key] || {};
+                const cfg = qmCfgFor(d.key) || {};
                 const bx = cfg.x ?? qmX + i * slotW;
                 const by = cfg.y ?? qmY;
                 const bw = cfg.width ?? Math.max(4, slotW - 1);
                 const bh = cfg.height ?? qmHPct;
-                return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "auto" }, children: /* @__PURE__ */ jsxRuntime2.jsx(
+                const fit = !!cfg.fitToContent;
+                const slotStyle = fit ? { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" } : { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "auto" };
+                return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: slotStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
                   QuickMenuButtonEl,
                   {
                     label: d.label,
                     title: d.title,
                     icon: d.icon,
-                    onClick: d.onClick,
+                    onClick: qmOnClick(d),
                     disabled: d.disabled,
                     config: cfg,
                     assetResolver,
-                    artButtonStyle: { width: "100%", height: "100%" },
-                    artImgStyle: { width: "100%", height: "100%", objectFit: "contain", display: "block" },
+                    artButtonStyle: fit ? { maxWidth: "100%", maxHeight: "100%", pointerEvents: "auto" } : { width: "100%", height: "100%" },
+                    artImgStyle: fit ? { maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", objectFit: "contain", display: "block" } : { width: "100%", height: "100%", objectFit: "contain", display: "block" },
                     pillClassName: d.pillClassName,
-                    pillStyle: { ...d.pillStyle, width: "100%", height: "100%", justifyContent: "center" }
+                    pillStyle: { ...d.pillStyle, width: "100%", height: "100%", justifyContent: "center", ...fit ? { pointerEvents: "auto" } : {} }
                   }
                 ) }, d.key);
               }) });
@@ -13297,9 +14396,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     label: d.label,
                     title: d.title,
                     icon: d.icon,
-                    onClick: d.onClick,
+                    onClick: qmOnClick(d),
                     disabled: d.disabled,
-                    config: qmButtonCfgs[d.key],
+                    config: qmCfgFor(d.key),
                     assetResolver,
                     artButtonStyle: { width: "auto", height: "auto" },
                     artImgStyle: { height: scalePx(28), width: "auto", objectFit: "contain", display: "block" },
@@ -13850,7 +14949,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 }
             ` }),
       /* @__PURE__ */ jsxRuntime2.jsx(ToastProvider, { children: /* @__PURE__ */ jsxRuntime2.jsx(ProjectProvider, { initialProject: project, children: /* @__PURE__ */ jsxRuntime2.jsx(LivePreview, { onClose: () => {
-      }, hideCloseButton: true, autoStartMusic: true }) }) })
+      }, hideCloseButton: true, autoStartMusic: true, isStandalone: true }) }) })
     ] });
   };
   const GameEngine2 = {
@@ -13874,7 +14973,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "2.7.5",
+    version: "2.8.0",
     /**
      * Check if the engine is ready
      */

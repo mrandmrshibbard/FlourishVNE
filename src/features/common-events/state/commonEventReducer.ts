@@ -251,16 +251,39 @@ export const commonEventReducer = (state: VNProject, action: CommonEventAction):
             const existing = commonEvents[commonEventId];
             if (!existing) return state;
 
+            // Remove the deleted parameter's argument from any CallCommonEvent command
+            // that targets this event (in scenes AND in other common events), so no
+            // dangling arg refs linger after the param is gone.
+            const stripArg = (cmd: any) => {
+                if (cmd.type === 'CallCommonEvent' && cmd.commonEventId === commonEventId && cmd.arguments && parameterId in cmd.arguments) {
+                    const { [parameterId]: _drop, ...restArgs } = cmd.arguments;
+                    return { ...cmd, arguments: restArgs };
+                }
+                return cmd;
+            };
+
+            const newScenes: typeof state.scenes = {};
+            for (const sceneId in state.scenes) {
+                const scene = state.scenes[sceneId];
+                newScenes[sceneId] = { ...scene, commands: scene.commands.map(stripArg) };
+            }
+
+            const updatedEvents: typeof commonEvents = {};
+            for (const ceId in commonEvents) {
+                const ce = commonEvents[ceId];
+                updatedEvents[ceId] = { ...ce, commands: ce.commands.map(stripArg) };
+            }
+            // Apply the parameter removal to the target event.
+            updatedEvents[commonEventId] = {
+                ...updatedEvents[commonEventId],
+                parameters: existing.parameters.filter(p => p.id !== parameterId),
+                updatedAt: new Date().toISOString(),
+            };
+
             return {
                 ...state,
-                commonEvents: {
-                    ...commonEvents,
-                    [commonEventId]: {
-                        ...existing,
-                        parameters: existing.parameters.filter(p => p.id !== parameterId),
-                        updatedAt: new Date().toISOString(),
-                    },
-                },
+                scenes: newScenes,
+                commonEvents: updatedEvents,
             };
         }
 

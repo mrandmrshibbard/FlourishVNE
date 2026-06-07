@@ -4,8 +4,13 @@
  * Includes a native splash window for instant visual feedback
  */
 
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
+
+// Renderer asks to quit the whole app (ExitGame UI action on a desktop build).
+ipcMain.on('app-quit', () => {
+    app.quit();
+});
 
 // GPU stability: ANGLE D3D11 on Windows, plus prevent renderer backgrounding
 // to avoid black screen when switching back to a maximised window.

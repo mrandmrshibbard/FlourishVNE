@@ -144,7 +144,7 @@ const StandalonePlayer: React.FC<StandalonePlayerProps> = ({ project }) => {
             `}</style>
             <ToastProvider>
                 <ProjectProvider initialProject={project}>
-                    <LivePreview onClose={() => {}} hideCloseButton={true} autoStartMusic={true} />
+                    <LivePreview onClose={() => {}} hideCloseButton={true} autoStartMusic={true} isStandalone={true} />
                 </ProjectProvider>
             </ToastProvider>
         </div>

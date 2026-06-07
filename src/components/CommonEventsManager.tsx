@@ -111,6 +111,48 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
         dispatch({ type: 'DUPLICATE_COMMON_EVENT', payload: { commonEventId: id } });
     }, [dispatch]);
 
+    // ── Cross-project library: export all common events to a JSON file ──
+    const handleExportLibrary = useCallback(() => {
+        try {
+            const payload = { flourishCommonEvents: commonEvents, exportedAt: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'common-events.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) { console.error('[CommonEvents] export failed:', e); }
+    }, [commonEvents]);
+
+    // Import common events from a JSON file; each gets a fresh top-level id (internal
+    // command/param ids are kept so in-event references stay intact). Note: commands that
+    // reference project variables by id won't auto-resolve in a different project.
+    const handleImportLibrary = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const parsed = JSON.parse(String(reader.result || '{}'));
+                const list: VNCommonEvent[] = Array.isArray(parsed) ? parsed : (parsed.flourishCommonEvents || []);
+                let lastId: VNID | null = null;
+                for (const ce of list) {
+                    if (!ce || !ce.name) continue;
+                    const fresh: VNCommonEvent = { ...ce, id: `ce-${Math.random().toString(36).substring(2, 9)}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+                    dispatch({ type: 'ADD_COMMON_EVENT', payload: { commonEvent: fresh } });
+                    lastId = fresh.id;
+                }
+                if (lastId) setSelectedEventId(lastId);
+            } catch (err) {
+                console.error('[CommonEvents] import failed:', err);
+                alert('Import failed: invalid common-events file.');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }, [dispatch]);
+
     const handleRenameStart = useCallback((event: VNCommonEvent) => {
         setRenamingEventId(event.id);
         setRenameValue(event.name);
@@ -294,8 +336,8 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                     </div>
                 </div>
 
-                {/* New button */}
-                <div className="p-2 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+                {/* New button + cross-project library import/export */}
+                <div className="p-2 border-b space-y-1" style={{ borderColor: 'var(--border-subtle)' }}>
                     <button
                         onClick={() => setShowNewDialog(true)}
                         className="w-full py-1.5 px-2 rounded text-xs flex items-center justify-center gap-1 font-bold transition-colors"
@@ -303,6 +345,20 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                     >
                         <PlusIcon className="w-3 h-3" /> {t('newEvent')}
                     </button>
+                    <div className="flex gap-1">
+                        <button
+                            onClick={handleExportLibrary}
+                            disabled={commonEvents.length === 0}
+                            className="flex-1 py-1 px-2 rounded text-[11px] bg-slate-700 hover:bg-slate-600 text-white transition-colors disabled:opacity-40"
+                            title="Export all common events to a JSON file"
+                        >
+                            Export
+                        </button>
+                        <label className="flex-1 py-1 px-2 rounded text-[11px] bg-slate-700 hover:bg-slate-600 text-white transition-colors text-center cursor-pointer" title="Import common events from a JSON file">
+                            Import
+                            <input type="file" accept=".json" onChange={handleImportLibrary} className="hidden" />
+                        </label>
+                    </div>
                 </div>
 
                 {/* New event dialog */}

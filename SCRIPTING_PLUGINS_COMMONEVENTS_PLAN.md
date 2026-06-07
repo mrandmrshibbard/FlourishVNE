@@ -1,8 +1,64 @@
 # Scripting · Plugins · Common Events — Audit & Improvement Plan
 
-> Status: **PLAN / not started.** Agreed direction (2026-06-06): do the **full roadmap, phased**, and
-> **build the half-wired features rather than hiding them**. Paused before kickoff to fix unrelated bugs first.
+> Status: **ALL PHASES DONE (2026-06-07).** P1 Scripting · P2 Common Events · P3 Plugins · P4 polish (offline subset).
+> **Phase 4 shipped (offline, low-risk subset):** richer script `game` API — **inventory** (`getItemCount`/
+> `hasItem`/`addItem`/`removeItem`/`getItems`, sugar over each item's count variable via the existing
+> `project.items`/`itemReducer`) + `getCharacters()`; **cross-project Common Event library** (Export/Import
+> JSON in `CommonEventsManager`, fresh CE ids on import, internal command/param ids preserved); **ScriptEditor
+> API reference panel** (📖 API toggle → click-to-insert snippets at the cursor — a lightweight, dependency-free
+> autocomplete substitute); docs updated (md+html). **Deliberately skipped from P4 (out of scope for an
+> offline/bundled build):** Monaco/CodeMirror (heavy dep), plugin marketplace + permission model (needs
+> network — we settled on no-network), custom-effect visual pipeline (deferred in P3). Verified tsc 35 / vite
+> / build:engine (676 KB) green.
+> **Phase 3 shipped:** rebuilt `PluginManagerService` around the UI's actual call contract (the old
+> service↔UI signatures were fully mismatched → install was broken). New `setHost(bridge)` (project/
+> dispatch/toast, set in `ProjectContext`) + `setRuntime(bridge)` (live getVariable/setVariable/notify,
+> set by `LivePreview` during play). `loadPlugin(source, project, dispatch)` validates + checks
+> engineVersion/dependencies + dispatches INSTALL + loads hooks; `enable/disable/uninstall(…, project,
+> dispatch)`; `ensureLoaded(project)` loads enabled + unloads stale (project-switch safe). Hooks actually
+> fire: `onBeforeCommand`/`onAfterCommand` (around the main switch), `onSceneChange` (lifecycle effect),
+> `onVariableChange` (applyResult diff + bridge setVariable), `onRuntimeInit` (play start); added hook
+> types `onVariableChange`/`onSave`/`onLoadAfterSave` (killed the doc's duplicate-`onLoad`). `registerCommand`
+> → custom commands appear in the Command Palette "🧩 Plugins" group, are created by `commandFactory`
+> (params defaults), edited by a generic param editor in `PropertiesInspector`, and RUN via a default case
+> in the LivePreview command switch (handler may return `{advance:false}`). `registerEffect` registered +
+> listed (full visual pipeline deferred). Storage moved to `project.pluginStorage` via `SET_PLUGIN_STORAGE`
+> (travels with the project; localStorage gone). Plugin settings form (from optional `manifest.settings`),
+> dep/engine enforcement, export (`.plugin.js`) + import-from-file in `PluginManagerUI`. Sandbox hardened
+> to script parity (timers + `.constructor` blocked). Plugin doc half rewritten (md + html) to the TYPED
+> command shape (`type/displayName/parameters/handler`). Canonical-shape decision: typed shape, handler
+> uses `api.*` + optional `{advance}`. Network decision: no network (integration category documented as
+> such). Verified tsc 35 / vite / build:engine (674 KB) green.
+> **Phase 2 shipped:** CE parameter variable-leak fixed (stack frame now stores `savedVariables`/
+> `clearedVariables` + `commonEventId`; both pop sites in `LivePreview` restore on return — true local
+> param scope); `MAX_CALL_DEPTH=32` + cycle detection (target already on the stack) in `commonEventHandler`
+> (+ enforced in the script bridge and the new UI action); `auto` trigger runs once at scene start via a
+> **race-free injection at the top of the main command loop** (`autoRanSceneRef`, condition-gated, top
+> scene level only, re-entry re-runs); `parallel` trigger via a `setInterval(~120ms)` scheduler in
+> `LivePreview` (per-CE PC + `waitUntil`, condition-gated, advances one **background-safe** command/tick:
+> SetVariable/RunScript/Wait/audio — presentation-takeover commands skipped with a one-time warn; pure
+> runtime, nothing serialized); param **type coercion** (`coerceParam`) at every call site + **dangling
+> arg-ref cleanup** in `commonEventReducer` `DELETE_COMMON_EVENT_PARAMETER` (sweeps scenes + CEs);
+> `CallCommonEvent` exposed as a `VNUIAction` (handled in `LivePreview` action chain with depth/cycle
+> guard + param save/restore; pickable + arg inputs in the shared `menu-editor/ActionEditor`, so buttons,
+> ShowButton commands, and choices all get it; en/pt i18n added); Common Events doc section added to
+> `docs/scripting-and-plugins.md` (+ `.html`). Verified tsc 35 / vite / build:engine green. Parallel
+> mini-spec recorded below. Agreed direction (2026-06-06):
+> do the **full roadmap, phased**, and **build the half-wired features rather than hiding them**.
 > Read this before touching any of the three systems.
+>
+> **Phase 1 shipped:** real `showDialogue`/`playMusic` + `notify`→toast (via new `CommandContext.notify`,
+> sourced from `ToastContext` in `LivePreview`); `getScenes()`/`getVariables()`/`getAllVariables` alias;
+> top-level `game.clamp`/`game.lerp` (kept `game.math.*`); `notify` `'success'`; `onSceneEnter`/`onSceneExit`
+> fired via a `currentSceneId`-watching effect in `LivePreview` (global hooks, navigation ignored to avoid
+> loops); `global` scripts runnable via `game.runScript(nameOrId, args?)` (recursive, depth-guarded);
+> script **params** (`VNScript.params`) + **args** (`RunScriptCommand.arguments`) exposed as read-only
+> `game.args` (NO variable leak — never written to the store); `game.callCommonEvent(nameOrId, args?)`
+> bridges to the command-stack; sandbox hardening (block timers + reject `.constructor`); errors surfaced
+> as toasts + in the ScriptEditor console; ScriptEditor params panel + RunScript Arguments inspector;
+> Scripting half of `docs/scripting-and-plugins.md` (+ `.html`) rewritten to match. Schema additions are
+> additive-optional (round-trip safe both directions) — no MigrationService entry needed (that framework is
+> for structural 1.0→2.0 jumps). Verified: tsc 35 baseline, vite build, build:engine green.
 
 ## One-sentence diagnosis
 
@@ -78,6 +134,26 @@ tsc (35 baseline) / vite / `build:engine` green. All schema additions additive-o
 - Parameter type coercion + validation; clean dangling arg refs on param rename/delete.
 - Expose CallCommonEvent as a `VNUIAction` + choice action (script path covered in Phase 1).
 - Add a Common Events section to the doc (currently undocumented).
+
+#### Parallel scheduler mini-spec (settled 2026-06-07)
+- **Activation:** while `mode==='playing'`, active set = enabled CEs with `trigger==='parallel'` whose
+  `conditionVariableId` is unset OR resolves truthy. Re-evaluated each tick (cheap), so toggling the
+  condition variable starts/stops the CE. State per CE: `{ index, waitUntil? }`, reset when it leaves the
+  active set so it restarts cleanly next activation.
+- **Tick:** one `setInterval` (~120ms) gated on `mode==='playing' && !paused && hudStack.length===0`.
+  Each tick, each active CE advances **one** command from its own PC; at end-of-list it loops to 0
+  (parallel events are looping background logic). `Wait` sets `waitUntil = now + secs*1000` and the PC
+  pauses until then.
+- **Allowed commands (background-safe only):** `SetVariable`, `RunScript`, `Wait`,
+  `PlayMusic`/`StopMusic`/`PlaySoundEffect`/`StopSoundEffect`, `CallCommonEvent` (called events, depth-
+  guarded). **Skipped (with a one-time warn):** anything that takes over the main presentation —
+  Dialogue, Choice, ShowText/Image/Character, SetBackground, TextInput, Jump/JumpToLabel, CreditRoll,
+  screen effects, particles, tweens. Rationale: parallel events must never hijack the dialogue flow; this
+  keeps them safe and is documented as a known limitation.
+- **Variable sharing:** writes go to the same global store; flushed to `playerState.variables` once per
+  tick. **Bounds:** per-tick per-CE = 1 command; this naturally rate-limits. No save-state change — the
+  scheduler is pure runtime (PCs are not serialized; parallel CEs simply restart on load). Honors
+  [[feedback-never-break-saveload]].
 
 ### Phase 3 — Plugin runtime (biggest hole)
 - Move `PluginAPI` creation into the runtime context so `getVariable`/`setVariable` read/write live state.

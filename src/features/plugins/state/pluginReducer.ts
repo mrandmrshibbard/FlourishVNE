@@ -12,7 +12,8 @@ export type PluginAction =
     | { type: 'ENABLE_PLUGIN'; payload: { pluginId: string } }
     | { type: 'DISABLE_PLUGIN'; payload: { pluginId: string } }
     | { type: 'UPDATE_PLUGIN_CONFIG'; payload: { pluginId: string; config: Record<string, any> } }
-    | { type: 'UPDATE_PLUGIN_REGISTRY'; payload: { pluginId: string; entry: Partial<PluginRegistryEntry> } };
+    | { type: 'UPDATE_PLUGIN_REGISTRY'; payload: { pluginId: string; entry: Partial<PluginRegistryEntry> } }
+    | { type: 'SET_PLUGIN_STORAGE'; payload: { pluginId: string; key: string; value: any } };
 
 export const pluginReducer = (state: VNProject, action: PluginAction): VNProject => {
     switch (action.type) {
@@ -125,6 +126,19 @@ export const pluginReducer = (state: VNProject, action: PluginAction): VNProject
                 pluginRegistry: {
                     ...registry,
                     [pluginId]: { ...existing, ...entry },
+                },
+            };
+        }
+
+        case 'SET_PLUGIN_STORAGE': {
+            const { pluginId, key, value } = action.payload;
+            const storage = state.pluginStorage || {};
+            const pluginBucket = storage[pluginId] || {};
+            return {
+                ...state,
+                pluginStorage: {
+                    ...storage,
+                    [pluginId]: { ...pluginBucket, [key]: value },
                 },
             };
         }

@@ -70,6 +70,8 @@ export interface ImageOverlay {
     flipY?: boolean;
     transition?: VNTransition;
     duration?: number;
+    /** When true, width/height are a max bound and the image + footprint shrink to the fitted art. */
+    fitToContent?: boolean;
     action?: 'show' | 'hide';
     /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
     conditions?: import('../../../types/shared').VNCondition[];
@@ -284,7 +286,17 @@ export interface PlayerState {
     currentSceneId: VNID;
     currentCommands: VNCommand[];
     currentIndex: number;
-    commandStack: Array<{sceneId: VNID, commands: VNCommand[], index: number}>;
+    commandStack: Array<{
+        sceneId: VNID;
+        commands: VNCommand[];
+        index: number;
+        /** Common Event id this frame is running (for cycle detection). */
+        commonEventId?: VNID;
+        /** Prior values of variables this CE call overrode, to restore on return (true local param scope). */
+        savedVariables?: Record<VNID, string | number | boolean>;
+        /** Keys that did NOT exist before the call (param ids) — delete on return. */
+        clearedVariables?: VNID[];
+    }>;
     variables: Record<VNID, string | number | boolean>;
     stageState: StageState;
     musicState: MusicState;

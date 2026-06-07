@@ -23,7 +23,8 @@
     "showLog": "Show Log / History",
     "toggleAutoAdvance": "Toggle Auto-Advance",
     "toggleSkip": "Toggle Skip",
-    "skipBackward": "Skip Backward (Rewind)"
+    "skipBackward": "Skip Backward (Rewind)",
+    "callCommonEvent": "Call Common Event"
   },
   "actionsList": {
     "actions": "Actions",
@@ -187,6 +188,16 @@
     "buttonsHintDrag": " Drag & resize each button on the canvas, or set width/height below.",
     "image": "Image",
     "noneDefaultStyle": "None (use default style)",
+    "fitToContent": "Fit clickable area to the art (trim empty space)",
+    "customAction": "Custom action",
+    "customActionHint": "Overrides this button's built-in behavior. Leave as \"None\" to keep the default.",
+    "customButtonsHeader": "Custom Buttons",
+    "customButtonsHint": "Add your own quick-menu buttons. They sit inline with the others (grouped layout) and can be moved/resized on the canvas (independent layout).",
+    "buttonLabel": "Button label",
+    "buttonAction": "Action",
+    "addCustomButton": "Add custom button",
+    "removeButton": "Remove button",
+    "visible": "Visible",
     "qmLabels": { "skipBackward": "Back", "log": "Log", "autoAdvance": "Auto", "skipForward": "Skip", "save": "Save", "load": "Load" },
     "quitConfirmation": "Quit Confirmation",
     "newGameConfirmation": "New Game Confirmation",
@@ -245,6 +256,7 @@
     "heightPct": "Height %",
     "positionAnchor": "Position & Anchor",
     "fineTuneAnchor": "Fine-tune anchor point",
+    "fitToContent": "Fit to content (trim empty space)",
     "anchorX": "Anchor X (0-1)",
     "anchorY": "Anchor Y (0-1)",
     "transition": "Transition",
@@ -566,6 +578,7 @@
   "menuEditor": {
     "noElement": "No element",
     "renderError": "Render Error",
+    "parallaxActive": "Parallax: {{mode}}",
     "prev": "◀ Prev",
     "next": "Next ▶",
     "slot": "Slot {{n}}",

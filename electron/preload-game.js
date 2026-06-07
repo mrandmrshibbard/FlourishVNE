@@ -70,6 +70,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return store.has(key);
     },
 
+    // Quit the desktop application (used by the ExitGame UI action)
+    quitApp: () => {
+        ipcRenderer.send('app-quit');
+    },
+
     // Unified async storage API (preferred)
     storage: {
         setItem: async (key, value) => {

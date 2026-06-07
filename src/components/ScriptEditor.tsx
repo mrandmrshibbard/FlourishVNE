@@ -7,7 +7,7 @@
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useProject } from '../contexts/ProjectContext';
-import { VNScript } from '../types/scripting';
+import { VNScript, ScriptParam } from '../types/scripting';
 import { createDefaultScript, validateScript, executeScript, ScriptRuntimeContext } from '../features/scripting/ScriptExecutor';
 import { VNID } from '../types';
 import { PlusIcon, TrashIcon, PencilIcon } from './icons';
@@ -15,6 +15,46 @@ import { PlusIcon, TrashIcon, PencilIcon } from './icons';
 interface ScriptEditorProps {
     onClose: () => void;
 }
+
+/** `game` API reference shown in the editor's reference panel. Clicking a row inserts the snippet. */
+const API_REFERENCE: Array<{ group: string; items: Array<{ sig: string; snippet: string; desc: string }> }> = [
+    { group: 'Variables', items: [
+        { sig: 'getVariable(name)', snippet: 'game.getVariable("")', desc: 'Read a variable value.' },
+        { sig: 'setVariable(name, value)', snippet: 'game.setVariable("", )', desc: 'Set a variable value.' },
+        { sig: 'getVariables()', snippet: 'game.getVariables()', desc: 'All variables as a { name: value } map.' },
+        { sig: 'args.NAME', snippet: 'game.args.', desc: 'Read a script parameter (read-only).' },
+    ]},
+    { group: 'Flow', items: [
+        { sig: 'jumpToScene(name)', snippet: 'game.jumpToScene("")', desc: 'Jump to a scene by name/id.' },
+        { sig: 'jumpToLabel(label)', snippet: 'game.jumpToLabel("")', desc: 'Jump to a label in the current scene.' },
+        { sig: 'runScript(name, args?)', snippet: 'game.runScript("")', desc: 'Run another script (script-to-script).' },
+        { sig: 'callCommonEvent(name, args?)', snippet: 'game.callCommonEvent("")', desc: 'Invoke a Common Event.' },
+        { sig: 'await wait(seconds)', snippet: 'await game.wait(1)', desc: 'Pause this script (timers are blocked).' },
+    ]},
+    { group: 'Presentation', items: [
+        { sig: 'showDialogue(name, text)', snippet: 'game.showDialogue("", "")', desc: 'Show a dialogue line.' },
+        { sig: 'notify(msg, type?)', snippet: 'game.notify("", "info")', desc: 'Toast: info | success | warning | error.' },
+        { sig: 'playSFX(name, vol?)', snippet: 'game.playSFX("")', desc: 'Play a sound effect.' },
+        { sig: 'playMusic(name, loop?, vol?)', snippet: 'game.playMusic("", true)', desc: 'Play background music.' },
+        { sig: 'stopMusic(fade?)', snippet: 'game.stopMusic(1)', desc: 'Stop music (fade seconds).' },
+    ]},
+    { group: 'Inventory', items: [
+        { sig: 'getItemCount(item)', snippet: 'game.getItemCount("")', desc: 'How many the player owns.' },
+        { sig: 'hasItem(item)', snippet: 'game.hasItem("")', desc: 'True if owned (count > 0).' },
+        { sig: 'addItem(item, n?)', snippet: 'game.addItem("", 1)', desc: 'Give the player an item.' },
+        { sig: 'removeItem(item, n?)', snippet: 'game.removeItem("", 1)', desc: 'Take an item away.' },
+        { sig: 'getItems()', snippet: 'game.getItems()', desc: 'All items with counts.' },
+    ]},
+    { group: 'Project & Math', items: [
+        { sig: 'getScenes()', snippet: 'game.getScenes()', desc: 'List of scene names.' },
+        { sig: 'getCharacters()', snippet: 'game.getCharacters()', desc: 'List of { id, name }.' },
+        { sig: 'currentScene / currentSceneId', snippet: 'game.currentScene', desc: 'Current scene name / id.' },
+        { sig: 'random(min, max)', snippet: 'game.random(1, 10)', desc: 'Random integer (inclusive).' },
+        { sig: 'clamp(v, min, max)', snippet: 'game.clamp(, 0, 100)', desc: 'Clamp a number.' },
+        { sig: 'lerp(a, b, t)', snippet: 'game.lerp(0, 1, 0.5)', desc: 'Linear interpolate.' },
+        { sig: 'log(...args)', snippet: 'game.log()', desc: 'Console output (Script Editor console).' },
+    ]},
+];
 
 const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
     const { project, dispatch } = useProject();
@@ -26,7 +66,23 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
     const [isRunning, setIsRunning] = useState(false);
     const [showNewDialog, setShowNewDialog] = useState(false);
     const [newScriptName, setNewScriptName] = useState('');
+    const [showApi, setShowApi] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Insert an API snippet at the textarea cursor (lightweight autocomplete substitute).
+    const insertSnippet = useCallback((snippet: string) => {
+        const ta = textareaRef.current;
+        const start = ta ? ta.selectionStart : editingCode.length;
+        const end = ta ? ta.selectionEnd : editingCode.length;
+        const next = editingCode.substring(0, start) + snippet + editingCode.substring(end);
+        setEditingCode(next);
+        requestAnimationFrame(() => {
+            if (!ta) return;
+            ta.focus();
+            const pos = start + snippet.length;
+            ta.selectionStart = ta.selectionEnd = pos;
+        });
+    }, [editingCode]);
 
     const selectedScript = selectedScriptId ? (project.scripts || {})[selectedScriptId] : null;
 
@@ -91,6 +147,8 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                 return acc;
             }, {} as Record<VNID, string | number | boolean>),
             currentSceneId: project.startSceneId,
+            // Seed game.args from the script's declared parameter defaults for the test run.
+            args: (selectedScript.params || []).reduce((acc, p) => { acc[p.name] = p.defaultValue; return acc; }, {} as Record<string, string | number | boolean>),
             onSetVariable: (name, value) => {
                 setConsoleOutput(prev => [...prev, `  ↳ setVariable("${name}", ${JSON.stringify(value)})`]);
             },
@@ -114,6 +172,12 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
             },
             onNotify: (msg, type) => {
                 setConsoleOutput(prev => [...prev, `  ↳ notify("${msg}", "${type || 'info'}")`]);
+            },
+            onRunScript: (name, a) => {
+                setConsoleOutput(prev => [...prev, `  ↳ runScript("${name}"${a ? `, ${JSON.stringify(a)}` : ''})  [not executed in test]`]);
+            },
+            onCallCommonEvent: (name, a) => {
+                setConsoleOutput(prev => [...prev, `  ↳ callCommonEvent("${name}"${a ? `, ${JSON.stringify(a)}` : ''})  [not executed in test]`]);
             },
         };
 
@@ -173,6 +237,43 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
         if (!selectedScriptId) return;
         dispatch({ type: 'UPDATE_SCRIPT', payload: { scriptId: selectedScriptId, updates: { trigger } } });
     }, [dispatch, selectedScriptId]);
+
+    // ── Script parameters (exposed to the script as read-only game.args) ──
+    const updateParams = useCallback((params: ScriptParam[]) => {
+        if (!selectedScriptId) return;
+        dispatch({ type: 'UPDATE_SCRIPT', payload: { scriptId: selectedScriptId, updates: { params } } });
+    }, [dispatch, selectedScriptId]);
+
+    const handleAddParam = useCallback(() => {
+        if (!selectedScript) return;
+        const newParam: ScriptParam = {
+            id: `sp-${Math.random().toString(36).substring(2, 9)}`,
+            name: `param${(selectedScript.params?.length || 0) + 1}`,
+            type: 'string',
+            defaultValue: '',
+            description: '',
+        };
+        updateParams([...(selectedScript.params || []), newParam]);
+    }, [selectedScript, updateParams]);
+
+    const handleUpdateParam = useCallback((idx: number, patch: Partial<ScriptParam>) => {
+        if (!selectedScript) return;
+        const params = [...(selectedScript.params || [])];
+        const merged = { ...params[idx], ...patch };
+        // Coerce the default value to the (possibly new) type so it stays valid.
+        if (patch.type) {
+            merged.defaultValue = patch.type === 'number' ? Number(merged.defaultValue) || 0
+                : patch.type === 'boolean' ? merged.defaultValue === true || merged.defaultValue === 'true'
+                : String(merged.defaultValue ?? '');
+        }
+        params[idx] = merged;
+        updateParams(params);
+    }, [selectedScript, updateParams]);
+
+    const handleRemoveParam = useCallback((idx: number) => {
+        if (!selectedScript) return;
+        updateParams((selectedScript.params || []).filter((_, i) => i !== idx));
+    }, [selectedScript, updateParams]);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
@@ -293,11 +394,82 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                         {isRunning ? 'Running...' : '▶ Test Run'}
                                     </button>
                                     <button
+                                        onClick={() => setShowApi(s => !s)}
+                                        className={`text-xs px-2.5 py-1 rounded transition-colors ${showApi ? 'bg-violet-600/40 text-violet-200' : 'bg-violet-600/20 hover:bg-violet-600/30 text-violet-300'}`}
+                                        title="Toggle the game API reference"
+                                    >
+                                        📖 API
+                                    </button>
+                                    <button
                                         onClick={handleSaveCode}
                                         className="text-xs px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 transition-colors"
                                     >
                                         Save (Ctrl+S)
                                     </button>
+                                </div>
+
+                                {/* Parameters panel — declared params become read-only game.args */}
+                                <div className="px-3 py-1.5 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Parameters</span>
+                                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>access in script via <code className="font-mono">game.args.name</code></span>
+                                        <div className="flex-1" />
+                                        <button onClick={handleAddParam} className="text-[11px] px-2 py-0.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 flex items-center gap-1">
+                                            <PlusIcon className="w-3 h-3" /> Add
+                                        </button>
+                                    </div>
+                                    {(selectedScript.params && selectedScript.params.length > 0) ? (
+                                        <div className="space-y-1">
+                                            {selectedScript.params.map((p, idx) => (
+                                                <div key={p.id} className="flex items-center gap-1">
+                                                    <input
+                                                        value={p.name}
+                                                        onChange={e => handleUpdateParam(idx, { name: e.target.value })}
+                                                        placeholder="name"
+                                                        className="w-32 bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none border border-slate-700"
+                                                    />
+                                                    <select
+                                                        value={p.type}
+                                                        onChange={e => handleUpdateParam(idx, { type: e.target.value as ScriptParam['type'] })}
+                                                        className="bg-slate-800 text-white px-1 py-1 rounded text-xs border border-slate-700"
+                                                    >
+                                                        <option value="string">string</option>
+                                                        <option value="number">number</option>
+                                                        <option value="boolean">boolean</option>
+                                                    </select>
+                                                    {p.type === 'boolean' ? (
+                                                        <select
+                                                            value={String(p.defaultValue)}
+                                                            onChange={e => handleUpdateParam(idx, { defaultValue: e.target.value === 'true' })}
+                                                            className="bg-slate-800 text-white px-1 py-1 rounded text-xs border border-slate-700"
+                                                        >
+                                                            <option value="false">false</option>
+                                                            <option value="true">true</option>
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            value={String(p.defaultValue ?? '')}
+                                                            onChange={e => handleUpdateParam(idx, { defaultValue: p.type === 'number' ? (Number(e.target.value) || 0) : e.target.value })}
+                                                            placeholder="default"
+                                                            type={p.type === 'number' ? 'number' : 'text'}
+                                                            className="w-24 bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none border border-slate-700"
+                                                        />
+                                                    )}
+                                                    <input
+                                                        value={p.description || ''}
+                                                        onChange={e => handleUpdateParam(idx, { description: e.target.value })}
+                                                        placeholder="description (optional)"
+                                                        className="flex-1 bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none border border-slate-700"
+                                                    />
+                                                    <button onClick={() => handleRemoveParam(idx)} className="p-1 text-slate-500 hover:text-red-400">
+                                                        <TrashIcon className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>No parameters. Add one to accept arguments from RunScript / game.runScript.</div>
+                                    )}
                                 </div>
 
                                 {/* Validation Errors Banner */}
@@ -309,8 +481,9 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                     </div>
                                 )}
 
-                                {/* Code Editor */}
-                                <div className="flex-1 relative min-h-0">
+                                {/* Code Editor (+ optional API reference panel) */}
+                                <div className="flex-1 min-h-0 flex">
+                                    <div className="flex-1 relative min-h-0">
                                     <textarea
                                         ref={textareaRef}
                                         value={editingCode}
@@ -336,6 +509,29 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                     <style>{`
                                         .script-editor-textarea { padding-left: 48px !important; }
                                     `}</style>
+                                    </div>
+                                    {showApi && (
+                                        <div className="w-64 flex-shrink-0 border-l overflow-y-auto" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
+                                            <div className="px-2 py-1 text-[11px] font-bold sticky top-0" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+                                                <code>game</code> API — click to insert
+                                            </div>
+                                            {API_REFERENCE.map(group => (
+                                                <div key={group.group} className="py-1">
+                                                    <div className="px-2 text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--accent-lavender, #a78bfa)' }}>{group.group}</div>
+                                                    {group.items.map(item => (
+                                                        <button
+                                                            key={item.sig}
+                                                            onClick={() => insertSnippet(item.snippet)}
+                                                            title={item.desc}
+                                                            className="block w-full text-left px-2 py-0.5 hover:bg-violet-500/10 transition-colors"
+                                                        >
+                                                            <span className="font-mono text-[11px] text-sky-300">game.{item.sig}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Console Output */}

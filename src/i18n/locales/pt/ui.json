@@ -23,7 +23,8 @@
     "showLog": "Mostrar histórico",
     "toggleAutoAdvance": "Alternar avanço automático",
     "toggleSkip": "Alternar pular",
-    "skipBackward": "Retroceder (voltar)"
+    "skipBackward": "Retroceder (voltar)",
+    "callCommonEvent": "Chamar evento comum"
   },
   "actionsList": {
     "actions": "Ações",
@@ -187,6 +188,16 @@
     "buttonsHintDrag": " Arraste e redimensione cada botão no canvas, ou defina largura/altura abaixo.",
     "image": "Imagem",
     "noneDefaultStyle": "Nenhuma (usar estilo padrão)",
+    "fitToContent": "Ajustar área clicável à arte (remover espaço vazio)",
+    "customAction": "Ação personalizada",
+    "customActionHint": "Substitui o comportamento padrão deste botão. Deixe como \"Nenhuma\" para manter o padrão.",
+    "customButtonsHeader": "Botões personalizados",
+    "customButtonsHint": "Adicione seus próprios botões ao menu rápido. Eles ficam ao lado dos outros (layout agrupado) e podem ser movidos/redimensionados no canvas (layout independente).",
+    "buttonLabel": "Rótulo do botão",
+    "buttonAction": "Ação",
+    "addCustomButton": "Adicionar botão personalizado",
+    "removeButton": "Remover botão",
+    "visible": "Visível",
     "qmLabels": { "skipBackward": "Voltar", "log": "Histórico", "autoAdvance": "Auto", "skipForward": "Pular", "save": "Salvar", "load": "Carregar" },
     "quitConfirmation": "Confirmação de saída",
     "newGameConfirmation": "Confirmação de novo jogo",
@@ -245,6 +256,7 @@
     "heightPct": "Altura %",
     "positionAnchor": "Posição e âncora",
     "fineTuneAnchor": "Ajustar o ponto de âncora",
+    "fitToContent": "Ajustar ao conteúdo (remover espaço vazio)",
     "anchorX": "Âncora X (0-1)",
     "anchorY": "Âncora Y (0-1)",
     "transition": "Transição",
@@ -566,6 +578,7 @@
   "menuEditor": {
     "noElement": "Sem elemento",
     "renderError": "Erro de renderização",
+    "parallaxActive": "Paralaxe: {{mode}}",
     "prev": "◀ Ant.",
     "next": "Próx ▶",
     "slot": "Slot {{n}}",

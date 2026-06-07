@@ -38,6 +38,23 @@ export interface PluginManifest {
     license?: string;
     /** Tags for searchability */
     tags?: string[];
+    /** Optional user-editable settings schema. Rendered as a form in the plugin's Details view;
+     *  values are stored in the plugin's config and read at runtime via `api.getConfig()`. */
+    settings?: PluginSettingField[];
+}
+
+/** A single user-editable plugin setting (rendered as a form field in Plugin Details). */
+export interface PluginSettingField {
+    /** Key used in the config object (and api.getConfig()). */
+    name: string;
+    /** Display label (defaults to `name`). */
+    label?: string;
+    /** Field type. */
+    type: 'string' | 'number' | 'boolean' | 'select';
+    /** Default value when the user hasn't set one. */
+    defaultValue?: string | number | boolean;
+    /** Options for `select`. */
+    options?: Array<{ label: string; value: string }>;
 }
 
 export type PluginCategory =
@@ -104,6 +121,12 @@ export interface PluginHooks {
     onAfterCommand?: (api: PluginAPI, command: any, result: any) => void;
     /** Called when a scene changes */
     onSceneChange?: (api: PluginAPI, fromSceneId: string, toSceneId: string) => void;
+    /** Called when a variable's value changes at runtime */
+    onVariableChange?: (api: PluginAPI, variableId: string, oldValue: any, newValue: any) => void;
+    /** Called before the game state is saved (may mutate the passed saveData object) */
+    onSave?: (api: PluginAPI, saveData: any) => void;
+    /** Called after a save is loaded */
+    onLoadAfterSave?: (api: PluginAPI, saveData: any) => void;
 }
 
 /**
@@ -129,9 +152,13 @@ export interface PluginAPI {
 
     // --- UI ---
     /** Show a notification */
-    notify: (message: string, type?: 'info' | 'warning' | 'error') => void;
+    notify: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
     /** Log to the engine console */
     log: (...args: any[]) => void;
+
+    // --- Settings / config ---
+    /** Read this plugin's user-configured settings (manifest.settings defaults merged with overrides). */
+    getConfig: () => Record<string, any>;
 
     // --- Storage ---
     /** Get a value from plugin-scoped persistent storage */
@@ -162,8 +189,12 @@ export interface CustomCommandDefinition {
     icon?: string;
     /** Parameter definitions */
     parameters: CustomCommandParameter[];
-    /** Handler function that executes the command at runtime */
-    handler: (params: Record<string, any>, api: PluginAPI) => void | Promise<void>;
+    /**
+     * Handler executed at runtime. Use `api.setVariable` / `api.notify` for effects.
+     * Optionally return `{ advance: false }` to NOT auto-advance to the next command
+     * (defaults to advancing, like built-in commands).
+     */
+    handler: (params: Record<string, any>, api: PluginAPI) => void | { advance?: boolean } | Promise<void | { advance?: boolean }>;
 }
 
 export interface CustomCommandParameter {

@@ -43,6 +43,7 @@ import VariablePropertiesEditor from './VariablePropertiesEditor';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './inspector/fields';
 import { CommandGroupAccordion } from './inspector/CommandGroupFields';
 import { isCommandGrouped } from './inspector/inspectorGroups';
+import { pluginManager } from '../features/plugins/PluginManagerService';
 
 const useCommandDefaults = (
     command: VNCommand | undefined,
@@ -2438,7 +2439,45 @@ const PropertiesInspector: React.FC<{
     return <Panel title={t('footer.titleNamed', { name: t(`commands:names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() }) })} className="w-72 min-w-[280px] max-w-[320px] flex-shrink-0 h-full">
         <div className="flex flex-col h-full">
             <div className="flex-grow overflow-y-auto pr-1">
-                {isCommandGrouped(command) ? <CommandGroupAccordion command={command} updateCommand={updateCommand} ctx={{ sceneId: activeSceneId, commandIndex: selectedCommandIndex ?? 0 }} /> : renderProperties()}
+                {(() => {
+                    // Plugin-provided custom command: render a generic editor from its parameter schema.
+                    const customDef = pluginManager.getCommand(command.type as string);
+                    if (customDef) {
+                        const params: Record<string, any> = (command as any).params || {};
+                        const setParam = (name: string, value: any) => updateCommand({ params: { ...params, [name]: value } } as any);
+                        return (
+                            <div className="space-y-2">
+                                {customDef.description && <p className="text-xs text-[var(--text-secondary)]">{customDef.description}</p>}
+                                {(customDef.parameters || []).map(p => {
+                                    const cur = params[p.name] ?? p.defaultValue ?? '';
+                                    return (
+                                        <label key={p.name} className="block text-xs">
+                                            <span className="block mb-0.5 text-[var(--text-secondary)]">{p.label || p.name}{p.required ? ' *' : ''}</span>
+                                            {p.type === 'boolean' ? (
+                                                <input type="checkbox" checked={!!cur} onChange={e => setParam(p.name, e.target.checked)} />
+                                            ) : p.type === 'select' ? (
+                                                <select value={String(cur)} onChange={e => setParam(p.name, e.target.value)} className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] px-2 py-1 rounded border border-[var(--border-default)]">
+                                                    {(p.options || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                </select>
+                                            ) : p.type === 'variable' ? (
+                                                <select value={String(cur)} onChange={e => setParam(p.name, e.target.value)} className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] px-2 py-1 rounded border border-[var(--border-default)]">
+                                                    <option value="">—</option>
+                                                    {Object.values(project.variables).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                                </select>
+                                            ) : p.type === 'color' ? (
+                                                <input type="color" value={String(cur || '#ffffff')} onChange={e => setParam(p.name, e.target.value)} className="w-full" />
+                                            ) : (
+                                                <input type={p.type === 'number' ? 'number' : 'text'} value={String(cur)} onChange={e => setParam(p.name, p.type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] px-2 py-1 rounded border border-[var(--border-default)]" />
+                                            )}
+                                            {p.description && <span className="text-[10px] text-[var(--text-muted)]">{p.description}</span>}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        );
+                    }
+                    return isCommandGrouped(command) ? <CommandGroupAccordion command={command} updateCommand={updateCommand} ctx={{ sceneId: activeSceneId, commandIndex: selectedCommandIndex ?? 0 }} /> : renderProperties();
+                })()}
                 {(() => {
                     // Shared "Reset Position" for any positionable command — snaps the element
                     // back to its default placement (centre for overlays, 'center' for characters,

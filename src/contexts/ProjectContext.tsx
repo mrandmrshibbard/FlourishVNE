@@ -8,6 +8,7 @@ import { WorkflowTracker } from '../features/analytics/WorkflowTracker';
 import { useToast } from './ToastContext';
 import { migrateProjectToUnifiedScreens } from '../utils/unifiedScreenMigration';
 import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigration';
+import { pluginManager } from '../features/plugins/PluginManagerService';
 
 interface UndoRedoState {
   past: VNProject[];
@@ -222,6 +223,19 @@ export const ProjectProvider: React.FC<{
       (window as any).__FLOURISH_PROJECT__ = history.present;
     }
   }, [history.present]);
+
+  // Give the plugin manager an editor-level host bridge (project / dispatch / toast) so
+  // plugin APIs can read project data, persist scoped storage, and surface notifications.
+  // The live runtime bridge (variables) is set separately by LivePreview during play.
+  useEffect(() => {
+    pluginManager.setHost({
+      getProject: () => historyRef.current.present,
+      dispatch: dispatchWithHistory,
+      notify: (message, type = 'info') => { try { toast.addToast(message, type); } catch { /* no-op */ } },
+    });
+    // Load any already-enabled plugins so their commands/effects/hooks are available.
+    try { pluginManager.ensureLoaded(historyRef.current.present); } catch (e) { log.warn('Plugin ensureLoaded failed:', e); }
+  }, [dispatchWithHistory, toast]);
 
   return (
     <ProjectContext.Provider value={{

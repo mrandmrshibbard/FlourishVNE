@@ -550,9 +550,15 @@ const ShowImageGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowImageComman
                 <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY} onChange={p => updateCommand(p as any)} />
             </>;
         case 'appearance':
-            return <FormField label={t('image.opacity', { value: cmd.opacity })}>
-                <input type="range" min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full" />
-            </FormField>;
+            return <>
+                <FormField label={t('image.opacity', { value: cmd.opacity })}>
+                    <input type="range" min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full" />
+                </FormField>
+                <label className="flex items-center gap-2 mt-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={!!cmd.fitToContent} onChange={e => updateCommand({ fitToContent: e.target.checked || undefined } as any)} className="cursor-pointer" />
+                    {t('image.fitToContent')}
+                </label>
+            </>;
         case 'animation':
             return <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand as any} />;
         default:
@@ -1692,6 +1698,29 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
                     <p><strong>{t('runScript.trigger')}</strong> {(selectedScript as any).trigger}</p>
                     {(selectedScript as any).description && <p className="mt-0.5">{(selectedScript as any).description}</p>}
                 </div>}
+                {selectedScript && (selectedScript as any).params && (selectedScript as any).params.length > 0 && (
+                    <div className="mt-1">
+                        <h4 className="font-bold text-xs mb-1 text-[var(--text-secondary)]">Arguments</h4>
+                        {(selectedScript as any).params.map((p: any) => {
+                            const argVal = cmd.arguments?.[p.id];
+                            const current = argVal !== undefined ? argVal : p.defaultValue;
+                            const setArg = (v: any) => updateCommand({ arguments: { ...(cmd.arguments || {}), [p.id]: v } } as any);
+                            return (
+                                <FormField key={p.id} label={`${p.name} (${p.type})`}>
+                                    {p.type === 'boolean' ? (
+                                        <Select value={String(current)} onChange={e => setArg(e.target.value === 'true')}>
+                                            <option value="false">false</option>
+                                            <option value="true">true</option>
+                                        </Select>
+                                    ) : (
+                                        <TextInput type={p.type === 'number' ? 'number' : 'text'} value={String(current ?? '')} onChange={e => setArg(p.type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} />
+                                    )}
+                                    {p.description && <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{p.description}</span>}
+                                </FormField>
+                            );
+                        })}
+                    </div>
+                )}
                 <FormField label={t('runScript.waitForCompletion')}>
                     <label className="flex items-center gap-2"><input type="checkbox" checked={cmd.waitForCompletion} onChange={e => updateCommand({ waitForCompletion: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('runScript.waitForCompletionHint')}</span></label>
                 </FormField>

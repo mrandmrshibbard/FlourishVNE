@@ -85,6 +85,9 @@ export interface VNProject {
     plugins?: Record<string, VNPlugin>;
     /** Plugin registry (enabled state + config per plugin) */
     pluginRegistry?: Record<string, PluginRegistryEntry>;
+    /** Plugin-scoped persistent storage (api.getStorage/setStorage). Travels with the project
+     *  so a plugin's saved data is portable — replaces the old localStorage approach. */
+    pluginStorage?: Record<string, Record<string, any>>;
     /** When true, characters sharing the same preset position are automatically spread apart */
     autoArrangeCharacters?: boolean;
 }

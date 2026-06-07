@@ -2,7 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNUIScreen } from '../../features/ui/types';
-import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, RESET_ALL_VARIABLES } from '../../types/shared';
+import { VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, RESET_ALL_VARIABLES } from '../../types/shared';
+import { VNCommonEvent } from '../../types/commonEvents';
 import { VNSetVariableOperator } from '../../features/variables/types';
 import { VNScene, CommandType, LabelCommand } from '../../features/scene/types';
 import { VNVariable } from '../../features/variables/types';
@@ -18,6 +19,7 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
+    UIActionType.CallCommonEvent,
     UIActionType.ShowLog, UIActionType.ToggleAutoAdvance, UIActionType.ToggleSkip, UIActionType.SkipBackward,
 ];
 
@@ -111,6 +113,9 @@ const ActionEditor: React.FC<{
                 break;
             case UIActionType.OpenURL:
                 newAction = { ...newAction, url: 'https://', newTab: true } as OpenURLAction;
+                break;
+            case UIActionType.CallCommonEvent:
+                newAction = { ...newAction, commonEventId: Object.keys(project.commonEvents || {})[0] || '' } as CallCommonEventAction;
                 break;
         }
         onActionChange(newAction);
@@ -420,11 +425,48 @@ const ActionEditor: React.FC<{
                     </div>
                 );
             }
+            case UIActionType.CallCommonEvent: {
+                const ccAction = action as CallCommonEventAction;
+                const events = Object.values(project.commonEvents || {}) as VNCommonEvent[];
+                const selected = ccAction.commonEventId ? (project.commonEvents || {})[ccAction.commonEventId] : undefined;
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label="Common Event">
+                            <Select value={ccAction.commonEventId || ''} onChange={e => onActionChange({ ...ccAction, commonEventId: e.target.value as VNID, arguments: undefined })}>
+                                <option value="">Select a common event…</option>
+                                {events.map(ce => <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? ' (disabled)' : ''}</option>)}
+                            </Select>
+                        </FormField>
+                        {selected && selected.parameters && selected.parameters.length > 0 && (
+                            <div>
+                                <p className="text-xs text-[var(--text-secondary)] mb-1">Arguments</p>
+                                {selected.parameters.map(p => {
+                                    const argVal = ccAction.arguments?.[p.id];
+                                    const current = argVal !== undefined ? argVal : p.defaultValue;
+                                    const setArg = (v: string | number | boolean) => onActionChange({ ...ccAction, arguments: { ...(ccAction.arguments || {}), [p.id]: v } });
+                                    return (
+                                        <FormField key={p.id} label={`${p.name} (${p.type})`}>
+                                            {p.type === 'boolean' ? (
+                                                <Select value={String(current)} onChange={e => setArg(e.target.value === 'true')}>
+                                                    <option value="false">false</option>
+                                                    <option value="true">true</option>
+                                                </Select>
+                                            ) : (
+                                                <TextInput type={p.type === 'number' ? 'number' : 'text'} value={String(current ?? '')} onChange={e => setArg(p.type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} />
+                                            )}
+                                        </FormField>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
             default:
                 return null;
         }
     };
-    
+
     return (
         <div>
             <FormField label={t('actionEditor.actionType')}>

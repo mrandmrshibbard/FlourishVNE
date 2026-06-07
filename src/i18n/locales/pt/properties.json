@@ -68,7 +68,8 @@
   },
   "image": {
     "image": "Imagem",
-    "opacity": "Opacidade: {{value}}"
+    "opacity": "Opacidade: {{value}}",
+    "fitToContent": "Ajustar ao conteúdo (sem margens)"
   },
   "overlay": {
     "targetText": "Texto Alvo para Ocultar",

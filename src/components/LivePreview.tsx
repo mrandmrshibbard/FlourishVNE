@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { combineConditions } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
@@ -9,7 +10,7 @@ import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, b
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, RESET_ALL_VARIABLES
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, RESET_ALL_VARIABLES
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
@@ -184,6 +185,11 @@ import {
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
 import { RuntimeDiagnostics } from './live-preview/runtime/runtimeDiagnostics';
+import { executeScript, ScriptRuntimeContext } from '../features/scripting/ScriptExecutor';
+import { pluginManager } from '../features/plugins/PluginManagerService';
+import { MAX_CALL_DEPTH, coerceParam } from './live-preview/command-handlers/commonEventHandler';
+import { VNScript } from '../types/scripting';
+import { VNCommonEvent } from '../types/commonEvents';
 
 // Import extracted types
 import {
@@ -720,11 +726,15 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     const iScaleX = tweenValues?.scaleX ?? overlay.scaleX;
     const iScaleY = tweenValues?.scaleY ?? overlay.scaleY;
 
+    // "Fit to content": the width/height become a max bound and the box shrinks to the fitted
+    // (undistorted) art, so the element footprint hugs the image with no surrounding margin.
+    const fit = !!overlay.fitToContent;
     const containerStyle: React.CSSProperties = {
         left: `${ix}%`,
         top: `${iy}%`,
-        width: `${iw}px`,
-        height: `${ih}px`,
+        ...(fit
+            ? { width: 'auto', height: 'auto', maxWidth: `${iw}px`, maxHeight: `${ih}px` }
+            : { width: `${iw}px`, height: `${ih}px` }),
         transform: `${isSlideTransition ? '' : 'translate(-50%, -50%)'}${parallaxTransform(overlay.parallaxDepth)}`.trim() || undefined,
         // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
         zIndex: 1 + (overlay.layer ?? 0) * 100,
@@ -739,12 +749,15 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     const iFlipX = overlay.flipX ? -1 : 1;
     const iFlipY = overlay.flipY ? -1 : 1;
     const imageStyle: React.CSSProperties = {
-        width: '100%',
-        height: '100%',
+        ...(fit
+            ? { display: 'block', width: 'auto', height: 'auto', maxWidth: `${iw}px`, maxHeight: `${ih}px` }
+            : { width: '100%', height: '100%' }),
         transform: `rotate(${iRotation}deg) scale(${iScaleX * iFlipX}, ${iScaleY * iFlipY})`,
         transformOrigin: 'center center',
         opacity: iOpacity,
     };
+    // When fitting, the media is in-flow (so it drives the box size); otherwise it fills the box.
+    const mediaCls = `${fit ? '' : 'absolute inset-0 w-full h-full '}object-contain pointer-events-none`;
 
     const className = `absolute${applyTransition ? ` ${transitionClass} transition-base` : ''}`;
     const style = {
@@ -756,21 +769,21 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     return (
         <div className={className} style={style}>
             {overlay.isVideo && overlay.videoUrl ? (
-                <video 
-                    src={overlay.videoUrl} 
-                    autoPlay 
-                    muted 
-                    loop={overlay.videoLoop} 
+                <video
+                    src={overlay.videoUrl}
+                    autoPlay
+                    muted
+                    loop={overlay.videoLoop}
                     playsInline
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none" 
-                    style={imageStyle} 
+                    className={mediaCls}
+                    style={imageStyle}
                 />
             ) : (
-                <img 
-                    src={overlay.imageUrl} 
-                    alt="" 
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none" 
-                    style={imageStyle} 
+                <img
+                    src={overlay.imageUrl}
+                    alt=""
+                    className={mediaCls}
+                    style={imageStyle}
                 />
             )}
         </div>
@@ -1740,6 +1753,34 @@ const ButtonElement: React.FC<{
     // drift, out of step with same-depth elements). So the parallax transform goes on a
     // non-transitioned WRAPPER, and the hover-scale stays on the inner <button>.
     const { transform, overflow, ...wrapperStyle } = style;
+
+    // "Fit to content": shrink the visible art AND the clickable button to the image's fitted
+    // rectangle (kept undistorted), so there's no empty/letterbox margin around it. Only applies
+    // when the button actually has art — a colored/text button has nothing to trim.
+    // `interactive` mirrors the wrapper's pointer-events so a disabled element stays non-clickable.
+    const fit = !!element.fitToContent && !!displayUrl;
+    const interactive = wrapperStyle.pointerEvents !== 'none';
+    if (fit) {
+        return (
+            <div key={element.id} style={{ ...wrapperStyle, transform, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <button
+                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', padding: 0, border: 'none', background: 'transparent', position: 'relative', display: 'block', lineHeight: 0, cursor: interactive ? 'pointer' : 'default', pointerEvents: interactive ? 'auto' : 'none' }}
+                    className="transition-transform transform hover:scale-105"
+                    onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
+                    onMouseLeave={() => setIsHovered(false)}
+                    onClick={handleClick}
+                >
+                    <img src={displayUrl!} alt={element.text} draggable={false} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                    {interpolatedText && (
+                        <span className="absolute inset-0 flex items-center justify-center z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), pointerEvents: 'none'}}>
+                            {interpolatedText}
+                        </span>
+                    )}
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div key={element.id} style={{ ...wrapperStyle, transform }}>
             <button
@@ -2922,14 +2963,18 @@ const UIScreenRenderer: React.FC<{
                                el.background?.type ? el.background.assetId :
                                el.image?.id || null;
                 
+                // "Fit to content": center the media and let it shrink to its fitted (undistorted)
+                // size so there's no empty letterbox margin around it. Only meaningful for media.
+                const fit = !!el.fitToContent;
                 const containerStyle: React.CSSProperties = {
                     ...style,
                     overflow: 'hidden',
+                    ...(fit ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}),
                 };
-                
+
                 // If it's a color background
                 if (bgType === 'color' && typeof bgValue === 'string') {
-                    return <div key={el.id} style={{ ...containerStyle, backgroundColor: bgValue }} />;
+                    return <div key={el.id} style={{ ...style, overflow: 'hidden', backgroundColor: bgValue }} />;
                 }
                 
                 // Otherwise it's an image or video asset. Resolve via assetResolver so a video
@@ -2942,13 +2987,11 @@ const UIScreenRenderer: React.FC<{
                 
                 const isVideo = bgType === 'video';
                 
-                // Media fills container using object-fit
-                const mediaStyle: React.CSSProperties = {
-                    width: '100%',
-                    height: '100%',
-                    objectFit: el.objectFit || 'contain',
-                    display: 'block',
-                };
+                // Media fills container using object-fit — unless "fit to content", where it shrinks
+                // to its own fitted rect (no surrounding dead-space).
+                const mediaStyle: React.CSSProperties = fit
+                    ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: el.objectFit || 'contain', display: 'block' }
+                    : { width: '100%', height: '100%', objectFit: el.objectFit || 'contain', display: 'block' };
                 
                 if (isVideo) {
                     return (
@@ -3676,9 +3719,14 @@ const InGameConfirmDialog: React.FC<{
 };
 
 // --- Main Player Component ---
-const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean }> = ({ onClose, hideCloseButton = false, autoStartMusic = false }) => {
+const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean; isStandalone?: boolean }> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
     const { project } = useProject();
-    
+    const toast = useToast();
+    // Stable notify bridge for scripts (game.notify) and surfaced script errors.
+    const notify = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+        try { toast.addToast(message, type); } catch { console.log(`[notify] [${type}] ${message}`); }
+    }, [toast]);
+
     const getValidTitleScreenId = useCallback(() => {
         // 1. Check if the assigned title screen ID is valid
         if (project.ui.titleScreenId && project.uiScreens[project.ui.titleScreenId]) {
@@ -3734,6 +3782,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return next;
         });
     }, []);
+    // Mirror hudStack into a ref so the parallel scheduler interval can read it without restarting.
+    const hudStackRef = useRef<VNID[]>([]);
+    hudStackRef.current = hudStack;
+    // Project ref for the plugin runtime bridge (variable name→id resolution).
+    const projectRef = useRef(project);
+    projectRef.current = project;
 
     useEffect(() => {
         playerStateRef.current = playerState;
@@ -5146,6 +5200,232 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [settings.sfxVolume]);
 
     // --- Game Loop ---
+    // ── Scene lifecycle scripts (onSceneEnter / onSceneExit) ──────────────────
+    // Scripts with trigger 'onSceneEnter'/'onSceneExit' are global lifecycle hooks:
+    // they run on every scene change (the data model has no per-scene binding).
+    // Run for side effects (variables, notify, SFX/music, dialogue); navigation
+    // from a lifecycle script is intentionally ignored to avoid scene-change loops.
+    const prevLifecycleSceneRef = useRef<VNID | null>(null);
+    // Tracks the scene id for which 'auto' common events have already been injected,
+    // so they run once per scene entry (re-entry after visiting another scene re-runs).
+    const autoRanSceneRef = useRef<VNID | null>(null);
+    const runLifecycleScripts = useCallback((trigger: 'onSceneEnter' | 'onSceneExit', sceneId: VNID) => {
+        const scripts = (Object.values(project.scripts || {}) as VNScript[]).filter(s => s.enabled && s.trigger === trigger);
+        if (scripts.length === 0) return;
+
+        const store = variableStoreRef.current;
+        const baseVars: Record<VNID, string | number | boolean> = store ? store.snapshot().globals : { ...(playerState?.variables || {}) };
+        const variableUpdates: Record<VNID, string | number | boolean> = { ...baseVars };
+
+        const resolveVarId = (nameOrId: string): VNID => {
+            if (project.variables[nameOrId]) return nameOrId;
+            const lower = nameOrId.toLowerCase();
+            for (const [id, v] of Object.entries(project.variables)) if ((v as { name: string }).name.toLowerCase() === lower) return id;
+            return nameOrId;
+        };
+        const resolveAudioId = (nameOrId: string): string => {
+            if (project.audio[nameOrId]) return nameOrId;
+            const lower = nameOrId.toLowerCase();
+            for (const [id, a] of Object.entries(project.audio)) if ((a as { name: string }).name.toLowerCase() === lower) return id;
+            return nameOrId;
+        };
+
+        for (const scr of scripts) {
+            const ctx: ScriptRuntimeContext = {
+                project,
+                variables: variableUpdates,
+                currentSceneId: sceneId,
+                args: {},
+                onSetVariable: (nameOrId, value) => { variableUpdates[resolveVarId(nameOrId)] = value; },
+                onJumpToScene: () => { /* ignored for lifecycle scripts */ },
+                onJumpToLabel: () => { /* ignored for lifecycle scripts */ },
+                onShowDialogue: (characterName, text) => {
+                    const match = (Object.values(project.characters) as Array<{ id: VNID; name: string; color?: string }>).find(c => c.name.toLowerCase() === (characterName || '').toLowerCase());
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: characterName || 'Narrator', characterColor: match?.color || '#FFFFFF', characterId: match?.id || null, text } } } : null);
+                },
+                onPlaySFX: (nameOrId, volume) => { playSound(resolveAudioId(nameOrId), volume); },
+                onPlayMusic: (nameOrId, loop, volume) => {
+                    const url = assetResolver(resolveAudioId(nameOrId), 'audio');
+                    const audio = musicAudioRef.current;
+                    if (!url || !audio) return;
+                    audio.src = url; audio.load(); audio.loop = !!loop; audio.volume = 0;
+                    audio.play().then(() => fadeAudio(audio, typeof volume === 'number' ? volume : settings.musicVolume, 1)).catch(() => {});
+                },
+                onStopMusic: (fade) => { if (musicAudioRef.current) fadeAudio(musicAudioRef.current, 0, fade || 1); },
+                onNotify: (message, type) => { notify(message, type); },
+                onRunScript: () => { /* lifecycle scripts cannot chain (kept simple) */ },
+                onCallCommonEvent: () => { /* not supported from lifecycle scripts */ },
+            };
+            const result = executeScript(scr, ctx);
+            if (!result.success) {
+                console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
+                notify(`Script "${scr.name}" error: ${result.error}`, 'error');
+            }
+        }
+
+        // Apply accumulated variable writes through the store + player state.
+        if (store) {
+            store.applyWrites(Object.entries(variableUpdates).map(([variableId, value]) => ({ variableId, value, scope: 'global' as const, sourceCommandId: `lifecycle-${trigger}` })));
+        }
+        updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...variableUpdates } } : null);
+    }, [project, playerState?.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify]);
+
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing') { prevLifecycleSceneRef.current = null; return; }
+        const sceneId = playerState.currentSceneId;
+        if (!sceneId) return;
+        const prev = prevLifecycleSceneRef.current;
+        if (prev === sceneId) return;
+        if (prev) runLifecycleScripts('onSceneExit', prev);
+        runLifecycleScripts('onSceneEnter', sceneId);
+        try { pluginManager.invokeHook('onSceneChange', prev || '', sceneId); } catch { /* isolated */ }
+        prevLifecycleSceneRef.current = sceneId;
+    }, [playerState?.currentSceneId, playerState?.mode, runLifecycleScripts]);
+
+    // ── Parallel Common Events scheduler ──────────────────────────────────────
+    // CEs with trigger 'parallel' run alongside the active scene on a slow interval,
+    // sharing the global variable store. Each tick advances one command per active CE
+    // (looping). Only background-safe commands run (variables / scripts / audio / wait);
+    // presentation-takeover commands (dialogue, choices, backgrounds, jumps, …) are
+    // skipped so parallel events can never hijack the main flow. See the mini-spec in
+    // SCRIPTING_PLUGINS_COMMONEVENTS_PLAN.md. Pure runtime — nothing is serialized.
+    const parallelStateRef = useRef<Map<string, { index: number; waitUntil?: number }>>(new Map());
+    const parallelWarnedRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        const ALLOWED = new Set<string>([
+            CommandType.SetVariable, CommandType.RunScript, CommandType.Wait,
+            CommandType.PlayMusic, CommandType.StopMusic, CommandType.PlaySoundEffect, CommandType.StopSoundEffect,
+        ]);
+        const isTruthy = (v: unknown) => !(v === undefined || v === null || v === false || v === 0 || v === '' || v === 'false');
+
+        const tick = () => {
+            const ps = playerStateRef.current;
+            if (!ps || ps.mode !== 'playing') return;
+            if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
+
+            const events = Object.values(project.commonEvents || {}) as VNCommonEvent[];
+            const active = events.filter(ce => ce.enabled && ce.trigger === 'parallel'
+                && ce.commands && ce.commands.length > 0
+                && (!ce.conditionVariableId || isTruthy(ps.variables[ce.conditionVariableId])));
+
+            // Drop state for CEs no longer active so they restart cleanly next activation.
+            const activeIds = new Set<string>(active.map(c => c.id));
+            for (const id of Array.from(parallelStateRef.current.keys()) as string[]) {
+                if (!activeIds.has(id)) parallelStateRef.current.delete(id);
+            }
+            if (active.length === 0) return;
+
+            const now = Date.now();
+            let varAccum: Record<string, string | number | boolean> | null = null;
+            let musicAccum: Record<string, unknown> | null = null;
+
+            const buildCtx = (): CommandContext => ({
+                project,
+                playerState: { ...ps, variables: { ...ps.variables, ...(varAccum || {}) } },
+                assetResolver,
+                getAssetMetadata: getAssetMetadata as any,
+                musicAudioRef,
+                fadeAudio,
+                playSound,
+                stopAllSfx,
+                stopSfx,
+                settings,
+                advance: () => {},
+                setPlayerState: updatePlayerState,
+                activeEffectTimeoutsRef,
+                evaluateConditions,
+                notify,
+            });
+
+            for (const ce of active) {
+                let st = parallelStateRef.current.get(ce.id);
+                if (!st) { st = { index: 0 }; parallelStateRef.current.set(ce.id, st); }
+                if (st.waitUntil && now < st.waitUntil) continue;
+                st.waitUntil = undefined;
+                const cmds = ce.commands;
+                if (st.index >= cmds.length) st.index = 0;
+                const cmd = cmds[st.index] as any;
+                st.index = (st.index + 1) % cmds.length; // advance PC (looping)
+                if (!cmd) continue;
+
+                if (cmd.type === CommandType.Wait) {
+                    const secs = typeof cmd.duration === 'number' ? cmd.duration : 0;
+                    st.waitUntil = now + Math.max(0, secs) * 1000;
+                    continue;
+                }
+                if (!ALLOWED.has(cmd.type)) {
+                    const key = `${ce.id}:${cmd.type}`;
+                    if (!parallelWarnedRef.current.has(key)) {
+                        parallelWarnedRef.current.add(key);
+                        console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
+                    }
+                    continue;
+                }
+                try {
+                    const ctx = buildCtx();
+                    let result: CommandResult | null = null;
+                    switch (cmd.type) {
+                        case CommandType.SetVariable: result = handleSetVariable(cmd, ctx); break;
+                        case CommandType.RunScript: result = handleRunScript(cmd, ctx); break;
+                        case CommandType.PlayMusic: result = handlePlayMusic(cmd, ctx); break;
+                        case CommandType.StopMusic: result = handleStopMusic(cmd, ctx); break;
+                        case CommandType.PlaySoundEffect: result = handlePlaySoundEffect(cmd, ctx); break;
+                        case CommandType.StopSoundEffect: result = handleStopSoundEffect(cmd, ctx); break;
+                    }
+                    if (result?.updates?.variables) varAccum = { ...(varAccum || {}), ...result.updates.variables };
+                    if (result?.updates?.musicState) musicAccum = { ...(musicAccum || {}), ...result.updates.musicState };
+                } catch (e) {
+                    console.error(`[Parallel CE "${ce.name}"] command error:`, e);
+                }
+            }
+
+            if (varAccum || musicAccum) {
+                updatePlayerState(p => p ? {
+                    ...p,
+                    ...(varAccum ? { variables: { ...p.variables, ...varAccum } } : {}),
+                    ...(musicAccum ? { musicState: { ...p.musicState, ...(musicAccum as any) } } : {}),
+                } : null);
+            }
+        };
+
+        const interval = window.setInterval(tick, 120);
+        return () => window.clearInterval(interval);
+    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions, notify]);
+
+    // ── Plugin runtime bridge ─────────────────────────────────────────────────
+    // While LivePreview is mounted, plugins' api.getVariable/setVariable read & write the
+    // LIVE game variable store (resolving by name or id), and api.notify shows toasts.
+    // Enabled plugins are loaded and onRuntimeInit fired once. Cleared on unmount so the
+    // editor falls back to project defaults.
+    useEffect(() => {
+        const resolveVarId = (nameOrId: string): VNID => {
+            const p = projectRef.current;
+            if (p.variables[nameOrId]) return nameOrId;
+            const lower = nameOrId.toLowerCase();
+            for (const [id, v] of Object.entries(p.variables)) if ((v as { name: string }).name.toLowerCase() === lower) return id;
+            return nameOrId;
+        };
+        pluginManager.setRuntime({
+            getVariable: (nameOrId) => {
+                const id = resolveVarId(nameOrId);
+                const store = variableStoreRef.current;
+                const v = store ? store.get(id) : playerStateRef.current?.variables[id];
+                return (v === null ? undefined : v) as string | number | boolean | undefined;
+            },
+            setVariable: (nameOrId, value) => {
+                const id = resolveVarId(nameOrId);
+                const old = playerStateRef.current?.variables[id];
+                variableStoreRef.current?.applyWrites([{ variableId: id, value, scope: 'global', sourceCommandId: 'plugin' }]);
+                updatePlayerState(p => p ? { ...p, variables: { ...p.variables, [id]: value } } : null);
+                if (old !== value) { try { pluginManager.invokeHook('onVariableChange', id, old, value); } catch { /* isolated */ } }
+            },
+            notify: (message, type) => notify(message, type),
+        });
+        pluginManager.ensureLoaded(projectRef.current);
+        try { pluginManager.invokeHook('onRuntimeInit'); } catch { /* isolated */ }
+        return () => pluginManager.setRuntime(null);
+    }, [updatePlayerState, notify]);
+
     useEffect(() => {
         const scheduler = commandSchedulerRef.current;
         const diagnostics = runtimeDiagnosticsRef.current;
@@ -5172,14 +5452,43 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     variableStoreRef.current = variableStore;
     const getRuntimeVariables = () => variableStore.snapshot().globals as Record<VNID, string | number | boolean>;
 
+        // ── 'auto' Common Events: run once at scene start, before the scene's own commands ──
+        // Injected here (top of the command loop, before reading the next command) so there is
+        // no race with the scene's command 0. Guarded to the top scene level (empty stack) and
+        // to once per scene entry. Re-entering a scene after visiting another one re-runs them.
+        if (playerState.currentIndex === 0 && playerState.commandStack.length === 0 && autoRanSceneRef.current !== playerState.currentSceneId) {
+            autoRanSceneRef.current = playerState.currentSceneId;
+            const autoVars = getRuntimeVariables();
+            const isTruthy = (v: unknown) => !(v === undefined || v === null || v === false || v === 0 || v === '' || v === 'false');
+            const autoCmds = (Object.values(project.commonEvents || {}) as VNCommonEvent[])
+                .filter(ce => ce.enabled && ce.trigger === 'auto' && (!ce.conditionVariableId || isTruthy(autoVars[ce.conditionVariableId])))
+                .flatMap(ce => ce.commands || []);
+            if (autoCmds.length > 0) {
+                updatePlayerState(p => {
+                    if (!p) return null;
+                    // Push the scene to return to (at index 0) and run the auto commands first.
+                    const newStack = [...p.commandStack, { sceneId: p.currentSceneId, commands: p.currentCommands, index: 0 }];
+                    return { ...p, commandStack: newStack, currentCommands: autoCmds, currentIndex: 0 };
+                });
+                return;
+            }
+        }
+
         const command = playerState.currentCommands[playerState.currentIndex];
         if (!command) { 
             if (playerState.commandStack.length > 0) {
-                const popped = playerState.commandStack[playerState.commandStack.length - 1];
                 updatePlayerState(p => {
-                    if (!p) return null;
+                    if (!p || p.commandStack.length === 0) return p;
+                    const frame = p.commandStack[p.commandStack.length - 1];
                     const newStack = p.commandStack.slice(0, -1);
-                    return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
+                    // Restore parameter variables to their pre-call state (true local scope).
+                    let variables = p.variables;
+                    if (frame.savedVariables || frame.clearedVariables) {
+                        variables = { ...p.variables };
+                        if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+                        if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+                    }
+                    return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
                 });
             } else {
                 runtimeDebugLog('End of scene - trying to advance to next scene');
@@ -5347,11 +5656,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const nextIndex = playerState.currentIndex + 1;
             if (nextIndex >= playerState.currentCommands.length) {
                 if (playerState.commandStack.length > 0) {
-                    const popped = playerState.commandStack[playerState.commandStack.length - 1];
                     updatePlayerState(p => {
-                        if (!p) return null;
+                        if (!p || p.commandStack.length === 0) return p;
+                        const frame = p.commandStack[p.commandStack.length - 1];
                         const newStack = p.commandStack.slice(0, -1);
-                        return { ...p, currentSceneId: popped.sceneId, currentCommands: popped.commands, currentIndex: popped.index, commandStack: newStack };
+                        // Restore parameter variables to their pre-call state (true local scope).
+                        let variables = p.variables;
+                        if (frame.savedVariables || frame.clearedVariables) {
+                            variables = { ...p.variables };
+                            if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+                            if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+                        }
+                        return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
                     });
                 } else {
                     // Scene ended, try to advance to next scene
@@ -5447,6 +5763,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setPlayerState: updatePlayerState,
             activeEffectTimeoutsRef,
             evaluateConditions,
+            notify,
         };
         
         let instantAdvance = true;
@@ -5464,6 +5781,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         sourceCommandId: command.id,
                     }));
                     variableStore.applyWrites(writes);
+                }
+                // Plugin hook: notify of any variable that actually changed value.
+                if (result.updates?.variables) {
+                    const prevVars = playerState?.variables || {};
+                    for (const [vid, val] of Object.entries(result.updates.variables)) {
+                        if (prevVars[vid] !== val) {
+                            try { pluginManager.invokeHook('onVariableChange', vid, prevVars[vid], val); } catch { /* isolated */ }
+                        }
+                    }
                 }
                 if (result.updates) {
                     const isSceneChange = result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId;
@@ -5566,6 +5892,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 });
                 return;
             }
+
+            // Plugin hook: before a command executes (observe-only in this version).
+            try { pluginManager.invokeHook('onBeforeCommand', command); } catch { /* isolated in service */ }
 
             switch (command.type) {
                 case CommandType.Group: {
@@ -6056,8 +6385,33 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                default: {
+                    // Custom command registered by a plugin (type = "pluginId.command").
+                    const customDef = pluginManager.getCommand(command.type as string);
+                    if (customDef) {
+                        const ownerId = pluginManager.getCommandOwner(command.type as string);
+                        const api = ownerId ? pluginManager.getApi(ownerId) : undefined;
+                        if (api) {
+                            try {
+                                const params = (command as any).params || (command as any).parameters || {};
+                                const ret = customDef.handler(params, api);
+                                if (ret && typeof (ret as any).then === 'function') {
+                                    (ret as Promise<any>).catch(e => console.error(`[Custom command ${command.type}] handler error:`, e));
+                                } else if (ret && (ret as any).advance === false) {
+                                    instantAdvance = false;
+                                }
+                            } catch (e) {
+                                console.error(`[Custom command ${command.type}] handler error:`, e);
+                            }
+                        }
+                    }
+                    break;
+                }
             }
-            
+
+            // Plugin hook: after a command executes.
+            try { pluginManager.invokeHook('onAfterCommand', command, null); } catch { /* isolated in service */ }
+
             // Handle command advancement based on async modifier
             runtimeDebugLog('[DEBUG] Command execution complete:', command.type, '| shouldRunAsync:', shouldRunAsync, '| instantAdvance:', instantAdvance);
             if (shouldRunAsync) {
@@ -6757,6 +7111,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             } else {
                 performQuit();
             }
+        } else if (action.type === UIActionType.ExitGame) {
+            // Stop game music + SFX so nothing keeps playing once we leave the game.
+            const audio = musicAudioRef.current;
+            if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ''; }
+            stopAllSfx();
+            if (isStandalone) {
+                // A genuine built/exported game. Desktop (Electron): quit the whole app.
+                // Web: best-effort close the tab (browsers may block it for non-script windows).
+                const electronAPI = (window as any).electronAPI;
+                if (electronAPI?.quitApp) { electronAPI.quitApp(); return; }
+                try { window.close(); } catch { /* ignore — browsers may block window.close() */ }
+                return;
+            }
+            // Editor test-play: ONLY close the preview overlay back to the editor — never quit the
+            // editor itself (window.close()/app.quit() here would kill the whole editor window).
+            onClose();
         } else if (action.type === UIActionType.ContinueGame) {
             // Continue = load the auto-save from slot 0
             const doLoad = async () => {
@@ -7275,6 +7645,45 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     window.location.href = openUrlAction.url;
                 }
             }
+        } else if (action.type === UIActionType.CallCommonEvent) {
+            // Invoke a Common Event from a button/choice — pushes the current position onto
+            // the command stack and switches to the CE's commands; returns to the next command
+            // when the CE finishes (parameter variables are restored on return).
+            const ccAction = action as CallCommonEventAction;
+            const ce = (project.commonEvents || {})[ccAction.commonEventId];
+            if (!ce || !ce.enabled || !ce.commands || ce.commands.length === 0) {
+                runtimeDebugWarn('[CallCommonEvent action] event not found / disabled / empty');
+                return;
+            }
+            if (!playerState || playerState.mode !== 'playing') {
+                notify('Call Common Event only works during gameplay', 'warning');
+                return;
+            }
+            if (playerState.commandStack.length >= MAX_CALL_DEPTH || playerState.commandStack.some(f => f.commonEventId === ce.id)) {
+                notify(`Common Event call blocked (depth/cycle): "${ce.name}"`, 'error');
+                return;
+            }
+            const overrides: Record<VNID, string | number | boolean> = {};
+            const savedVariables: Record<VNID, string | number | boolean> = {};
+            const clearedVariables: VNID[] = [];
+            for (const param of ce.parameters || []) {
+                const raw = ccAction.arguments?.[param.id];
+                overrides[param.id] = raw !== undefined ? coerceParam(raw, param.type) : param.defaultValue;
+                if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
+                else clearedVariables.push(param.id);
+            }
+            updatePlayerState(p => {
+                if (!p) return null;
+                const newStack = [...p.commandStack, {
+                    sceneId: p.currentSceneId,
+                    commands: p.currentCommands,
+                    index: p.currentIndex + 1,
+                    commonEventId: ce.id,
+                    ...(Object.keys(savedVariables).length > 0 ? { savedVariables } : {}),
+                    ...(clearedVariables.length > 0 ? { clearedVariables } : {}),
+                }];
+                return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
+            });
         } else if (action.type === UIActionType.ShowLog) {
             // Open the text history overlay (same as the built-in quick menu's "Log" button).
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: true } } : null);
@@ -8609,8 +9018,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         };
                         const hasHistory = playerState.history.length > 0;
                         const qmButtonCfgs = project.ui.quickMenuButtons || {};
+                        const qmCustomButtons = project.ui.quickMenuCustomButtons || [];
+                        // Resolve the art/position/size config for a descriptor key: built-ins live in
+                        // quickMenuButtons (keyed by key); custom buttons carry their own config.
+                        const qmCfgFor = (key: string): QuickMenuButtonConfig | undefined =>
+                            qmButtonCfgs[key as QuickMenuButtonKey] || qmCustomButtons.find(cb => cb.id === key);
                         const iconCls = 'w-3.5 h-3.5';
-                        type QmDesc = { key: QuickMenuButtonKey; show: boolean; onClick: (e: React.MouseEvent) => void; disabled?: boolean; title: string; label: string; icon: React.ReactNode; pillClassName: string; pillStyle: React.CSSProperties };
+                        type QmDesc = { key: string; show: boolean; onClick: (e: React.MouseEvent) => void; disabled?: boolean; title: string; label: string; icon: React.ReactNode; pillClassName: string; pillStyle: React.CSSProperties };
                         const descriptors: QmDesc[] = [
                             {
                                 key: 'skipBackward', show: project.ui.quickMenuShowSkipBackward !== false,
@@ -8661,7 +9075,35 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
                             },
                         ];
-                        const visible = descriptors.filter(d => d.show);
+                        // Author-defined extra buttons: each runs its own action. Appended after the
+                        // built-ins so grouped layout shows them inline; independent layout positions
+                        // them by their own x/y/width/height (via qmCfgFor).
+                        const customDescriptors: QmDesc[] = qmCustomButtons
+                            .filter(cb => cb.show !== false)
+                            .map(cb => ({
+                                key: cb.id,
+                                show: true,
+                                onClick: (e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    if (cb.action && cb.action.type !== UIActionType.None) handleUIAction(cb.action);
+                                },
+                                title: cb.label,
+                                label: cb.label,
+                                icon: null,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            }));
+                        const visible = [...descriptors, ...customDescriptors].filter(d => d.show);
+
+                        // A custom action on a Quick Menu button OVERRIDES its built-in behavior,
+                        // routing through the same UI-action pipeline as every other button.
+                        const qmOnClick = (d: QmDesc) => {
+                            const cfg = qmCfgFor(d.key);
+                            if (cfg?.action && cfg.action.type !== UIActionType.None) {
+                                return (e: React.MouseEvent) => { e.stopPropagation(); handleUIAction(cfg.action!); };
+                            }
+                            return d.onClick;
+                        };
 
                         // ── Independent layout: each button placed/sized on its own ── //
                         if (project.ui.quickMenuIndependentLayout) {
@@ -8670,20 +9112,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             return (
                                 <div className="absolute inset-0" style={{ pointerEvents: 'none', zIndex: qmZIndex }}>
                                     {visible.map((d, i) => {
-                                        const cfg = qmButtonCfgs[d.key] || {};
+                                        const cfg = qmCfgFor(d.key) || {};
                                         const bx = cfg.x ?? (qmX + i * slotW);
                                         const by = cfg.y ?? qmY;
                                         const bw = cfg.width ?? Math.max(4, slotW - 1);
                                         const bh = cfg.height ?? qmHPct;
+                                        // "Fit to content": the slot is just bounds — the art + clickable button shrink to
+                                        // the fitted image so empty margin is neither visible nor clickable.
+                                        const fit = !!cfg.fitToContent;
+                                        const slotStyle: React.CSSProperties = fit
+                                            ? { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+                                            : { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto' };
                                         return (
-                                            <div key={d.key} style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto' }}>
+                                            <div key={d.key} style={slotStyle}>
                                                 <QuickMenuButtonEl
-                                                    label={d.label} title={d.title} icon={d.icon} onClick={d.onClick} disabled={d.disabled}
+                                                    label={d.label} title={d.title} icon={d.icon} onClick={qmOnClick(d)} disabled={d.disabled}
                                                     config={cfg} assetResolver={assetResolver}
-                                                    artButtonStyle={{ width: '100%', height: '100%' }}
-                                                    artImgStyle={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                                                    artButtonStyle={fit
+                                                        ? { maxWidth: '100%', maxHeight: '100%', pointerEvents: 'auto' }
+                                                        : { width: '100%', height: '100%' }}
+                                                    artImgStyle={fit
+                                                        ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }
+                                                        : { width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                                                     pillClassName={d.pillClassName}
-                                                    pillStyle={{ ...d.pillStyle, width: '100%', height: '100%', justifyContent: 'center' }}
+                                                    pillStyle={{ ...d.pillStyle, width: '100%', height: '100%', justifyContent: 'center', ...(fit ? { pointerEvents: 'auto' } : {}) }}
                                                 />
                                             </div>
                                         );
@@ -8709,8 +9161,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     {visible.map(d => (
                                         <QuickMenuButtonEl
                                             key={d.key}
-                                            label={d.label} title={d.title} icon={d.icon} onClick={d.onClick} disabled={d.disabled}
-                                            config={qmButtonCfgs[d.key]} assetResolver={assetResolver}
+                                            label={d.label} title={d.title} icon={d.icon} onClick={qmOnClick(d)} disabled={d.disabled}
+                                            config={qmCfgFor(d.key)} assetResolver={assetResolver}
                                             artButtonStyle={{ width: 'auto', height: 'auto' }}
                                             artImgStyle={{ height: scalePx(28), width: 'auto', objectFit: 'contain', display: 'block' }}
                                             pillClassName={d.pillClassName}

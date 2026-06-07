@@ -45,6 +45,8 @@ export interface CommandContext {
     runtime?: RuntimeCommandHelpers;
     // Condition evaluation for ShowButton and other conditional commands
     evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
+    /** Show a toast notification to the player (scripts' game.notify, surfaced script errors). Optional. */
+    notify?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 /**

@@ -108,6 +108,36 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
         setActiveTab('details');
     }, []);
 
+    const handleExportPlugin = useCallback((pluginId: string) => {
+        const plugin = (project.plugins || {})[pluginId];
+        if (!plugin) return;
+        try {
+            const blob = new Blob([plugin.source], { type: 'text/javascript' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${pluginId}.plugin.js`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setConsoleLog(prev => [...prev, `✓ Exported "${pluginId}"`]);
+        } catch (err: any) {
+            setConsoleLog(prev => [...prev, `✖ Export failed: ${err.message}`]);
+        }
+    }, [project.plugins]);
+
+    const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            setInstallSource(String(reader.result || ''));
+            setInstallError('');
+            setActiveTab('install');
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }, []);
+
     const renderInstalled = () => (
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {plugins.length === 0 ? (
@@ -247,6 +277,10 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                 )}
 
                 <div className="flex justify-end gap-2 mt-3">
+                    <label className="text-xs px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors cursor-pointer">
+                        Import from file…
+                        <input type="file" accept=".js,.txt" onChange={handleImportFile} className="hidden" />
+                    </label>
                     <button
                         onClick={() => { setInstallSource(''); setInstallError(''); }}
                         className="text-xs px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors"
@@ -275,7 +309,9 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
         }
 
         const m = selectedPlugin.manifest;
-        const registry = (project.pluginRegistry || {})[m.id];
+        const ownedCommands = pluginManager.getRegisteredCommands().filter(c => c.type.startsWith(m.id + '.'));
+        const ownedEffects = pluginManager.getRegisteredEffects().filter(e => e.type.startsWith(m.id + '.'));
+        const settingsSchema = (m as any).settings as Array<{ name: string; label?: string; type: string; defaultValue?: any; options?: Array<{ label: string; value: string }> }> | undefined;
 
         return (
             <div className="flex-1 overflow-y-auto p-4">
@@ -312,14 +348,14 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                         </table>
                     </div>
 
-                    {/* Registered Commands */}
-                    {registry?.registeredCommands && registry.registeredCommands.length > 0 && (
+                    {/* Registered Commands (live from the plugin manager) */}
+                    {ownedCommands.length > 0 && (
                         <div>
                             <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Registered Commands</h4>
                             <div className="space-y-1">
-                                {registry.registeredCommands.map(cmd => (
-                                    <div key={cmd.id} className="p-2 rounded text-xs border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
-                                        <span className="font-bold text-sky-300">{cmd.name}</span>
+                                {ownedCommands.map(cmd => (
+                                    <div key={cmd.type} className="p-2 rounded text-xs border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
+                                        <span className="font-bold text-sky-300">{cmd.displayName}</span>
                                         {cmd.description && <span className="ml-2" style={{ color: 'var(--text-secondary)' }}>{cmd.description}</span>}
                                     </div>
                                 ))}
@@ -327,17 +363,46 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                         </div>
                     )}
 
-                    {/* Registered Effects */}
-                    {registry?.registeredEffects && registry.registeredEffects.length > 0 && (
+                    {/* Registered Effects (live from the plugin manager) */}
+                    {ownedEffects.length > 0 && (
                         <div>
                             <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Registered Effects</h4>
                             <div className="space-y-1">
-                                {registry.registeredEffects.map(eff => (
-                                    <div key={eff.id} className="p-2 rounded text-xs border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
-                                        <span className="font-bold text-violet-300">{eff.name}</span>
+                                {ownedEffects.map(eff => (
+                                    <div key={eff.type} className="p-2 rounded text-xs border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
+                                        <span className="font-bold text-violet-300">{eff.displayName}</span>
                                         {eff.description && <span className="ml-2" style={{ color: 'var(--text-secondary)' }}>{eff.description}</span>}
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Plugin Settings (from optional manifest.settings schema) */}
+                    {settingsSchema && settingsSchema.length > 0 && (
+                        <div>
+                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Settings</h4>
+                            <div className="space-y-2 p-2 rounded border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
+                                {settingsSchema.map(field => {
+                                    const current = selectedPlugin.config?.[field.name] ?? field.defaultValue ?? '';
+                                    const setField = (value: any) => {
+                                        dispatch({ type: 'UPDATE_PLUGIN_CONFIG', payload: { pluginId: m.id, config: { ...selectedPlugin.config, [field.name]: value } } });
+                                    };
+                                    return (
+                                        <label key={field.name} className="block text-xs">
+                                            <span className="block mb-0.5" style={{ color: 'var(--text-secondary)' }}>{field.label || field.name}</span>
+                                            {field.type === 'boolean' ? (
+                                                <input type="checkbox" checked={!!current} onChange={e => setField(e.target.checked)} />
+                                            ) : field.type === 'select' ? (
+                                                <select value={String(current)} onChange={e => setField(e.target.value)} className="w-full bg-slate-900 text-white px-2 py-1 rounded border border-slate-700">
+                                                    {(field.options || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                </select>
+                                            ) : (
+                                                <input type={field.type === 'number' ? 'number' : 'text'} value={String(current)} onChange={e => setField(field.type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} className="w-full bg-slate-900 text-white px-2 py-1 rounded border border-slate-700" />
+                                            )}
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -369,6 +434,12 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                                 Enable
                             </button>
                         )}
+                        <button
+                            onClick={() => handleExportPlugin(m.id)}
+                            className="text-xs px-3 py-1.5 rounded bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 transition-colors"
+                        >
+                            Export
+                        </button>
                         <button
                             onClick={() => { handleUninstallPlugin(m.id); setActiveTab('installed'); }}
                             className="text-xs px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-300 transition-colors"
