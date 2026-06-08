@@ -1,0 +1,17 @@
+{
+  "panelTitle": "Staging Area",
+  "dragToResize": "Drag to resize",
+  "dragToResizeScale": "Drag to resize (scale)",
+  "showEventIndicators": "Show Event Indicators",
+  "hideEventIndicators": "Hide Event Indicators",
+  "showVariableState": "Show Variable State",
+  "hideVariableState": "Hide Variable State",
+  "variableStateHeading": "Variable State",
+  "videoLabel": "Video: {{name}}",
+  "submitButton": "Submit",
+  "inputPlaceholder": "Type here…",
+  "quickMenuBack": "Back",
+  "quickMenuLog": "Log",
+  "quickMenuAuto": "Auto",
+  "quickMenuSkip": "Skip"
+}

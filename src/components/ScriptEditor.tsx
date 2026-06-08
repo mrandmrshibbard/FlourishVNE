@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNScript, ScriptParam } from '../types/scripting';
 import { createDefaultScript, validateScript, executeScript, ScriptRuntimeContext } from '../features/scripting/ScriptExecutor';
@@ -50,6 +51,7 @@ const API_REFERENCE: Array<{ group: string; items: Array<{ sig: string; snippet:
         { sig: 'getCharacters()', snippet: 'game.getCharacters()', desc: 'List of { id, name }.' },
         { sig: 'currentScene / currentSceneId', snippet: 'game.currentScene', desc: 'Current scene name / id.' },
         { sig: 'random(min, max)', snippet: 'game.random(1, 10)', desc: 'Random integer (inclusive).' },
+        { sig: 'math.randomFloat(min, max)', snippet: 'game.math.randomFloat(0, 1)', desc: 'Random decimal in a range.' },
         { sig: 'clamp(v, min, max)', snippet: 'game.clamp(, 0, 100)', desc: 'Clamp a number.' },
         { sig: 'lerp(a, b, t)', snippet: 'game.lerp(0, 1, 0.5)', desc: 'Linear interpolate.' },
         { sig: 'log(...args)', snippet: 'game.log()', desc: 'Console output (Script Editor console).' },
@@ -57,6 +59,7 @@ const API_REFERENCE: Array<{ group: string; items: Array<{ sig: string; snippet:
 ];
 
 const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
+    const { t } = useTranslation('editorTools');
     const { project, dispatch } = useProject();
     const scripts = useMemo(() => Object.values(project.scripts || {}) as VNScript[], [project.scripts]);
     const [selectedScriptId, setSelectedScriptId] = useState<VNID | null>(scripts[0]?.id || null);
@@ -192,20 +195,23 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
         };
 
         const testScript: VNScript = { ...selectedScript, code: editingCode };
-        const result = executeScript(testScript, testContext);
-
-        console.log = origLog;
-
-        if (result.success) {
-            setConsoleOutput(prev => [...prev, `✓ Completed in ${result.duration.toFixed(1)}ms`]);
-            if (result.returnValue !== undefined) {
-                setConsoleOutput(prev => [...prev, `  Return: ${JSON.stringify(result.returnValue)}`]);
+        // executeScript is async (scripts may `await game.wait(...)`) — restore console + report on resolve.
+        executeScript(testScript, testContext).then(result => {
+            console.log = origLog;
+            if (result.success) {
+                setConsoleOutput(prev => [...prev, `✓ Completed in ${result.duration.toFixed(1)}ms`]);
+                if (result.returnValue !== undefined) {
+                    setConsoleOutput(prev => [...prev, `  Return: ${JSON.stringify(result.returnValue)}`]);
+                }
+            } else {
+                setConsoleOutput(prev => [...prev, `✖ Error: ${result.error}`, ...(result.stack ? [`  ${result.stack.split('\n')[0]}`] : [])]);
             }
-        } else {
-            setConsoleOutput(prev => [...prev, `✖ Error: ${result.error}`, ...(result.stack ? [`  ${result.stack.split('\n')[0]}`] : [])]);
-        }
-
-        setIsRunning(false);
+            setIsRunning(false);
+        }).catch(err => {
+            console.log = origLog;
+            setConsoleOutput(prev => [...prev, `✖ Error: ${err?.message || String(err)}`]);
+            setIsRunning(false);
+        });
     }, [selectedScript, editingCode, project]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -282,13 +288,13 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                 <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-elevated)' }}>
                     <div className="flex items-center gap-2">
                         <span className="text-lg">📜</span>
-                        <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Script Editor</h2>
+                        <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{t('scriptEditor.title')}</h2>
                         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-emerald)', color: '#fff' }}>
-                            {scripts.length} script{scripts.length !== 1 ? 's' : ''}
+                            {t('scriptEditor.scriptCount', { count: scripts.length })}
                         </span>
                     </div>
                     <button onClick={onClose} className="text-xs px-3 py-1 rounded hover:bg-red-500/20 text-red-400 transition-colors">
-                        Close
+                        {t('scriptEditor.close')}
                     </button>
                 </div>
 
@@ -300,7 +306,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                 onClick={() => setShowNewDialog(true)}
                                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-1.5 px-2 rounded text-xs flex items-center justify-center gap-1 font-bold transition-colors"
                             >
-                                <PlusIcon className="w-3 h-3" /> New Script
+                                <PlusIcon className="w-3 h-3" /> {t('scriptEditor.newScript')}
                             </button>
                         </div>
 
@@ -311,13 +317,13 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                     value={newScriptName}
                                     onChange={e => setNewScriptName(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && handleCreateScript()}
-                                    placeholder="Script name..."
+                                    placeholder={t('scriptEditor.scriptNamePlaceholder')}
                                     className="w-full bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none ring-1 ring-emerald-500 mb-1"
                                     autoFocus
                                 />
                                 <div className="flex gap-1">
-                                    <button onClick={handleCreateScript} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1 rounded text-xs">Create</button>
-                                    <button onClick={() => setShowNewDialog(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-1 rounded text-xs">Cancel</button>
+                                    <button onClick={handleCreateScript} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1 rounded text-xs">{t('scriptEditor.create')}</button>
+                                    <button onClick={() => setShowNewDialog(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-1 rounded text-xs">{t('scriptEditor.cancel')}</button>
                                 </div>
                             </div>
                         )}
@@ -325,7 +331,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                         <div className="flex-1 overflow-y-auto">
                             {scripts.length === 0 ? (
                                 <div className="p-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-                                    No scripts yet. Create one to get started!
+                                    {t('scriptEditor.noScriptsYet')}
                                 </div>
                             ) : (
                                 scripts.map(script => (
@@ -365,10 +371,10 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                         onChange={e => handleUpdateTrigger(e.target.value as VNScript['trigger'])}
                                         className="text-xs bg-slate-800 text-white px-2 py-1 rounded border border-slate-600"
                                     >
-                                        <option value="command">Trigger: Event</option>
-                                        <option value="onSceneEnter">Trigger: Scene Enter</option>
-                                        <option value="onSceneExit">Trigger: Scene Exit</option>
-                                        <option value="global">Trigger: Global (Utility)</option>
+                                        <option value="command">{t('scriptEditor.triggerEvent')}</option>
+                                        <option value="onSceneEnter">{t('scriptEditor.triggerSceneEnter')}</option>
+                                        <option value="onSceneExit">{t('scriptEditor.triggerSceneExit')}</option>
+                                        <option value="global">{t('scriptEditor.triggerGlobal')}</option>
                                     </select>
                                     <label className="flex items-center gap-1 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
                                         <input
@@ -377,45 +383,45 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                             onChange={e => handleToggleEnabled(selectedScriptId!, e.target.checked)}
                                             className="accent-emerald-500"
                                         />
-                                        Enabled
+                                        {t('scriptEditor.enabled')}
                                     </label>
                                     <div className="flex-1" />
                                     <button
                                         onClick={handleValidate}
                                         className="text-xs px-2.5 py-1 rounded bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 transition-colors"
                                     >
-                                        Validate
+                                        {t('scriptEditor.validate')}
                                     </button>
                                     <button
                                         onClick={handleTestRun}
                                         disabled={isRunning}
                                         className="text-xs px-2.5 py-1 rounded bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 transition-colors disabled:opacity-50"
                                     >
-                                        {isRunning ? 'Running...' : '▶ Test Run'}
+                                        {isRunning ? t('scriptEditor.running') : t('scriptEditor.testRun')}
                                     </button>
                                     <button
                                         onClick={() => setShowApi(s => !s)}
                                         className={`text-xs px-2.5 py-1 rounded transition-colors ${showApi ? 'bg-violet-600/40 text-violet-200' : 'bg-violet-600/20 hover:bg-violet-600/30 text-violet-300'}`}
-                                        title="Toggle the game API reference"
+                                        title={t('scriptEditor.apiToggleTitle')}
                                     >
-                                        📖 API
+                                        {t('scriptEditor.apiToggleLabel')}
                                     </button>
                                     <button
                                         onClick={handleSaveCode}
                                         className="text-xs px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 transition-colors"
                                     >
-                                        Save (Ctrl+S)
+                                        {t('scriptEditor.save')}
                                     </button>
                                 </div>
 
                                 {/* Parameters panel — declared params become read-only game.args */}
                                 <div className="px-3 py-1.5 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Parameters</span>
-                                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>access in script via <code className="font-mono">game.args.name</code></span>
+                                        <span className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>{t('scriptEditor.parametersLabel')}</span>
+                                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('scriptEditor.parametersHint')} <code className="font-mono">game.args.name</code></span>
                                         <div className="flex-1" />
                                         <button onClick={handleAddParam} className="text-[11px] px-2 py-0.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 flex items-center gap-1">
-                                            <PlusIcon className="w-3 h-3" /> Add
+                                            <PlusIcon className="w-3 h-3" /> {t('scriptEditor.addParam')}
                                         </button>
                                     </div>
                                     {(selectedScript.params && selectedScript.params.length > 0) ? (
@@ -425,7 +431,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                                     <input
                                                         value={p.name}
                                                         onChange={e => handleUpdateParam(idx, { name: e.target.value })}
-                                                        placeholder="name"
+                                                        placeholder={t('scriptEditor.paramNamePlaceholder')}
                                                         className="w-32 bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none border border-slate-700"
                                                     />
                                                     <select
@@ -450,7 +456,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                                         <input
                                                             value={String(p.defaultValue ?? '')}
                                                             onChange={e => handleUpdateParam(idx, { defaultValue: p.type === 'number' ? (Number(e.target.value) || 0) : e.target.value })}
-                                                            placeholder="default"
+                                                            placeholder={t('scriptEditor.paramDefaultPlaceholder')}
                                                             type={p.type === 'number' ? 'number' : 'text'}
                                                             className="w-24 bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none border border-slate-700"
                                                         />
@@ -458,7 +464,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                                     <input
                                                         value={p.description || ''}
                                                         onChange={e => handleUpdateParam(idx, { description: e.target.value })}
-                                                        placeholder="description (optional)"
+                                                        placeholder={t('scriptEditor.paramDescPlaceholder')}
                                                         className="flex-1 bg-slate-900 text-white px-2 py-1 rounded text-xs outline-none border border-slate-700"
                                                     />
                                                     <button onClick={() => handleRemoveParam(idx)} className="p-1 text-slate-500 hover:text-red-400">
@@ -468,7 +474,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>No parameters. Add one to accept arguments from RunScript / game.runScript.</div>
+                                        <div className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>{t('scriptEditor.noParams')}</div>
                                     )}
                                 </div>
 
@@ -497,7 +503,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                             tabSize: 2,
                                             caretColor: '#58a6ff',
                                         }}
-                                        placeholder="// Write your script here..."
+                                        placeholder={t('scriptEditor.codePlaceholder')}
                                     />
                                     {/* Line numbers overlay */}
                                     <div className="absolute left-0 top-0 bottom-0 w-10 pointer-events-none pt-4 text-right pr-2 font-mono text-xs leading-6" style={{ color: '#484f58', background: '#0d1117' }}>
@@ -513,7 +519,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                     {showApi && (
                                         <div className="w-64 flex-shrink-0 border-l overflow-y-auto" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
                                             <div className="px-2 py-1 text-[11px] font-bold sticky top-0" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-                                                <code>game</code> API — click to insert
+                                                <code>game</code> {t('scriptEditor.apiPanelHeader')}
                                             </div>
                                             {API_REFERENCE.map(group => (
                                                 <div key={group.group} className="py-1">
@@ -537,12 +543,12 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                 {/* Console Output */}
                                 <div className="h-36 border-t flex flex-col" style={{ borderColor: 'var(--border-subtle)' }}>
                                     <div className="flex items-center justify-between px-3 py-1" style={{ background: 'var(--bg-elevated)' }}>
-                                        <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Console</span>
-                                        <button onClick={() => setConsoleOutput([])} className="text-xs text-slate-400 hover:text-white transition-colors">Clear</button>
+                                        <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{t('scriptEditor.consoleLabel')}</span>
+                                        <button onClick={() => setConsoleOutput([])} className="text-xs text-slate-400 hover:text-white transition-colors">{t('scriptEditor.clearConsole')}</button>
                                     </div>
                                     <div className="flex-1 overflow-y-auto p-2 font-mono text-xs" style={{ background: '#0d1117', color: '#8b949e' }}>
                                         {consoleOutput.length === 0 ? (
-                                            <span className="text-slate-600 italic">Script output will appear here...</span>
+                                            <span className="text-slate-600 italic">{t('scriptEditor.consoleEmpty')}</span>
                                         ) : (
                                             consoleOutput.map((line, i) => (
                                                 <div key={i} className={
@@ -563,8 +569,8 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                     <div className="text-4xl mb-3">📜</div>
                                     <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                                         {scripts.length === 0
-                                            ? 'Create your first script to get started'
-                                            : 'Select a script from the sidebar'
+                                            ? t('scriptEditor.emptyStateCreateFirst')
+                                            : t('scriptEditor.emptyStateSelectScript')
                                         }
                                     </p>
                                 </div>

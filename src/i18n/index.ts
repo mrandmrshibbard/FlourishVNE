@@ -27,6 +27,12 @@ import enProperties from './locales/en/properties.json';
 import enAssets from './locales/en/assets.json';
 import enUi from './locales/en/ui.json';
 import enComponents from './locales/en/components.json';
+import enStaging from './locales/en/staging.json';
+import enGameBuilder from './locales/en/gameBuilder.json';
+import enEditorTools from './locales/en/editorTools.json';
+import enTemplates from './locales/en/templates.json';
+import enContentTools from './locales/en/contentTools.json';
+import enContextPanels from './locales/en/contextPanels.json';
 import ptCommon from './locales/pt/common.json';
 import ptHeader from './locales/pt/header.json';
 import ptSettings from './locales/pt/settings.json';
@@ -41,6 +47,12 @@ import ptProperties from './locales/pt/properties.json';
 import ptAssets from './locales/pt/assets.json';
 import ptUi from './locales/pt/ui.json';
 import ptComponents from './locales/pt/components.json';
+import ptStaging from './locales/pt/staging.json';
+import ptGameBuilder from './locales/pt/gameBuilder.json';
+import ptEditorTools from './locales/pt/editorTools.json';
+import ptTemplates from './locales/pt/templates.json';
+import ptContentTools from './locales/pt/contentTools.json';
+import ptContextPanels from './locales/pt/contextPanels.json';
 
 /** Languages offered in the editor's Language selector. `en` is the source of truth. */
 export const SUPPORTED_LANGUAGES = [
@@ -53,8 +65,8 @@ export type LanguageCode = typeof SUPPORTED_LANGUAGES[number]['code'];
 const LANGUAGE_STORAGE_KEY = 'flourish-editor-language';
 
 const resources = {
-    en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub, nav: enNav, scenes: enScenes, characters: enCharacters, variables: enVariables, commonEvents: enCommonEvents, commands: enCommands, properties: enProperties, assets: enAssets, ui: enUi, components: enComponents },
-    pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub, nav: ptNav, scenes: ptScenes, characters: ptCharacters, variables: ptVariables, commonEvents: ptCommonEvents, commands: ptCommands, properties: ptProperties, assets: ptAssets, ui: ptUi, components: ptComponents },
+    en: { common: enCommon, header: enHeader, settings: enSettings, hub: enHub, nav: enNav, scenes: enScenes, characters: enCharacters, variables: enVariables, commonEvents: enCommonEvents, commands: enCommands, properties: enProperties, assets: enAssets, ui: enUi, components: enComponents, staging: enStaging, gameBuilder: enGameBuilder, editorTools: enEditorTools, templates: enTemplates, contentTools: enContentTools, contextPanels: enContextPanels },
+    pt: { common: ptCommon, header: ptHeader, settings: ptSettings, hub: ptHub, nav: ptNav, scenes: ptScenes, characters: ptCharacters, variables: ptVariables, commonEvents: ptCommonEvents, commands: ptCommands, properties: ptProperties, assets: ptAssets, ui: ptUi, components: ptComponents, staging: ptStaging, gameBuilder: ptGameBuilder, editorTools: ptEditorTools, templates: ptTemplates, contentTools: ptContentTools, contextPanels: ptContextPanels },
 } as const;
 
 function getInitialLanguage(): string {
@@ -74,7 +86,7 @@ i18n.use(initReactI18next).init({
     lng: getInitialLanguage(),
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'header', 'settings', 'hub', 'nav', 'scenes', 'characters', 'variables', 'commonEvents', 'commands', 'properties', 'assets', 'ui', 'components'],
+    ns: ['common', 'header', 'settings', 'hub', 'nav', 'scenes', 'characters', 'variables', 'commonEvents', 'commands', 'properties', 'assets', 'ui', 'components', 'staging', 'gameBuilder', 'editorTools', 'templates', 'contentTools', 'contextPanels'],
     interpolation: { escapeValue: false }, // React already escapes
     returnNull: false,
 });

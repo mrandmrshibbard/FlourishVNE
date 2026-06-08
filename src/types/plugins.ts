@@ -107,13 +107,9 @@ export interface PluginHooks {
     onDisable?: (api: PluginAPI) => void | Promise<void>;
     /** Called when the plugin is uninstalled */
     onUninstall?: (api: PluginAPI) => void | Promise<void>;
-    /** Called before a game build starts */
-    onPreBuild?: (api: PluginAPI) => void | Promise<void>;
-    /** Called after a game build completes */
-    onPostBuild?: (api: PluginAPI) => void | Promise<void>;
     /** Called when the game runtime initialises */
     onRuntimeInit?: (api: PluginAPI) => void | Promise<void>;
-    /** Called each frame during gameplay (use sparingly) */
+    /** Called periodically during gameplay (~ every 120ms; use sparingly) with elapsed ms. */
     onRuntimeTick?: (api: PluginAPI, deltaMs: number) => void;
     /** Called when a command is about to execute (can modify/intercept) */
     onBeforeCommand?: (api: PluginAPI, command: any) => any | null;
@@ -217,6 +213,22 @@ export interface CustomCommandParameter {
 /**
  * A custom effect definition provided by a plugin.
  */
+/** Live info passed to a custom effect's per-frame renderer. */
+export interface CustomEffectRenderInfo {
+    /** Canvas width in px (already clamped/sized). */
+    width: number;
+    /** Canvas height in px. */
+    height: number;
+    /** Effect strength, 0..1 (from the SetScreenOverlayEffect command's intensity). */
+    intensity: number;
+    /** Optional author color (hex) for the effect. */
+    color?: string;
+    /** Optional per-effect params from the command. */
+    params?: Record<string, any>;
+    /** Milliseconds elapsed since this effect instance started. */
+    timeMs: number;
+}
+
 export interface CustomEffectDefinition {
     /** Unique effect identifier */
     type: string;
@@ -226,10 +238,14 @@ export interface CustomEffectDefinition {
     description: string;
     /** Effect parameters */
     parameters: CustomCommandParameter[];
-    /** Apply the effect */
-    apply: (params: Record<string, any>, api: PluginAPI) => void | Promise<void>;
-    /** Remove/cleanup the effect */
-    remove: (api: PluginAPI) => void | Promise<void>;
+    /** Per-frame canvas renderer (the visual pipeline). When provided, the effect renders as a
+     *  full-screen overlay each animation frame while active. The canvas is cleared before each
+     *  call. This is the recommended way to implement a visible effect. */
+    render?: (ctx: CanvasRenderingContext2D, info: CustomEffectRenderInfo) => void;
+    /** Optional imperative apply (legacy / side-effect effects). */
+    apply?: (params: Record<string, any>, api: PluginAPI) => void | Promise<void>;
+    /** Optional imperative cleanup. */
+    remove?: (api: PluginAPI) => void | Promise<void>;
 }
 
 /**

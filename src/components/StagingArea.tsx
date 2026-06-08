@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNID, VNPosition, VNTransition, VNPositionPreset } from '../types';
 import type { VNScreenOverlayEffect } from '../types';
 import { VNProject } from '../types/project';
@@ -8,6 +9,7 @@ import {
     PlayMovieCommand, VNCommand, TextInputCommand
 } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
+import ResizableDraggable from './menu-editor/ResizableDraggable';
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { combineConditions } from '../utils/conditionLogic';
@@ -171,6 +173,8 @@ interface StageState {
     } | null;
     flash: { color: string } | null;
     choices: ChoiceOption[] | null;
+    choiceLayout?: 'vertical' | 'horizontal' | 'free';
+    choiceCommandId?: string | null;
     textInput: { prompt: string; placeholder?: string } | null;
     commandIndicator: { type: string; details: string } | null;
     variables: Record<string, string | number | boolean>;
@@ -184,6 +188,7 @@ const StagingArea: React.FC<{
     style?: React.CSSProperties;
 }> = ({ project, activeSceneId, selectedCommandIndex, className, style }) => {
     const { dispatch } = useProject();
+    const { t } = useTranslation('staging');
     const commandRadial = useCommandRadial();
     const [showCommandIndicators, setShowCommandIndicators] = React.useState(true);
     const [showVariableState, setShowVariableState] = React.useState(false);
@@ -297,6 +302,8 @@ const StagingArea: React.FC<{
         let movie: StageState['movie'] = null;
         let flash: StageState['flash'] = null;
         let choices: StageState['choices'] = null;
+        let choiceLayout: StageState['choiceLayout'] = undefined;
+        let choiceCommandId: StageState['choiceCommandId'] = null;
         let textInput: StageState['textInput'] = null;
         let commandIndicator: StageState['commandIndicator'] = null;
         let currentVariables: StageState['variables'] = {};
@@ -482,6 +489,8 @@ const StagingArea: React.FC<{
                     break;
                 case CommandType.Choice:
                     choices = currentCommand.options.filter(opt => evaluateConditions(opt.conditions, currentVariables));
+                    choiceLayout = currentCommand.layout;
+                    choiceCommandId = currentCommand.id;
                     break;
                 case CommandType.PlayMovie: {
                     const movieCmd = currentCommand as PlayMovieCommand;
@@ -525,7 +534,7 @@ const StagingArea: React.FC<{
             }
         }
 
-        setStageState({ backgroundUrl, backgroundIsVideo, backgroundStack, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, textInput, commandIndicator, variables: currentVariables });
+        setStageState({ backgroundUrl, backgroundIsVideo, backgroundStack, characters, textOverlays, imageOverlays, buttonOverlays, hotSpotOverlays, screen, dialogue, movie, flash, choices, choiceLayout, choiceCommandId, textInput, commandIndicator, variables: currentVariables });
 
     }, [activeSceneId, selectedCommandIndex, project]);
 
@@ -987,49 +996,93 @@ const StagingArea: React.FC<{
         );
     };
 
-    const renderChoiceMenu = (choices: NonNullable<StageState['choices']>) => (
-        <div className="absolute z-30 flex flex-col items-center justify-center"
-             style={{
-                 left: `${choiceXPct}%`,
-                 top: `${choiceYPct}%`,
-                 width: `${choiceWPct}%`,
-                 height: `${choiceHPct}%`,
-             }}>
-            {choices.map((choice) => {
-                 const interpolatedText = interpolateVariables(choice.text, currentVariables, project);
-                return (
-                    <div key={choice.id}
-                         className="mb-3"
-                         style={choiceBorderImageUrl 
-                             ? { ...buildImageBackgroundStyle(choiceBorderImageUrl, choiceSizeMode, choiceSlice), padding: s(choiceBorderPadding), width: '100%', borderRadius: s(choiceBorderRadius) }
-                             : { width: '100%' }}>
-                        <button className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
-                                style={{
-                                    borderRadius: s(choiceBorderRadius),
-                                    ...(choiceButtonImageUrl 
-                                        ? { ...buildImageBackgroundStyle(choiceButtonImageUrl, choiceSizeMode, choiceSlice), backgroundColor: choiceBgColor } 
-                                        : !hasCustomChoiceImage 
-                                            ? {
-                                                backgroundColor: choiceBgColor,
-                                                border: '1px solid rgba(148,163,184,0.3)',
-                                                boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
-                                              } 
-                                            : {}),
-                                    padding: `${s(choicePadding)} ${s(choicePadding * 2)}`,
-                                    ...(choiceHeight ? { height: s(choiceHeight) } : {}),
-                                    ...fontSettingsToStyle(project.ui.choiceTextFont),
-                                    textAlign: (project.ui.choiceTextFont?.align || 'center') as any,
-                                    wordBreak: 'break-word' as const,
-                                    overflowWrap: 'break-word' as const,
-                                    cursor: 'pointer',
-                                }}>
-                            <GradientText style={extractTextGradientStyle(project.ui.choiceTextFont)}>{interpolatedText}</GradientText>
-                        </button>
+    const renderChoiceMenu = (choices: NonNullable<StageState['choices']>) => {
+        const layout = stageState.choiceLayout;
+
+        // One preview button, applying per-option appearance overrides (art/color/radius/fontSize/text)
+        // with fallback to the global choice style — mirrors the runtime ChoiceMenu.
+        const resolveOptImg = (a?: { type: 'image' | 'video'; id: VNID } | null): string | null =>
+            (a && a.type !== 'video') ? (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null) : null;
+        const renderBtn = (opt: ChoiceOption, fill: boolean) => {
+            const text = interpolateVariables(opt.text, currentVariables, project);
+            const baseImg = resolveOptImg(opt.image) || choiceButtonImageUrl;
+            const bg = opt.backgroundColor ? hexToRgba(opt.backgroundColor, choiceOpacity) : choiceBgColor;
+            const radius = opt.borderRadius ?? choiceBorderRadius;
+            const hasImg = !!(baseImg || choiceBorderImageUrl);
+            return (
+                <button className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
+                    style={{
+                        borderRadius: s(radius),
+                        ...(fill ? { height: '100%' } : {}),
+                        ...(baseImg
+                            ? { ...buildImageBackgroundStyle(baseImg, choiceSizeMode, choiceSlice), backgroundColor: bg }
+                            : !hasImg
+                                ? { backgroundColor: bg, border: '1px solid rgba(148,163,184,0.3)', boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)' }
+                                : {}),
+                        padding: `${s(choicePadding)} ${s(choicePadding * 2)}`,
+                        ...(!fill && choiceHeight ? { height: s(choiceHeight) } : {}),
+                        ...fontSettingsToStyle(project.ui.choiceTextFont),
+                        ...(opt.fontSize ? { fontSize: s(opt.fontSize) } : {}),
+                        ...(opt.textColor ? { color: opt.textColor } : {}),
+                        textAlign: (project.ui.choiceTextFont?.align || 'center') as any,
+                        wordBreak: 'break-word' as const,
+                        overflowWrap: 'break-word' as const,
+                        cursor: 'pointer',
+                    }}>
+                    <GradientText style={extractTextGradientStyle(project.ui.choiceTextFont)}>{text}</GradientText>
+                </button>
+            );
+        };
+
+        // ── Free layout: each option positioned by x/y/width/height. Drag + resize on the canvas
+        //    when this Choice command is the one being edited (selected). ──
+        if (layout === 'free') {
+            const scene = project.scenes[activeSceneId];
+            const editCmd = (selectedCommandIndex != null && (scene?.commands[selectedCommandIndex] as any)?.type === CommandType.Choice && (scene?.commands[selectedCommandIndex] as any)?.id === stageState.choiceCommandId)
+                ? (scene!.commands[selectedCommandIndex] as ChoiceCommand) : null;
+            const opts = editCmd ? editCmd.options : choices;
+            const updateOpt = (i: number, u: { x: number; y: number; width: number; height: number }) => {
+                if (!editCmd || selectedCommandIndex == null) return;
+                const newOptions = editCmd.options.map((o, idx) => idx === i ? { ...o, x: u.x, y: u.y, width: u.width, height: u.height } : o);
+                dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex, command: { ...editCmd, options: newOptions } } });
+            };
+            return (
+                <div className="absolute inset-0 z-30">
+                    {opts.map((opt, i) => {
+                        const bx = opt.x ?? (34 + i * 2), by = opt.y ?? (40 + i * 12), bw = opt.width ?? 25, bh = opt.height ?? 9;
+                        if (editCmd && stageSize.width > 0) {
+                            return (
+                                <ResizableDraggable key={opt.id} x={bx} y={by} width={bw} height={bh} anchorX={0} anchorY={0}
+                                    parentSize={stageSize} isSelected={true} onSelect={() => {}} onUpdate={u => updateOpt(i, u)}
+                                    label={`Choice ${i + 1}`}>
+                                    {renderBtn(opt, true)}
+                                </ResizableDraggable>
+                            );
+                        }
+                        return <div key={opt.id} style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%` }}>{renderBtn(opt, true)}</div>;
+                    })}
+                </div>
+            );
+        }
+
+        // ── Vertical (default) / Horizontal stack ──
+        const horizontal = layout === 'horizontal';
+        return (
+            <div className={`absolute z-30 flex ${horizontal ? 'flex-row flex-wrap gap-3' : 'flex-col'} items-center justify-center`}
+                 style={{ left: `${choiceXPct}%`, top: `${choiceYPct}%`, width: `${choiceWPct}%`, height: `${choiceHPct}%` }}>
+                {choices.map((opt) => (
+                    <div key={opt.id}
+                         className={horizontal ? '' : 'mb-3'}
+                         style={{
+                             ...(horizontal ? {} : { width: '100%' }),
+                             ...(choiceBorderImageUrl ? { ...buildImageBackgroundStyle(choiceBorderImageUrl, choiceSizeMode, choiceSlice), padding: s(choiceBorderPadding), borderRadius: s(choiceBorderRadius) } : {}),
+                         }}>
+                        {renderBtn(opt, false)}
                     </div>
-                )
-            })}
-        </div>
-    );
+                ))}
+            </div>
+        );
+    };
 
     const renderInputBox = (ti: NonNullable<StageState['textInput']>) => {
         const promptStyle: React.CSSProperties = project.ui.inputPromptFont
@@ -1086,11 +1139,11 @@ const StagingArea: React.FC<{
                                      border: '1px solid rgba(148,163,184,0.3)',
                                      borderRadius: s(Math.max(4, inputBorderRadius - 4)),
                                  }}>
-                                <span style={{ opacity: 0.4 }}>{ti.placeholder || 'Type here…'}</span>
+                                <span style={{ opacity: 0.4 }}>{ti.placeholder || t('inputPlaceholder')}</span>
                             </div>
                             <div className="mt-3 text-center">
                                 <span className="inline-block px-4 py-1 rounded bg-sky-600/80" style={submitStyle}>
-                                    <GradientText style={extractTextGradientStyle(project.ui.inputSubmitFont)}>Submit</GradientText>
+                                    <GradientText style={extractTextGradientStyle(project.ui.inputSubmitFont)}>{t('submitButton')}</GradientText>
                                 </span>
                             </div>
                         </div>
@@ -1103,7 +1156,7 @@ const StagingArea: React.FC<{
     const renderQuickMenu = () => {
         if (qmPosition === 'hidden') return null;
         const qmBg = hexToRgba(qmColor, qmOpacity);
-        const labels = ['Back', 'Log', 'Auto', 'Skip'];
+        const labels = [t('quickMenuBack'), t('quickMenuLog'), t('quickMenuAuto'), t('quickMenuSkip')];
         return (
             <div className="absolute z-25 flex items-center justify-center"
                  style={{
@@ -1145,8 +1198,8 @@ const StagingArea: React.FC<{
     };
 
     return (
-        <Panel 
-            title="Staging Area" 
+        <Panel
+            title={t('panelTitle')}
             className={className} 
             style={{ 
                 height: style?.height || 'var(--canvas-height)',
@@ -1233,7 +1286,7 @@ const StagingArea: React.FC<{
                                 {cmdId && (
                                     <div
                                         onMouseDown={e => handleOverlayResizeMouseDown(e, 'movie', cmdId, m.width, m.height)}
-                                        title="Drag to resize"
+                                        title={t('dragToResize')}
                                         style={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff', boxShadow: '0 0 3px rgba(0,0,0,0.6)', cursor: 'nwse-resize', zIndex: 60 }}
                                     />
                                 )}
@@ -1264,7 +1317,7 @@ const StagingArea: React.FC<{
                 {stageState.movie && !stageState.movie.videoUrl && (
                     <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center text-white bg-black/60">
                         <FilmIcon className="w-12 h-12 opacity-50" />
-                        <p className="text-sm opacity-70 mt-2">Video: {stageState.movie.videoName}</p>
+                        <p className="text-sm opacity-70 mt-2">{t('videoLabel', { name: stageState.movie.videoName })}</p>
                     </div>
                 )}
 
@@ -1316,7 +1369,7 @@ const StagingArea: React.FC<{
                             {char.sourceCommandId && (
                                 <div
                                     onMouseDown={e => handleOverlayResizeMouseDown(e, 'character', char.charId, char.scale ?? 1, char.scale ?? 1, char.sourceCommandId)}
-                                    title="Drag to resize (scale)"
+                                    title={t('dragToResizeScale')}
                                     style={{
                                         position: 'absolute', right: 0, bottom: 0, width: 14, height: 14,
                                         borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff',
@@ -1447,7 +1500,7 @@ const StagingArea: React.FC<{
                                 {/* Resize handle (bottom-right corner) — drag to scale the button. */}
                                 <div
                                     onMouseDown={e => handleOverlayResizeMouseDown(e, 'button', btn.id, btn.width, btn.height)}
-                                    title="Drag to resize"
+                                    title={t('dragToResize')}
                                     style={{
                                         position: 'absolute',
                                         right: -6,
@@ -1565,7 +1618,7 @@ const StagingArea: React.FC<{
                 
                 {showVariableState && (
                     <div className="absolute top-2 left-2 bg-black/70 p-2 rounded-lg text-xs max-w-xs max-h-48 overflow-y-auto z-50">
-                        <h4 className="font-bold mb-1">Variable State</h4>
+                        <h4 className="font-bold mb-1">{t('variableStateHeading')}</h4>
                         <ul>
                             {Object.entries(currentVariables).map(([id, value]) => {
                                 const varName = project.variables[id]?.name || id;
@@ -1583,7 +1636,7 @@ const StagingArea: React.FC<{
                                 ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
                                 : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
                         }`}
-                        title={showCommandIndicators ? 'Hide Event Indicators' : 'Show Event Indicators'}
+                        title={showCommandIndicators ? t('hideEventIndicators') : t('showEventIndicators')}
                     >
                         {showCommandIndicators ? <EyeIcon className="w-4 h-4" /> : <EyeSlashIcon className="w-4 h-4" />}
                     </button>
@@ -1594,7 +1647,7 @@ const StagingArea: React.FC<{
                                 ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
                                 : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
                         }`}
-                        title={showVariableState ? 'Hide Variable State' : 'Show Variable State'}
+                        title={showVariableState ? t('hideVariableState') : t('showVariableState')}
                     >
                         <VariablesIcon className="w-4 h-4" />
                     </button>

@@ -428,37 +428,14 @@ const ActionEditor: React.FC<{
             case UIActionType.CallCommonEvent: {
                 const ccAction = action as CallCommonEventAction;
                 const events = Object.values(project.commonEvents || {}) as VNCommonEvent[];
-                const selected = ccAction.commonEventId ? (project.commonEvents || {})[ccAction.commonEventId] : undefined;
                 return (
                     <div className="space-y-2 p-2 border border-slate-700 rounded">
                         <FormField label="Common Event">
-                            <Select value={ccAction.commonEventId || ''} onChange={e => onActionChange({ ...ccAction, commonEventId: e.target.value as VNID, arguments: undefined })}>
+                            <Select value={ccAction.commonEventId || ''} onChange={e => onActionChange({ ...ccAction, commonEventId: e.target.value as VNID })}>
                                 <option value="">Select a common event…</option>
                                 {events.map(ce => <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? ' (disabled)' : ''}</option>)}
                             </Select>
                         </FormField>
-                        {selected && selected.parameters && selected.parameters.length > 0 && (
-                            <div>
-                                <p className="text-xs text-[var(--text-secondary)] mb-1">Arguments</p>
-                                {selected.parameters.map(p => {
-                                    const argVal = ccAction.arguments?.[p.id];
-                                    const current = argVal !== undefined ? argVal : p.defaultValue;
-                                    const setArg = (v: string | number | boolean) => onActionChange({ ...ccAction, arguments: { ...(ccAction.arguments || {}), [p.id]: v } });
-                                    return (
-                                        <FormField key={p.id} label={`${p.name} (${p.type})`}>
-                                            {p.type === 'boolean' ? (
-                                                <Select value={String(current)} onChange={e => setArg(e.target.value === 'true')}>
-                                                    <option value="false">false</option>
-                                                    <option value="true">true</option>
-                                                </Select>
-                                            ) : (
-                                                <TextInput type={p.type === 'number' ? 'number' : 'text'} value={String(current ?? '')} onChange={e => setArg(p.type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} />
-                                            )}
-                                        </FormField>
-                                    );
-                                })}
-                            </div>
-                        )}
                     </div>
                 );
             }

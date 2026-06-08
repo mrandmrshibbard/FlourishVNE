@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Template, TemplateConfig as TConfig, TemplateGenerationResult } from '../../types/template';
 import { VNUIScreen } from '../../features/ui/types';
 import { VNID } from '../../types';
@@ -41,6 +42,8 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
   showMetadata = true,
   onInteraction
 }) => {
+  const { t } = useTranslation('templates');
+
   // State
   const [viewMode, setViewMode] = useState<ViewMode>('desktop');
   const [generatedScreens, setGeneratedScreens] = useState<VNUIScreen[]>([]);
@@ -66,7 +69,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       setActiveScreenIndex(0);
     } catch (error) {
       console.error('Preview generation error:', error);
-      setGenerationError(error instanceof Error ? error.message : 'Failed to generate preview');
+      setGenerationError(error instanceof Error ? error.message : t('preview.generationError'));
     } finally {
       setIsGenerating(false);
     }
@@ -143,26 +146,26 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       <div className="template-preview__toolbar">
         {/* View mode switcher */}
         <div className="preview-toolbar__section">
-          <label className="toolbar-label">View:</label>
+          <label className="toolbar-label">{t('preview.viewLabel')}</label>
           <div className="view-mode-buttons">
             <button
               className={`view-mode-btn ${viewMode === 'desktop' ? 'active' : ''}`}
               onClick={() => setViewMode('desktop')}
-              title="Desktop view"
+              title={t('preview.desktopView')}
             >
               🖥️
             </button>
             <button
               className={`view-mode-btn ${viewMode === 'tablet' ? 'active' : ''}`}
               onClick={() => setViewMode('tablet')}
-              title="Tablet view"
+              title={t('preview.tabletView')}
             >
               📱
             </button>
             <button
               className={`view-mode-btn ${viewMode === 'mobile' ? 'active' : ''}`}
               onClick={() => setViewMode('mobile')}
-              title="Mobile view"
+              title={t('preview.mobileView')}
             >
               📱
             </button>
@@ -171,7 +174,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
 
         {/* Zoom controls */}
         <div className="preview-toolbar__section">
-          <label className="toolbar-label">Zoom:</label>
+          <label className="toolbar-label">{t('preview.zoomLabel')}</label>
           <button
             className="zoom-btn"
             onClick={() => setZoom(Math.max(25, zoom - 25))}
@@ -191,7 +194,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
             className="zoom-btn"
             onClick={() => setZoom(100)}
           >
-            Reset
+            {t('preview.zoomReset')}
           </button>
         </div>
 
@@ -203,14 +206,14 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
               checked={showGrid}
               onChange={(e) => setShowGrid(e.target.checked)}
             />
-            <span>Grid</span>
+            <span>{t('preview.grid')}</span>
           </label>
         </div>
 
         {/* Screen navigation */}
         {generatedScreens.length > 1 && (
           <div className="preview-toolbar__section">
-            <label className="toolbar-label">Screen:</label>
+            <label className="toolbar-label">{t('preview.screenLabel')}</label>
             <button
               className="nav-btn"
               onClick={() => navigateToScreen(activeScreenIndex - 1)}
@@ -236,9 +239,9 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
           <button
             className="export-btn"
             onClick={exportAsImage}
-            title="Export as image"
+            title={t('preview.exportTitle')}
           >
-            📷 Export
+            📷 {t('preview.exportButton')}
           </button>
         </div>
       </div>
@@ -248,7 +251,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
         {isGenerating && (
           <div className="preview-loading">
             <div className="spinner" />
-            <p>Generating preview...</p>
+            <p>{t('preview.generating')}</p>
           </div>
         )}
 
@@ -256,7 +259,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
           <div className="preview-error">
             <span className="error-icon">⚠️</span>
             <p>{generationError}</p>
-            <button onClick={generatePreview}>Retry</button>
+            <button onClick={generatePreview}>{t('preview.retry')}</button>
           </div>
         )}
 
@@ -297,7 +300,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
                 <div className="screen-info">
                   <strong>{activeScreen.name}</strong>
                   <span className="element-count">
-                    {Object.keys(activeScreen.elements).length} elements
+                    {t('preview.elementCount', { count: Object.keys(activeScreen.elements).length })}
                   </span>
                 </div>
               </div>
@@ -307,8 +310,8 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
 
         {!isGenerating && !generationError && generatedScreens.length === 0 && (
           <div className="preview-empty">
-            <p>No preview available</p>
-            <small>Configure template settings to see preview</small>
+            <p>{t('preview.noPreview')}</p>
+            <small>{t('preview.noPreviewHint')}</small>
           </div>
         )}
       </div>
@@ -316,7 +319,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       {/* Code view */}
       {showCode && activeScreen && (
         <div className="template-preview__code">
-          <h4>Generated Code</h4>
+          <h4>{t('preview.generatedCode')}</h4>
           <pre className="code-block">
             {JSON.stringify(activeScreen, null, 2)}
           </pre>
@@ -327,26 +330,26 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       {showMetadata && template.preview && (
         <div className="template-preview__metadata">
           <div className="metadata-section">
-            <h4>Template Info</h4>
+            <h4>{t('preview.templateInfo')}</h4>
             <div className="metadata-item">
-              <label>Complexity:</label>
+              <label>{t('preview.complexity')}</label>
               <span className={`complexity-badge complexity--${template.preview.complexity}`}>
                 {template.preview.complexity}
               </span>
             </div>
             <div className="metadata-item">
-              <label>Setup Time:</label>
-              <span>{template.preview.estimatedTime} minutes</span>
+              <label>{t('preview.setupTime')}</label>
+              <span>{t('preview.setupTimeMinutes', { minutes: template.preview.estimatedTime })}</span>
             </div>
             <div className="metadata-item">
-              <label>Features:</label>
+              <label>{t('preview.featuresLabel')}</label>
               <ul className="feature-list">
                 {template.preview.features.slice(0, 5).map((feature, idx) => (
                   <li key={idx}>{feature}</li>
                 ))}
                 {template.preview.features.length > 5 && (
                   <li className="feature-more">
-                    +{template.preview.features.length - 5} more
+                    {t('preview.featuresMore', { count: template.preview.features.length - 5 })}
                   </li>
                 )}
               </ul>
@@ -390,6 +393,8 @@ const PreviewElement: React.FC<PreviewElementProps> = ({
   interactive,
   onInteract
 }) => {
+  const { t } = useTranslation('templates');
+
   const handleClick = useCallback(() => {
     if (interactive) {
       onInteract('click');
@@ -409,7 +414,7 @@ const PreviewElement: React.FC<PreviewElementProps> = ({
     >
       {/* Element content placeholder */}
       <div className="element-placeholder">
-        Element
+        {t('preview.elementPlaceholder')}
       </div>
     </div>
   );

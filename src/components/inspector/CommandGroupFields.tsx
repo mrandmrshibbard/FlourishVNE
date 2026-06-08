@@ -28,6 +28,8 @@ import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEff
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspectorGroups';
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
+import { pluginManager } from '../../features/plugins/PluginManagerService';
+import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './ChoiceAppearanceFields';
 
 export type UpdateCommand = (updates: Partial<VNCommand>) => void;
 
@@ -823,7 +825,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
         case CommandType.SetScreenOverlayEffect: {
             const effectType = cmd.effectType as string;
             const intensity = typeof cmd.intensity === 'number' ? cmd.intensity : 0;
-            const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh'].includes(effectType);
+            const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh'].includes(effectType) || !!pluginManager.getEffect(effectType);
             const defaultColors: Record<string, string> = { sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF' };
             const effectColor = cmd.color || defaultColors[effectType] || '#FFFFFF';
             const overlayDuration = typeof cmd.duration === 'number' ? cmd.duration : 0;
@@ -837,6 +839,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         <option value="shimmer">{t('screen.effects.shimmer')}</option>
                         <option value="rain">{t('screen.effects.rain')}</option>
                         <option value="snowAsh">{t('screen.effects.snowAsh')}</option>
+                        {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
+                            <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
+                        ))}
                     </Select>
                 </FormField>
                 <FormField label={t('screen.intensityPct', { value: Math.round(intensity * 100) })}>
@@ -1551,27 +1556,21 @@ const ChoiceGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand
         updateCommand({ options: [...cmd.options, { id: genOptId(), text: 'New Option', actions: [{ type: UIActionType.JumpToScene, targetSceneId: firstSceneId || '' }] }] } as any);
     };
     const removeOption = (index: number) => updateCommand({ options: cmd.options.filter((_: any, i: number) => i !== index) } as any);
-    const updateAction = (oi: number, ai: number, updated: any) => {
+    // Choice options carry the FULL VNUIAction set (same as buttons) — edited via the shared ActionEditor.
+    const setAction = (oi: number, ai: number, newAction: VNUIAction) => {
         const opt = cmd.options[oi];
         const newActions = [...(opt.actions || [])];
-        newActions[ai] = { ...newActions[ai], ...updated };
+        newActions[ai] = newAction;
         updateOption(oi, { actions: newActions });
     };
-    const addAction = (oi: number, type: UIActionType.JumpToScene | UIActionType.SetVariable) => {
+    const addAnyAction = (oi: number) => {
         const opt = cmd.options[oi];
-        let na: any;
-        if (type === UIActionType.JumpToScene) na = { type: UIActionType.JumpToScene, targetSceneId: project.startSceneId };
-        else {
-            const firstVarId = Object.keys(project.variables)[0] || '';
-            const fv = project.variables[firstVarId];
-            const dv = fv ? (fv.type === 'boolean' ? false : fv.type === 'number' ? 0 : '') : '';
-            na = { type: UIActionType.SetVariable, variableId: firstVarId, operator: 'set', value: dv };
-        }
-        updateOption(oi, { actions: [...(opt.actions || []), na] });
+        updateOption(oi, { actions: [...(opt.actions || []), { type: UIActionType.None }] });
     };
     const removeAction = (oi: number, ai: number) => updateOption(oi, { actions: (cmd.options[oi].actions || []).filter((_: any, i: number) => i !== ai) });
 
     return <div>
+        <ChoiceLayoutSelect layout={cmd.layout} onChange={l => updateCommand({ layout: l } as any)} />
         {cmd.options.map((opt: any, i: number) => {
             const mo = ('targetSceneId' in opt && !('actions' in opt))
                 ? { id: opt.id || genOptId(), text: opt.text, conditions: opt.conditions, actions: [{ type: UIActionType.JumpToScene, targetSceneId: opt.targetSceneId }] }
@@ -1586,67 +1585,17 @@ const ChoiceGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand
                     <div className="space-y-2 pl-2 border-l-2 border-[var(--border-default)]">
                         {(mo.actions || []).map((action: any, ai: number) => (
                             <div key={ai} className="p-1 bg-[var(--bg-primary)] rounded-md">
-                                {action.type === UIActionType.JumpToScene ? (
-                                    <FormField label={t('choice.jumpToScene')}>
-                                        <div className="flex items-center gap-1">
-                                            <Select value={action.targetSceneId} onChange={e => updateAction(i, ai, { targetSceneId: e.target.value })}>
-                                                {Object.values(project.scenes).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                            </Select>
-                                            <button onClick={() => removeAction(i, ai)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
-                                        </div>
-                                    </FormField>
-                                ) : action.type === UIActionType.SetVariable ? (
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between items-center">
-                                            <p className="text-xs font-semibold">{t('choice.setVariable')}</p>
-                                            <button onClick={() => removeAction(i, ai)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
-                                        </div>
-                                        {(() => {
-                                            const variable = project.variables[action.variableId];
-                                            return <div className="space-y-2">
-                                                <FormField label={t('vars.variable')}>
-                                                    <Select value={action.variableId} onChange={e => {
-                                                        const nv = project.variables[e.target.value];
-                                                        let op = action.operator, val = action.value;
-                                                        if (nv?.type !== 'number' && (op === 'add' || op === 'subtract')) op = 'set';
-                                                        if (nv) val = nv.type === 'boolean' ? false : nv.type === 'number' ? 0 : '';
-                                                        updateAction(i, ai, { variableId: e.target.value, operator: op, value: val });
-                                                    }}>
-                                                        {Object.values(project.variables).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                                    </Select>
-                                                </FormField>
-                                                <div className="grid grid-cols-2 gap-1">
-                                                    <FormField label={t('vars.operator')}>
-                                                        <Select value={action.operator} onChange={e => updateAction(i, ai, { operator: e.target.value })}>
-                                                            <option value="set">Set (=)</option>
-                                                            {variable?.type === 'number' && <option value="add">Add (+)</option>}
-                                                            {variable?.type === 'number' && <option value="subtract">Subtract (-)</option>}
-                                                        </Select>
-                                                    </FormField>
-                                                    <FormField label={t('vars.value')}>
-                                                        {variable?.type === 'boolean' ? (
-                                                            <Select value={String(action.value)} onChange={e => updateAction(i, ai, { value: e.target.value === 'true' })}>
-                                                                <option value="true">{t('vars.true')}</option>
-                                                                <option value="false">{t('vars.false')}</option>
-                                                            </Select>
-                                                        ) : variable?.type === 'number' ? (
-                                                            <TextInput type="number" value={String(action.value)} onChange={e => updateAction(i, ai, { value: parseFloat(e.target.value) || 0 })} />
-                                                        ) : (
-                                                            <TextInput value={String(action.value)} onChange={e => updateAction(i, ai, { value: e.target.value })} />
-                                                        )}
-                                                    </FormField>
-                                                </div>
-                                            </div>;
-                                        })()}
-                                    </div>
-                                ) : null}
+                                <div className="flex justify-end -mb-1">
+                                    <button onClick={() => removeAction(i, ai)} className="text-red-400 hover:text-red-300 p-0.5" title={t('choice.removeOption')}><XMarkIcon className="w-3.5 h-3.5" /></button>
+                                </div>
+                                <ActionEditor action={action} onActionChange={(na) => setAction(i, ai, na)} />
                             </div>
                         ))}
                         <div className="flex gap-1 pt-1">
-                            <button onClick={() => addAction(i, UIActionType.JumpToScene)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">{t('choice.addJump')}</button>
-                            <button onClick={() => addAction(i, UIActionType.SetVariable)} disabled={Object.keys(project.variables).length === 0} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed">{t('choice.addSetVariable')}</button>
+                            <button onClick={() => addAnyAction(i)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded flex items-center gap-1"><PlusIcon className="w-3 h-3" />{t('choice.addAction')}</button>
                         </div>
                     </div>
+                    <ChoiceOptionAppearance option={mo} layout={cmd.layout} project={project} onChange={patch => updateOption(i, patch)} />
                     <button onClick={() => removeOption(i)} className="text-red-400 hover:text-red-300 text-xs mt-3">{t('choice.removeOption')}</button>
                 </div>
             );
@@ -1753,7 +1702,7 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
             const selectedCE: any = cmd.commonEventId ? (project.commonEvents || {})[cmd.commonEventId] : null;
             return <>
                 <FormField label={t('callCommonEvent.commonEvent')}>
-                    <Select value={cmd.commonEventId || ''} onChange={e => updateCommand({ commonEventId: e.target.value, arguments: {} } as any)}>
+                    <Select value={cmd.commonEventId || ''} onChange={e => updateCommand({ commonEventId: e.target.value } as any)}>
                         <option value="">{t('callCommonEvent.selectCommonEvent')}</option>
                         {commonEvents.map((ce: any) => <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? t('callCommonEvent.disabled') : ''}</option>)}
                     </Select>
@@ -1764,22 +1713,6 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
                     <p><strong>{t('callCommonEvent.commands')}</strong> {selectedCE.commands?.length || 0}</p>
                     {selectedCE.description && <p className="mt-0.5">{selectedCE.description}</p>}
                 </div>}
-                {selectedCE && selectedCE.parameters && selectedCE.parameters.length > 0 && <>
-                    <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('callCommonEvent.arguments')}</h4>
-                    <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>{t('callCommonEvent.argumentsHint')}</p>
-                    {selectedCE.parameters.map((param: any) => (
-                        <FormField key={param.id} label={param.name}>
-                            {param.type === 'boolean' ? (
-                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!((cmd.arguments || {})[param.id] ?? param.defaultValue)} onChange={e => updateCommand({ arguments: { ...(cmd.arguments || {}), [param.id]: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-secondary)]">{param.description || param.name}</span></label>
-                            ) : param.type === 'number' ? (
-                                <TextInput type="number" value={Number((cmd.arguments || {})[param.id] ?? param.defaultValue)} onChange={e => updateCommand({ arguments: { ...(cmd.arguments || {}), [param.id]: parseFloat(e.target.value) || 0 } } as any)} />
-                            ) : (
-                                <TextInput value={String((cmd.arguments || {})[param.id] ?? param.defaultValue)} onChange={e => updateCommand({ arguments: { ...(cmd.arguments || {}), [param.id]: e.target.value } } as any)} placeholder={param.description || t('callCommonEvent.valueFor', { name: param.name })} />
-                            )}
-                        </FormField>
-                    ))}
-                </>}
             </>;
         }
         default:

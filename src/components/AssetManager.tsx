@@ -228,12 +228,14 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
 
     // Edit state
     const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [renamingFolderPath, setRenamingFolderPath] = useState<string | null>(null);
     const [creatingFolder, setCreatingFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
 
     // Modal state
     const [showFolderSelector, setShowFolderSelector] = useState(false);
     const [moveAssetData, setMoveAssetData] = useState<{ id: string; name: string; type: AssetType } | null>(null);
+    const [moveMultiple, setMoveMultiple] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'asset' | 'folder' | 'multi'; id?: string; path?: string; name: string; count?: number } | null>(null);
 
@@ -431,6 +433,47 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
     const handleMoveAsset = useCallback((assetId: string, newPath: string) => {
         dispatch({ type: 'UPDATE_ASSET', payload: { assetType: selectedCategory, assetId, updates: { path: newPath } } });
     }, [dispatch, selectedCategory]);
+
+    /** Moves the dragged asset to a folder; if it's part of the current multi-selection,
+     *  the whole selection moves with it (so dragging any selected card moves them all). */
+    const handleMoveDragged = useCallback((draggedId: string, newPath: string) => {
+        const ids = selectedAssetIds.has(draggedId) && selectedAssetIds.size > 1
+            ? Array.from(selectedAssetIds)
+            : [draggedId];
+        ids.forEach(id => handleMoveAsset(id, newPath));
+    }, [selectedAssetIds, handleMoveAsset]);
+
+    /** Renames a folder by rewriting the path prefix on every asset inside it
+     *  (including the placeholder marker and any nested subfolders). */
+    const handleRenameFolder = useCallback((folderPath: string, rawName: string) => {
+        setRenamingFolderPath(null);
+        const newName = rawName.trim();
+        if (!newName || /[\/\\]/.test(newName)) return;
+        const parts = folderPath.split('/');
+        parts.pop();
+        const parentPath = parts.join('/');
+        const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+        if (newPath === folderPath) return;
+        // Block renaming onto an existing sibling folder.
+        const conflict = allAssets.some((a: any) => {
+            const p = a.path || '';
+            if (p === folderPath || p.startsWith(folderPath + '/')) return false; // part of the folder being renamed
+            return p === newPath || p.startsWith(newPath + '/');
+        });
+        if (conflict) { toast.error(t('toastFolderExists', { name: newName })); return; }
+        allAssets.forEach((a: any) => {
+            const p = a.path || '';
+            if (p === folderPath) {
+                dispatch({ type: 'UPDATE_ASSET', payload: { assetType: selectedCategory, assetId: a.id, updates: { path: newPath } } });
+            } else if (p.startsWith(folderPath + '/')) {
+                dispatch({ type: 'UPDATE_ASSET', payload: { assetType: selectedCategory, assetId: a.id, updates: { path: newPath + p.slice(folderPath.length) } } });
+            }
+        });
+        // Keep the breadcrumb valid if we're viewing inside the renamed folder.
+        if (currentPath === folderPath || currentPath.startsWith(folderPath + '/')) {
+            setCurrentPath(newPath + currentPath.slice(folderPath.length));
+        }
+    }, [allAssets, currentPath, selectedCategory, dispatch, toast, t]);
 
     const handleCreateFolder = useCallback(() => {
         if (!newFolderName.trim() || /[\/\\]/.test(newFolderName)) { setCreatingFolder(false); setNewFolderName(''); return; }
@@ -723,9 +766,12 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                                 {currentDirectory.children.map(folder => (
                                     <FolderCard
                                         key={folder.path} folder={folder} viewMode={viewMode}
+                                        isRenaming={renamingFolderPath === folder.path}
                                         onClick={() => navigateToPath(folder.path)}
+                                        onStartRenaming={() => setRenamingFolderPath(folder.path)}
+                                        onCommitRename={name => handleRenameFolder(folder.path, name)}
                                         onDelete={() => { setDeleteTarget({ type: 'folder', path: folder.path, name: folder.name }); setShowDeleteConfirm(true); }}
-                                        onDrop={path => { if (draggedAsset) handleMoveAsset(draggedAsset.id, path); }}
+                                        onDrop={path => { if (draggedAsset) handleMoveDragged(draggedAsset.id, path); }}
                                     />
                                 ))}
                             </div>
@@ -797,6 +843,9 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                             <div className="text-3xl font-bold text-sky-400">{selectedAssetIds.size}</div>
                             <div className="text-sm text-[var(--text-secondary)] mt-1">{t('assetsSelected')}</div>
                         </div>
+                        <button onClick={() => { setMoveMultiple(true); setShowFolderSelector(true); }} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 rounded-lg font-medium transition-all border border-sky-500/30">
+                            <FolderIcon className="w-4 h-4" /> {t('moveSelected')}
+                        </button>
                         <button onClick={handleDeleteSelected} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-medium transition-all border border-red-500/30">
                             <TrashIcon className="w-4 h-4" /> {t('deleteSelected')}
                         </button>
@@ -809,9 +858,15 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
 
             {/* ── Modals ── */}
             <FolderSelectorModal
-                isOpen={showFolderSelector} assetName={moveAssetData?.name || ''} allAssets={allAssets}
-                onSelect={path => { if (moveAssetData) handleMoveAsset(moveAssetData.id, path); setShowFolderSelector(false); setMoveAssetData(null); }}
-                onClose={() => { setShowFolderSelector(false); setMoveAssetData(null); }}
+                isOpen={showFolderSelector}
+                assetName={moveMultiple ? t('selected', { count: selectedAssetIds.size }) : (moveAssetData?.name || '')}
+                allAssets={allAssets}
+                onSelect={path => {
+                    if (moveMultiple) { selectedAssetIds.forEach(id => handleMoveAsset(id, path)); setSelectedAssetIds(new Set()); }
+                    else if (moveAssetData) handleMoveAsset(moveAssetData.id, path);
+                    setShowFolderSelector(false); setMoveAssetData(null); setMoveMultiple(false);
+                }}
+                onClose={() => { setShowFolderSelector(false); setMoveAssetData(null); setMoveMultiple(false); }}
             />
             <ConfirmDialog
                 isOpen={showDeleteConfirm}
@@ -872,7 +927,7 @@ const AssetCard: React.FC<{
     if (viewMode === 'grid') {
         return (
             <div
-                draggable onDragStart={onDragStart} onDragEnd={onDragEnd}
+                draggable={!isRenaming} onDragStart={onDragStart} onDragEnd={onDragEnd}
                 onClick={onSelect} onDoubleClick={e => { e.stopPropagation(); onStartRenaming(); }}
                 className={`group relative bg-[var(--bg-primary)] rounded-lg overflow-hidden cursor-pointer border transition-all hover:shadow-lg ${
                     isSelected ? 'border-sky-500 ring-2 ring-sky-500/30 shadow-sky-500/10' : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]'
@@ -921,7 +976,7 @@ const AssetCard: React.FC<{
     // ── List View ──
     return (
         <div
-            draggable onDragStart={onDragStart} onDragEnd={onDragEnd}
+            draggable={!isRenaming} onDragStart={onDragStart} onDragEnd={onDragEnd}
             onClick={onSelect} onDoubleClick={e => { e.stopPropagation(); onStartRenaming(); }}
             className={`group flex items-center gap-3 bg-[var(--bg-primary)] rounded-lg p-2 cursor-pointer border transition-all ${
                 isSelected ? 'border-sky-500 ring-2 ring-sky-500/30' : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]'
@@ -976,13 +1031,20 @@ const ActionBtn: React.FC<{ icon: React.ReactNode; title: string; onClick: (e?: 
 const FolderCard: React.FC<{
     folder: DirectoryNode;
     viewMode: ViewMode;
+    isRenaming: boolean;
     onClick: () => void;
+    onStartRenaming: () => void;
+    onCommitRename: (name: string) => void;
     onDelete: () => void;
     onDrop: (path: string) => void;
-}> = React.memo(({ folder, viewMode, onClick, onDelete, onDrop }) => {
+}> = React.memo(({ folder, viewMode, isRenaming, onClick, onStartRenaming, onCommitRename, onDelete, onDrop }) => {
     const { t } = useTranslation('assets');
     const [isHovering, setIsHovering] = useState(false);
+    const { inputProps: renameInputProps } = useInlineRename(folder.name, onCommitRename);
     const totalAssets = folder.assets.length + folder.children.reduce((acc, c) => acc + c.assets.length, 0);
+
+    // Single-click navigates into the folder, so only navigate when not renaming.
+    const handleClick = () => { if (!isRenaming) onClick(); };
 
     const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsHovering(true); };
     const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsHovering(false); };
@@ -992,19 +1054,31 @@ const FolderCard: React.FC<{
         return (
             <div
                 onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-                onClick={onClick}
+                onClick={handleClick} onDoubleClick={e => { e.stopPropagation(); onStartRenaming(); }}
                 className={`group relative bg-[var(--bg-primary)] rounded-lg p-3 cursor-pointer border transition-all ${
                     isHovering ? 'border-sky-500 bg-sky-500/10 ring-2 ring-sky-500/50' : 'border-[var(--border-subtle)] hover:border-sky-500/50'
                 }`}
             >
                 <div className="flex flex-col items-center text-center">
                     <FolderIcon className={`w-10 h-10 mb-1.5 ${isHovering ? 'text-sky-400' : 'text-yellow-500'}`} />
-                    <div className="font-medium text-white text-xs truncate w-full">{folder.name}</div>
+                    {isRenaming ? (
+                        <input type="text" {...renameInputProps}
+                            className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-xs outline-none ring-2 ring-sky-500 text-center" />
+                    ) : (
+                        <div className="font-medium text-white text-xs truncate w-full">{folder.name}</div>
+                    )}
                     <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">{t('items', { count: totalAssets })}</div>
                 </div>
-                <button onClick={e => { e.stopPropagation(); onDelete(); }} className="absolute top-1.5 right-1.5 p-1 rounded bg-[var(--bg-primary)]/80 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('deleteFolderAction')}>
-                    <TrashIcon className="w-3 h-3" />
-                </button>
+                {!isRenaming && (
+                    <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={e => { e.stopPropagation(); onStartRenaming(); }} className="p-1 rounded bg-[var(--bg-primary)]/80 text-[var(--text-secondary)] hover:text-sky-400 transition-colors" title={t('rename')}>
+                            <PencilIcon className="w-3 h-3" />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); onDelete(); }} className="p-1 rounded bg-[var(--bg-primary)]/80 text-[var(--text-secondary)] hover:text-red-400 transition-colors" title={t('deleteFolderAction')}>
+                            <TrashIcon className="w-3 h-3" />
+                        </button>
+                    </div>
+                )}
             </div>
         );
     }
@@ -1012,20 +1086,34 @@ const FolderCard: React.FC<{
     return (
         <div
             onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-            onClick={onClick}
+            onClick={handleClick} onDoubleClick={e => { e.stopPropagation(); onStartRenaming(); }}
             className={`group flex items-center gap-3 bg-[var(--bg-primary)] rounded-lg p-2 cursor-pointer border transition-all ${
                 isHovering ? 'border-sky-500 bg-sky-500/10 ring-2 ring-sky-500/50' : 'border-[var(--border-subtle)] hover:border-sky-500/50'
             }`}
         >
             <FolderIcon className={`w-8 h-8 flex-shrink-0 ${isHovering ? 'text-sky-400' : 'text-yellow-500'}`} />
             <div className="flex-1 min-w-0">
-                <div className="font-medium text-white text-sm truncate">{folder.name}</div>
-                <div className="text-xs text-[var(--text-secondary)]">{t('items', { count: totalAssets })}</div>
+                {isRenaming ? (
+                    <input type="text" {...renameInputProps}
+                        className="w-full bg-[var(--bg-primary)] text-white px-2 py-1 rounded text-sm outline-none ring-2 ring-sky-500" />
+                ) : (
+                    <>
+                        <div className="font-medium text-white text-sm truncate">{folder.name}</div>
+                        <div className="text-xs text-[var(--text-secondary)]">{t('items', { count: totalAssets })}</div>
+                    </>
+                )}
             </div>
-            <button onClick={e => { e.stopPropagation(); onDelete(); }} className="p-1 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('deleteFolderAction')}>
-                <TrashIcon className="w-4 h-4" />
-            </button>
-            <ChevronRightIcon className="w-4 h-4 text-[var(--text-muted)]" />
+            {!isRenaming && (
+                <>
+                    <button onClick={e => { e.stopPropagation(); onStartRenaming(); }} className="p-1 text-[var(--text-secondary)] hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('rename')}>
+                        <PencilIcon className="w-4 h-4" />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); onDelete(); }} className="p-1 text-[var(--text-secondary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" title={t('deleteFolderAction')}>
+                        <TrashIcon className="w-4 h-4" />
+                    </button>
+                    <ChevronRightIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                </>
+            )}
         </div>
     );
 });

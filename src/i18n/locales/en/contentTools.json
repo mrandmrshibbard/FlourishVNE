@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "Content Wizards",
+    "stepOf": "Step {{current}} of {{total}}",
+    "estimatedTime": " · ~{{min}} min",
+    "chooseWizard": "Choose a wizard to get started with guided content creation.",
+    "steps": "{{count}} steps",
+    "approxMin": "~{{min}} min",
+    "selectDefault": "Select...",
+    "noOptions": "No options available",
+    "enable": "Enable",
+    "fileUploadHint": "File upload (configure after wizard)",
+    "fieldRequired": "{{label}} is required",
+    "backToWizards": "← Wizards",
+    "back": "← Back",
+    "skip": "Skip",
+    "complete": "✓ Complete",
+    "next": "Next →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "Right-click to pop out player",
+    "fabTitleStopped": "Play ambient music (right-click for player)",
+    "rightClickPopOut": "Right-click to pop out",
+    "panelTitle": "Music Player",
+    "dockBack": "Dock back",
+    "selectSong": "Select a song",
+    "pause": "Pause",
+    "play": "Play",
+    "nextSong": "Next Song"
+  }
+}

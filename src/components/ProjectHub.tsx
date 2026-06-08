@@ -700,7 +700,7 @@ export const ProjectHub: React.FC<{
                         <div className="absolute bottom-8 left-10 text-[var(--accent-lavender)] opacity-30 group-hover:opacity-70 transition-opacity">✧</div>
                     </button>
                     
-                    {/* Start Tutorial Card */}
+                    {/* Start Demo Card */}
                     <button 
                         onClick={handleStartTutorial}
                         className="group relative w-full md:w-1/3 h-72 text-center p-8 rounded-3xl transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center justify-center overflow-hidden"

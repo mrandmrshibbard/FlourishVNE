@@ -315,6 +315,8 @@ export interface PlayerState {
             textEffect?: VNDialogueTextEffect;
         } | null;
         choices: ChoiceOption[] | null;
+        /** Layout for the active choice menu (from the Choice command). undefined = vertical stack. */
+        choiceLayout?: 'vertical' | 'horizontal' | 'free';
         textInput: {
             variableId: VNID;
             prompt: string;

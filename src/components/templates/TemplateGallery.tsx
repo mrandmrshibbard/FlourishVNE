@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Template, TemplateCategory } from '../../types/template';
 import { TemplateService } from '../../features/templates/TemplateService';
 import { VNID } from '../../types';
@@ -54,6 +55,8 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
   showFilters = true,
   maxTemplates
 }) => {
+  const { t } = useTranslation('templates');
+
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
@@ -81,7 +84,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
       });
       setTemplates(result.templates);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load templates');
+      setError(err instanceof Error ? err.message : t('gallery.loadError'));
     } finally {
       setLoading(false);
     }
@@ -149,7 +152,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
       <div className="template-gallery template-gallery--loading">
         <div className="template-gallery__spinner">
           <div className="spinner" />
-          <p>Loading templates...</p>
+          <p>{t('gallery.loading')}</p>
         </div>
       </div>
     );
@@ -162,7 +165,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
         <div className="template-gallery__error">
           <p className="error-message">{error}</p>
           <button onClick={loadTemplates} className="btn btn--primary">
-            Retry
+            {t('gallery.retry')}
           </button>
         </div>
       </div>
@@ -174,9 +177,9 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
     return (
       <div className="template-gallery template-gallery--empty">
         <div className="template-gallery__empty">
-          <p>No templates available</p>
+          <p>{t('gallery.noTemplates')}</p>
           <button onClick={loadTemplates} className="btn btn--secondary">
-            Refresh
+            {t('gallery.refresh')}
           </button>
         </div>
       </div>
@@ -187,21 +190,21 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
     <div className="template-gallery">
       {/* Header */}
       <div className="template-gallery__header">
-        <h2 className="template-gallery__title">Template Gallery</h2>
-        
+        <h2 className="template-gallery__title">{t('gallery.title')}</h2>
+
         {/* View mode toggle */}
         <div className="template-gallery__view-toggle">
           <button
             className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
             onClick={() => setViewMode('grid')}
-            title="Grid view"
+            title={t('gallery.gridView')}
           >
             <GridIcon />
           </button>
           <button
             className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
             onClick={() => setViewMode('list')}
-            title="List view"
+            title={t('gallery.listView')}
           >
             <ListIcon />
           </button>
@@ -216,7 +219,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
             <div className="template-gallery__search">
               <input
                 type="text"
-                placeholder="Search templates..."
+                placeholder={t('gallery.searchPlaceholder')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="search-input"
@@ -225,7 +228,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
                 <button
                   className="search-clear"
                   onClick={() => setSearchQuery('')}
-                  title="Clear search"
+                  title={t('gallery.clearSearch')}
                 >
                   ×
                 </button>
@@ -241,7 +244,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
                 onChange={e => setSelectedCategory(e.target.value as TemplateCategory | 'all')}
                 className="category-select"
               >
-                <option value="all">All Categories</option>
+                <option value="all">{t('gallery.allCategories')}</option>
                 {availableCategories.map(cat => (
                   <option key={cat} value={cat}>
                     {formatCategoryName(cat)}
@@ -269,7 +272,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
           ))
         ) : (
           <div className="template-gallery__no-results">
-            <p>No templates match your search criteria</p>
+            <p>{t('gallery.noResults')}</p>
             <button
               onClick={() => {
                 setSearchQuery('');
@@ -277,7 +280,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
               }}
               className="btn btn--secondary"
             >
-              Clear Filters
+              {t('gallery.clearFilters')}
             </button>
           </div>
         )}
@@ -306,6 +309,8 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
   onPreview,
   onApply
 }) => {
+  const { t } = useTranslation('templates');
+
   return (
     <div
       className={`template-card template-card--${viewMode} ${isSelected ? 'template-card--selected' : ''}`}
@@ -350,7 +355,7 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
           </span>
           {template.usageCount !== undefined && (
             <span className="meta-item">
-              {template.usageCount} uses
+              {t('gallery.uses', { count: template.usageCount })}
             </span>
           )}
           {template.rating !== undefined && (
@@ -366,13 +371,13 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
             className="btn btn--secondary btn--sm"
             onClick={e => onPreview(template, e)}
           >
-            Preview
+            {t('gallery.preview')}
           </button>
           <button
             className="btn btn--primary btn--sm"
             onClick={e => onApply(template, e)}
           >
-            Apply
+            {t('gallery.apply')}
           </button>
         </div>
       </div>

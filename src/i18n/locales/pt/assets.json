@@ -47,6 +47,7 @@
   "batchSelection": "Seleção em Lote",
   "assetsSelected": "recursos selecionados",
   "deleteSelected": "Excluir Selecionados",
+  "moveSelected": "Mover para Pasta",
   "clearSelection": "Limpar Seleção",
   "replace": "Substituir",
   "move": "Mover",
@@ -82,5 +83,6 @@
   "toastUploaded_other": "{{count}} arquivos enviados",
   "toastAcross": " em {{cats}}",
   "toastReplaced": "Recurso substituído — todas as referências preservadas",
-  "toastReplaceFailed": "Falha ao substituir o recurso"
+  "toastReplaceFailed": "Falha ao substituir o recurso",
+  "toastFolderExists": "Já existe uma pasta chamada \"{{name}}\" aqui"
 }

@@ -29,21 +29,22 @@ export interface ScriptRuntimeContext {
     onPlayMusic: (nameOrId: string, loop?: boolean, volume?: number) => void;
     onStopMusic: (fadeDuration?: number) => void;
     onNotify: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
-    /** Run another script by name or ID (script-to-script). Optional; no-op if not provided. */
-    onRunScript?: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
+    /** Run another script by name or ID (script-to-script). Optional; no-op if not provided.
+     *  May return a Promise so the caller script can `await game.runScript(...)`. */
+    onRunScript?: (nameOrId: string, args?: Record<string, string | number | boolean>) => void | Promise<void>;
     /** Call a Common Event by name or ID. Optional; no-op if not provided. */
     onCallCommonEvent?: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
 }
 
 /**
  * Execute a script with the given runtime context.
- * Scripts run in a Function constructor sandbox (not eval)
- * with a controlled `game` API object.
+ * Scripts run in an AsyncFunction sandbox (not eval) with a controlled `game` API object.
+ * Async so scripts can `await game.wait(...)` and so callers can optionally wait for completion.
  */
-export function executeScript(
+export async function executeScript(
     script: VNScript,
     context: ScriptRuntimeContext
-): ScriptExecutionResult {
+): Promise<ScriptExecutionResult> {
     const startTime = performance.now();
     const variableChanges: Record<string, string | number | boolean> = {};
     let navigationRequest: ScriptExecutionResult['navigationRequest'] = undefined;
@@ -84,8 +85,15 @@ export function executeScript(
                 console.warn(`[Script] Variable not found: "${nameOrId}"`);
                 return;
             }
-            variableChanges[id] = value;
-            context.onSetVariable(nameOrId, value);
+            // Respect the variable's optional numeric clamp bounds (same as Set Variable commands).
+            let finalValue = value;
+            const def = context.project.variables?.[id] as { type?: string; min?: number; max?: number } | undefined;
+            if (def?.type === 'number' && typeof finalValue === 'number') {
+                if (typeof def.min === 'number' && finalValue < def.min) finalValue = def.min;
+                if (typeof def.max === 'number' && finalValue > def.max) finalValue = def.max;
+            }
+            variableChanges[id] = finalValue;
+            context.onSetVariable(nameOrId, finalValue);
         },
 
         getAllVariables: () => {
@@ -171,12 +179,13 @@ export function executeScript(
             context.onJumpToLabel(labelId);
         },
 
+        // Returns the callback's result so a script may `await game.runScript(...)` for ordering.
         runScript: (nameOrId: string, args?: Record<string, string | number | boolean>) => {
-            context.onRunScript?.(nameOrId, args);
+            return context.onRunScript?.(nameOrId, args);
         },
 
         callCommonEvent: (nameOrId: string, args?: Record<string, string | number | boolean>) => {
-            context.onCallCommonEvent?.(nameOrId, args);
+            return context.onCallCommonEvent?.(nameOrId, args);
         },
 
         playSFX: (nameOrId: string, volume?: number) => {
@@ -261,8 +270,11 @@ export function executeScript(
             ${script.code}
         `;
 
-        const scriptFn = new Function('game', wrappedCode);
-        const returnValue = scriptFn(gameAPI);
+        // AsyncFunction so the script body may use `await` (e.g. `await game.wait(2)`), and so the
+        // returned promise is actually awaited here (a plain Function would never await wait()).
+        const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as FunctionConstructor;
+        const scriptFn = new AsyncFunction('game', wrappedCode);
+        const returnValue = await scriptFn(gameAPI);
 
         return {
             success: true,

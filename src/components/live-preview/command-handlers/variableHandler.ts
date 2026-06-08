@@ -49,7 +49,9 @@ export const handleSetVariable = (
         command.value,
         command.randomMin,
         command.randomMax,
-        wasCoerced ? originalOperator : undefined
+        wasCoerced ? originalOperator : undefined,
+        variable.min,
+        variable.max
     );
     
     console.log('[DEBUG SetVariable] New value:', newVal, '| operator:', `${command.operator} => ${effectiveOperator}`);

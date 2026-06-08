@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flourish Visual Novel Engine — Documentation</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #2a1a3e 0%, #14101f 60%, #0d0a14 100%);
+      color: #e7e3f0; display: flex; flex-direction: column; align-items: center;
+      padding: 3rem 1.25rem 4rem;
+    }
+    h1 { font-size: 2rem; margin: 0 0 .4rem; background: linear-gradient(90deg,#ff66c4,#8a2be2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    p.sub { color: #a99fc0; margin: 0 0 2rem; }
+    .grid { display: grid; gap: 1rem; width: 100%; max-width: 760px; }
+    a.card {
+      display: block; text-decoration: none; color: inherit;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(138,43,226,0.35);
+      border-radius: 12px; padding: 1.1rem 1.25rem; transition: all .15s ease;
+    }
+    a.card:hover { background: rgba(138,43,226,0.14); border-color: #8a2be2; transform: translateY(-2px); }
+    a.card h2 { margin: 0 0 .3rem; font-size: 1.1rem; }
+    a.card span { color: #a99fc0; font-size: .9rem; }
+    footer { margin-top: 2.5rem; color: #6f6885; font-size: .8rem; text-align: center; }
+    footer a { color: #b794f6; }
+  </style>
+</head>
+<body>
+  <h1>Flourish VNE Documentation</h1>
+  <p class="sub">Guides for building visual novels — no coding required.</p>
+
+  <div class="grid">
+    <a class="card" href="getting-started.html">
+      <h2>🚀 Getting Started</h2>
+      <span>A beginner's walkthrough: your first scene, characters, choices, and playing your game.</span>
+    </a>
+    <a class="card" href="feature-workflows.html">
+      <h2>🧩 Feature Workflows</h2>
+      <span>Step‑by‑step recipes for every feature — scenes, screens, variables, common events, and more.</span>
+    </a>
+    <a class="card" href="scripting-and-plugins.html">
+      <h2>⚙️ Scripting, Plugins &amp; Common Events</h2>
+      <span>The advanced layer: the script <code>game</code> API, writing plugins, and reusable Common Events.</span>
+    </a>
+  </div>
+
+  <footer>
+    Flourish Visual Novel Engine · Documentation<br />
+    The sample plugin lives at <code>examples/sample.plugin.js</code>.
+  </footer>
+</body>
+</html>

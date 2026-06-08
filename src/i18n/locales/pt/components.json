@@ -259,6 +259,10 @@
     "typeLabel": "Tipo:",
     "currentValue": "Valor Atual:",
     "helpText": "O valor padrão é usado quando o jogo inicia. Você pode alterar o valor da variável durante o jogo usando comandos Definir Variável.",
+    "clampRange": "Faixa de limite (mín / máx)",
+    "noMin": "sem mín",
+    "noMax": "sem máx",
+    "clampHint": "Opcional. Quando definido, este número nunca fica abaixo do mín nem acima do máx — por qualquer Definir Variável, escolha ou script. Deixe em branco para sem limite.",
     "deleteVariable": "Excluir Variável",
     "confirmDelete": "Excluir a variável \"{{name}}\"? Isso quebrará quaisquer comandos que a referenciam."
   },

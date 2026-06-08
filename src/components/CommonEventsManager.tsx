@@ -11,7 +11,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useProject } from '../contexts/ProjectContext';
-import { VNCommonEvent, CommonEventParameter, CommonEventTrigger, createDefaultCommonEvent, createCommonEventParameter } from '../types/commonEvents';
+import { VNCommonEvent, CommonEventTrigger, createDefaultCommonEvent } from '../types/commonEvents';
 import { CommandType, VNCommand } from '../features/scene/types';
 import { VNID } from '../types';
 import {
@@ -20,6 +20,8 @@ import {
     CommonEventsIcon, BoltIcon, GripVerticalIcon
 } from './icons';
 import { getCommandColor, COMMAND_CATEGORIES } from './CommandPalette';
+import { CommandGroupAccordion } from './inspector/CommandGroupFields';
+import { useCommandDefaults, useChoiceActionNormalization } from './PropertiesInspector';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -71,11 +73,29 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
     const [renamingEventId, setRenamingEventId] = useState<VNID | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
     const [expandedSections, setExpandedSections] = useState<Set<string>>(
-        new Set(['properties', 'parameters', 'commands'])
+        new Set(['properties', 'commands'])
     );
 
     const selectedEvent = selectedEventId ? (project.commonEvents || {})[selectedEventId] as VNCommonEvent | undefined : undefined;
+
+    // The command currently open for editing, and a writer that targets it in the reducer.
+    const selectedCommand: VNCommand | undefined =
+        (selectedEvent && selectedCommandIndex !== null) ? selectedEvent.commands[selectedCommandIndex] : undefined;
+    const updateSelectedCommand = useCallback((updates: Partial<VNCommand>) => {
+        if (!selectedEventId || selectedCommandIndex === null) return;
+        dispatch({ type: 'UPDATE_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, commandIndex: selectedCommandIndex, updates } });
+    }, [dispatch, selectedEventId, selectedCommandIndex]);
+
+    // Clear the open command editor whenever the selected event changes.
+    React.useEffect(() => { setSelectedCommandIndex(null); }, [selectedEventId]);
+
+    // Apply the same auto-defaults the scene inspector uses (e.g. select the first variable for a
+    // new Set Variable so the number operators appear, first character for Show Character, etc.)
+    // and normalize choice actions — so editing a CE command behaves exactly like a scene command.
+    useCommandDefaults(selectedCommand, project, updateSelectedCommand);
+    useChoiceActionNormalization(selectedCommand, project, updateSelectedCommand);
 
     const filteredEvents = useMemo(() => {
         if (!searchQuery) return commonEvents;
@@ -136,10 +156,23 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
             try {
                 const parsed = JSON.parse(String(reader.result || '{}'));
                 const list: VNCommonEvent[] = Array.isArray(parsed) ? parsed : (parsed.flourishCommonEvents || []);
+                // Pass 1: assign fresh ids and remember old→new so nested calls within this batch
+                // keep pointing at the right (re-id'd) event.
+                const idMap: Record<string, VNID> = {};
+                const prepared = list.filter(ce => ce && ce.name).map(ce => {
+                    const newId = `ce-${Math.random().toString(36).substring(2, 9)}` as VNID;
+                    idMap[ce.id] = newId;
+                    return { ...ce, id: newId };
+                });
+                // Pass 2: remap CallCommonEvent targets that reference another imported event.
+                const remapCmds = (cmds: any[] | undefined): any[] =>
+                    (cmds || []).map(c => (c && c.type === 'CallCommonEvent' && c.commonEventId && idMap[c.commonEventId])
+                        ? { ...c, commonEventId: idMap[c.commonEventId] }
+                        : c);
+                const stamp = new Date().toISOString();
                 let lastId: VNID | null = null;
-                for (const ce of list) {
-                    if (!ce || !ce.name) continue;
-                    const fresh: VNCommonEvent = { ...ce, id: `ce-${Math.random().toString(36).substring(2, 9)}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+                for (const ce of prepared) {
+                    const fresh: VNCommonEvent = { ...ce, commands: remapCmds(ce.commands), createdAt: stamp, updatedAt: stamp };
                     dispatch({ type: 'ADD_COMMON_EVENT', payload: { commonEvent: fresh } });
                     lastId = fresh.id;
                 }
@@ -176,26 +209,6 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
     const updateEvent = useCallback((updates: Partial<VNCommonEvent>) => {
         if (!selectedEventId) return;
         dispatch({ type: 'UPDATE_COMMON_EVENT', payload: { commonEventId: selectedEventId, updates } });
-    }, [dispatch, selectedEventId]);
-
-    /* ------------------------------------------------------------ */
-    /*  Parameter handlers                                           */
-    /* ------------------------------------------------------------ */
-
-    const handleAddParam = useCallback(() => {
-        if (!selectedEventId) return;
-        const param = createCommonEventParameter(`param_${(selectedEvent?.parameters.length || 0) + 1}`);
-        dispatch({ type: 'ADD_COMMON_EVENT_PARAMETER', payload: { commonEventId: selectedEventId, parameter: param } });
-    }, [dispatch, selectedEventId, selectedEvent]);
-
-    const handleUpdateParam = useCallback((paramId: VNID, updates: Partial<CommonEventParameter>) => {
-        if (!selectedEventId) return;
-        dispatch({ type: 'UPDATE_COMMON_EVENT_PARAMETER', payload: { commonEventId: selectedEventId, parameterId: paramId, updates } });
-    }, [dispatch, selectedEventId]);
-
-    const handleDeleteParam = useCallback((paramId: VNID) => {
-        if (!selectedEventId) return;
-        dispatch({ type: 'DELETE_COMMON_EVENT_PARAMETER', payload: { commonEventId: selectedEventId, parameterId: paramId } });
     }, [dispatch, selectedEventId]);
 
     /* ------------------------------------------------------------ */
@@ -286,6 +299,8 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
     const handleDeleteCommand = useCallback((index: number) => {
         if (!selectedEventId) return;
         dispatch({ type: 'DELETE_COMMON_EVENT_COMMAND', payload: { commonEventId: selectedEventId, commandIndex: index } });
+        // Indices shift after a delete — clear the open editor to avoid editing the wrong command.
+        setSelectedCommandIndex(null);
     }, [dispatch, selectedEventId]);
 
     /* ------------------------------------------------------------ */
@@ -458,11 +473,6 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                                             {t('cmdCount', { count: event.commands.length })}
                                         </span>
-                                        {event.parameters.length > 0 && (
-                                            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                                                {t('paramCount', { count: event.parameters.length })}
-                                            </span>
-                                        )}
                                     </div>
                                 </div>
                             );
@@ -574,89 +584,16 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                             </p>
                                         </div>
                                     )}
+
+                                    {/* Parallel events only run background-safe commands — make that explicit. */}
+                                    {selectedEvent.trigger === 'parallel' && (
+                                        <div className="text-[10px] rounded p-2 leading-relaxed" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--text-secondary)' }}>
+                                            {t('parallelNote')}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
-
-                        {/* ─── Parameters section (for called events) ─── */}
-                        {selectedEvent.trigger === 'called' && (
-                            <div className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-                                <button
-                                    onClick={() => toggleSection('parameters')}
-                                    className="w-full flex items-center gap-2 px-4 py-2 hover:bg-white/5 transition-colors"
-                                >
-                                    {expandedSections.has('parameters') ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
-                                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('parameters')}</span>
-                                    <span className="text-[10px] ml-auto px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
-                                        {selectedEvent.parameters.length}
-                                    </span>
-                                </button>
-
-                                {expandedSections.has('parameters') && (
-                                    <div className="px-4 pb-3 space-y-2">
-                                        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                                            {t('parametersHint')}
-                                        </p>
-
-                                        {selectedEvent.parameters.map((param: CommonEventParameter) => (
-                                            <div key={param.id} className="flex items-start gap-2 p-2 rounded" style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)' }}>
-                                                <div className="flex-1 space-y-1">
-                                                    <input
-                                                        type="text"
-                                                        value={param.name}
-                                                        onChange={e => handleUpdateParam(param.id, { name: e.target.value })}
-                                                        placeholder={t('parameterNamePlaceholder')}
-                                                        className="w-full px-1.5 py-0.5 rounded text-xs outline-none"
-                                                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
-                                                    />
-                                                    <div className="flex gap-1">
-                                                        <select
-                                                            value={param.type}
-                                                            onChange={e => handleUpdateParam(param.id, { type: e.target.value as 'string' | 'number' | 'boolean' })}
-                                                            className="px-1.5 py-0.5 rounded text-[10px] outline-none"
-                                                            style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
-                                                        >
-                                                            <option value="string">{t('paramTypes.string')}</option>
-                                                            <option value="number">{t('paramTypes.number')}</option>
-                                                            <option value="boolean">{t('paramTypes.boolean')}</option>
-                                                        </select>
-                                                        <input
-                                                            type="text"
-                                                            value={String(param.defaultValue)}
-                                                            onChange={e => handleUpdateParam(param.id, {
-                                                                defaultValue: param.type === 'number'
-                                                                    ? Number(e.target.value) || 0
-                                                                    : param.type === 'boolean'
-                                                                        ? e.target.value === 'true'
-                                                                        : e.target.value
-                                                            })}
-                                                            placeholder={t('defaultValuePlaceholder')}
-                                                            className="flex-1 px-1.5 py-0.5 rounded text-[10px] outline-none"
-                                                            style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleDeleteParam(param.id)}
-                                                    className="p-1 rounded hover:bg-red-500/20 text-red-400"
-                                                    title={t('removeParameter')}
-                                                >
-                                                    <TrashIcon className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        ))}
-
-                                        <button
-                                            onClick={handleAddParam}
-                                            className="w-full py-1 rounded text-xs flex items-center justify-center gap-1 transition-colors"
-                                            style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px dashed var(--border-subtle)' }}
-                                        >
-                                            <PlusIcon className="w-3 h-3" /> {t('addParameter')}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
 
                         {/* ─── Commands section ─── */}
                         <div>
@@ -699,10 +636,13 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                         ) : (
                                             selectedEvent.commands.map((cmd: VNCommand, index: number) => {
                                                 const colorClass = getCommandColor(cmd.type);
+                                                const isSelected = selectedCommandIndex === index;
                                                 return (
                                                     <div
                                                         key={cmd.id}
-                                                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs border ${colorClass} group`}
+                                                        onClick={() => setSelectedCommandIndex(isSelected ? null : index)}
+                                                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs border ${colorClass} group cursor-pointer ${isSelected ? 'ring-2 ring-amber-400' : ''}`}
+                                                        title={t('editCommand')}
                                                     >
                                                         <GripVerticalIcon className="w-3 h-3 flex-shrink-0 opacity-40" />
                                                         <span className="flex-1 truncate font-medium">
@@ -720,7 +660,7 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                                             )}
                                                         </span>
                                                         <button
-                                                            onClick={() => handleDeleteCommand(index)}
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteCommand(index); }}
                                                             className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-opacity"
                                                             title={t('removeCommand')}
                                                         >
@@ -764,6 +704,24 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                                             </button>
                                         ))}
                                     </div>
+
+                                    {/* Selected command's property editor (reuses the scene inspector's
+                                        grouped fields, writing via UPDATE_COMMON_EVENT_COMMAND). */}
+                                    {selectedCommand ? (
+                                        <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+                                                    {t('editingCommand', { name: formatCommandName(selectedCommand.type) })}
+                                                </span>
+                                                <button onClick={() => setSelectedCommandIndex(null)} className="text-[10px] px-1.5 py-0.5 rounded hover:bg-white/5" style={{ color: 'var(--text-muted)' }}>
+                                                    {t('common:close')}
+                                                </button>
+                                            </div>
+                                            <CommandGroupAccordion command={selectedCommand} updateCommand={updateSelectedCommand} />
+                                        </div>
+                                    ) : selectedEvent.commands.length > 0 ? (
+                                        <p className="text-[10px] mt-2 text-center" style={{ color: 'var(--text-muted)' }}>{t('clickCommandToEdit')}</p>
+                                    ) : null}
                                 </div>
                             )}
                         </div>

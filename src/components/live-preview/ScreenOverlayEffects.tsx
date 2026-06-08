@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import {
   clamp01,
   normalizeOverlayEffects,
+  BUILTIN_OVERLAY_EFFECT_TYPES,
   type VNScreenOverlayEffect,
   type VNScreenOverlayEffectType,
   type VNEffectParams,
 } from '../../types';
+import { pluginManager } from '../../features/plugins/PluginManagerService';
+import type { CustomEffectDefinition } from '../../types/plugins';
 
 export interface ScreenOverlayEffectsProps {
   effects?: VNScreenOverlayEffect[];
@@ -58,6 +61,48 @@ function createNoise() {
   };
 }
 
+/**
+ * Renders one plugin-registered custom effect through its per-frame `render` callback — the
+ * visual pipeline for `api.registerEffect(...)`. Isolated: render errors are caught (and stop the
+ * loop), the canvas is cleared each frame, and the rAF loop stops on unmount / intensity 0.
+ */
+const PluginEffectCanvas: React.FC<{
+  def: CustomEffectDefinition;
+  effect: VNScreenOverlayEffect;
+  width: number;
+  height: number;
+}> = ({ def, effect, width, height }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const intensity = clamp01(effect.intensity ?? 0);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !def.render || intensity <= 0 || width <= 0 || height <= 0) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const start = performance.now();
+    let raf = 0;
+    let stopped = false;
+    const loop = () => {
+      if (stopped) return;
+      ctx.clearRect(0, 0, width, height);
+      try {
+        def.render!(ctx, { width, height, intensity, color: effect.color, params: effect.params, timeMs: performance.now() - start });
+      } catch (e) {
+        console.error(`[Plugin effect "${def.type}"] render error (stopping):`, e);
+        stopped = true;
+        return;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => { stopped = true; cancelAnimationFrame(raf); };
+  }, [def, intensity, width, height, effect.color, effect.params]);
+  if (intensity <= 0) return null;
+  return <canvas ref={canvasRef} className="vnfx-canvas" aria-hidden />;
+};
+
 export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   effects,
   width,
@@ -76,6 +121,17 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const shimmer = getEffect(normalized, 'shimmer');
   const rain = getEffect(normalized, 'rain');
   const snowAsh = getEffect(normalized, 'snowAsh');
+
+  // Plugin-registered custom effects: any active effect whose type isn't a built-in and whose
+  // plugin provides a `render` callback. These render through PluginEffectCanvas.
+  const pluginEffects = useMemo(() => {
+    const builtins = new Set<string>(BUILTIN_OVERLAY_EFFECT_TYPES);
+    return normalized
+      .filter((e) => !builtins.has(e.type) && clamp01(e.intensity) > 0)
+      .map((e) => ({ effect: e, def: pluginManager.getEffect(e.type) }))
+      .filter((x): x is { effect: VNScreenOverlayEffect; def: CustomEffectDefinition } =>
+        !!x.def && typeof x.def.render === 'function');
+  }, [normalized]);
 
   const rainCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const snowCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -584,6 +640,17 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
           aria-hidden
         />
       )}
+
+      {/* Plugin-registered custom effects (visual pipeline) */}
+      {pluginEffects.map(({ effect, def }) => (
+        <PluginEffectCanvas
+          key={effect.id || def.type}
+          def={def}
+          effect={effect}
+          width={safeWidth}
+          height={safeHeight}
+        />
+      ))}
     </div>
   );
 };

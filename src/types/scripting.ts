@@ -98,8 +98,9 @@ export interface ScriptAPI {
     jumpToScene: (nameOrId: string) => void;
     /** Jump to a label in the current scene */
     jumpToLabel: (labelId: string) => void;
-    /** Run another script by name or ID (script-to-script), with optional arguments. */
-    runScript: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
+    /** Run another script by name or ID (script-to-script), with optional arguments.
+     *  Returns a Promise you can `await` so the called script finishes (incl. its waits) first. */
+    runScript: (nameOrId: string, args?: Record<string, string | number | boolean>) => void | Promise<void>;
     /** Call a Common Event by name or ID, with optional arguments. */
     callCommonEvent: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
 

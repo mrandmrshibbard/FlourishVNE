@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "Loading context panels...",
+    "emptyTitle": "No context-specific panels available",
+    "emptyHint": "Select an item to see relevant tools and suggestions",
+    "suggestionsHeading": "Suggestions",
+    "panelSuggestionsHeading": "Suggestions:",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Add Dialogue",
+      "addDialogueTip": "Add dialogue command (Alt+D)",
+      "addChoice": "Add Choice",
+      "addChoiceTip": "Add choice command (Alt+C)",
+      "setVariable": "Set Variable",
+      "setVariableTip": "Add variable command (Alt+V)",
+      "preview": "Preview",
+      "previewTip": "Preview scene (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Add Expression",
+      "addExpressionTip": "Add new expression",
+      "addOutfit": "Add Outfit",
+      "addOutfitTip": "Add outfit variant",
+      "duplicate": "Duplicate",
+      "duplicateTip": "Duplicate character (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Add Button",
+      "addButtonTip": "Add button element",
+      "addText": "Add Text",
+      "addTextTip": "Add text element",
+      "addImage": "Add Image",
+      "addImageTip": "Add image element",
+      "preview": "Preview",
+      "previewTip": "Preview UI screen (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Filter",
+      "filterTip": "Filter templates",
+      "sort": "Sort",
+      "sortTip": "Sort templates",
+      "favorites": "Favorites",
+      "favoritesTip": "Show favorites only"
+    },
+    "logicBuilding": {
+      "addCondition": "Add Condition",
+      "addConditionTip": "Add condition node",
+      "addAction": "Add Action",
+      "addActionTip": "Add action node",
+      "validate": "Validate",
+      "validateTip": "Validate logic flow"
+    },
+    "variableManagement": {
+      "addVariable": "Add Variable",
+      "addVariableTip": "Add new variable (Alt+N)",
+      "debug": "Debug",
+      "debugTip": "Open variable debugger",
+      "export": "Export",
+      "exportTip": "Export variable definitions"
+    },
+    "assetManagement": {
+      "import": "Import",
+      "importTip": "Import assets",
+      "organize": "Organize",
+      "organizeTip": "Organize assets",
+      "findUnused": "Find Unused",
+      "findUnusedTip": "Find unused assets"
+    },
+    "wizardFlow": {
+      "back": "Back",
+      "backTip": "Previous step",
+      "next": "Next",
+      "nextTip": "Next step",
+      "cancel": "Cancel",
+      "cancelTip": "Cancel wizard"
+    }
+  },
+  "localizationPanel": {
+    "title": "Localization Manager",
+    "stringCount_one": "{{count}} string",
+    "stringCount_other": "{{count}} strings",
+    "addLanguage": "Add Language",
+    "removeLanguageTip": "Remove {{name}}",
+    "searchPlaceholder": "Search by key or text...",
+    "filterAll": "All",
+    "filterDialogue": "Dialogue",
+    "filterChoice": "Choice",
+    "colKey": "Key",
+    "colContext": "Context",
+    "colDefaultText": "Default Text",
+    "emptyNoStrings": "No strings found",
+    "emptyNoStringsHintScan": "Add dialogue or choice commands to your scenes to see translatable strings.",
+    "emptyNoStringsHintFilter": "No strings match your current filters.",
+    "translationPlaceholder": "Enter translation...",
+    "exportCsv": "Export CSV",
+    "importCsv": "Import CSV",
+    "importSuccess_one": "{{count}} translation imported.",
+    "importSuccess_other": "{{count}} translations imported.",
+    "importErrors_one": "{{count}} error:",
+    "importErrors_other": "{{count}} errors:",
+    "showingCount": "Showing {{filtered}} of {{total}} strings"
+  }
+}

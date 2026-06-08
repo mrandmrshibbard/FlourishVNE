@@ -1,0 +1,17 @@
+{
+  "panelTitle": "Área de Palco",
+  "dragToResize": "Arraste para redimensionar",
+  "dragToResizeScale": "Arraste para redimensionar (escala)",
+  "showEventIndicators": "Mostrar Indicadores de Evento",
+  "hideEventIndicators": "Ocultar Indicadores de Evento",
+  "showVariableState": "Mostrar Estado de Variáveis",
+  "hideVariableState": "Ocultar Estado de Variáveis",
+  "variableStateHeading": "Estado de Variáveis",
+  "videoLabel": "Vídeo: {{name}}",
+  "submitButton": "Enviar",
+  "inputPlaceholder": "Digite aqui…",
+  "quickMenuBack": "Voltar",
+  "quickMenuLog": "Log",
+  "quickMenuAuto": "Auto",
+  "quickMenuSkip": "Pular"
+}

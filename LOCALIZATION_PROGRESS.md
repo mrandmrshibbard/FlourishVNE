@@ -1,6 +1,12 @@
 # FlourishVNE Editor Localization (i18n) — Progress & Handoff Reference
 
-> **Status snapshot:** Infrastructure complete + **45 components** localized into English (`en`) and Brazilian Portuguese (`pt`). **✅ WAVE A** + **✅ WAVE B** + **🔄 WAVE C IN PROGRESS**. New `components` namespace holds Wave C strings. Done so far in C: `ConfirmationModal`, `InfoModal`, `LoadingOverlay`, `KeyboardShortcutsModal`, `ImportSummaryModal`, `AutoUpdateBanner`, `ChangelogModal`, `GuidedTour`, `HelpPanel` (full command reference), `AssetSelector`, `ManagerWindow`, `ThemeSelector`, `UIScreenThemeSelector`, `VariablePropertiesEditor`, `SearchableSelect`, `TransitionPreview`, `FontEditor`. `ContextMenu`/`Panel`/`Form` verified string-free. Full-project parity: **2026 keys, en==pt ALL MATCH**, build green. **Next in C: ContentWizardModal, templates/, GameBuilder, ScriptEditor, PluginManagerUI, MusicPlayer, context-panels, VisualNovelEditor, StagingArea.** This file is the single source of truth to resume accurately.
+> **Status snapshot:** Infrastructure complete. **✅ WAVE A** + **✅ WAVE B** + **✅ WAVE C COMPLETE** (2026-06-07). All editor-UI components are localized into English (`en`) and Brazilian Portuguese (`pt`). Full-project parity: **2457 keys across 20 namespaces, en==pt ALL MATCH**, `tsc` clean (no new errors), `vite build` green.
+>
+> **Wave C completion (final batch)** added 6 new namespaces for the remaining large editors: `gameBuilder` (GameBuilder), `editorTools` (VisualNovelEditor + ScriptEditor + PluginManagerUI), `templates` (TemplateGallery/Config/Preview), `staging` (StagingArea — editor chrome only; previewed project data left untranslated), `contentTools` (ContentWizardModal + MusicPlayer), `contextPanels` (ContextPanelManager + ContextualToolbar + LocalizationPanel chrome). All registered in `src/i18n/index.ts`.
+>
+> **Only Wave D (deferred, low-priority) remains:** `getCommandSummary` gray summary lines (CommandItem/CommandStackItem) and `commandStackUtils` async-warning strings. SKIP list unchanged (LivePreview + live-preview/* runtime, ResourceManager/ScriptingEditor dead code).
+>
+> _(Historical: Wave C earlier did ConfirmationModal, InfoModal, LoadingOverlay, KeyboardShortcutsModal, ImportSummaryModal, AutoUpdateBanner, ChangelogModal, GuidedTour, HelpPanel, AssetSelector, ManagerWindow, ThemeSelector, UIScreenThemeSelector, VariablePropertiesEditor, SearchableSelect, TransitionPreview, FontEditor via the `components` namespace.)_
 
 ---
 

@@ -79,6 +79,17 @@ const VariablePropertiesEditor: React.FC<{
                             <TextInput value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value })} />
                         )}
                     </FormField>
+                    {variable.type === 'number' && (
+                        <FormField label={t('varProps.clampRange')}>
+                            <div className="grid grid-cols-2 gap-2">
+                                <TextInput type="number" value={variable.min ?? ''} placeholder={t('varProps.noMin')}
+                                    onChange={e => updateVariable({ min: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} />
+                                <TextInput type="number" value={variable.max ?? ''} placeholder={t('varProps.noMax')}
+                                    onChange={e => updateVariable({ max: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} />
+                            </div>
+                            <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('varProps.clampHint')}</p>
+                        </FormField>
+                    )}
                     <div className="text-xs text-[var(--text-secondary)] mt-2">
                         <p><strong>{t('varProps.typeLabel')}</strong> {variable.type}</p>
                         <p><strong>{t('varProps.currentValue')}</strong> {String(variable.defaultValue)}</p>

@@ -47,6 +47,7 @@
   "batchSelection": "Batch Selection",
   "assetsSelected": "assets selected",
   "deleteSelected": "Delete Selected",
+  "moveSelected": "Move to Folder",
   "clearSelection": "Clear Selection",
   "replace": "Replace",
   "move": "Move",
@@ -82,5 +83,6 @@
   "toastUploaded_other": "Uploaded {{count}} files",
   "toastAcross": " across {{cats}}",
   "toastReplaced": "Asset replaced — all references preserved",
-  "toastReplaceFailed": "Failed to replace asset"
+  "toastReplaceFailed": "Failed to replace asset",
+  "toastFolderExists": "A folder named \"{{name}}\" already exists here"
 }

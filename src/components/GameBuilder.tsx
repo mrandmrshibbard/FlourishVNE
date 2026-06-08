@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VNProject } from '../types/project';
 import { buildStandaloneGame, downloadBlob, estimateBuildSize, BuildProgress } from '../utils/gameBundler';
 import { validateProjectForBuild, ValidationResult } from '../utils/buildValidator';
@@ -20,13 +21,14 @@ type BuildType = 'web' | 'desktop';
 type DesktopFormat = 'standalone' | 'installer';
 
 export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) => {
+  const { t } = useTranslation('gameBuilder');
   const [buildStep, setBuildStep] = useState<BuildStep>('idle');
   const [buildType, setBuildType] = useState<BuildType>('web');
   const [desktopFormat, setDesktopFormat] = useState<DesktopFormat>('standalone');
   const [progress, setProgress] = useState<BuildProgress>({
     step: 'prepare',
     progress: 0,
-    message: 'Ready to build...'
+    message: t('ready')
   });
   const [error, setError] = useState<string>('');
   const [gameBlob, setGameBlob] = useState<Blob | null>(null);
@@ -41,7 +43,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (PNG recommended, 256×256 or larger).');
+      setError(t('iconError'));
       return;
     }
     const reader = new FileReader();
@@ -83,7 +85,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
       
     } catch (err) {
       console.error('Build error:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      setError(err instanceof Error ? err.message : t('error.unknown'));
       setBuildStep('error');
     }
   };
@@ -113,7 +115,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
   const handleReset = () => {
     setBuildStep('idle');
-    setProgress({ step: 'prepare', progress: 0, message: 'Ready to build...' });
+    setProgress({ step: 'prepare', progress: 0, message: t('ready') });
     setGameBlob(null);
     setError('');
   };
@@ -122,7 +124,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <h2 style={styles.title}><GamepadIcon style={{ display: 'inline-block', verticalAlign: 'middle', width: 28, height: 28, marginRight: 8 }} /> Build Standalone Game</h2>
+          <h2 style={styles.title}><GamepadIcon style={{ display: 'inline-block', verticalAlign: 'middle', width: 28, height: 28, marginRight: 8 }} /> {t('title')}</h2>
           <button onClick={onClose} style={styles.closeButton}><XMarkIcon style={{ width: 24, height: 24 }} /></button>
         </div>
 
@@ -130,7 +132,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
           {buildStep === 'idle' && (
             <>
               <div style={styles.buildTypeSelector}>
-                <h3 style={styles.selectorTitle}>Choose Build Type:</h3>
+                <h3 style={styles.selectorTitle}>{t('chooseBuildType')}</h3>
                 <div style={styles.buildTypes}>
                   <button
                     onClick={() => setBuildType('web')}
@@ -140,9 +142,9 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                     }}
                   >
                     <div style={styles.buildTypeIcon}><GlobeIcon style={{ width: 48, height: 48 }} /></div>
-                    <div style={styles.buildTypeName}>Web Build</div>
+                    <div style={styles.buildTypeName}>{t('webBuild.name')}</div>
                     <div style={styles.buildTypeDesc}>
-                      Play in browser • itch.io ready • No saves persist
+                      {t('webBuild.desc')}
                     </div>
                   </button>
                   <button
@@ -153,9 +155,9 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                     }}
                   >
                     <div style={styles.buildTypeIcon}><SaveIcon style={{ width: 48, height: 48 }} /></div>
-                    <div style={styles.buildTypeName}>Desktop Build</div>
+                    <div style={styles.buildTypeName}>{t('desktopBuild.name')}</div>
                     <div style={styles.buildTypeDesc}>
-                      Windows/Mac/Linux • Save progress • Offline play
+                      {t('desktopBuild.desc')}
                     </div>
                   </button>
                 </div>
@@ -163,47 +165,39 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
               <div style={styles.infoBox}>
                 <h3 style={styles.infoTitle}>
-                  {buildType === 'web' ? 'Web Build' : 'Desktop Build'}
+                  {buildType === 'web' ? t('webBuild.infoTitle') : t('desktopBuild.infoTitle')}
                 </h3>
                 {buildType === 'web' ? (
                   <>
-                    <p style={styles.infoText}>
-                      This creates a <strong>browser-based game</strong> that you can:
-                    </p>
+                    <p style={styles.infoText}>{t('webBuild.intro')}</p>
                     <ul style={styles.list}>
-                      <li>✅ Upload to <strong>itch.io</strong> (easiest!)</li>
-                      <li>✅ Share on any web host (Netlify, GitHub Pages, etc.)</li>
-                      <li>✅ Send to friends as a ZIP file</li>
-                      <li>✅ Play offline in any browser</li>
-                      <li>⚠️ Note: Progress won't save (browser limitation)</li>
+                      <li>{t('webBuild.item1')}</li>
+                      <li>{t('webBuild.item2')}</li>
+                      <li>{t('webBuild.item3')}</li>
+                      <li>{t('webBuild.item4')}</li>
+                      <li>{t('webBuild.item5')}</li>
                     </ul>
                   </>
                 ) : (
                   <>
-                    <p style={styles.infoText}>
-                      This creates a <strong>standalone desktop app</strong> with:
-                    </p>
+                    <p style={styles.infoText}>{t('desktopBuild.intro')}</p>
                     <ul style={styles.list}>
-                      <li>💾 Full save/load system (10 save slots)</li>
-                      <li>🔄 Auto-save functionality</li>
-                      <li>📁 Persistent progress storage</li>
-                      <li>🖥️ Works on Windows, Mac, and Linux</li>
-                      <li>📦 Requires Electron (included in build)</li>
+                      <li>{t('desktopBuild.item1')}</li>
+                      <li>{t('desktopBuild.item2')}</li>
+                      <li>{t('desktopBuild.item3')}</li>
+                      <li>{t('desktopBuild.item4')}</li>
+                      <li>{t('desktopBuild.item5')}</li>
                     </ul>
                     {desktopFormat === 'installer' && (
-                      <p style={styles.warningText}>
-                        ⚡ Installer builds are faster to build and launch instantly after install — the setup extracts all files ahead of time
-                      </p>
+                      <p style={styles.warningText}>{t('desktopBuild.installerWarning')}</p>
                     )}
                     {desktopFormat === 'standalone' && (
-                      <p style={styles.warningText}>
-                        ⏱ Standalone builds take longer to build and are slower to start — the exe must unpack itself into a temp folder on every launch
-                      </p>
+                      <p style={styles.warningText}>{t('desktopBuild.standaloneWarning')}</p>
                     )}
                   </>
                 )}
                 <p style={styles.infoText}>
-                  <strong>No coding required!</strong> Just download and distribute.
+                  <strong>{t('noCodingRequired')}</strong>
                 </p>
               </div>
 
@@ -216,15 +210,15 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                     onChange={handleIconSelect}
                     style={{ display: 'none' }}
                   />
-                  <div style={styles.iconPickerLabel}>Application Icon</div>
+                  <div style={styles.iconPickerLabel}>{t('iconPicker.label')}</div>
                   <div style={styles.iconPickerRow}>
                     <div
                       style={styles.iconPreviewBox}
                       onClick={() => iconInputRef.current?.click()}
-                      title="Click to choose an icon"
+                      title={t('iconPicker.clickToChoose')}
                     >
                       {iconDataUrl ? (
-                        <img src={iconDataUrl} alt="App icon" style={styles.iconPreviewImg} />
+                        <img src={iconDataUrl} alt={t('iconPicker.altText')} style={styles.iconPreviewImg} />
                       ) : (
                         <span style={styles.iconPlaceholder}><SaveIcon style={{ width: 28, height: 28, opacity: 0.5 }} /></span>
                       )}
@@ -234,17 +228,17 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                         style={styles.iconChooseBtn}
                         onClick={() => iconInputRef.current?.click()}
                       >
-                        {iconDataUrl ? 'Change Icon' : 'Choose Icon'}
+                        {iconDataUrl ? t('iconPicker.changeIcon') : t('iconPicker.chooseIcon')}
                       </button>
                       {iconDataUrl && (
                         <button
                           style={styles.iconClearBtn}
                           onClick={() => setIconDataUrl('')}
                         >
-                          Remove
+                          {t('iconPicker.remove')}
                         </button>
                       )}
-                      <p style={styles.iconHint}>Recommended: 256×256 PNG</p>
+                      <p style={styles.iconHint}>{t('iconPicker.hint')}</p>
                     </div>
                   </div>
                 </div>
@@ -252,7 +246,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
               {buildType === 'desktop' && (
                 <div style={{ margin: '12px 0', padding: '12px 16px', borderRadius: '8px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(100,116,139,0.3)' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px', color: '#e2e8f0' }}>Build Format</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px', color: '#e2e8f0' }}>{t('formatPicker.title')}</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       onClick={() => setDesktopFormat('standalone')}
@@ -268,12 +262,12 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                         fontSize: '13px',
                       }}
                     >
-                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>📦 Standalone .exe</div>
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{t('formatPicker.standaloneName')}</div>
                       <div style={{ fontSize: '11px', opacity: 0.7 }}>
-                        Single portable executable — no installation needed, just run
+                        {t('formatPicker.standaloneDesc')}
                       </div>
                       <div style={{ fontSize: '10px', opacity: 0.5, marginTop: '4px' }}>
-                        ⏱ Slower build &amp; startup — exe must unpack on every launch
+                        {t('formatPicker.standaloneNote')}
                       </div>
                     </button>
                     <button
@@ -290,12 +284,12 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                         fontSize: '13px',
                       }}
                     >
-                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>🔧 Installer (Setup)</div>
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{t('formatPicker.installerName')}</div>
                       <div style={{ fontSize: '11px', opacity: 0.7 }}>
-                        Setup wizard with shortcuts, install directory, uninstaller, and game saves folder
+                        {t('formatPicker.installerDesc')}
                       </div>
                       <div style={{ fontSize: '10px', opacity: 0.5, marginTop: '4px' }}>
-                        ⚡ Faster build &amp; startup — files are pre-extracted during install
+                        {t('formatPicker.installerNote')}
                       </div>
                     </button>
                   </div>
@@ -304,15 +298,15 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
               <div style={styles.statsBox}>
                 <div style={styles.stat}>
-                  <div style={styles.statLabel}>Estimated Size:</div>
+                  <div style={styles.statLabel}>{t('stats.estimatedSize')}</div>
                   <div style={styles.statValue}>{estimatedSize.toFixed(1)} MB</div>
                 </div>
                 <div style={styles.stat}>
-                  <div style={styles.statLabel}>Scenes:</div>
+                  <div style={styles.statLabel}>{t('stats.scenes')}</div>
                   <div style={styles.statValue}>{Object.keys(project.scenes || {}).length}</div>
                 </div>
                 <div style={styles.stat}>
-                  <div style={styles.statLabel}>Characters:</div>
+                  <div style={styles.statLabel}>{t('stats.characters')}</div>
                   <div style={styles.statValue}>{Object.keys(project.characters || {}).length}</div>
                 </div>
               </div>
@@ -326,9 +320,9 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                   border: `1px solid ${validation.errors.length > 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(251, 191, 36, 0.4)'}`,
                 }}>
                   <div style={{ fontWeight: 'bold', marginBottom: '8px', color: validation.errors.length > 0 ? '#f87171' : '#fbbf24', fontSize: '14px' }}>
-                    {validation.errors.length > 0 ? `⛔ ${validation.errors.length} Error(s)` : ''} 
-                    {validation.errors.length > 0 && validation.warnings.length > 0 ? ' • ' : ''}
-                    {validation.warnings.length > 0 ? `⚠️ ${validation.warnings.length} Warning(s)` : ''}
+                    {validation.errors.length > 0 ? t('validation.errors', { count: validation.errors.length }) : ''}
+                    {validation.errors.length > 0 && validation.warnings.length > 0 ? t('validation.separator') : ''}
+                    {validation.warnings.length > 0 ? t('validation.warnings', { count: validation.warnings.length }) : ''}
                   </div>
                   <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '12px' }}>
                     {validation.errors.map((e, i) => (
@@ -353,16 +347,16 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 }}
                 disabled={validation.errors.length > 0}
               >
-                {validation.errors.length > 0 
-                  ? 'Fix Errors Before Building' 
-                  : buildType === 'web' ? 'Build Web Game' : desktopFormat === 'installer' ? 'Build Installer' : 'Build Standalone EXE'}
+                {validation.errors.length > 0
+                  ? t('buildBtn.fixErrors')
+                  : buildType === 'web' ? t('buildBtn.buildWeb') : desktopFormat === 'installer' ? t('buildBtn.buildInstaller') : t('buildBtn.buildStandalone')}
               </button>
 
               <div style={styles.helpBox}>
                 <p style={styles.helpText}>
-                  <strong>First time?</strong> After building, you'll get a ZIP file. 
-                  Upload it to <a href="https://itch.io" target="_blank" rel="noopener noreferrer" style={styles.link}>itch.io</a> and 
-                  you're done! No command line needed.
+                  <strong>{t('helpBox.firstTime')}</strong>{' '}{t('helpBox.before')}{' '}
+                  <a href="https://itch.io" target="_blank" rel="noopener noreferrer" style={styles.link}>itch.io</a>{' '}
+                  {t('helpBox.after')}
                 </p>
               </div>
             </>
@@ -378,25 +372,25 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
               
               {buildType === 'web' ? (
                 <div style={styles.progressSteps}>
-                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>📋 Preparing</div>
-                  <div style={getStepStyle(progress.step, 'generate', buildType)}>⚙️ Generating</div>
-                  <div style={getStepStyle(progress.step, 'assets', buildType)}>🎨 Bundling Assets</div>
-                  <div style={getStepStyle(progress.step, 'finalize', buildType)}>📦 Finalizing</div>
+                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>{t('progress.web.prepare')}</div>
+                  <div style={getStepStyle(progress.step, 'generate', buildType)}>{t('progress.web.generate')}</div>
+                  <div style={getStepStyle(progress.step, 'assets', buildType)}>{t('progress.web.assets')}</div>
+                  <div style={getStepStyle(progress.step, 'finalize', buildType)}>{t('progress.web.finalize')}</div>
                 </div>
               ) : (
                 <div style={{ ...styles.progressSteps, gridTemplateColumns: '1fr 1fr 1fr' }}>
-                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>📋 Prepare</div>
-                  <div style={getStepStyle(progress.step, 'generate', buildType)}>⚙️ Generate</div>
-                  <div style={getStepStyle(progress.step, 'assets', buildType)}>🎨 Assets</div>
-                  <div style={getStepStyle(progress.step, 'install', buildType)}>📥 Dependencies</div>
-                  <div style={getStepStyle(progress.step, 'build', buildType)}>🔨 Build EXE</div>
-                  <div style={getStepStyle(progress.step, 'save', buildType)}>💾 Save</div>
+                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>{t('progress.desktop.prepare')}</div>
+                  <div style={getStepStyle(progress.step, 'generate', buildType)}>{t('progress.desktop.generate')}</div>
+                  <div style={getStepStyle(progress.step, 'assets', buildType)}>{t('progress.desktop.assets')}</div>
+                  <div style={getStepStyle(progress.step, 'install', buildType)}>{t('progress.desktop.install')}</div>
+                  <div style={getStepStyle(progress.step, 'build', buildType)}>{t('progress.desktop.build')}</div>
+                  <div style={getStepStyle(progress.step, 'save', buildType)}>{t('progress.desktop.save')}</div>
                 </div>
               )}
 
               {buildType === 'desktop' && (
                 <p style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center', marginTop: '16px' }}>
-                  Desktop builds take a few minutes — the app is working in the background.
+                  {t('progress.desktop.working')}
                 </p>
               )}
             </div>
@@ -406,29 +400,29 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
             <div style={styles.successContainer}>
               <div style={styles.successIcon}><CheckIcon style={{ width: 64, height: 64, color: '#4CAF50' }} /></div>
               <h3 style={styles.successTitle}>
-                {buildType === 'web' ? 'Web Game Built Successfully!' : desktopFormat === 'installer' ? 'Installer Built Successfully!' : 'Desktop App Built Successfully!'}
+                {buildType === 'web' ? t('success.webTitle') : desktopFormat === 'installer' ? t('success.installerTitle') : t('success.desktopTitle')}
               </h3>
               <p style={styles.successText}>
-                {buildType === 'web' 
-                  ? 'Your game is ready to share on the web!'
+                {buildType === 'web'
+                  ? t('success.webText')
                   : desktopFormat === 'installer'
-                  ? 'Your installer with shortcuts and game saves directory is ready!'
-                  : 'Your standalone desktop game is ready!'}
+                  ? t('success.installerText')
+                  : t('success.desktopText')}
               </p>
 
               {buildType === 'web' && (
                 <>
                   <div style={styles.buildInfo}>
                     <div style={styles.buildStat}>
-                      <strong>File Size:</strong> {buildSize.toFixed(1)} MB
+                      <strong>{t('success.fileSize')}</strong> {buildSize.toFixed(1)} MB
                     </div>
                     <div style={styles.buildStat}>
-                      <strong>Format:</strong> HTML5 (ZIP)
+                      <strong>{t('success.format')}</strong> {t('success.formatValue')}
                     </div>
                   </div>
 
                   <button onClick={handleDownload} style={styles.downloadButton}>
-                    <ArrowDownTrayIcon style={{ display: 'inline-block', verticalAlign: 'middle', width: 20, height: 20, marginRight: 8 }} /> Download Web Game ZIP
+                    <ArrowDownTrayIcon style={{ display: 'inline-block', verticalAlign: 'middle', width: 20, height: 20, marginRight: 8 }} /> {t('success.downloadBtn')}
                   </button>
                 </>
               )}
@@ -436,89 +430,89 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
               {buildType === 'desktop' && (
                 <div style={styles.successMessage}>
                   <p style={{ fontSize: '16px', color: '#10b981', margin: '16px 0' }}>
-                    Executable saved successfully!
+                    {t('success.execSaved')}
                   </p>
                   <p style={{ fontSize: '14px', color: '#94a3b8' }}>
-                    Check the location you selected to find your game's executable file.
+                    {t('success.execLocation')}
                   </p>
                 </div>
               )}
 
               <div style={styles.nextSteps}>
-                <h4 style={styles.nextStepsTitle}>What's Next?</h4>
+                <h4 style={styles.nextStepsTitle}>{t('nextSteps.title')}</h4>
                 {buildType === 'web' ? (
                   <ol style={styles.nextStepsList}>
                     <li>
-                      <strong>Upload to itch.io (Recommended):</strong>
+                      <strong>{t('nextSteps.web.step1Title')}</strong>
                       <br />
-                      Go to <a href="https://itch.io/game/new" target="_blank" rel="noopener noreferrer" style={styles.link}>itch.io/game/new</a>
+                      {t('nextSteps.web.step1GoTo')}{' '}<a href="https://itch.io/game/new" target="_blank" rel="noopener noreferrer" style={styles.link}>itch.io/game/new</a>
                       <br />
-                      Choose "HTML" as the upload type
+                      {t('nextSteps.web.step1ChooseHtml')}
                       <br />
-                      Upload the ZIP file you just downloaded
+                      {t('nextSteps.web.step1Upload')}
                       <br />
-                      Check "This file will be played in the browser"
+                      {t('nextSteps.web.step1Check')}
                       <br />
-                      Publish!
+                      {t('nextSteps.web.step1Publish')}
                     </li>
                     <li>
-                      <strong>Or host yourself:</strong> Unzip and upload the contents to any web host
+                      <strong>{t('nextSteps.web.step2Title')}</strong> {t('nextSteps.web.step2Desc')}
                     </li>
                     <li>
-                      <strong>Or share offline:</strong> Send the ZIP to friends - they can unzip and open index.html
+                      <strong>{t('nextSteps.web.step3Title')}</strong> {t('nextSteps.web.step3Desc')}
                     </li>
                   </ol>
                 ) : (
                   <ol style={styles.nextStepsList}>
                     <li>
-                      <strong>Test Your Game:</strong> {desktopFormat === 'installer' ? 'Run the Setup installer to install your game' : 'Double-click the executable to test your game'}
+                      <strong>{t('nextSteps.desktop.step1Title')}</strong> {desktopFormat === 'installer' ? t('nextSteps.desktop.step1Installer') : t('nextSteps.desktop.step1Standalone')}
                       <br />
-                      • Windows: .exe file
+                      {t('nextSteps.desktop.step1Windows')}
                       <br />
-                      • Mac: .app or .dmg file
+                      {t('nextSteps.desktop.step1Mac')}
                       <br />
-                      • Linux: .AppImage file
+                      {t('nextSteps.desktop.step1Linux')}
                     </li>
                     <li>
-                      <strong>Distribute:</strong> Share the {desktopFormat === 'installer' ? 'installer' : 'executable'} with players!
+                      <strong>{t('nextSteps.desktop.step2Title')}</strong> {desktopFormat === 'installer' ? t('nextSteps.desktop.step2ShareInstaller') : t('nextSteps.desktop.step2ShareStandalone')}
                       <br />
-                      {desktopFormat === 'installer' 
-                        ? 'The installer will create desktop/start menu shortcuts, an install directory, and a game saves folder'
-                        : 'They just download and run - no installation needed'}
+                      {desktopFormat === 'installer'
+                        ? t('nextSteps.desktop.step2InstallerDesc')
+                        : t('nextSteps.desktop.step2StandaloneDesc')}
                     </li>
                     <li>
-                      <strong>Save System:</strong> Your game includes:
+                      <strong>{t('nextSteps.desktop.step3Title')}</strong> {t('nextSteps.desktop.step3Desc')}
                       <br />
-                      • Automatic file-based saves (persistent between sessions)
+                      {t('nextSteps.desktop.step3Item1')}
                       <br />
-                      • Players' progress is saved to their computer
+                      {t('nextSteps.desktop.step3Item2')}
                       <br />
-                      • Works offline with no server needed
+                      {t('nextSteps.desktop.step3Item3')}
                     </li>
                     {desktopFormat === 'installer' && (
                       <li>
-                        <strong>Installer Features:</strong>
+                        <strong>{t('nextSteps.desktop.step4InstallerTitle')}</strong>
                         <br />
-                        • Custom install directory selection
+                        {t('nextSteps.desktop.step4Item1')}
                         <br />
-                        • Desktop and Start Menu shortcuts
+                        {t('nextSteps.desktop.step4Item2')}
                         <br />
-                        • Clean uninstaller included
+                        {t('nextSteps.desktop.step4Item3')}
                         <br />
-                        • Game saves stored in user data folder
+                        {t('nextSteps.desktop.step4Item4')}
                       </li>
                     )}
                     <li>
-                      <strong>Note:</strong> The {desktopFormat === 'installer' ? 'installer' : 'executable'} is platform-specific
+                      <strong>{t('nextSteps.desktop.step5NoteTitle')}</strong> {desktopFormat === 'installer' ? t('nextSteps.desktop.step5NoteInstaller') : t('nextSteps.desktop.step5NoteStandalone')}
                       <br />
-                      Build on Windows for .exe, Mac for .app, Linux for .AppImage
+                      {t('nextSteps.desktop.step5Platform')}
                     </li>
                   </ol>
                 )}
               </div>
 
               <button onClick={handleReset} style={styles.resetButton}>
-                Build Another Version
+                {t('success.buildAnotherVersion')}
               </button>
             </div>
           )}
@@ -526,20 +520,20 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
           {buildStep === 'error' && (
             <div style={styles.errorContainer}>
               <div style={styles.errorIcon}><XMarkIcon style={{ width: 64, height: 64, color: '#f44336' }} /></div>
-              <h3 style={styles.errorTitle}>Build Failed</h3>
+              <h3 style={styles.errorTitle}>{t('error.title')}</h3>
               <p style={styles.errorMessage}>{error}</p>
-              
+
               <div style={styles.errorHelp}>
-                <p><strong>Common fixes:</strong></p>
+                <p><strong>{t('error.commonFixes')}</strong></p>
                 <ul style={styles.list}>
-                  <li>Make sure your project has at least one scene</li>
-                  <li>Check that all assets are properly loaded</li>
-                  <li>Try closing and reopening the app</li>
+                  <li>{t('error.fix1')}</li>
+                  <li>{t('error.fix2')}</li>
+                  <li>{t('error.fix3')}</li>
                 </ul>
               </div>
 
               <button onClick={handleReset} style={styles.retryButton}>
-                Try Again
+                {t('error.tryAgain')}
               </button>
             </div>
           )}

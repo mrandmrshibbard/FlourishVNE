@@ -336,7 +336,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 768,
-    icon: path.join(__dirname, '../docs/Flourish.png'),
+    icon: path.join(__dirname, '../public/Flourish.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -474,7 +474,28 @@ function createWindow() {
         {
           label: 'Documentation',
           click: async () => {
-            await shell.openPath(path.join(__dirname, '../docs/index.html'));
+            // Docs ship as unpacked extraResources in a packaged build (real filesystem path so the
+            // OS can open the .html), and live at repo-root /docs in dev. Resolve accordingly, verify
+            // the file exists, and surface a friendly dialog instead of a raw Windows "file not found".
+            const docsDir = app.isPackaged
+              ? path.join(process.resourcesPath, 'docs')
+              : path.join(__dirname, '../docs');
+            const indexPath = path.join(docsDir, 'index.html');
+            try {
+              if (!fs.existsSync(indexPath)) {
+                throw new Error(`Documentation file not found at:\n${indexPath}`);
+              }
+              const err = await shell.openPath(indexPath);
+              if (err) throw new Error(err);
+            } catch (e) {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Documentation',
+                message: 'Could not open the documentation.',
+                detail: (e && e.message) ? e.message : String(e),
+                buttons: ['OK']
+              });
+            }
           }
         },
         { type: 'separator' },
@@ -1168,7 +1189,7 @@ ipcMain.on('open-manager-window', (event, config) => {
     height,
     minWidth: 800,
     minHeight: 600,
-    icon: path.join(__dirname, '../docs/Flourish.png'),
+    icon: path.join(__dirname, '../public/Flourish.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

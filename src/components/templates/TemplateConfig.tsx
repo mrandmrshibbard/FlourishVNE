@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Template, TemplateConfig as TConfig, TemplateValidationResult } from '../../types/template';
 import { VNID } from '../../types';
 
@@ -54,6 +55,8 @@ export const TemplateConfigComponent: React.FC<TemplateConfigProps> = ({
   onCancel,
   showPreview = true
 }) => {
+  const { t } = useTranslation('templates');
+
   // State
   const [config, setConfig] = useState<TConfig>(
     initialConfig || template.defaultConfig
@@ -219,7 +222,7 @@ export const TemplateConfigComponent: React.FC<TemplateConfigProps> = ({
    */
   const handleCancel = useCallback(() => {
     if (isDirty) {
-      const confirmCancel = window.confirm('You have unsaved changes. Are you sure you want to cancel?');
+      const confirmCancel = window.confirm(t('config.confirmCancel'));
       if (!confirmCancel) return;
     }
     onCancel?.();
@@ -229,7 +232,7 @@ export const TemplateConfigComponent: React.FC<TemplateConfigProps> = ({
    * Reset to defaults
    */
   const handleReset = useCallback(() => {
-    const confirmReset = window.confirm('Reset all configuration to default values?');
+    const confirmReset = window.confirm(t('config.confirmReset'));
     if (confirmReset) {
       setConfig(template.defaultConfig);
       setIsDirty(true);
@@ -250,7 +253,7 @@ export const TemplateConfigComponent: React.FC<TemplateConfigProps> = ({
       {/* Header */}
       <div className="template-config__header">
         <div className="template-config__title-section">
-          <h2 className="template-config__title">{template.name} Configuration</h2>
+          <h2 className="template-config__title">{t('config.heading', { name: template.name })}</h2>
           <p className="template-config__description">{template.description}</p>
         </div>
         
@@ -261,20 +264,20 @@ export const TemplateConfigComponent: React.FC<TemplateConfigProps> = ({
             onClick={handleReset}
             disabled={!isDirty}
           >
-            Reset to Defaults
+            {t('config.resetToDefaults')}
           </button>
           <button
             className="btn btn--secondary"
             onClick={handleCancel}
           >
-            Cancel
+            {t('config.cancel')}
           </button>
           <button
             className="btn btn--primary"
             onClick={handleSave}
             disabled={!validationResult.isValid || !isDirty}
           >
-            Save Configuration
+            {t('config.saveConfiguration')}
           </button>
         </div>
       </div>
@@ -332,10 +335,10 @@ export const TemplateConfigComponent: React.FC<TemplateConfigProps> = ({
       {/* Preview section */}
       {showPreview && (
         <div className="template-config__preview">
-          <h3>Preview</h3>
+          <h3>{t('config.previewHeading')}</h3>
           <div className="preview-placeholder">
-            <p>Template preview will appear here</p>
-            <small>Changes update in real-time</small>
+            <p>{t('config.previewPlaceholder')}</p>
+            <small>{t('config.previewRealtimeNote')}</small>
           </div>
         </div>
       )}
@@ -359,6 +362,8 @@ const ConfigFieldRenderer: React.FC<ConfigFieldRendererProps> = ({
   onChange,
   error
 }) => {
+  const { t } = useTranslation('templates');
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     let newValue: any = e.target.value;
     
@@ -412,7 +417,7 @@ const ConfigFieldRenderer: React.FC<ConfigFieldRendererProps> = ({
             checked={value || false}
             onChange={handleChange}
           />
-          <span>Enable</span>
+          <span>{t('config.enable')}</span>
         </label>
       )}
 
@@ -422,7 +427,7 @@ const ConfigFieldRenderer: React.FC<ConfigFieldRendererProps> = ({
           value={value || ''}
           onChange={handleChange}
         >
-          <option value="">Select...</option>
+          <option value="">{t('config.selectPlaceholder')}</option>
           {field.options.map(opt => (
             <option key={opt.value} value={opt.value}>
               {opt.label}

@@ -19,7 +19,8 @@ export function handleChoice(command: ChoiceCommand, context: CommandContext): C
     updates: {
       uiState: {
         ...playerState.uiState,
-        choices: availableChoices
+        choices: availableChoices,
+        choiceLayout: command.layout
       }
     }
   };

@@ -1268,7 +1268,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     );
 };
 
-const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject }> = ({ choices, projectUI, onSelect, variables, project }) => {
+const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free' }> = ({ choices, projectUI, onSelect, variables, project, layout }) => {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     
     // Resolve choice button image/video URL
@@ -1316,8 +1316,109 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     const choiceXPct = projectUI.choiceButtonX ?? (50 - choiceWPct / 2);
     const choiceYPct = projectUI.choiceButtonY ?? 35;
 
+    // Resolve a per-option art asset (image/video) to a URL.
+    const resolveChoiceImg = (a?: { type: 'image' | 'video'; id: VNID } | null): string | null => {
+        if (!a) return null;
+        return a.type === 'video'
+            ? (project.videos[a.id]?.videoUrl || (project.backgrounds[a.id] as any)?.videoUrl || (project.images[a.id] as any)?.videoUrl || null)
+            : (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null);
+    };
+
+    // Render one choice button. Per-option overrides (art / colors / fontSize / radius) fall back to
+    // the global project.ui.choice* style, so with no overrides this is identical to the classic look.
+    // `fill` = the button should fill its wrapper's height (used by the free/positioned layout).
+    const renderButton = (choice: ChoiceOption, index: number, fill: boolean) => {
+        const interpolatedText = interpolateVariables(choice.text, variables, project);
+        const isHovered = hoveredIndex === index;
+        const optImg = resolveChoiceImg(choice.image);
+        const optHoverImg = resolveChoiceImg(choice.hoverImage);
+        const baseImg = optImg ?? choiceButtonUrl;
+        const baseIsVideo = optImg ? choice.image?.type === 'video' : isChoiceButtonVideo;
+        const hoverImg = optHoverImg ?? choiceHoverUrl;
+        const activeButtonUrl = (isHovered && hoverImg) ? hoverImg : baseImg;
+        const optBg = choice.backgroundColor ? hexToRgba(choice.backgroundColor, choiceOpacity) : choiceBgColor;
+        const optHoverBg = choice.hoverBackgroundColor ? hexToRgba(choice.hoverBackgroundColor, choiceOpacity) : choiceHoverBgColor;
+        const optRadius = choice.borderRadius ?? choiceBorderRadius;
+        const hasImg = !!(baseImg || choiceBorderUrl);
+        return (
+            <button
+                onClick={() => onSelect(choice)}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
+                style={{
+                    borderRadius: scalePx(optRadius),
+                    ...(fill ? { height: '100%' } : {}),
+                    ...(activeButtonUrl && !baseIsVideo
+                        ? {
+                            ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
+                            backgroundColor: isHovered ? optHoverBg : optBg,
+                          }
+                        : !hasImg
+                            ? {
+                                backgroundColor: isHovered ? optHoverBg : optBg,
+                                border: '1px solid rgba(148,163,184,0.3)',
+                                boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                backdropFilter: 'blur(6px)',
+                                WebkitBackdropFilter: 'blur(6px)',
+                              }
+                            : { backgroundColor: isHovered ? optHoverBg : 'transparent' }),
+                    padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
+                    ...(!fill && choiceHeight ? { height: scalePx(choiceHeight) } : {}),
+                    ...fontSettingsToStyle(projectUI.choiceTextFont),
+                    ...(choice.fontSize ? { fontSize: scalePx(choice.fontSize) } : {}),
+                    ...(choice.textColor ? { color: choice.textColor } : {}),
+                    textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
+                    wordBreak: 'normal' as const,
+                    overflowWrap: 'break-word' as const,
+                    cursor: 'pointer',
+                }}
+            >
+                {baseIsVideo && baseImg && (
+                    <video autoPlay loop muted className="absolute inset-0 w-full h-full -z-10" style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(optRadius) }}>
+                        <source src={baseImg} />
+                    </video>
+                )}
+                <span className="relative z-10" style={{ ...(extractTextGradientStyle(projectUI.choiceTextFont) || {}), ...(choice.textColor ? { color: choice.textColor } : {}) }}>{interpolatedText}</span>
+            </button>
+        );
+    };
+
+    const choiceKeyframes = (
+        <style>{`
+            @keyframes vnChoiceOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes vnChoiceSlideIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        `}</style>
+    );
+
+    // ── Free layout: each option positioned/sized by its own x/y/width/height ──
+    if (layout === 'free') {
+        return (
+            <div className="absolute inset-0 z-30" style={{ pointerEvents: 'none', animation: 'vnChoiceOverlayIn 0.3s ease-out' }}>
+                {choices.map((choice, index) => {
+                    const bx = choice.x ?? (34 + index * 2);
+                    const by = choice.y ?? (40 + index * 12);
+                    const bw = choice.width ?? 25;
+                    const bh = choice.height ?? 9;
+                    return (
+                        <div key={index} style={{
+                            position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto',
+                            animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                            ...(choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) } : {}),
+                        }}>
+                            {renderButton(choice, index, true)}
+                        </div>
+                    );
+                })}
+                {choiceKeyframes}
+            </div>
+        );
+    }
+
+    // ── Vertical (default) or Horizontal stack ──
+    const horizontal = layout === 'horizontal';
     return (
-        <div className="absolute z-30 flex flex-col items-center justify-center"
+        <div className={`absolute z-30 flex ${horizontal ? 'flex-row flex-wrap gap-3' : 'flex-col'} items-center justify-center`}
              style={{
                  left: `${choiceXPct}%`,
                  top: `${choiceYPct}%`,
@@ -1325,81 +1426,22 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
                  height: `${choiceHPct}%`,
                  animation: 'vnChoiceOverlayIn 0.3s ease-out',
              }}>
-            {choices.map((choice, index) => {
-                const interpolatedText = interpolateVariables(choice.text, variables, project);
-                const isHovered = hoveredIndex === index;
-                // Determine which image url to use (hover image takes priority when hovered)
-                const activeButtonUrl = (isHovered && choiceHoverUrl) ? choiceHoverUrl : choiceButtonUrl;
-                
-                return (
-                    <div
-                        key={index}
-                        className="mb-3"
-                        style={{
-                            animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
-                            width: '100%',
-                            ...(choiceBorderUrl 
-                                ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) }
-                                : {})
-                        }}
-                    >
-                        <button 
-                            onClick={() => onSelect(choice)}
-                            onMouseEnter={() => setHoveredIndex(index)}
-                            onMouseLeave={() => setHoveredIndex(null)}
-                            className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
-                            style={{
-                                borderRadius: scalePx(choiceBorderRadius),
-                                ...(activeButtonUrl && !isChoiceButtonVideo 
-                                    ? { 
-                                        ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
-                                        backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor,
-                                      } 
-                                    : !hasCustomChoiceImage 
-                                        ? { 
-                                            backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor,
-                                            border: '1px solid rgba(148,163,184,0.3)',
-                                            boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
-                                            backdropFilter: 'blur(6px)',
-                                            WebkitBackdropFilter: 'blur(6px)',
-                                          } 
-                                        : { backgroundColor: isHovered ? choiceHoverBgColor : 'transparent' }),
-                                padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`, 
-                                ...(choiceHeight ? { height: scalePx(choiceHeight) } : {}), 
-                                ...fontSettingsToStyle(projectUI.choiceTextFont), 
-                                textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
-                                wordBreak: 'normal' as const,
-                                overflowWrap: 'break-word' as const,
-                                cursor: 'pointer',
-                            }}
-                        >
-                            {isChoiceButtonVideo && choiceButtonUrl && (
-                                <video 
-                                    autoPlay 
-                                    loop 
-                                    muted 
-                                    className="absolute inset-0 w-full h-full -z-10"
-                                    style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(choiceBorderRadius) }}
-                                >
-                                    <source src={choiceButtonUrl} />
-                                </video>
-                            )}
-                            <span className="relative z-10" style={extractTextGradientStyle(projectUI.choiceTextFont) || undefined}>{interpolatedText}</span>
-                        </button>
-                    </div>
-                );
-            })}
-            {/* Inject choice keyframe animations */}
-            <style>{`
-                @keyframes vnChoiceOverlayIn {
-                    from { opacity: 0; }
-                    to   { opacity: 1; }
-                }
-                @keyframes vnChoiceSlideIn {
-                    from { opacity: 0; transform: translateY(16px); }
-                    to   { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
+            {choices.map((choice, index) => (
+                <div
+                    key={index}
+                    className={horizontal ? '' : 'mb-3'}
+                    style={{
+                        animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                        ...(horizontal ? {} : { width: '100%' }),
+                        ...(choiceBorderUrl
+                            ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) }
+                            : {})
+                    }}
+                >
+                    {renderButton(choice, index, false)}
+                </div>
+            ))}
+            {choiceKeyframes}
         </div>
     );
 };
@@ -4320,6 +4362,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             };
 
+            // Plugin hook: let plugins read/augment the save record before it is persisted.
+            try { pluginManager.invokeHook('onSave', saves[slotNumber]); } catch { /* isolated */ }
+
             // If persistence failed previously, store in memory and avoid hitting storage repeatedly
             if (!savesPersistentRef.current) {
                 inMemorySavesRef.current = saves;
@@ -4363,6 +4408,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setScreenStack([]);
             setHudStack([]);
             setIsJustLoaded(true);
+            // Plugin hook: a save has just been loaded (state applied).
+            try { pluginManager.invokeHook('onLoadAfterSave', saveData); } catch { /* isolated */ }
         };
 
         void doLoad();
@@ -5209,7 +5256,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Tracks the scene id for which 'auto' common events have already been injected,
     // so they run once per scene entry (re-entry after visiting another scene re-runs).
     const autoRanSceneRef = useRef<VNID | null>(null);
-    const runLifecycleScripts = useCallback((trigger: 'onSceneEnter' | 'onSceneExit', sceneId: VNID) => {
+    const runLifecycleScripts = useCallback(async (trigger: 'onSceneEnter' | 'onSceneExit', sceneId: VNID) => {
         const scripts = (Object.values(project.scripts || {}) as VNScript[]).filter(s => s.enabled && s.trigger === trigger);
         if (scripts.length === 0) return;
 
@@ -5230,7 +5277,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return nameOrId;
         };
 
-        for (const scr of scripts) {
+        // Run one lifecycle script (recursively, so onSceneEnter/Exit scripts CAN chain via
+        // game.runScript). game.callCommonEvent isn't supported here (lifecycle runs outside the
+        // command loop / stack) — warned, not silently ignored.
+        const LIFECYCLE_MAX_DEPTH = 16;
+        const execLifecycle = async (scr: VNScript, depth: number): Promise<void> => {
+            if (depth > LIFECYCLE_MAX_DEPTH) {
+                console.error(`[Lifecycle:${trigger}] script recursion limit reached at "${scr.name}"`);
+                return;
+            }
             const ctx: ScriptRuntimeContext = {
                 project,
                 variables: variableUpdates,
@@ -5253,15 +5308,22 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 },
                 onStopMusic: (fade) => { if (musicAudioRef.current) fadeAudio(musicAudioRef.current, 0, fade || 1); },
                 onNotify: (message, type) => { notify(message, type); },
-                onRunScript: () => { /* lifecycle scripts cannot chain (kept simple) */ },
-                onCallCommonEvent: () => { /* not supported from lifecycle scripts */ },
+                onRunScript: (nameOrId) => {
+                    const lower = String(nameOrId).toLowerCase();
+                    const target = (Object.values(project.scripts || {}) as VNScript[]).find(s => s.id === nameOrId || s.name.toLowerCase() === lower);
+                    if (target && target.enabled) return execLifecycle(target, depth + 1);
+                    console.warn(`[Lifecycle:${trigger}] runScript: not found/disabled "${nameOrId}"`);
+                    return undefined;
+                },
+                onCallCommonEvent: () => { console.warn(`[Lifecycle:${trigger}] game.callCommonEvent is not available from lifecycle scripts — use a Common Event's "auto" trigger instead.`); },
             };
-            const result = executeScript(scr, ctx);
+            const result = await executeScript(scr, ctx);
             if (!result.success) {
                 console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
                 notify(`Script "${scr.name}" error: ${result.error}`, 'error');
             }
-        }
+        };
+        for (const scr of scripts) await execLifecycle(scr, 0);
 
         // Apply accumulated variable writes through the store + player state.
         if (store) {
@@ -5295,12 +5357,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         const ALLOWED = new Set<string>([
             CommandType.SetVariable, CommandType.RunScript, CommandType.Wait,
             CommandType.PlayMusic, CommandType.StopMusic, CommandType.PlaySoundEffect, CommandType.StopSoundEffect,
+            CommandType.CallCommonEvent,
         ]);
+        const PARALLEL_CALL_MAX_DEPTH = 8;
         const isTruthy = (v: unknown) => !(v === undefined || v === null || v === false || v === 0 || v === '' || v === 'false');
 
         const tick = () => {
             const ps = playerStateRef.current;
             if (!ps || ps.mode !== 'playing') return;
+            // Plugin heartbeat (~120ms). Fires during play even when no parallel CEs are active.
+            try { pluginManager.invokeHook('onRuntimeTick', 120); } catch { /* isolated */ }
             if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
 
             const events = Object.values(project.commonEvents || {}) as VNCommonEvent[];
@@ -5337,6 +5403,41 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 notify,
             });
 
+            // Run a CALLED Common Event's background-safe commands inline (parallel context).
+            // No command stack / param scoping / Wait blocking here — calls are flattened and
+            // depth+cycle guarded. Presentation commands are skipped, same as the top level.
+            const resolveCe = (idOrName: string): VNCommonEvent | undefined => {
+                const ces = project.commonEvents || {};
+                return (ces[idOrName] as VNCommonEvent) || (Object.values(ces) as VNCommonEvent[]).find(e => e.name?.toLowerCase() === String(idOrName).toLowerCase());
+            };
+            const runCalledCe = (idOrName: string, depth: number, chain: Set<string>) => {
+                if (depth > PARALLEL_CALL_MAX_DEPTH) return;
+                const target = resolveCe(idOrName);
+                if (!target || !target.enabled || chain.has(target.id)) return; // disabled / cycle guard
+                const nextChain = new Set(chain); nextChain.add(target.id);
+                for (const c of (target.commands || []) as any[]) {
+                    if (c.type === CommandType.Wait) continue;            // can't block inline
+                    if (c.type === CommandType.CallCommonEvent) { runCalledCe(c.commonEventId, depth + 1, nextChain); continue; }
+                    if (!ALLOWED.has(c.type)) continue;
+                    try {
+                        const ctx = buildCtx();
+                        let r: CommandResult | null = null;
+                        switch (c.type) {
+                            case CommandType.SetVariable: r = handleSetVariable(c, ctx); break;
+                            case CommandType.RunScript:
+                                handleRunScript(c, ctx).then(rr => { if (rr.updates?.variables) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...rr.updates!.variables } } : null); }).catch(() => {});
+                                break;
+                            case CommandType.PlayMusic: r = handlePlayMusic(c, ctx); break;
+                            case CommandType.StopMusic: r = handleStopMusic(c, ctx); break;
+                            case CommandType.PlaySoundEffect: r = handlePlaySoundEffect(c, ctx); break;
+                            case CommandType.StopSoundEffect: r = handleStopSoundEffect(c, ctx); break;
+                        }
+                        if (r?.updates?.variables) varAccum = { ...(varAccum || {}), ...r.updates.variables };
+                        if (r?.updates?.musicState) musicAccum = { ...(musicAccum || {}), ...r.updates.musicState };
+                    } catch (e) { console.error('[Parallel CE call] command error:', e); }
+                }
+            };
+
             for (const ce of active) {
                 let st = parallelStateRef.current.get(ce.id);
                 if (!st) { st = { index: 0 }; parallelStateRef.current.set(ce.id, st); }
@@ -5366,11 +5467,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     let result: CommandResult | null = null;
                     switch (cmd.type) {
                         case CommandType.SetVariable: result = handleSetVariable(cmd, ctx); break;
-                        case CommandType.RunScript: result = handleRunScript(cmd, ctx); break;
+                        case CommandType.RunScript:
+                            // Scripts are async — run in the background and apply var changes on resolve
+                            // (the parallel tick stays synchronous).
+                            handleRunScript(cmd, ctx)
+                                .then(r => { if (r.updates?.variables) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...r.updates!.variables } } : null); })
+                                .catch(e => console.error(`[Parallel CE "${ce.name}"] script error:`, e));
+                            break;
                         case CommandType.PlayMusic: result = handlePlayMusic(cmd, ctx); break;
                         case CommandType.StopMusic: result = handleStopMusic(cmd, ctx); break;
                         case CommandType.PlaySoundEffect: result = handlePlaySoundEffect(cmd, ctx); break;
                         case CommandType.StopSoundEffect: result = handleStopSoundEffect(cmd, ctx); break;
+                        case CommandType.CallCommonEvent: runCalledCe(cmd.commonEventId, 1, new Set([ce.id])); break;
                     }
                     if (result?.updates?.variables) varAccum = { ...(varAccum || {}), ...result.updates.variables };
                     if (result?.updates?.musicState) musicAccum = { ...(musicAccum || {}), ...result.updates.musicState };
@@ -6361,8 +6469,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.RunScript: {
-                    const result = handleRunScript(command as RunScriptCommand, commandContext);
-                    applyResult(result);
+                    const runScriptCmd = command as RunScriptCommand;
+                    // Default true (commandFactory). When set, the scene waits for the script to fully
+                    // finish — including any `await game.wait(...)` inside it — before advancing.
+                    const waitForScript = runScriptCmd.waitForCompletion !== false;
+                    if (waitForScript) {
+                        const result = await handleRunScript(runScriptCmd, commandContext);
+                        applyResult(result);
+                    } else {
+                        // Fire-and-forget: don't block the scene. Variable writes land when the script
+                        // resolves; scene/CommonEvent navigation from a non-waiting script is not honored.
+                        instantAdvance = true;
+                        handleRunScript(runScriptCmd, commandContext)
+                            .then(result => { if (result.updates) applyResult({ advance: true, updates: result.updates }); })
+                            .catch(err => console.error('[RunScript] background script error:', err));
+                    }
                     break;
                 }
                 case CommandType.SpawnParticles: {
@@ -6492,6 +6613,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
     const handleChoiceSelect = (choice: ChoiceOption) => {
         runtimeDebugLog('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
+        // Full action list (+ legacy targetSceneId fallback). The inline handling below covers
+        // SetVariable / JumpToScene / JumpToLabel / OpenURL; EVERY other action type is delegated to
+        // handleUIAction (the same pipeline buttons use) after the state update — giving choices the
+        // full action set, incl. Call Common Event, Go To Screen, Play Sound, Exit Game, etc.
+        const allActions: VNUIAction[] = [...(choice.actions || [])];
+        if (!choice.actions && (choice as any).targetSceneId) {
+            allActions.push({ type: UIActionType.JumpToScene, targetSceneId: (choice as any).targetSceneId } as VNUIAction);
+        }
+        const INLINE_CHOICE_ACTIONS = new Set<string>([UIActionType.SetVariable, UIActionType.JumpToScene, UIActionType.JumpToLabel, UIActionType.OpenURL]);
         updatePlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
@@ -6520,11 +6650,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Clear dialogue and choices after selection
             newState.uiState = { ...newState.uiState, dialogue: null, choices: null };
             
-            const actions = choice.actions || [];
-            if (!choice.actions && choice.targetSceneId) {
-                // FIX: 'targetSceneId' should be 'targetScreenId', but the type is wrong. The correct fix is in types/shared.ts
-                actions.push({ type: UIActionType.JumpToScene, targetSceneId: (choice as any).targetSceneId });
-            }
+            const actions = allActions;
 
             for (const action of actions) {
                 runtimeDebugLog('[CHOICE] Processing action:', action.type, action);
@@ -6549,7 +6675,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         setVarAction.value,
                         setVarAction.randomMin,
                         setVarAction.randomMax,
-                        wasCoercedOperator ? originalOperator : undefined
+                        wasCoercedOperator ? originalOperator : undefined,
+                        (variable as any).min,
+                        (variable as any).max
                     );
 
                     newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
@@ -6642,9 +6770,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // If no jump, just advance to next command in current scene
                 newState.currentIndex = newState.currentIndex + 1;
             }
-    
+
             return newState;
         });
+
+        // Run every non-inline action through the shared UI-action pipeline (same as buttons), so
+        // choices support the full action set (Call Common Event, Go To Screen, Play Sound, toggles,
+        // Exit Game, …). SetVariable/Jump/Label/OpenURL were already handled inline above.
+        for (const action of allActions) {
+            if (!INLINE_CHOICE_ACTIONS.has(action.type)) {
+                handleUIAction(action);
+            }
+        }
     };
 
     const handleTextInputSubmit = (value: string) => {
@@ -7368,7 +7505,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     setVarAction.value,
                     setVarAction.randomMin,
                     setVarAction.randomMax,
-                    wasCoercedOperator ? originalOperator : undefined
+                    wasCoercedOperator ? originalOperator : undefined,
+                    (variable as any).min,
+                    (variable as any).max
                 );
             };
 
@@ -9176,7 +9315,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />
                 </>
             )}
-            {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} />}
+            {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout} />}
             {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} projectUI={project.ui} />}
             {activeFlashRef.current && <div 
                 key={activeFlashRef.current.key}

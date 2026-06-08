@@ -231,10 +231,28 @@ export interface ChoiceOption {
     actions?: ChoiceAction[];
     conditions?: VNCondition[];
     targetSceneId?: VNID; // Deprecated, for migration
+    // ── Per-option placement (only used when the Choice's layout is 'free') ──
+    // Percentages of the stage, top-left anchored (matches quick-menu independent layout).
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    // ── Per-option appearance overrides (any layout). Unset → global project.ui.choice* style. ──
+    image?: { type: 'image' | 'video'; id: VNID } | null;
+    hoverImage?: { type: 'image' | 'video'; id: VNID } | null;
+    backgroundColor?: string;
+    hoverBackgroundColor?: string;
+    textColor?: string;
+    fontSize?: number;       // px
+    borderRadius?: number;   // px
 }
 export interface ChoiceCommand extends BaseCommand {
     type: CommandType.Choice;
     options: ChoiceOption[];
+    /** How the choice buttons are arranged. undefined/'vertical' = the classic centered stack
+     *  (unchanged default); 'horizontal' = a centered row; 'free' = each option positioned by its
+     *  own x/y/width/height (drag/resize on the canvas). Additive-optional. */
+    layout?: 'vertical' | 'horizontal' | 'free';
 }
 
 export interface BranchStartCommand extends BaseCommand {

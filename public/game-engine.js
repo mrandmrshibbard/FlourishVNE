@@ -2955,6 +2955,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return { containerStyle, gradientSpanStyle };
   };
+  const BUILTIN_OVERLAY_EFFECT_TYPES = [
+    "crtScanlines",
+    "chromaticGlitch",
+    "sunbeams",
+    "shimmer",
+    "rain",
+    "snowAsh"
+  ];
   function clamp01(value) {
     if (Number.isNaN(value)) return 0;
     return Math.max(0, Math.min(1, value));
@@ -3021,6 +3029,40 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       return lerp2(grad(p[X], x), grad(p[X + 1], x - 1), u);
     };
   }
+  const PluginEffectCanvas = ({ def, effect, width, height }) => {
+    const canvasRef = React2.useRef(null);
+    const intensity = clamp01(effect.intensity ?? 0);
+    React2.useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas || !def.render || intensity <= 0 || width <= 0 || height <= 0) return;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const start = performance.now();
+      let raf = 0;
+      let stopped = false;
+      const loop = () => {
+        if (stopped) return;
+        ctx.clearRect(0, 0, width, height);
+        try {
+          def.render(ctx, { width, height, intensity, color: effect.color, params: effect.params, timeMs: performance.now() - start });
+        } catch (e) {
+          console.error(`[Plugin effect "${def.type}"] render error (stopping):`, e);
+          stopped = true;
+          return;
+        }
+        raf = requestAnimationFrame(loop);
+      };
+      raf = requestAnimationFrame(loop);
+      return () => {
+        stopped = true;
+        cancelAnimationFrame(raf);
+      };
+    }, [def, intensity, width, height, effect.color, effect.params]);
+    if (intensity <= 0) return null;
+    return /* @__PURE__ */ jsxRuntime2.jsx("canvas", { ref: canvasRef, className: "vnfx-canvas", "aria-hidden": true });
+  };
   const ScreenOverlayEffects = ({
     effects,
     width,
@@ -3037,6 +3079,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const shimmer = getEffect(normalized, "shimmer");
     const rain = getEffect(normalized, "rain");
     const snowAsh = getEffect(normalized, "snowAsh");
+    const pluginEffects = React2.useMemo(() => {
+      const builtins = new Set(BUILTIN_OVERLAY_EFFECT_TYPES);
+      return normalized.filter((e) => !builtins.has(e.type) && clamp01(e.intensity) > 0).map((e) => ({ effect: e, def: pluginManager.getEffect(e.type) })).filter((x) => !!x.def && typeof x.def.render === "function");
+    }, [normalized]);
     const rainCanvasRef = React2.useRef(null);
     const snowCanvasRef = React2.useRef(null);
     const sunbeamsCanvasRef = React2.useRef(null);
@@ -3424,7 +3470,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           className: "vnfx-canvas",
           "aria-hidden": true
         }
-      )
+      ),
+      pluginEffects.map(({ effect, def }) => /* @__PURE__ */ jsxRuntime2.jsx(
+        PluginEffectCanvas,
+        {
+          def,
+          effect,
+          width: safeWidth,
+          height: safeHeight
+        },
+        effect.id || def.type
+      ))
     ] });
   };
   const PARTICLE_PRESETS = {
@@ -4135,17 +4191,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return changeValStr;
     }
   };
-  const calculateVariableValue = (operator, variableType, currentValue, changeValue, randomMin, randomMax, originalOperator) => {
+  const clampNumberToBounds = (value, min, max) => {
+    let v = value;
+    if (typeof min === "number" && Number.isFinite(min) && v < min) v = min;
+    if (typeof max === "number" && Number.isFinite(max) && v > max) v = max;
+    return v;
+  };
+  const calculateVariableValue = (operator, variableType, currentValue, changeValue, randomMin, randomMax, originalOperator, boundMin, boundMax) => {
     const changeValStr = String(changeValue);
+    const finish = (result) => typeof result === "number" ? clampNumberToBounds(result, boundMin, boundMax) : result;
     switch (operator) {
       case "add":
-        return toNumeric(currentValue) + toNumeric(changeValStr);
+        return finish(toNumeric(currentValue) + toNumeric(changeValStr));
       case "subtract":
-        return toNumeric(currentValue) - toNumeric(changeValStr);
+        return finish(toNumeric(currentValue) - toNumeric(changeValStr));
       case "random": {
         const min = randomMin ?? 0;
         const max = randomMax ?? 100;
-        return Math.floor(Math.random() * (max - min + 1)) + min;
+        return finish(Math.floor(Math.random() * (max - min + 1)) + min);
       }
       case "set":
       default:
@@ -4164,7 +4227,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             return randomVal;
           }
         }
-        return coerceValueToType(changeValue, variableType, currentValue);
+        return finish(coerceValueToType(changeValue, variableType, currentValue));
     }
   };
   const PRESET_X = {
@@ -4257,7 +4320,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       command.value,
       command.randomMin,
       command.randomMax,
-      wasCoerced ? originalOperator : void 0
+      wasCoerced ? originalOperator : void 0,
+      variable.min,
+      variable.max
     );
     console.log("[DEBUG SetVariable] New value:", newVal, "| operator:", `${command.operator} => ${effectiveOperator}`);
     return {
@@ -4313,7 +4378,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       updates: {
         uiState: {
           ...playerState.uiState,
-          choices: availableChoices
+          choices: availableChoices,
+          choiceLayout: command.layout
         }
       }
     };
@@ -5767,7 +5833,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   function handleCreditRoll(command, _ctx) {
     return { advance: false };
   }
-  function executeScript(script, context) {
+  async function executeScript(script, context) {
     var _a;
     const startTime = performance.now();
     const variableChanges = {};
@@ -5796,13 +5862,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return context.variables[id];
       },
       setVariable: (nameOrId, value) => {
+        var _a2;
         const id = resolveVarId(nameOrId);
         if (!id) {
           console.warn(`[Script] Variable not found: "${nameOrId}"`);
           return;
         }
-        variableChanges[id] = value;
-        context.onSetVariable(nameOrId, value);
+        let finalValue = value;
+        const def = (_a2 = context.project.variables) == null ? void 0 : _a2[id];
+        if ((def == null ? void 0 : def.type) === "number" && typeof finalValue === "number") {
+          if (typeof def.min === "number" && finalValue < def.min) finalValue = def.min;
+          if (typeof def.max === "number" && finalValue > def.max) finalValue = def.max;
+        }
+        variableChanges[id] = finalValue;
+        context.onSetVariable(nameOrId, finalValue);
       },
       getAllVariables: () => {
         const result = {};
@@ -5881,13 +5954,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         navigationRequest = { type: "label", target: labelId };
         context.onJumpToLabel(labelId);
       },
+      // Returns the callback's result so a script may `await game.runScript(...)` for ordering.
       runScript: (nameOrId, args) => {
         var _a2;
-        (_a2 = context.onRunScript) == null ? void 0 : _a2.call(context, nameOrId, args);
+        return (_a2 = context.onRunScript) == null ? void 0 : _a2.call(context, nameOrId, args);
       },
       callCommonEvent: (nameOrId, args) => {
         var _a2;
-        (_a2 = context.onCallCommonEvent) == null ? void 0 : _a2.call(context, nameOrId, args);
+        return (_a2 = context.onCallCommonEvent) == null ? void 0 : _a2.call(context, nameOrId, args);
       },
       playSFX: (nameOrId, volume) => {
         context.onPlaySFX(nameOrId, volume);
@@ -5956,8 +6030,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ${blockStatements}
             ${script.code}
         `;
-      const scriptFn = new Function("game", wrappedCode);
-      const returnValue = scriptFn(gameAPI);
+      const AsyncFunction = Object.getPrototypeOf(async function() {
+      }).constructor;
+      const scriptFn = new AsyncFunction("game", wrappedCode);
+      const returnValue = await scriptFn(gameAPI);
       return {
         success: true,
         returnValue,
@@ -6083,7 +6159,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return out;
   }
-  const handleRunScript = (command, context) => {
+  const handleRunScript = async (command, context) => {
     var _a;
     const { project, playerState } = context;
     const script = (project.scripts || {})[command.scriptId];
@@ -6146,7 +6222,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       musicStateUpdate = { audioId, loop: !!loop, currentTime: 0, isPlaying: true };
     };
-    const runScriptInternal = (scr, args, depth) => {
+    const runScriptInternal = async (scr, args, depth) => {
       var _a2, _b;
       if (depth > MAX_SCRIPT_DEPTH) {
         console.error(`[RunScript] Recursion limit (${MAX_SCRIPT_DEPTH}) reached at "${scr.name}"`);
@@ -6195,10 +6271,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const target = findScript(project, nameOrId);
           if (!target) {
             console.warn(`[Script] runScript: script not found "${nameOrId}"`);
-            return;
+            return void 0;
           }
-          if (!target.enabled) return;
-          runScriptInternal(target, resolveArgs(target, a), depth + 1);
+          if (!target.enabled) return void 0;
+          return runScriptInternal(target, resolveArgs(target, a), depth + 1);
         },
         onCallCommonEvent: (nameOrId, a) => {
           const events = project.commonEvents || {};
@@ -6223,7 +6299,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           pendingCommonEvent = { commonEventId: ce.id, variableOverrides: overrides };
         }
       };
-      const result = executeScript(scr, runtimeContext);
+      const result = await executeScript(scr, runtimeContext);
       if (!result.success) {
         console.error(`[RunScript] Script "${scr.name}" failed:`, result.error);
         if (result.stack) console.error(result.stack);
@@ -6233,7 +6309,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       if (result.navigationRequest) navigationRequest = result.navigationRequest;
     };
-    runScriptInternal(script, resolveArgs(script, command.arguments), 0);
+    await runScriptInternal(script, resolveArgs(script, command.arguments), 0);
     const updates = {};
     if (Object.keys(variableUpdates).length > 0) updates.variables = variableUpdates;
     if (dialogueUpdate) updates.uiState = { ...updates.uiState || {}, dialogue: dialogueUpdate };
@@ -7595,7 +7671,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
-  const ChoiceMenu = ({ choices, projectUI, onSelect, variables, project }) => {
+  const ChoiceMenu = ({ choices, projectUI, onSelect, variables, project, layout }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const [hoveredIndex, setHoveredIndex] = React2.useState(null);
     const choiceButtonUrl = projectUI.choiceButtonImage ? projectUI.choiceButtonImage.type === "video" ? (_a = project.videos[projectUI.choiceButtonImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[projectUI.choiceButtonImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[projectUI.choiceButtonImage.id]) == null ? void 0 : _c.imageUrl) : null;
@@ -7612,7 +7688,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
     const choiceHoverColor = projectUI.choiceHoverColor ?? "#334155";
     const choiceHoverUrl = projectUI.choiceHoverImage ? ((_g = project.images[projectUI.choiceHoverImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.choiceHoverImage.id]) == null ? void 0 : _h.imageUrl) : null;
-    const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
     const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
     const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
     const gameW = ((_i = project.gameResolution) == null ? void 0 : _i.width) || 1920;
@@ -7621,10 +7696,92 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const choiceHPct = choiceHeight ? choiceHeight * 100 / gameH : 25;
     const choiceXPct = projectUI.choiceButtonX ?? 50 - choiceWPct / 2;
     const choiceYPct = projectUI.choiceButtonY ?? 35;
+    const resolveChoiceImg = (a) => {
+      var _a2, _b2, _c2, _d2, _e2;
+      if (!a) return null;
+      return a.type === "video" ? ((_a2 = project.videos[a.id]) == null ? void 0 : _a2.videoUrl) || ((_b2 = project.backgrounds[a.id]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.images[a.id]) == null ? void 0 : _c2.videoUrl) || null : ((_d2 = project.images[a.id]) == null ? void 0 : _d2.imageUrl) || ((_e2 = project.backgrounds[a.id]) == null ? void 0 : _e2.imageUrl) || null;
+    };
+    const renderButton = (choice, index, fill) => {
+      var _a2, _b2;
+      const interpolatedText = interpolateVariables(choice.text, variables, project);
+      const isHovered = hoveredIndex === index;
+      const optImg = resolveChoiceImg(choice.image);
+      const optHoverImg = resolveChoiceImg(choice.hoverImage);
+      const baseImg = optImg ?? choiceButtonUrl;
+      const baseIsVideo = optImg ? ((_a2 = choice.image) == null ? void 0 : _a2.type) === "video" : isChoiceButtonVideo;
+      const hoverImg = optHoverImg ?? choiceHoverUrl;
+      const activeButtonUrl = isHovered && hoverImg ? hoverImg : baseImg;
+      const optBg = choice.backgroundColor ? hexToRgba(choice.backgroundColor, choiceOpacity) : choiceBgColor;
+      const optHoverBg = choice.hoverBackgroundColor ? hexToRgba(choice.hoverBackgroundColor, choiceOpacity) : choiceHoverBgColor;
+      const optRadius = choice.borderRadius ?? choiceBorderRadius;
+      const hasImg = !!(baseImg || choiceBorderUrl);
+      return /* @__PURE__ */ jsxRuntime2.jsxs(
+        "button",
+        {
+          onClick: () => onSelect(choice),
+          onMouseEnter: () => setHoveredIndex(index),
+          onMouseLeave: () => setHoveredIndex(null),
+          className: "relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]",
+          style: {
+            borderRadius: scalePx(optRadius),
+            ...fill ? { height: "100%" } : {},
+            ...activeButtonUrl && !baseIsVideo ? {
+              ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
+              backgroundColor: isHovered ? optHoverBg : optBg
+            } : !hasImg ? {
+              backgroundColor: isHovered ? optHoverBg : optBg,
+              border: "1px solid rgba(148,163,184,0.3)",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)"
+            } : { backgroundColor: isHovered ? optHoverBg : "transparent" },
+            padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
+            ...!fill && choiceHeight ? { height: scalePx(choiceHeight) } : {},
+            ...fontSettingsToStyle(projectUI.choiceTextFont),
+            ...choice.fontSize ? { fontSize: scalePx(choice.fontSize) } : {},
+            ...choice.textColor ? { color: choice.textColor } : {},
+            textAlign: ((_b2 = projectUI.choiceTextFont) == null ? void 0 : _b2.align) || "center",
+            wordBreak: "normal",
+            overflowWrap: "break-word",
+            cursor: "pointer"
+          },
+          children: [
+            baseIsVideo && baseImg && /* @__PURE__ */ jsxRuntime2.jsx("video", { autoPlay: true, loop: true, muted: true, className: "absolute inset-0 w-full h-full -z-10", style: { pointerEvents: "none", objectFit: "fill", borderRadius: scalePx(optRadius) }, children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: baseImg }) }),
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: { ...extractTextGradientStyle(projectUI.choiceTextFont) || {}, ...choice.textColor ? { color: choice.textColor } : {} }, children: interpolatedText })
+          ]
+        }
+      );
+    };
+    const choiceKeyframes = /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
+            @keyframes vnChoiceOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes vnChoiceSlideIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        ` });
+    if (layout === "free") {
+      return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute inset-0 z-30", style: { pointerEvents: "none", animation: "vnChoiceOverlayIn 0.3s ease-out" }, children: [
+        choices.map((choice, index) => {
+          const bx = choice.x ?? 34 + index * 2;
+          const by = choice.y ?? 40 + index * 12;
+          const bw = choice.width ?? 25;
+          const bh = choice.height ?? 9;
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+            position: "absolute",
+            left: `${bx}%`,
+            top: `${by}%`,
+            width: `${bw}%`,
+            height: `${bh}%`,
+            pointerEvents: "auto",
+            animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+            ...choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) } : {}
+          }, children: renderButton(choice, index, true) }, index);
+        }),
+        choiceKeyframes
+      ] });
+    }
+    const horizontal = layout === "horizontal";
     return /* @__PURE__ */ jsxRuntime2.jsxs(
       "div",
       {
-        className: "absolute z-30 flex flex-col items-center justify-center",
+        className: `absolute z-30 flex ${horizontal ? "flex-row flex-wrap gap-3" : "flex-col"} items-center justify-center`,
         style: {
           left: `${choiceXPct}%`,
           top: `${choiceYPct}%`,
@@ -7633,77 +7790,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           animation: "vnChoiceOverlayIn 0.3s ease-out"
         },
         children: [
-          choices.map((choice, index) => {
-            var _a2;
-            const interpolatedText = interpolateVariables(choice.text, variables, project);
-            const isHovered = hoveredIndex === index;
-            const activeButtonUrl = isHovered && choiceHoverUrl ? choiceHoverUrl : choiceButtonUrl;
-            return /* @__PURE__ */ jsxRuntime2.jsx(
-              "div",
-              {
-                className: "mb-3",
-                style: {
-                  animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
-                  width: "100%",
-                  ...choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) } : {}
-                },
-                children: /* @__PURE__ */ jsxRuntime2.jsxs(
-                  "button",
-                  {
-                    onClick: () => onSelect(choice),
-                    onMouseEnter: () => setHoveredIndex(index),
-                    onMouseLeave: () => setHoveredIndex(null),
-                    className: "relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]",
-                    style: {
-                      borderRadius: scalePx(choiceBorderRadius),
-                      ...activeButtonUrl && !isChoiceButtonVideo ? {
-                        ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
-                        backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor
-                      } : !hasCustomChoiceImage ? {
-                        backgroundColor: isHovered ? choiceHoverBgColor : choiceBgColor,
-                        border: "1px solid rgba(148,163,184,0.3)",
-                        boxShadow: "0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)",
-                        backdropFilter: "blur(6px)",
-                        WebkitBackdropFilter: "blur(6px)"
-                      } : { backgroundColor: isHovered ? choiceHoverBgColor : "transparent" },
-                      padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
-                      ...choiceHeight ? { height: scalePx(choiceHeight) } : {},
-                      ...fontSettingsToStyle(projectUI.choiceTextFont),
-                      textAlign: ((_a2 = projectUI.choiceTextFont) == null ? void 0 : _a2.align) || "center",
-                      wordBreak: "normal",
-                      overflowWrap: "break-word",
-                      cursor: "pointer"
-                    },
-                    children: [
-                      isChoiceButtonVideo && choiceButtonUrl && /* @__PURE__ */ jsxRuntime2.jsx(
-                        "video",
-                        {
-                          autoPlay: true,
-                          loop: true,
-                          muted: true,
-                          className: "absolute inset-0 w-full h-full -z-10",
-                          style: { pointerEvents: "none", objectFit: "fill", borderRadius: scalePx(choiceBorderRadius) },
-                          children: /* @__PURE__ */ jsxRuntime2.jsx("source", { src: choiceButtonUrl })
-                        }
-                      ),
-                      /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "relative z-10", style: extractTextGradientStyle(projectUI.choiceTextFont) || void 0, children: interpolatedText })
-                    ]
-                  }
-                )
+          choices.map((choice, index) => /* @__PURE__ */ jsxRuntime2.jsx(
+            "div",
+            {
+              className: horizontal ? "" : "mb-3",
+              style: {
+                animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                ...horizontal ? {} : { width: "100%" },
+                ...choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) } : {}
               },
-              index
-            );
-          }),
-          /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `
-                @keyframes vnChoiceOverlayIn {
-                    from { opacity: 0; }
-                    to   { opacity: 1; }
-                }
-                @keyframes vnChoiceSlideIn {
-                    from { opacity: 0; transform: translateY(16px); }
-                    to   { opacity: 1; transform: translateY(0); }
-                }
-            ` })
+              children: renderButton(choice, index, false)
+            },
+            index
+          )),
+          choiceKeyframes
         ]
       }
     );
@@ -10182,6 +10282,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             musicState: finalMusicState
           }
         };
+        try {
+          pluginManager.invokeHook("onSave", saves[slotNumber]);
+        } catch {
+        }
         if (!savesPersistentRef.current) {
           inMemorySavesRef.current = saves;
         } else {
@@ -10233,6 +10337,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         setScreenStack([]);
         setHudStack([]);
         setIsJustLoaded(true);
+        try {
+          pluginManager.invokeHook("onLoadAfterSave", saveData);
+        } catch {
+        }
       };
       void doLoad();
     };
@@ -10974,7 +11082,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [settings.sfxVolume]);
     const prevLifecycleSceneRef = React2.useRef(null);
     const autoRanSceneRef = React2.useRef(null);
-    const runLifecycleScripts = React2.useCallback((trigger, sceneId) => {
+    const runLifecycleScripts = React2.useCallback(async (trigger, sceneId) => {
       const scripts = Object.values(project.scripts || {}).filter((s) => s.enabled && s.trigger === trigger);
       if (scripts.length === 0) return;
       const store = variableStoreRef.current;
@@ -10992,7 +11100,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         for (const [id, a] of Object.entries(project.audio)) if (a.name.toLowerCase() === lower) return id;
         return nameOrId;
       };
-      for (const scr of scripts) {
+      const LIFECYCLE_MAX_DEPTH = 16;
+      const execLifecycle = async (scr, depth) => {
+        if (depth > LIFECYCLE_MAX_DEPTH) {
+          console.error(`[Lifecycle:${trigger}] script recursion limit reached at "${scr.name}"`);
+          return;
+        }
         const ctx = {
           project,
           variables: variableUpdates,
@@ -11029,17 +11142,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           onNotify: (message, type) => {
             notify(message, type);
           },
-          onRunScript: () => {
+          onRunScript: (nameOrId) => {
+            const lower = String(nameOrId).toLowerCase();
+            const target = Object.values(project.scripts || {}).find((s) => s.id === nameOrId || s.name.toLowerCase() === lower);
+            if (target && target.enabled) return execLifecycle(target, depth + 1);
+            console.warn(`[Lifecycle:${trigger}] runScript: not found/disabled "${nameOrId}"`);
+            return void 0;
           },
           onCallCommonEvent: () => {
+            console.warn(`[Lifecycle:${trigger}] game.callCommonEvent is not available from lifecycle scripts — use a Common Event's "auto" trigger instead.`);
           }
         };
-        const result = executeScript(scr, ctx);
+        const result = await executeScript(scr, ctx);
         if (!result.success) {
           console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
           notify(`Script "${scr.name}" error: ${result.error}`, "error");
         }
-      }
+      };
+      for (const scr of scripts) await execLifecycle(scr, 0);
       if (store) {
         store.applyWrites(Object.entries(variableUpdates).map(([variableId, value]) => ({ variableId, value, scope: "global", sourceCommandId: `lifecycle-${trigger}` })));
       }
@@ -11072,13 +11192,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         CommandType.PlayMusic,
         CommandType.StopMusic,
         CommandType.PlaySoundEffect,
-        CommandType.StopSoundEffect
+        CommandType.StopSoundEffect,
+        CommandType.CallCommonEvent
       ]);
+      const PARALLEL_CALL_MAX_DEPTH = 8;
       const isTruthy = (v) => !(v === void 0 || v === null || v === false || v === 0 || v === "" || v === "false");
       const tick = () => {
         var _a2, _b2;
         const ps = playerStateRef.current;
         if (!ps || ps.mode !== "playing") return;
+        try {
+          pluginManager.invokeHook("onRuntimeTick", 120);
+        } catch {
+        }
         if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
         const events = Object.values(project.commonEvents || {});
         const active = events.filter((ce) => ce.enabled && ce.trigger === "parallel" && ce.commands && ce.commands.length > 0 && (!ce.conditionVariableId || isTruthy(ps.variables[ce.conditionVariableId])));
@@ -11108,6 +11234,61 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           evaluateConditions: evaluateConditions2,
           notify
         });
+        const resolveCe = (idOrName) => {
+          const ces = project.commonEvents || {};
+          return ces[idOrName] || Object.values(ces).find((e) => {
+            var _a3;
+            return ((_a3 = e.name) == null ? void 0 : _a3.toLowerCase()) === String(idOrName).toLowerCase();
+          });
+        };
+        const runCalledCe = (idOrName, depth, chain) => {
+          var _a3, _b3;
+          if (depth > PARALLEL_CALL_MAX_DEPTH) return;
+          const target = resolveCe(idOrName);
+          if (!target || !target.enabled || chain.has(target.id)) return;
+          const nextChain = new Set(chain);
+          nextChain.add(target.id);
+          for (const c of target.commands || []) {
+            if (c.type === CommandType.Wait) continue;
+            if (c.type === CommandType.CallCommonEvent) {
+              runCalledCe(c.commonEventId, depth + 1, nextChain);
+              continue;
+            }
+            if (!ALLOWED.has(c.type)) continue;
+            try {
+              const ctx = buildCtx();
+              let r = null;
+              switch (c.type) {
+                case CommandType.SetVariable:
+                  r = handleSetVariable(c, ctx);
+                  break;
+                case CommandType.RunScript:
+                  handleRunScript(c, ctx).then((rr) => {
+                    var _a4;
+                    if ((_a4 = rr.updates) == null ? void 0 : _a4.variables) updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...rr.updates.variables } } : null);
+                  }).catch(() => {
+                  });
+                  break;
+                case CommandType.PlayMusic:
+                  r = handlePlayMusic(c, ctx);
+                  break;
+                case CommandType.StopMusic:
+                  r = handleStopMusic(c, ctx);
+                  break;
+                case CommandType.PlaySoundEffect:
+                  r = handlePlaySoundEffect(c, ctx);
+                  break;
+                case CommandType.StopSoundEffect:
+                  r = handleStopSoundEffect(c, ctx);
+                  break;
+              }
+              if ((_a3 = r == null ? void 0 : r.updates) == null ? void 0 : _a3.variables) varAccum = { ...varAccum || {}, ...r.updates.variables };
+              if ((_b3 = r == null ? void 0 : r.updates) == null ? void 0 : _b3.musicState) musicAccum = { ...musicAccum || {}, ...r.updates.musicState };
+            } catch (e) {
+              console.error("[Parallel CE call] command error:", e);
+            }
+          }
+        };
         for (const ce of active) {
           let st = parallelStateRef.current.get(ce.id);
           if (!st) {
@@ -11142,7 +11323,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 result = handleSetVariable(cmd, ctx);
                 break;
               case CommandType.RunScript:
-                result = handleRunScript(cmd, ctx);
+                handleRunScript(cmd, ctx).then((r) => {
+                  var _a3;
+                  if ((_a3 = r.updates) == null ? void 0 : _a3.variables) updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...r.updates.variables } } : null);
+                }).catch((e) => console.error(`[Parallel CE "${ce.name}"] script error:`, e));
                 break;
               case CommandType.PlayMusic:
                 result = handlePlayMusic(cmd, ctx);
@@ -11155,6 +11339,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 break;
               case CommandType.StopSoundEffect:
                 result = handleStopSoundEffect(cmd, ctx);
+                break;
+              case CommandType.CallCommonEvent:
+                runCalledCe(cmd.commonEventId, 1, /* @__PURE__ */ new Set([ce.id]));
                 break;
             }
             if ((_a2 = result == null ? void 0 : result.updates) == null ? void 0 : _a2.variables) varAccum = { ...varAccum || {}, ...result.updates.variables };
@@ -12037,8 +12224,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               break;
             }
             case CommandType.RunScript: {
-              const result = handleRunScript(command, commandContext);
-              applyResult(result);
+              const runScriptCmd = command;
+              const waitForScript = runScriptCmd.waitForCompletion !== false;
+              if (waitForScript) {
+                const result = await handleRunScript(runScriptCmd, commandContext);
+                applyResult(result);
+              } else {
+                instantAdvance = true;
+                handleRunScript(runScriptCmd, commandContext).then((result) => {
+                  if (result.updates) applyResult({ advance: true, updates: result.updates });
+                }).catch((err) => console.error("[RunScript] background script error:", err));
+              }
               break;
             }
             case CommandType.SpawnParticles: {
@@ -12150,6 +12346,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const handleChoiceSelect = (choice) => {
       var _a2;
       runtimeDebugLog("[CHOICE] Selected:", choice.text, "Actions:", ((_a2 = choice.actions) == null ? void 0 : _a2.length) || 0);
+      const allActions = [...choice.actions || []];
+      if (!choice.actions && choice.targetSceneId) {
+        allActions.push({ type: UIActionType.JumpToScene, targetSceneId: choice.targetSceneId });
+      }
+      const INLINE_CHOICE_ACTIONS = /* @__PURE__ */ new Set([UIActionType.SetVariable, UIActionType.JumpToScene, UIActionType.JumpToLabel, UIActionType.OpenURL]);
       updatePlayerState((p) => {
         if (!p) return null;
         let newState = { ...p };
@@ -12171,10 +12372,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const inputKey = `${p.currentSceneId}:${p.currentIndex}`;
         newState.savedInputs = { ...newState.savedInputs, [inputKey]: { type: "choice", choice } };
         newState.uiState = { ...newState.uiState, dialogue: null, choices: null };
-        const actions = choice.actions || [];
-        if (!choice.actions && choice.targetSceneId) {
-          actions.push({ type: UIActionType.JumpToScene, targetSceneId: choice.targetSceneId });
-        }
+        const actions = allActions;
         for (const action of actions) {
           runtimeDebugLog("[CHOICE] Processing action:", action.type, action);
           if (action.type === UIActionType.SetVariable) {
@@ -12195,7 +12393,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               setVarAction.value,
               setVarAction.randomMin,
               setVarAction.randomMax,
-              wasCoercedOperator ? originalOperator : void 0
+              wasCoercedOperator ? originalOperator : void 0,
+              variable.min,
+              variable.max
             );
             newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
             runtimeDebugLog(
@@ -12276,6 +12476,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
         return newState;
       });
+      for (const action of allActions) {
+        if (!INLINE_CHOICE_ACTIONS.has(action.type)) {
+          handleUIAction(action);
+        }
+      }
     };
     const handleTextInputSubmit = (value) => {
       updatePlayerState((p) => {
@@ -12886,7 +13091,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             setVarAction.value,
             setVarAction.randomMin,
             setVarAction.randomMax,
-            wasCoercedOperator ? originalOperator : void 0
+            wasCoercedOperator ? originalOperator : void 0,
+            variable.min,
+            variable.max
           );
         };
         reactDom.flushSync(() => {
@@ -14412,7 +14619,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           })(),
           /* @__PURE__ */ jsxRuntime2.jsx(DialogueBox, { dialogue: uiState.dialogue, settings, projectUI: project.ui, onFinished: handleDialogueAdvance, variables: playerState.variables, project })
         ] }),
-        uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(ChoiceMenu, { choices: uiState.choices, projectUI: project.ui, onSelect: handleChoiceSelect, variables: playerState.variables, project }),
+        uiState.choices && /* @__PURE__ */ jsxRuntime2.jsx(ChoiceMenu, { choices: uiState.choices, projectUI: project.ui, onSelect: handleChoiceSelect, variables: playerState.variables, project, layout: uiState.choiceLayout }),
         uiState.textInput && /* @__PURE__ */ jsxRuntime2.jsx(TextInputForm, { textInput: uiState.textInput, onSubmit: handleTextInputSubmit, variables: playerState.variables, project, projectUI: project.ui }),
         activeFlashRef.current && /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
@@ -14973,7 +15180,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "2.8.0",
+    version: "2.8.5",
     /**
      * Check if the engine is ready
      */

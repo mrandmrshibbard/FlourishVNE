@@ -60,10 +60,10 @@ function resolveArgs(script: VNScript, supplied?: Record<string, VarValue>): Rec
  * Handle a RunScript command by executing the referenced script
  * within a sandbox that has access to the game API.
  */
-export const handleRunScript = (
+export const handleRunScript = async (
     command: RunScriptCommand,
     context: CommandContext
-): CommandResult => {
+): Promise<CommandResult> => {
     const { project, playerState } = context;
 
     const script = (project.scripts || {})[command.scriptId];
@@ -139,7 +139,7 @@ export const handleRunScript = (
     };
 
     // Execute a script (recursively for script-to-script), sharing the accumulators.
-    const runScriptInternal = (scr: VNScript, args: Record<string, VarValue>, depth: number) => {
+    const runScriptInternal = async (scr: VNScript, args: Record<string, VarValue>, depth: number): Promise<void> => {
         if (depth > MAX_SCRIPT_DEPTH) {
             console.error(`[RunScript] Recursion limit (${MAX_SCRIPT_DEPTH}) reached at "${scr.name}"`);
             context.notify?.(`Script recursion limit reached ("${scr.name}")`, 'error');
@@ -192,10 +192,11 @@ export const handleRunScript = (
                 const target = findScript(project, nameOrId);
                 if (!target) {
                     console.warn(`[Script] runScript: script not found "${nameOrId}"`);
-                    return;
+                    return undefined;
                 }
-                if (!target.enabled) return;
-                runScriptInternal(target, resolveArgs(target, a), depth + 1);
+                if (!target.enabled) return undefined;
+                // Return the promise so a script can `await game.runScript(...)` for ordering.
+                return runScriptInternal(target, resolveArgs(target, a), depth + 1);
             },
 
             onCallCommonEvent: (nameOrId, a) => {
@@ -222,7 +223,7 @@ export const handleRunScript = (
             },
         };
 
-        const result = executeScript(scr, runtimeContext);
+        const result = await executeScript(scr, runtimeContext);
         if (!result.success) {
             console.error(`[RunScript] Script "${scr.name}" failed:`, result.error);
             if (result.stack) console.error(result.stack);
@@ -234,7 +235,7 @@ export const handleRunScript = (
     };
 
     // Run the top-level script with its resolved args.
-    runScriptInternal(script, resolveArgs(script, command.arguments), 0);
+    await runScriptInternal(script, resolveArgs(script, command.arguments), 0);
 
     // --- Build the command result from accumulated effects ---
     const updates: NonNullable<CommandResult['updates']> = {};

@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNPlugin, PluginManifest } from '../types/plugins';
 import { PlusIcon, TrashIcon } from './icons';
@@ -21,6 +22,53 @@ interface PluginManagerUIProps {
 
 type TabView = 'installed' | 'install' | 'details';
 
+/** A working starter plugin (custom command + custom screen effect + a hook) the user can load
+ *  into the install box with one click. Mirrors docs/examples/sample.plugin.js. */
+const SAMPLE_PLUGIN_SOURCE = `// Sample plugin — a custom command + a custom screen effect.
+const manifest = {
+  id: 'sample-plugin',
+  name: 'Sample Plugin',
+  version: '1.0.0',
+  description: 'Example: a custom command, a custom screen effect, and a hook.',
+  author: 'You',
+  category: 'utility',
+};
+
+const plugin = {
+  manifest,
+  onEnable(api) {
+    // Custom command → appears in the Command Palette under "Plugins".
+    api.registerCommand({
+      type: 'addPoints', displayName: 'Add Points', category: 'Sample Plugin',
+      description: 'Adds an amount to a number variable.', icon: '+',
+      parameters: [
+        { name: 'variable', label: 'Variable', type: 'variable', required: true },
+        { name: 'amount', label: 'Amount', type: 'number', defaultValue: 1 },
+      ],
+      handler: (params, api) => {
+        const cur = Number(api.getVariable(params.variable)) || 0;
+        api.setVariable(params.variable, cur + (Number(params.amount) || 0));
+        api.notify('Added ' + params.amount, 'success');
+      },
+    });
+    // Custom screen effect → appears in "Set Screen Overlay Effect".
+    api.registerEffect({
+      type: 'pulseVignette', displayName: 'Pulse Vignette',
+      description: 'A soft pulsing vignette.', parameters: [],
+      render: (ctx, info) => {
+        const { width, height, intensity, timeMs } = info;
+        const pulse = 0.5 + 0.5 * Math.sin(timeMs / 600);
+        const r = Math.max(width, height) * 0.75;
+        const g = ctx.createRadialGradient(width/2, height/2, r*0.4, width/2, height/2, r);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(0,0,0,' + (0.6 * intensity * pulse) + ')');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, width, height);
+      },
+    });
+  },
+  onRuntimeInit(api) { api.notify('Sample plugin ready', 'info'); },
+};`;
+
 const CATEGORY_LABELS: Record<string, string> = {
     commands: '⚡ Commands',
     effects: '✨ Effects',
@@ -32,6 +80,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
+    const { t } = useTranslation('editorTools');
     const { project, dispatch } = useProject();
     const plugins = useMemo(() => Object.values(project.plugins || {}) as VNPlugin[], [project.plugins]);
     const [activeTab, setActiveTab] = useState<TabView>('installed');
@@ -53,7 +102,7 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
         setInstallError('');
         const source = installSource.trim();
         if (!source) {
-            setInstallError('Please paste plugin source code.');
+            setInstallError(t('pluginManager.installErrorEmpty'));
             return;
         }
 
@@ -64,7 +113,7 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
                 setInstallSource('');
                 setActiveTab('installed');
             } else {
-                setInstallError('Failed to load plugin. Check the source code format.');
+                setInstallError(t('pluginManager.installErrorFormat'));
             }
         } catch (err: any) {
             setInstallError(err.message || 'Installation failed.');
@@ -143,12 +192,12 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
             {plugins.length === 0 ? (
                 <div className="text-center py-12">
                     <div className="text-4xl mb-3">🧩</div>
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No plugins installed yet.</p>
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('pluginManager.noPluginsYet')}</p>
                     <button
                         onClick={() => setActiveTab('install')}
                         className="mt-3 bg-violet-600 hover:bg-violet-500 text-white px-4 py-1.5 rounded text-xs font-bold transition-colors"
                     >
-                        Install a Plugin
+                        {t('pluginManager.installPluginCta')}
                     </button>
                 </div>
             ) : (
@@ -193,21 +242,21 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
                                         onClick={() => handleDisablePlugin(plugin.manifest.id)}
                                         className="text-xs px-2 py-1 rounded bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 transition-colors"
                                     >
-                                        Disable
+                                        {t('pluginManager.disable')}
                                     </button>
                                 ) : (
                                     <button
                                         onClick={() => handleEnablePlugin(plugin.manifest.id)}
                                         className="text-xs px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 transition-colors"
                                     >
-                                        Enable
+                                        {t('pluginManager.enable')}
                                     </button>
                                 )}
                                 <button
                                     onClick={() => viewDetails(plugin.manifest.id)}
                                     className="text-xs px-2 py-1 rounded bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 transition-colors"
                                 >
-                                    Details
+                                    {t('pluginManager.details')}
                                 </button>
                                 <button
                                     onClick={() => handleUninstallPlugin(plugin.manifest.id)}
@@ -227,11 +276,10 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto p-4">
             <div className="max-w-2xl mx-auto">
                 <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
-                    Install Plugin from Source
+                    {t('pluginManager.installTitle')}
                 </h3>
                 <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
-                    Paste the plugin source code below. Plugins must export a <code className="bg-slate-800 px-1 rounded">manifest</code> object
-                    and optional lifecycle hooks. See the documentation for the full plugin API.
+                    {t('pluginManager.installDescription')} <code className="bg-slate-800 px-1 rounded">manifest</code> {t('pluginManager.installDescriptionMid')} <strong>{t('pluginManager.installDescriptionLoadExample')}</strong> {t('pluginManager.installDescriptionEnd')} <code className="bg-slate-800 px-1 rounded">{t('pluginManager.installDescriptionDocs')}</code> {t('pluginManager.installDescriptionDocsEnd')}
                 </p>
 
                 <textarea
@@ -277,22 +325,28 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                 )}
 
                 <div className="flex justify-end gap-2 mt-3">
+                    <button
+                        onClick={() => { setInstallSource(SAMPLE_PLUGIN_SOURCE); setInstallError(''); }}
+                        className="text-xs px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+                    >
+                        {t('pluginManager.loadExample')}
+                    </button>
                     <label className="text-xs px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors cursor-pointer">
-                        Import from file…
+                        {t('pluginManager.importFromFile')}
                         <input type="file" accept=".js,.txt" onChange={handleImportFile} className="hidden" />
                     </label>
                     <button
                         onClick={() => { setInstallSource(''); setInstallError(''); }}
                         className="text-xs px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors"
                     >
-                        Clear
+                        {t('pluginManager.clear')}
                     </button>
                     <button
                         onClick={handleInstallPlugin}
                         className="text-xs px-4 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-bold transition-colors"
                     >
                         <PlusIcon className="w-3 h-3 inline mr-1" />
-                        Install Plugin
+                        {t('pluginManager.installButton')}
                     </button>
                 </div>
             </div>
@@ -303,7 +357,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
         if (!selectedPlugin) {
             return (
                 <div className="flex-1 flex items-center justify-center">
-                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No plugin selected.</p>
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('pluginManager.noPluginSelected')}</p>
                 </div>
             );
         }
@@ -332,12 +386,12 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                         <table className="w-full text-xs">
                             <tbody>
                                 {[
-                                    ['ID', m.id],
-                                    ['Version', m.version],
-                                    ['Author', m.author || '—'],
-                                    ['Category', m.category ? CATEGORY_LABELS[m.category] || m.category : '—'],
-                                    ['State', selectedPlugin.state],
-                                    ['Capabilities', (m.capabilities || []).join(', ') || '—'],
+                                    [t('pluginManager.metaId'), m.id],
+                                    [t('pluginManager.metaVersion'), m.version],
+                                    [t('pluginManager.metaAuthor'), m.author || '—'],
+                                    [t('pluginManager.metaCategory'), m.category ? CATEGORY_LABELS[m.category] || m.category : '—'],
+                                    [t('pluginManager.metaState'), selectedPlugin.state],
+                                    [t('pluginManager.metaCapabilities'), (m.capabilities || []).join(', ') || '—'],
                                 ].map(([label, value], i) => (
                                     <tr key={label} className={i % 2 === 0 ? '' : ''} style={{ background: i % 2 === 0 ? 'var(--bg-primary)' : 'var(--bg-elevated)' }}>
                                         <td className="px-3 py-1.5 font-semibold w-32" style={{ color: 'var(--text-secondary)' }}>{label}</td>
@@ -351,7 +405,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                     {/* Registered Commands (live from the plugin manager) */}
                     {ownedCommands.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Registered Commands</h4>
+                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>{t('pluginManager.registeredCommandsTitle')}</h4>
                             <div className="space-y-1">
                                 {ownedCommands.map(cmd => (
                                     <div key={cmd.type} className="p-2 rounded text-xs border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
@@ -366,7 +420,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                     {/* Registered Effects (live from the plugin manager) */}
                     {ownedEffects.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Registered Effects</h4>
+                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>{t('pluginManager.registeredEffectsTitle')}</h4>
                             <div className="space-y-1">
                                 {ownedEffects.map(eff => (
                                     <div key={eff.type} className="p-2 rounded text-xs border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
@@ -381,7 +435,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                     {/* Plugin Settings (from optional manifest.settings schema) */}
                     {settingsSchema && settingsSchema.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Settings</h4>
+                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>{t('pluginManager.settingsTitle')}</h4>
                             <div className="space-y-2 p-2 rounded border" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-subtle)' }}>
                                 {settingsSchema.map(field => {
                                     const current = selectedPlugin.config?.[field.name] ?? field.defaultValue ?? '';
@@ -410,7 +464,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                     {/* Plugin Config */}
                     {selectedPlugin.config && Object.keys(selectedPlugin.config).length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Configuration</h4>
+                            <h4 className="text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>{t('pluginManager.configurationTitle')}</h4>
                             <pre className="p-2 rounded text-xs font-mono overflow-x-auto" style={{ background: '#0d1117', color: '#c9d1d9' }}>
                                 {JSON.stringify(selectedPlugin.config, null, 2)}
                             </pre>
@@ -424,33 +478,33 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                                 onClick={() => handleDisablePlugin(m.id)}
                                 className="text-xs px-3 py-1.5 rounded bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 transition-colors"
                             >
-                                Disable
+                                {t('pluginManager.detailsDisable')}
                             </button>
                         ) : (
                             <button
                                 onClick={() => handleEnablePlugin(m.id)}
                                 className="text-xs px-3 py-1.5 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 transition-colors"
                             >
-                                Enable
+                                {t('pluginManager.detailsEnable')}
                             </button>
                         )}
                         <button
                             onClick={() => handleExportPlugin(m.id)}
                             className="text-xs px-3 py-1.5 rounded bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 transition-colors"
                         >
-                            Export
+                            {t('pluginManager.detailsExport')}
                         </button>
                         <button
                             onClick={() => { handleUninstallPlugin(m.id); setActiveTab('installed'); }}
                             className="text-xs px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-300 transition-colors"
                         >
-                            Uninstall
+                            {t('pluginManager.detailsUninstall')}
                         </button>
                         <button
                             onClick={() => setActiveTab('installed')}
                             className="text-xs px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors ml-auto"
                         >
-                            ← Back
+                            {t('pluginManager.detailsBack')}
                         </button>
                     </div>
                 </div>
@@ -465,26 +519,26 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                 <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-elevated)' }}>
                     <div className="flex items-center gap-2">
                         <span className="text-lg">🧩</span>
-                        <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Plugin Manager</h2>
+                        <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{t('pluginManager.title')}</h2>
                         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-violet, #7c3aed)', color: '#fff' }}>
-                            {enabledCount} active
+                            {t('pluginManager.activeCount', { count: enabledCount })}
                         </span>
                         {disabledCount > 0 && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-600 text-white">
-                                {disabledCount} inactive
+                                {t('pluginManager.inactiveCount', { count: disabledCount })}
                             </span>
                         )}
                     </div>
                     <button onClick={onClose} className="text-xs px-3 py-1 rounded hover:bg-red-500/20 text-red-400 transition-colors">
-                        Close
+                        {t('pluginManager.close')}
                     </button>
                 </div>
 
                 {/* Tab Navigation */}
                 <div className="flex border-b" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-primary)' }}>
                     {([
-                        { key: 'installed' as TabView, label: 'Installed', icon: '📦' },
-                        { key: 'install' as TabView, label: 'Install Plugin', icon: '➕' },
+                        { key: 'installed' as TabView, label: t('pluginManager.tabInstalled'), icon: '📦' },
+                        { key: 'install' as TabView, label: t('pluginManager.tabInstallPlugin'), icon: '➕' },
                     ]).map(tab => (
                         <button
                             key={tab.key}
@@ -501,7 +555,7 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                     ))}
                     {activeTab === 'details' && (
                         <div className="px-4 py-2 text-xs font-semibold border-b-2 border-violet-500 text-violet-300">
-                            🔍 Plugin Details
+                            {t('pluginManager.tabDetails')}
                         </div>
                     )}
                 </div>
@@ -517,8 +571,8 @@ const plugin = { manifest, onLoad, onEnable, onDisable };`}
                 {consoleLog.length > 0 && (
                     <div className="h-24 border-t flex flex-col" style={{ borderColor: 'var(--border-subtle)' }}>
                         <div className="flex items-center justify-between px-3 py-1" style={{ background: 'var(--bg-elevated)' }}>
-                            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Log</span>
-                            <button onClick={() => setConsoleLog([])} className="text-xs text-slate-400 hover:text-white transition-colors">Clear</button>
+                            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{t('pluginManager.logLabel')}</span>
+                            <button onClick={() => setConsoleLog([])} className="text-xs text-slate-400 hover:text-white transition-colors">{t('pluginManager.clearLog')}</button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 font-mono text-xs" style={{ background: '#0d1117', color: '#8b949e' }}>
                             {consoleLog.map((line, i) => (

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 interface SearchableSelectOption {
@@ -39,6 +40,11 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    // The dropdown renders in a portal (position:fixed) so it can't be clipped by ancestor
+    // overflow (inspector panels, accordions, radial popovers). These coords anchor it to the trigger.
+    const [coords, setCoords] = useState<{ left: number; width: number; downTop: number; upTop: number; openUp: boolean } | null>(null);
 
     // Find current selection label
     const selectedOption = options.find(opt => opt.value === value);
@@ -71,10 +77,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         return { groups, ungrouped };
     }, [filteredOptions]);
 
-    // Handle click outside to close
+    // Handle click outside to close (the dropdown is portaled out of the container, so also
+    // treat clicks inside the portaled dropdown as "inside").
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+            const target = e.target as Node;
+            const inContainer = !!containerRef.current?.contains(target);
+            const inDropdown = !!dropdownRef.current?.contains(target);
+            if (!inContainer && !inDropdown) {
                 setIsOpen(false);
                 setSearch('');
             }
@@ -82,6 +92,29 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Position the portaled dropdown against the trigger, flipping above if there's no room below.
+    // Recomputed on open and on any scroll/resize while open. useLayoutEffect avoids a first-frame flash.
+    useLayoutEffect(() => {
+        if (!isOpen) { setCoords(null); return; }
+        const update = () => {
+            const el = triggerRef.current;
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            const desired = 280; // approx dropdown height (search + list)
+            const spaceBelow = window.innerHeight - r.bottom;
+            const spaceAbove = r.top;
+            const openUp = spaceBelow < desired && spaceAbove > spaceBelow;
+            setCoords({ left: r.left, width: r.width, downTop: r.bottom + 6, upTop: r.top - 6, openUp });
+        };
+        update();
+        window.addEventListener('scroll', update, true);
+        window.addEventListener('resize', update);
+        return () => {
+            window.removeEventListener('scroll', update, true);
+            window.removeEventListener('resize', update);
+        };
+    }, [isOpen]);
 
     // Focus input when opened
     useEffect(() => {
@@ -163,6 +196,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         >
             {/* Trigger button */}
             <button
+                ref={triggerRef}
                 type="button"
                 className="searchable-select__trigger"
                 onClick={() => setIsOpen(!isOpen)}
@@ -177,9 +211,24 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 </span>
             </button>
 
-            {/* Dropdown */}
-            {isOpen && (
-                <div className="searchable-select__dropdown">
+            {/* Dropdown — portaled to <body> with fixed positioning so ancestor overflow
+                (inspector panels / accordions / radial popovers) can't clip it. */}
+            {isOpen && coords && ReactDOM.createPortal(
+                <div
+                    ref={dropdownRef}
+                    className="searchable-select__dropdown"
+                    onKeyDown={handleKeyDown}
+                    style={{
+                        position: 'fixed',
+                        left: coords.left,
+                        width: coords.width,
+                        right: 'auto',
+                        top: coords.openUp ? coords.upTop : coords.downTop,
+                        transform: coords.openUp ? 'translateY(-100%)' : undefined,
+                        margin: 0,
+                        zIndex: 9999,
+                    }}
+                >
                     {/* Search input */}
                     {options.length > 5 && (
                         <div className="searchable-select__search">
@@ -246,7 +295,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                             </>
                         )}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             <style>{`

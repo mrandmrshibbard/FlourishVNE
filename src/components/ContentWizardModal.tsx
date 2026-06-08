@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ContentWizardService } from '../features/content-wizards/ContentWizardService';
 import { ContentWizard, WizardStep, StepInputField } from '../types/wizard';
 
@@ -11,6 +12,7 @@ interface ContentWizardModalProps {
 const wizardService = new ContentWizardService({ enableAutoSave: false });
 
 const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose, onComplete }) => {
+    const { t } = useTranslation('contentTools');
     const [selectedWizard, setSelectedWizard] = useState<ContentWizard | null>(null);
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [formData, setFormData] = useState<Record<string, any>>({});
@@ -64,7 +66,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
             const value = formData[field.id];
 
             if (field.required && (value === undefined || value === null || value === '')) {
-                newErrors[field.id] = `${field.label} is required`;
+                newErrors[field.id] = t('contentWizard.fieldRequired', { label: field.label });
                 continue;
             }
 
@@ -82,7 +84,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [currentStep, formData]);
+    }, [currentStep, formData, t]);
 
     const handleNext = useCallback(() => {
         if (!validateCurrentStep()) return;
@@ -170,7 +172,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                         onChange={(e) => handleFieldChange(field.id, e.target.value)}
                         className={baseInputClass}
                     >
-                        <option value="">Select...</option>
+                        <option value="">{t('contentWizard.selectDefault')}</option>
                         {field.options?.map(opt => (
                             <option key={opt.value} value={opt.value} disabled={opt.disabled}>
                                 {opt.label}
@@ -205,7 +207,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             );
                         })}
                         {(!field.options || field.options.length === 0) && (
-                            <p className="text-xs text-[var(--text-muted)] italic">No options available</p>
+                            <p className="text-xs text-[var(--text-muted)] italic">{t('contentWizard.noOptions')}</p>
                         )}
                     </div>
                 )}
@@ -218,7 +220,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             onChange={(e) => handleFieldChange(field.id, e.target.checked)}
                             className="w-4 h-4 rounded border-[var(--border-default)] bg-[var(--bg-primary)] text-purple-600 focus:ring-purple-500 focus:ring-offset-0"
                         />
-                        <span className="text-sm text-[var(--text-primary)]">Enable</span>
+                        <span className="text-sm text-[var(--text-primary)]">{t('contentWizard.enable')}</span>
                     </label>
                 )}
 
@@ -245,7 +247,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
 
                 {field.type === 'file' && (
                     <div className="px-4 py-3 bg-[var(--bg-primary)] border border-dashed border-[var(--border-default)] rounded-lg text-center text-[var(--text-secondary)] text-sm">
-                        File upload (configure after wizard)
+                        {t('contentWizard.fileUploadHint')}
                     </div>
                 )}
 
@@ -271,7 +273,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                     <div className="flex items-center gap-3">
                         <span className="text-xl">✨</span>
                         <h2 className="text-lg font-semibold text-white">
-                            {selectedWizard ? selectedWizard.name : 'Content Wizards'}
+                            {selectedWizard ? selectedWizard.name : t('contentWizard.title')}
                         </h2>
                     </div>
                     <button
@@ -307,8 +309,8 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             ))}
                         </div>
                         <p className="text-xs text-[var(--text-secondary)]">
-                            Step {currentStepIndex + 1} of {totalSteps}
-                            {currentStep.estimatedTime && ` · ~${currentStep.estimatedTime} min`}
+                            {t('contentWizard.stepOf', { current: currentStepIndex + 1, total: totalSteps })}
+                            {currentStep.estimatedTime && t('contentWizard.estimatedTime', { min: currentStep.estimatedTime })}
                         </p>
                     </div>
                 )}
@@ -317,7 +319,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                     {!selectedWizard ? (
                         <div>
                             <p className="text-[var(--text-secondary)] text-sm mb-5">
-                                Choose a wizard to get started with guided content creation.
+                                {t('contentWizard.chooseWizard')}
                             </p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {availableWizards.map(wizard => (
@@ -334,8 +336,8 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                                                 </h3>
                                                 <p className="text-sm text-[var(--text-secondary)] mt-1">{wizard.description}</p>
                                                 <div className="flex items-center gap-3 mt-3 text-xs text-[var(--text-muted)]">
-                                                    <span>{wizard.totalSteps} steps</span>
-                                                    <span>~{wizard.estimatedTime} min</span>
+                                                    <span>{t('contentWizard.steps', { count: wizard.totalSteps })}</span>
+                                                    <span>{t('contentWizard.approxMin', { min: wizard.estimatedTime })}</span>
                                                     <span className="capitalize px-1.5 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border-subtle)]">
                                                         {wizard.complexity}
                                                     </span>
@@ -363,7 +365,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                             onClick={handleBack}
                             className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-default)] transition-colors"
                         >
-                            {currentStepIndex === 0 ? '← Wizards' : '← Back'}
+                            {currentStepIndex === 0 ? t('contentWizard.backToWizards') : t('contentWizard.back')}
                         </button>
                         <div className="flex items-center gap-2">
                             {currentStep?.canSkip && !isLastStep && (
@@ -371,14 +373,14 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                                     onClick={() => setCurrentStepIndex(prev => prev + 1)}
                                     className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:text-slate-200 transition-colors"
                                 >
-                                    Skip
+                                    {t('contentWizard.skip')}
                                 </button>
                             )}
                             <button
                                 onClick={handleNext}
                                 className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors"
                             >
-                                {isLastStep ? '✓ Complete' : 'Next →'}
+                                {isLastStep ? t('contentWizard.complete') : t('contentWizard.next')}
                             </button>
                         </div>
                     </div>

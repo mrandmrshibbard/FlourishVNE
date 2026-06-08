@@ -1,12 +1,22 @@
 import { VNID } from './index';
 
-export type VNScreenOverlayEffectType =
+/** The six built-in screen-overlay effects. */
+export type VNKnownScreenOverlayEffectType =
   | 'crtScanlines'
   | 'chromaticGlitch'
   | 'sunbeams'
   | 'shimmer'
   | 'rain'
   | 'snowAsh';
+
+/** Effect type: a built-in name OR a plugin-registered effect id (e.g. "myPlugin.glow").
+ *  Widened to `string` (additive) so plugin custom effects are valid effect types. */
+export type VNScreenOverlayEffectType = VNKnownScreenOverlayEffectType | (string & {});
+
+/** The set of built-in effect type names (used to separate built-ins from plugin effects). */
+export const BUILTIN_OVERLAY_EFFECT_TYPES: readonly VNKnownScreenOverlayEffectType[] = [
+  'crtScanlines', 'chromaticGlitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh',
+];
 
 export type VNSnowAshVariant = 'snow' | 'ash';
 

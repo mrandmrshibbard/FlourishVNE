@@ -259,6 +259,10 @@
     "typeLabel": "Type:",
     "currentValue": "Current Value:",
     "helpText": "The default value is used when the game starts. You can change the variable's value during gameplay using Set Variable commands.",
+    "clampRange": "Clamp range (min / max)",
+    "noMin": "no min",
+    "noMax": "no max",
+    "clampHint": "Optional. When set, this number is never allowed below min or above max — by any Set Variable, choice, or script. Leave blank for no limit.",
     "deleteVariable": "Delete Variable",
     "confirmDelete": "Delete variable \"{{name}}\"? This will break any commands that reference it."
   },

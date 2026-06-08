@@ -1,5 +1,12 @@
 # Scripting · Plugins · Common Events — Audit & Improvement Plan
 
+> **UPDATE 2026-06-08 — usability pass + the real ceiling.** A hands-on testing pass closed several
+> usability gaps and made one scope cut (parameters). **The systems now work end-to-end for their
+> current scope.** What they *cannot* do yet — the limits below — is now the explicit roadmap: see
+> **§5 (what shipped 2026-06-08)**, **§6 (current limitations = the ceiling)**, and **§7 (where we
+> need to be: match the competition, then beat it)**. The vision is simple: *do what Ren'Py / TyranoBuilder /
+> Visual Novel Maker do, but better — without writing code, and without leaving the offline app.*
+>
 > Status: **ALL PHASES DONE (2026-06-07).** P1 Scripting · P2 Common Events · P3 Plugins · P4 polish (offline subset).
 > **Phase 4 shipped (offline, low-risk subset):** richer script `game` API — **inventory** (`getItemCount`/
 > `hasItem`/`addItem`/`removeItem`/`getItems`, sugar over each item's count variable via the existing
@@ -199,3 +206,124 @@ tsc (35 baseline) / vite / `build:engine` green. All schema additions additive-o
   `src/features/common-events/state/commonEventReducer.ts`,
   `src/components/live-preview/command-handlers/commonEventHandler.ts`, stack pop at `LivePreview.tsx:5115-5122`.
 - Doc to rewrite: `docs/scripting-and-plugins.md` (+ `.html` sibling). No Common Events doc exists yet.
+
+---
+
+## 5. Session 2026-06-08 — usability pass (shipped)
+
+A hands-on test pass exposed several "built but not actually usable" gaps. All fixed + verified
+(tsc clean / `vite build` / `build:engine` green; en==pt i18n parity held). All additive-optional →
+save/load safe.
+
+### Scripting
+- **Scripts are now truly async.** `executeScript` runs as an AsyncFunction and is awaited, so
+  `await game.wait(s)` actually pauses. The RunScript **"Wait for completion"** toggle was dead
+  (zero runtime refs) — now honored: ON (default) holds the scene until the script finishes (incl.
+  its waits); OFF runs it in the background. Lifecycle scripts, the parallel scheduler, and the
+  ScriptEditor test-run all updated to await.
+- **Lifecycle scripts can chain** via `game.runScript(...)` (`onSceneEnter`/`onSceneExit`);
+  `game.callCommonEvent` from a lifecycle script warns (it has no command stack there).
+- `game.math.randomFloat` added to the ScriptEditor API panel.
+- Files: `ScriptExecutor.ts`, `scriptHandler.ts`, `LivePreview.tsx`, `ScriptEditor.tsx`.
+
+### Plugins
+- **Wired the previously-dead hooks** `onRuntimeTick` (~120ms heartbeat), `onSave`, `onLoadAfterSave`;
+  **removed** `onPreBuild`/`onPostBuild` (no build pipeline to hook).
+- **Custom-effect visual pipeline built** (the P3 deferral): `registerEffect` now takes a
+  `render(ctx, info)` callback rendered each frame via `PluginEffectCanvas` in `ScreenOverlayEffects`
+  (isolated/try-caught/size-clamped). Plugin effects appear (🧩) in the Set-Screen-Overlay-Effect picker;
+  effect type widened to allow plugin ids.
+- **Discoverability:** shipped a commented sample (`docs/examples/sample.plugin.js`) + a **"Load example"**
+  button and guidance in `PluginManagerUI`.
+- Files: `types/plugins.ts`, `types/screen-effects.ts`, `ScreenOverlayEffects.tsx`, `LivePreview.tsx`,
+  `PluginManagerService.ts`, `inspector/CommandGroupFields.tsx`, `PropertiesInspector.tsx`, `PluginManagerUI.tsx`.
+
+### Common Events
+- **Command properties are now editable in the Events tab** (this was the killer bug — you could add
+  commands but not configure them, so CEs ran empty). Click a command → the scene inspector's grouped
+  editor (`CommandGroupAccordion`) opens, writing via `UPDATE_COMMON_EVENT_COMMAND`. Also reused the
+  scene `useCommandDefaults` hook so e.g. Set Variable auto-selects a variable (which is what surfaces
+  the Add/Subtract/Random operators).
+- **Parallel events can call `CallCommonEvent`** now (inline, depth/cycle-guarded) instead of silently
+  skipping; added a UI banner stating parallel only runs background-safe commands; cross-project import
+  now remaps nested CE references.
+- **Parameters REMOVED from the UI** (deliberate scope cut — see §6). The data fields remain as inert
+  deprecated optionals for save/load back-compat; new events never create them.
+- Files: `CommonEventsManager.tsx`, `LivePreview.tsx`, `commonEventReducer.ts` (+ the shared editors).
+
+### Adjacent wins from the same pass
+- **Choices got the FULL action set** (same as buttons) incl. **Call Common Event** — choice options now
+  use the shared `ActionEditor`; the runtime delegates non-inline actions to `handleUIAction`.
+- **Per-variable numeric clamp** (`min`/`max` on `VNVariable`): every write (commands, choices, button/
+  quick-menu actions, scripts) clamps — e.g. affection that can't go below 0. (`variableUtils.ts`,
+  `VariablePropertiesEditor.tsx`.)
+- **Validated real-world pattern:** Common Events as a **multi-variable relationship regulator**
+  (zero-sum affection between rivals: +akari / −chihiro in one reusable event). Flagship docs example.
+
+---
+
+## 6. Current limitations (the ceiling today)
+
+This is the honest "what it can't do yet," within the scope of Scripting / Plugins / Common Events.
+**Each bullet is a target in §7.**
+
+### Scripting — a logic/flow layer, NOT full editor parity
+The `game` API covers **variables, inventory, queries, flow (jump/runScript/callCommonEvent/wait),
+audio, a single dialogue line, notify, math**. It does **not** expose most **presentation** commands:
+- ❌ Show/Hide Character (expression, position, transition, effects)
+- ❌ Set Background, Show Image / Text / Button overlays
+- ❌ Choices, Text Input
+- ❌ Play Movie, screen effects (shake / tint / flash / overlay), particles, tweens
+- ❌ Go To Screen, Save / Load, Exit, CG gallery, credit roll
+- So **you cannot build a scene's visuals from a script today.**
+- **Escape hatch that exists now:** `game.callCommonEvent('X')` — a script owns the logic and delegates
+  presentation to a Common Event (which can run almost any command).
+- No autocomplete/type-checking in the editor (plain textarea + click-to-insert API panel; Monaco was
+  deemed too heavy for the offline bundle).
+
+### Plugins — extend the runtime, inside a strict offline sandbox
+Can add: **custom commands** (typed params), **custom screen effects** (canvas), **runtime/lifecycle
+hooks**, live variable read/write, project read, plugin-scoped storage, settings. Cannot:
+- ❌ **Network** — `fetch` / `XMLHttpRequest` / `WebSocket` blocked (no cloud saves, online APIs, server analytics).
+- ❌ **DOM / browser** — `window` / `document` / `localStorage` blocked (canvas effect is the only visual surface).
+- ❌ Timers, `eval`/`Function`, `import`/`require`, filesystem.
+- ❌ `onBeforeCommand` is **observe-only** — can't block/modify/replace a command.
+- ❌ No custom **editor panels/tabs** — plugins extend commands/effects/hooks, not the editor UI chrome.
+- ❌ No engine-core overrides, no new asset types.
+- ❌ No **marketplace / auto-update** — install is manual (paste source or import `.plugin.js`).
+
+### Common Events — solid, intentionally lean
+Works: reusable command sequences; **called / auto / parallel** triggers; call/return/nesting; recursion
++ cycle guards; clamped variable math; cross-project import/export; callable from scenes, choices,
+buttons, and scripts. Intentionally cut: **parameters** (removed — added complexity without a no-code
+payoff). Limitation to note: **parallel** events only run background-safe commands (variables, scripts,
+wait, audio, call-CE) — presentation commands are skipped by design.
+
+---
+
+## 7. Where we need to be (target — match the competition, then beat it)
+
+Benchmark: **Ren'Py, TyranoBuilder, Visual Novel Maker.** Goal: everything they let creators do, but
+**no-code and offline**, then better. Priorities, highest-leverage first:
+
+1. **Script → editor parity (biggest gap, highest value).** Grow the `game` API to cover presentation:
+   `showCharacter/hideCharacter`, `setBackground`, `showImage/Text/Button`, `choice(...)`,
+   `screenEffect(...)`, `playMovie`, `goToScreen`, `save/load`. Thread them through the existing async +
+   command/transition pipeline (reuse the command handlers; don't reinvent timing). **Done = anything you
+   can do with a command, you can do from a script** — that's what Ren'Py users expect and our no-coders
+   would get for free.
+2. **Editor authoring aids for scripting:** lightweight autocomplete/inline validation/signatures
+   (a no-dep substitute for Monaco), and a richer in-editor test runner that can exercise
+   `runScript`/`callCommonEvent`.
+3. **Plugins → controlled power-ups:** make `onBeforeCommand` able to **modify/cancel** a command;
+   allow plugins to contribute **editor UI** (a settings/inspector panel); a curated, **opt-in
+   allowlisted network** layer with a per-plugin permission prompt (for those who want cloud
+   saves/integrations) — kept off by default to preserve the offline guarantee.
+4. **Plugin distribution:** an import/export-driven **sharing flow** (and eventually a vetted gallery)
+   so non-coders can get plugins without hunting for source — the thing every competitor's ecosystem has.
+5. **Common Events polish:** richer parallel scheduling and author-facing guidance; keep it parameter-free
+   unless a genuinely no-code use appears.
+
+> Guiding rule for all of the above: **never break save/load** (additive-optional + `MigrationService`),
+> stay **offline-first** (network is opt-in only), and **keep it no-code** — if a capability needs a
+> script or plugin to be useful to a non-coder, it isn't done.

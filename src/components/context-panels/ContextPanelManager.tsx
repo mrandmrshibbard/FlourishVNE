@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ContextPanel, ContextSuggestion, ContextAction } from '../../types/context-panels';
 import { ContextPanelService } from '../../features/context-panels/ContextPanelService';
 import { VNID } from '../../types';
@@ -56,8 +57,8 @@ interface PanelState {
  * Context Panel Manager Component
  */
 export const ContextPanelManager: React.FC<ContextPanelManagerProps> = ({
-  currentContext = { 
-    activeTab: '', 
+  currentContext = {
+    activeTab: '',
     selectedItems: [],
     currentScene: undefined,
     currentCharacter: undefined,
@@ -72,6 +73,7 @@ export const ContextPanelManager: React.FC<ContextPanelManagerProps> = ({
   onSuggestionClick,
   onPanelAction
 }) => {
+  const { t } = useTranslation('contextPanels');
   // State
   const [panelState, setPanelState] = useState<PanelState>(() => {
     const saved = localStorage.getItem('flourish_panel_state');
@@ -229,7 +231,7 @@ export const ContextPanelManager: React.FC<ContextPanelManagerProps> = ({
       <div className={`context-panel-manager context-panel-manager--${position}`}>
         <div className="context-panel-manager__loading">
           <div className="spinner" />
-          <p>Loading context panels...</p>
+          <p>{t('panelManager.loading')}</p>
         </div>
       </div>
     );
@@ -240,8 +242,8 @@ export const ContextPanelManager: React.FC<ContextPanelManagerProps> = ({
     return (
       <div className={`context-panel-manager context-panel-manager--${position}`}>
         <div className="context-panel-manager__empty">
-          <p>No context-specific panels available</p>
-          <small>Select an item to see relevant tools and suggestions</small>
+          <p>{t('panelManager.emptyTitle')}</p>
+          <small>{t('panelManager.emptyHint')}</small>
         </div>
       </div>
     );
@@ -252,7 +254,7 @@ export const ContextPanelManager: React.FC<ContextPanelManagerProps> = ({
       {/* Suggestions section */}
       {suggestions.length > 0 && (
         <div className="context-panel-manager__suggestions">
-          <h3 className="suggestions-title"><LightBulbIcon className="w-4 h-4 inline-block mr-1 text-yellow-400" /> Suggestions</h3>
+          <h3 className="suggestions-title"><LightBulbIcon className="w-4 h-4 inline-block mr-1 text-yellow-400" /> {t('panelManager.suggestionsHeading')}</h3>
           <div className="suggestions-list">
             {suggestions.map(suggestion => (
               <SuggestionCard
@@ -359,6 +361,7 @@ const Panel: React.FC<PanelProps> = ({
   canReorder,
   onReorder
 }) => {
+  const { t } = useTranslation('contextPanels');
   const [isResizing, setIsResizing] = useState(false);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
@@ -420,7 +423,7 @@ const Panel: React.FC<PanelProps> = ({
         <div className="context-panel__title-row">
           {icon && <span className="context-panel__icon">{icon}</span>}
           <h3 className="context-panel__title">{panel.content.title}</h3>
-          <button className="context-panel__toggle" title={isExpanded ? 'Collapse' : 'Expand'}>
+          <button className="context-panel__toggle" title={isExpanded ? t('panelManager.collapse') : t('panelManager.expand')}>
             {isExpanded ? <ChevronDownIcon className="w-3.5 h-3.5" /> : <ChevronRightIcon className="w-3.5 h-3.5" />}
           </button>
         </div>
@@ -477,7 +480,7 @@ const Panel: React.FC<PanelProps> = ({
           {/* Suggestions */}
           {panel.content.suggestions && panel.content.suggestions.length > 0 && (
             <div className="context-panel__suggestions">
-              <h4>Suggestions:</h4>
+              <h4>{t('panelManager.panelSuggestionsHeading')}</h4>
               {panel.content.suggestions.map(suggestion => (
                 <div key={suggestion.id} className="context-suggestion">
                   {suggestion.title}
@@ -513,14 +516,14 @@ const Panel: React.FC<PanelProps> = ({
           <button
             className="reorder-btn reorder-btn--up"
             onClick={() => onReorder('up')}
-            title="Move up"
+            title={t('panelManager.moveUp')}
           >
             <ChevronUpIcon className="w-3.5 h-3.5" />
           </button>
           <button
             className="reorder-btn reorder-btn--down"
             onClick={() => onReorder('down')}
-            title="Move down"
+            title={t('panelManager.moveDown')}
           >
             <ChevronDownIcon className="w-3.5 h-3.5" />
           </button>

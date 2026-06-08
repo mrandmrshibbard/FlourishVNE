@@ -18,4 +18,9 @@ export interface VNVariable {
     defaultValue: string | number | boolean;
     /** Lifetime scope – defaults to 'global' for backwards compatibility */
     scope?: VNVariableScope;
+    /** Optional inclusive lower bound for NUMBER variables. When set, every write is clamped so the
+     *  value never goes below this (e.g. set to 0 to stop affection going negative). Additive-optional. */
+    min?: number;
+    /** Optional inclusive upper bound for NUMBER variables. When set, every write is clamped to this max. */
+    max?: number;
 }

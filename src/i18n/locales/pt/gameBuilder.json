@@ -1,0 +1,166 @@
+{
+  "title": "Compilar Jogo Autônomo",
+  "chooseBuildType": "Escolha o Tipo de Compilação:",
+  "ready": "Pronto para compilar...",
+  "iconError": "Selecione um arquivo de imagem (PNG recomendado, 256×256 ou maior).",
+
+  "webBuild": {
+    "name": "Compilação Web",
+    "desc": "Jogar no navegador • pronto para itch.io • Progresso não salvo",
+    "infoTitle": "Compilação Web",
+    "intro": "Isso cria um jogo baseado em navegador que você pode:",
+    "item1": "✅ Enviar para o itch.io (mais fácil!)",
+    "item2": "✅ Compartilhar em qualquer host web (Netlify, GitHub Pages, etc.)",
+    "item3": "✅ Enviar para amigos como arquivo ZIP",
+    "item4": "✅ Jogar offline em qualquer navegador",
+    "item5": "⚠️ Atenção: O progresso não será salvo (limitação do navegador)"
+  },
+
+  "desktopBuild": {
+    "name": "Compilação Desktop",
+    "desc": "Windows/Mac/Linux • Salvar progresso • Jogo offline",
+    "infoTitle": "Compilação Desktop",
+    "intro": "Isso cria um aplicativo desktop autônomo com:",
+    "item1": "💾 Sistema completo de salvar/carregar (10 slots)",
+    "item2": "🔄 Funcionalidade de salvamento automático",
+    "item3": "📁 Armazenamento persistente de progresso",
+    "item4": "🖥️ Funciona no Windows, Mac e Linux",
+    "item5": "📦 Requer Electron (incluído na compilação)",
+    "installerWarning": "⚡ Compilações de instalador são mais rápidas e iniciam instantaneamente após a instalação — o setup extrai todos os arquivos com antecedência",
+    "standaloneWarning": "⏱ Compilações autônomas demoram mais para compilar e iniciar — o exe precisa se descompactar em uma pasta temporária a cada execução"
+  },
+
+  "noCodingRequired": "Sem necessidade de programação! Basta baixar e distribuir.",
+
+  "iconPicker": {
+    "label": "Ícone do Aplicativo",
+    "clickToChoose": "Clique para escolher um ícone",
+    "altText": "Ícone do app",
+    "changeIcon": "Alterar Ícone",
+    "chooseIcon": "Escolher Ícone",
+    "remove": "Remover",
+    "hint": "Recomendado: PNG 256×256"
+  },
+
+  "formatPicker": {
+    "title": "Formato de Compilação",
+    "standaloneName": "📦 Autônomo .exe",
+    "standaloneDesc": "Executável portátil único — sem instalação, basta executar",
+    "standaloneNote": "⏱ Compilação e inicialização mais lentas — o exe precisa se descompactar a cada execução",
+    "installerName": "🔧 Instalador (Setup)",
+    "installerDesc": "Assistente de instalação com atalhos, diretório de instalação, desinstalador e pasta de saves",
+    "installerNote": "⚡ Compilação e inicialização mais rápidas — arquivos são pré-extraídos durante a instalação"
+  },
+
+  "stats": {
+    "estimatedSize": "Tamanho Estimado:",
+    "scenes": "Cenas:",
+    "characters": "Personagens:"
+  },
+
+  "validation": {
+    "errors": "⛔ {{count}} Erro(s)",
+    "warnings": "⚠️ {{count}} Aviso(s)",
+    "separator": " • "
+  },
+
+  "buildBtn": {
+    "fixErrors": "Corrija os Erros Antes de Compilar",
+    "buildWeb": "Compilar Jogo Web",
+    "buildInstaller": "Compilar Instalador",
+    "buildStandalone": "Compilar EXE Autônomo"
+  },
+
+  "helpBox": {
+    "firstTime": "Primeira vez?",
+    "before": "Após a compilação, você receberá um arquivo ZIP. Envie para o",
+    "after": "e pronto! Sem linha de comando."
+  },
+
+  "progress": {
+    "web": {
+      "prepare": "📋 Preparando",
+      "generate": "⚙️ Gerando",
+      "assets": "🎨 Empacotando Assets",
+      "finalize": "📦 Finalizando"
+    },
+    "desktop": {
+      "prepare": "📋 Preparar",
+      "generate": "⚙️ Gerar",
+      "assets": "🎨 Assets",
+      "install": "📥 Dependências",
+      "build": "🔨 Compilar EXE",
+      "save": "💾 Salvar",
+      "working": "Compilações desktop levam alguns minutos — o app está trabalhando em segundo plano."
+    }
+  },
+
+  "success": {
+    "webTitle": "Jogo Web Compilado com Sucesso!",
+    "installerTitle": "Instalador Compilado com Sucesso!",
+    "desktopTitle": "App Desktop Compilado com Sucesso!",
+    "webText": "Seu jogo está pronto para ser compartilhado na web!",
+    "installerText": "Seu instalador com atalhos e diretório de saves está pronto!",
+    "desktopText": "Seu jogo desktop autônomo está pronto!",
+    "fileSize": "Tamanho do Arquivo:",
+    "format": "Formato:",
+    "formatValue": "HTML5 (ZIP)",
+    "downloadBtn": "Baixar ZIP do Jogo Web",
+    "execSaved": "Executável salvo com sucesso!",
+    "execLocation": "Verifique o local que você selecionou para encontrar o executável do seu jogo.",
+    "buildAnotherVersion": "Compilar Outra Versão"
+  },
+
+  "nextSteps": {
+    "title": "O Que Vem Agora?",
+    "web": {
+      "step1Title": "Enviar para o itch.io (Recomendado):",
+      "step1GoTo": "Acesse",
+      "step1ChooseHtml": "Escolha \"HTML\" como tipo de upload",
+      "step1Upload": "Faça o upload do arquivo ZIP que você baixou",
+      "step1Check": "Marque \"This file will be played in the browser\"",
+      "step1Publish": "Publique!",
+      "step2Title": "Ou hospede você mesmo:",
+      "step2Desc": "Descompacte e envie o conteúdo para qualquer host web",
+      "step3Title": "Ou compartilhe offline:",
+      "step3Desc": "Envie o ZIP para amigos — eles podem descompactar e abrir index.html"
+    },
+    "desktop": {
+      "step1Title": "Teste Seu Jogo:",
+      "step1Installer": "Execute o instalador Setup para instalar seu jogo",
+      "step1Standalone": "Dê um duplo clique no executável para testar seu jogo",
+      "step1Windows": "• Windows: arquivo .exe",
+      "step1Mac": "• Mac: arquivo .app ou .dmg",
+      "step1Linux": "• Linux: arquivo .AppImage",
+      "step2Title": "Distribuir:",
+      "step2ShareInstaller": "Compartilhe o instalador com os jogadores!",
+      "step2ShareStandalone": "Compartilhe o executável com os jogadores!",
+      "step2InstallerDesc": "O instalador criará atalhos na área de trabalho/menu iniciar, diretório de instalação e pasta de saves",
+      "step2StandaloneDesc": "Eles só precisam baixar e executar — sem instalação necessária",
+      "step3Title": "Sistema de Saves:",
+      "step3Desc": "Seu jogo inclui:",
+      "step3Item1": "• Saves automáticos baseados em arquivo (persistentes entre sessões)",
+      "step3Item2": "• O progresso dos jogadores é salvo no computador deles",
+      "step3Item3": "• Funciona offline sem servidor",
+      "step4InstallerTitle": "Recursos do Instalador:",
+      "step4Item1": "• Seleção personalizada do diretório de instalação",
+      "step4Item2": "• Atalhos na Área de Trabalho e no Menu Iniciar",
+      "step4Item3": "• Desinstalador limpo incluído",
+      "step4Item4": "• Saves armazenados na pasta de dados do usuário",
+      "step5NoteTitle": "Nota:",
+      "step5NoteInstaller": "O instalador é específico por plataforma",
+      "step5NoteStandalone": "O executável é específico por plataforma",
+      "step5Platform": "Compile no Windows para .exe, Mac para .app, Linux para .AppImage"
+    }
+  },
+
+  "error": {
+    "title": "Falha na Compilação",
+    "unknown": "Ocorreu um erro desconhecido",
+    "commonFixes": "Correções comuns:",
+    "fix1": "Verifique se seu projeto tem pelo menos uma cena",
+    "fix2": "Confirme que todos os assets estão carregados corretamente",
+    "fix3": "Tente fechar e reabrir o aplicativo",
+    "tryAgain": "Tentar Novamente"
+  }
+}

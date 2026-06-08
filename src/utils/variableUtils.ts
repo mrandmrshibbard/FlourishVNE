@@ -121,9 +121,20 @@ export const coerceValueToType = (
 };
 
 /**
+ * Clamps a number to an optional inclusive [min, max] range. Either bound may be undefined
+ * (unbounded on that side). Non-finite input falls through unchanged.
+ */
+export const clampNumberToBounds = (value: number, min?: number, max?: number): number => {
+    let v = value;
+    if (typeof min === 'number' && Number.isFinite(min) && v < min) v = min;
+    if (typeof max === 'number' && Number.isFinite(max) && v > max) v = max;
+    return v;
+};
+
+/**
  * Calculates a new variable value based on operator and current value.
  * Handles operator coercion semantics (e.g., 'add' on boolean = true).
- * 
+ *
  * @param operator The effective operator to use
  * @param variableType The type of the variable
  * @param currentValue The current variable value
@@ -131,7 +142,9 @@ export const coerceValueToType = (
  * @param randomMin Minimum value for random operator (optional)
  * @param randomMax Maximum value for random operator (optional)
  * @param originalOperator The original operator if it was coerced (optional)
- * @returns The new value
+ * @param boundMin Per-variable clamp lower bound for NUMBER variables (optional)
+ * @param boundMax Per-variable clamp upper bound for NUMBER variables (optional)
+ * @returns The new value (number results clamped to [boundMin, boundMax] when set)
  */
 export const calculateVariableValue = (
     operator: VNSetVariableOperator,
@@ -140,23 +153,29 @@ export const calculateVariableValue = (
     changeValue: string | number | boolean,
     randomMin?: number,
     randomMax?: number,
-    originalOperator?: string
+    originalOperator?: string,
+    boundMin?: number,
+    boundMax?: number
 ): string | number | boolean => {
     const changeValStr = String(changeValue);
-    
+
+    // Compute the raw result, then clamp any NUMBER result to the variable's optional bounds.
+    const finish = (result: string | number | boolean): string | number | boolean =>
+        typeof result === 'number' ? clampNumberToBounds(result, boundMin, boundMax) : result;
+
     switch (operator) {
         case 'add':
-            return toNumeric(currentValue) + toNumeric(changeValStr);
-            
+            return finish(toNumeric(currentValue) + toNumeric(changeValStr));
+
         case 'subtract':
-            return toNumeric(currentValue) - toNumeric(changeValStr);
-            
+            return finish(toNumeric(currentValue) - toNumeric(changeValStr));
+
         case 'random': {
             const min = randomMin ?? 0;
             const max = randomMax ?? 100;
-            return Math.floor(Math.random() * (max - min + 1)) + min;
+            return finish(Math.floor(Math.random() * (max - min + 1)) + min);
         }
-        
+
         case 'set':
         default:
             // Handle coerced operators with semantic meaning for booleans
@@ -175,6 +194,6 @@ export const calculateVariableValue = (
                     return randomVal;
                 }
             }
-            return coerceValueToType(changeValue, variableType, currentValue);
+            return finish(coerceValueToType(changeValue, variableType, currentValue));
     }
 };

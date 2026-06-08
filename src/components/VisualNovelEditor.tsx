@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import Header from './Header';
 import PropertiesInspector from './PropertiesInspector';
@@ -50,6 +51,7 @@ function editorDebugLog(...args: unknown[]): void {
 
 
 const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationTab }> = ({ onExit, initialTab }) => {
+    const { t } = useTranslation('editorTools');
     const { project, dispatch } = useProject();
     const [activeSceneId, setActiveSceneId] = useState<VNID>(project.startSceneId);
     const [selectedCommandIndex, setSelectedCommandIndex] = useState<number | null>(null);
@@ -186,8 +188,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         if (activeTab === 'ui' && uiEditorMode === 'ingame') return null;
         // When on the UI tab in 'screens' mode with no screen selected, show placeholder
         if (activeTab === 'ui' && !activeMenuScreenId && uiEditorMode === 'screens') {
-            return <Panel title="Properties" style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
-                <p className="text-xs text-slate-400">Select a UI screen to edit properties.</p>
+            return <Panel title={t('visualNovelEditor.propertiesTitle')} style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
+                <p className="text-xs text-slate-400">{t('visualNovelEditor.selectUiScreenHint')}</p>
             </Panel>;
         }
         if (isConfiguringScene) {
@@ -271,8 +273,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         }
         // Always show properties panel for scenes tab, even if nothing selected
         if (activeTab === 'scenes') {
-            return <Panel title="Properties" style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
-                <p className="text-xs text-slate-400">Select a command to edit properties.</p>
+            return <Panel title={t('visualNovelEditor.propertiesTitle')} style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
+                <p className="text-xs text-slate-400">{t('visualNovelEditor.selectCommandHint')}</p>
             </Panel>;
         }
         return null; // Other tabs handle their own inspectors internally
@@ -348,7 +350,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             );
 
             if (!result.success) {
-                showModal('Template Application Failed', result.errors.join('\n'));
+                showModal(t('visualNovelEditor.templateApplyFailed'), result.errors.join('\n'));
                 return;
             }
 
@@ -411,17 +413,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
 
             // Show success message
             const message =
-                `Created:\n` +
-                `- ${result.generatedScreens.length} UI Screen(s)\n` +
-                `- ${result.generatedVariables.length} Variable(s)\n\n` +
-                `Next steps:\n` +
-                `1. Create a character in the Characters tab\n` +
-                `2. Add layers and assets to the character\n` +
-                `3. Go to UI tab and populate the asset cyclers\n` +
-                `4. Test in live preview!` +
-                (result.warnings.length > 0 ? `\n\nWarnings:\n${result.warnings.join('\n')}` : '');
+                t('visualNovelEditor.templateAppliedMsg', {
+                    screens: result.generatedScreens.length,
+                    variables: result.generatedVariables.length,
+                }) +
+                (result.warnings.length > 0 ? t('visualNovelEditor.templateAppliedWarnings', { warnings: result.warnings.join('\n') }) : '');
 
-            showModal(`Template "${template.name}" Applied Successfully!`, message);
+            showModal(t('visualNovelEditor.templateAppliedTitle', { name: template.name }), message);
 
             // Switch to UI tab to show the new screen
             if (result.generatedScreens.length > 0) {
@@ -430,7 +428,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             }
         } catch (error) {
             console.error('Failed to apply template:', error);
-            showModal('Template Application Error', 'Failed to apply template. Please try again.');
+            showModal(t('visualNovelEditor.templateApplyError'), t('visualNovelEditor.templateApplyErrorMsg'));
         }
     };
 
@@ -540,7 +538,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 <div className="flex-1 flex flex-col min-w-0">
                     {configuringTemplate && templateConfigDraft ? (
                         <div className="flex-1 overflow-auto p-4">
-                            <Suspense fallback={<div className="text-slate-300">Loading template configurator…</div>}>
+                            <Suspense fallback={<div className="text-slate-300">{t('visualNovelEditor.loadingTemplateConfigurator')}</div>}>
                                 <TemplateConfigComponent
                                     template={configuringTemplate}
                                     initialConfig={templateConfigDraft}
@@ -554,13 +552,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                     }}
                                     onSave={async (cfg) => {
                                         if (!isTemplateConfigValid) {
-                                            showModal('Fix Template Settings', 'Please resolve template configuration errors before applying.');
+                                            showModal(t('visualNovelEditor.fixTemplateSettings'), t('visualNovelEditor.fixTemplateSettingsMsg'));
                                             return;
                                         }
-                                        const t = configuringTemplate;
+                                        const tpl = configuringTemplate;
                                         setConfiguringTemplate(null);
                                         setTemplateConfigDraft(null);
-                                        await applyTemplateWithConfig(t, cfg);
+                                        await applyTemplateWithConfig(tpl, cfg);
                                     }}
                                     showPreview={true}
                                 />
@@ -607,25 +605,25 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         </ErrorBoundary>
                     ) : activeTab === 'assets' ? (
                         <ErrorBoundary panelName="Asset Manager">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading assets…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingAssets')}</div>}>
                                 <AssetManager project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'variables' ? (
                         <ErrorBoundary panelName="Variable Manager">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading variables…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingVariables')}</div>}>
                                 <VariableManager project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'settings' ? (
                         <ErrorBoundary panelName="Settings">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading settings…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingSettings')}</div>}>
                                 <SettingsManager project={project} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : activeTab === 'commonEvents' ? (
                         <ErrorBoundary panelName="Common Events">
-                            <Suspense fallback={<div className="text-slate-300 p-4">Loading common events…</div>}>
+                            <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingCommonEvents')}</div>}>
                                 <CommonEventsManager project={project} />
                             </Suspense>
                         </ErrorBoundary>

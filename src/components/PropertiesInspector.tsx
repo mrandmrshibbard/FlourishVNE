@@ -43,9 +43,10 @@ import VariablePropertiesEditor from './VariablePropertiesEditor';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './inspector/fields';
 import { CommandGroupAccordion } from './inspector/CommandGroupFields';
 import { isCommandGrouped } from './inspector/inspectorGroups';
+import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './inspector/ChoiceAppearanceFields';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 
-const useCommandDefaults = (
+export const useCommandDefaults = (
     command: VNCommand | undefined,
     project: VNProject,
     updateCommand: (updates: Partial<VNCommand>) => void
@@ -153,7 +154,7 @@ const useCommandDefaults = (
     }, [command, project.characters, project.backgrounds, project.images, project.variables, updateCommand]);
 };
 
-const useChoiceActionNormalization = (
+export const useChoiceActionNormalization = (
     command: VNCommand | undefined,
     project: VNProject,
     updateCommand: (updates: Partial<VNCommand>) => void
@@ -610,36 +611,17 @@ const PropertiesInspector: React.FC<{
 
                 const removeOption = (index: number) => updateCommand({ options: cmd.options.filter((_, i) => i !== index) });
 
-                const updateAction = (optionIndex: number, actionIndex: number, updatedAction: Partial<ChoiceAction>) => {
+                // Choice options carry the FULL VNUIAction set (same as buttons), edited via ActionEditor.
+                const setAction = (optionIndex: number, actionIndex: number, newAction: ChoiceAction) => {
                     const option = cmd.options[optionIndex];
                     const newActions = [...(option.actions || [])];
-                    newActions[actionIndex] = { ...newActions[actionIndex], ...updatedAction } as ChoiceAction;
+                    newActions[actionIndex] = newAction;
                     updateOption(optionIndex, { actions: newActions });
                 };
-                
-                const addAction = (optionIndex: number, type: UIActionType.JumpToScene | UIActionType.SetVariable) => {
+
+                const addAnyAction = (optionIndex: number) => {
                     const option = cmd.options[optionIndex];
-                    let newAction: ChoiceAction;
-                    if (type === UIActionType.JumpToScene) {
-                        newAction = { type: UIActionType.JumpToScene, targetSceneId: project.startSceneId };
-                    } else {
-                        // The type is guaranteed to be SetVariable here.
-                        const firstVarId = Object.keys(project.variables)[0] || '';
-                        const firstVar = project.variables[firstVarId];
-                        // Initialize with proper default value based on variable type
-                        let defaultValue: string | number | boolean = '';
-                        if (firstVar) {
-                            if (firstVar.type === 'boolean') {
-                                defaultValue = false;
-                            } else if (firstVar.type === 'number') {
-                                defaultValue = 0;
-                            } else {
-                                defaultValue = '';
-                            }
-                        }
-                        newAction = { type: UIActionType.SetVariable, variableId: firstVarId, operator: 'set', value: defaultValue };
-                    }
-                    updateOption(optionIndex, { actions: [...(option.actions || []), newAction] });
+                    updateOption(optionIndex, { actions: [...(option.actions || []), { type: UIActionType.None } as ChoiceAction] });
                 };
 
                 const removeAction = (optionIndex: number, actionIndex: number) => {
@@ -650,6 +632,7 @@ const PropertiesInspector: React.FC<{
 
                 return <div>
                     <h3 className="font-bold mb-2">{t('choice.options')}</h3>
+                    <ChoiceLayoutSelect layout={cmd.layout} onChange={l => updateCommand({ layout: l })} />
                     {cmd.options.map((opt, i) => {
                         const migratedOpt: ChoiceOption = ('targetSceneId' in opt && !('actions' in opt)) ? {
                             id: opt.id || generateId(), text: opt.text, conditions: opt.conditions,
@@ -667,92 +650,17 @@ const PropertiesInspector: React.FC<{
                                 <div className="space-y-2 pl-2 border-l-2 border-[var(--border-default)]">
                                     {(migratedOpt.actions || []).map((action, actionIndex) => (
                                         <div key={actionIndex} className="p-1 bg-[var(--bg-primary)] rounded-md">
-                                            {action.type === UIActionType.JumpToScene ? (
-                                                (() => {
-                                                    const actionAsJump = action as ChoiceAction & { targetSceneId: VNID };
-                                                    return (
-                                                <FormField label={t('choice.jumpToScene')}>
-                                                    <div className="flex items-center gap-1">
-                                                        <Select value={actionAsJump.targetSceneId} onChange={e => updateAction(i, actionIndex, { targetSceneId: e.target.value })}>
-                                                            {Object.values(project.scenes).map((s: VNScene) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                                        </Select>
-                                                        <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
-                                                    </div>
-                                                </FormField>
-                                                    );
-                                                })()
-                                            ) : action.type === UIActionType.SetVariable ? (
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between items-center">
-                                                        <p className="text-xs font-semibold">{t('choice.setVariable')}</p>
-                                                        <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-1"><XMarkIcon className="w-4 h-4" /></button>
-                                                    </div>
-                                                    {(() => {
-                                                        const actionAsSetVar = action as SetVariableAction;
-                                                        const variable = project.variables[actionAsSetVar.variableId];
-                                                        return (
-                                                            <div className="space-y-2">
-                                                                <FormField label={t('vars.variable')}>
-                                                                    <Select value={actionAsSetVar.variableId} onChange={e => {
-                                                                        const newVarId = e.target.value;
-                                                                        const newVar = project.variables[newVarId];
-                                                                        let newOperator = actionAsSetVar.operator;
-                                                                        let newValue = actionAsSetVar.value;
-                                                                        
-                                                                        // Reset operator if switching to non-number variable
-                                                                        if (newVar?.type !== 'number' && (actionAsSetVar.operator === 'add' || actionAsSetVar.operator === 'subtract')) {
-                                                                            newOperator = 'set';
-                                                                        }
-                                                                        
-                                                                        // Reset value to match new variable type
-                                                                        if (newVar) {
-                                                                            if (newVar.type === 'boolean') {
-                                                                                newValue = false;
-                                                                            } else if (newVar.type === 'number') {
-                                                                                newValue = 0;
-                                                                            } else {
-                                                                                newValue = '';
-                                                                            }
-                                                                        }
-                                                                        
-                                                                        updateAction(i, actionIndex, { variableId: newVarId, operator: newOperator, value: newValue });
-                                                                    }}>
-                                                                        {Object.values(project.variables).map((v: VNVariable) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                                                    </Select>
-                                                                </FormField>
-                                                                <div className="grid grid-cols-2 gap-1">
-                                                                    <FormField label={t('vars.operator')}>
-                                                                        <Select value={actionAsSetVar.operator} onChange={e => updateAction(i, actionIndex, { operator: e.target.value as VNSetVariableOperator })}>
-                                                                            <option value="set">Set (=)</option>
-                                                                            {variable?.type === 'number' && <option value="add">Add (+)</option>}
-                                                                            {variable?.type === 'number' && <option value="subtract">Subtract (-)</option>}
-                                                                        </Select>
-                                                                    </FormField>
-                                                                    <FormField label={t('vars.value')}>
-                                                                        {variable?.type === 'boolean' ? (
-                                                                            <Select value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: e.target.value === 'true' })}>
-                                                                                <option value="true">{t('vars.true')}</option>
-                                                                                <option value="false">{t('vars.false')}</option>
-                                                                            </Select>
-                                                                        ) : variable?.type === 'number' ? (
-                                                                            <TextInput type="number" value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: parseFloat(e.target.value) || 0 })}/>
-                                                                        ) : (
-                                                                            <TextInput value={String(actionAsSetVar.value)} onChange={e => updateAction(i, actionIndex, { value: e.target.value })}/>
-                                                                        )}
-                                                                    </FormField>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            ) : null}
+                                            <div className="flex justify-end -mb-1">
+                                                <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-0.5" title={t('choice.removeOption')}><XMarkIcon className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                            <ActionEditor action={action} onActionChange={(na) => setAction(i, actionIndex, na)} />
                                         </div>
                                     ))}
                                     <div className="flex gap-1 pt-1">
-                                       <button onClick={() => addAction(i, UIActionType.JumpToScene)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">{t('choice.addJump')}</button>
-                                       <button onClick={() => addAction(i, UIActionType.SetVariable)} disabled={Object.keys(project.variables).length === 0} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed">{t('choice.addSetVariable')}</button>
+                                       <button onClick={() => addAnyAction(i)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">{t('choice.addAction')}</button>
                                     </div>
                                 </div>
+                               <ChoiceOptionAppearance option={migratedOpt} layout={cmd.layout} project={project} onChange={patch => updateOption(i, patch)} />
                                <button onClick={() => removeOption(i)} className="text-red-400 hover:text-red-300 text-xs mt-3">{t('choice.removeOption')}</button>
                             </div>
                         )
@@ -1085,6 +993,9 @@ const PropertiesInspector: React.FC<{
                             <option value="shimmer">{t('screen.effects.shimmer')}</option>
                             <option value="rain">{t('screen.effects.rain')}</option>
                             <option value="snowAsh">{t('screen.effects.snowAsh')}</option>
+                            {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
+                                <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
+                            ))}
                         </Select>
                     </FormField>
 
@@ -2200,7 +2111,7 @@ const PropertiesInspector: React.FC<{
                 const selectedCE = cmd.commonEventId ? (project.commonEvents || {})[cmd.commonEventId] : null;
                 return <>
                     <FormField label={t('callCommonEvent.commonEvent')}>
-                        <Select value={cmd.commonEventId || ''} onChange={e => updateCommand({ commonEventId: e.target.value, arguments: {} })}>
+                        <Select value={cmd.commonEventId || ''} onChange={e => updateCommand({ commonEventId: e.target.value })}>
                             <option value="">{t('callCommonEvent.selectCommonEvent')}</option>
                             {commonEvents.map((ce: any) => (
                                 <option key={ce.id} value={ce.id}>{ce.name}{!ce.enabled ? t('callCommonEvent.disabled') : ''}</option>
@@ -2216,49 +2127,6 @@ const PropertiesInspector: React.FC<{
                             <p><strong>{t('callCommonEvent.commands')}</strong> {selectedCE.commands?.length || 0}</p>
                             {selectedCE.description && <p className="mt-0.5">{selectedCE.description}</p>}
                         </div>
-                    )}
-                    {selectedCE && selectedCE.parameters && selectedCE.parameters.length > 0 && (
-                        <>
-                            <hr className="border-[var(--border-subtle)] my-2" />
-                            <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t('callCommonEvent.arguments')}</h4>
-                            <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>
-                                {t('callCommonEvent.argumentsHint')}
-                            </p>
-                            {selectedCE.parameters.map((param: any) => (
-                                <FormField key={param.id} label={param.name}>
-                                    {param.type === 'boolean' ? (
-                                        <label className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!(cmd.arguments || {})[param.id] ?? param.defaultValue}
-                                                onChange={e => updateCommand({
-                                                    arguments: { ...(cmd.arguments || {}), [param.id]: e.target.checked }
-                                                })}
-                                            />
-                                            <span className="text-xs text-[var(--text-secondary)]">{param.description || param.name}</span>
-                                        </label>
-                                    ) : param.type === 'number' ? (
-                                        <input
-                                            type="number"
-                                            value={Number((cmd.arguments || {})[param.id] ?? param.defaultValue)}
-                                            onChange={e => updateCommand({
-                                                arguments: { ...(cmd.arguments || {}), [param.id]: parseFloat(e.target.value) || 0 }
-                                            })}
-                                            className="w-full rounded px-2 py-1 text-sm"
-                                            style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}
-                                        />
-                                    ) : (
-                                        <TextInput
-                                            value={String((cmd.arguments || {})[param.id] ?? param.defaultValue)}
-                                            onChange={e => updateCommand({
-                                                arguments: { ...(cmd.arguments || {}), [param.id]: e.target.value }
-                                            })}
-                                            placeholder={param.description || t('callCommonEvent.valueFor', { name: param.name })}
-                                        />
-                                    )}
-                                </FormField>
-                            ))}
-                        </>
                     )}
                 </>;
             }

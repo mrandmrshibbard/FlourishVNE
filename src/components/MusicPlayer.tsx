@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     toggleBackgroundMusic,
     isBgmPlaying,
@@ -81,6 +82,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
     currentSong,
     onSongChange,
 }) => {
+    const { t } = useTranslation('contentTools');
     const [poppedOut, setPoppedOut] = useState(false);
     const [showSongList, setShowSongList] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -191,7 +193,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     handlePopOut();
                 }}
                 className="fixed bottom-6 right-6 z-50 group"
-                title={isPlaying ? 'Right-click to pop out player' : 'Play ambient music (right-click for player)'}
+                title={isPlaying ? t('musicPlayer.fabTitlePlaying') : t('musicPlayer.fabTitleStopped')}
             >
                 <div
                     className="w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-lg hover:shadow-xl border"
@@ -219,7 +221,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 {isPlaying && (
                     <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <div className="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-secondary)] whitespace-nowrap shadow-lg">
-                            <PopOutIcon className="w-3 h-3 inline mr-1" /> Right-click to pop out
+                            <PopOutIcon className="w-3 h-3 inline mr-1" /> {t('musicPlayer.rightClickPopOut')}
                         </div>
                     </div>
                 )}
@@ -264,12 +266,12 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 >
                     <div className="flex items-center gap-2">
                         <MusicNoteIcon className="w-4 h-4 text-[var(--accent-pink)]" />
-                        <span className="text-xs font-semibold text-[var(--text-primary)]">Music Player</span>
+                        <span className="text-xs font-semibold text-[var(--text-primary)]">{t('musicPlayer.panelTitle')}</span>
                     </div>
                     <div className="flex gap-1">
                         <button
                             onClick={handleDock}
-                            title="Dock back"
+                            title={t('musicPlayer.dockBack')}
                             className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors"
                         >
                             <MinimizeIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" />
@@ -309,7 +311,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             }}
                         >
                             <span className="text-sm text-[var(--text-primary)] truncate">
-                                {currentSong || 'Select a song'}
+                                {currentSong || t('musicPlayer.selectSong')}
                             </span>
                             <ChevronDownIcon
                                 className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${showSongList ? 'rotate-180' : ''}`}
@@ -343,7 +345,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <button
                             onClick={handleTogglePlay}
                             className="w-10 h-10 rounded-full flex items-center justify-center transition-all border hover:scale-105 active:scale-95"
-                            title={isPlaying ? 'Pause' : 'Play'}
+                            title={isPlaying ? t('musicPlayer.pause') : t('musicPlayer.play')}
                             style={{
                                 background: isPlaying
                                     ? 'linear-gradient(135deg, var(--accent-pink), var(--accent-lavender))'
@@ -361,7 +363,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <button
                             onClick={handleSkip}
                             className="w-8 h-8 rounded-full flex items-center justify-center transition-all border hover:scale-105 active:scale-95 hover:border-[var(--accent-cyan)]"
-                            title="Next Song"
+                            title={t('musicPlayer.nextSong')}
                             style={{
                                 background: 'var(--bg-tertiary)',
                                 borderColor: 'var(--border-subtle)',

@@ -1,0 +1,166 @@
+{
+  "title": "Build Standalone Game",
+  "chooseBuildType": "Choose Build Type:",
+  "ready": "Ready to build...",
+  "iconError": "Please select an image file (PNG recommended, 256×256 or larger).",
+
+  "webBuild": {
+    "name": "Web Build",
+    "desc": "Play in browser • itch.io ready • No saves persist",
+    "infoTitle": "Web Build",
+    "intro": "This creates a browser-based game that you can:",
+    "item1": "✅ Upload to itch.io (easiest!)",
+    "item2": "✅ Share on any web host (Netlify, GitHub Pages, etc.)",
+    "item3": "✅ Send to friends as a ZIP file",
+    "item4": "✅ Play offline in any browser",
+    "item5": "⚠️ Note: Progress won't save (browser limitation)"
+  },
+
+  "desktopBuild": {
+    "name": "Desktop Build",
+    "desc": "Windows/Mac/Linux • Save progress • Offline play",
+    "infoTitle": "Desktop Build",
+    "intro": "This creates a standalone desktop app with:",
+    "item1": "💾 Full save/load system (10 save slots)",
+    "item2": "🔄 Auto-save functionality",
+    "item3": "📁 Persistent progress storage",
+    "item4": "🖥️ Works on Windows, Mac, and Linux",
+    "item5": "📦 Requires Electron (included in build)",
+    "installerWarning": "⚡ Installer builds are faster to build and launch instantly after install — the setup extracts all files ahead of time",
+    "standaloneWarning": "⏱ Standalone builds take longer to build and are slower to start — the exe must unpack itself into a temp folder on every launch"
+  },
+
+  "noCodingRequired": "No coding required! Just download and distribute.",
+
+  "iconPicker": {
+    "label": "Application Icon",
+    "clickToChoose": "Click to choose an icon",
+    "altText": "App icon",
+    "changeIcon": "Change Icon",
+    "chooseIcon": "Choose Icon",
+    "remove": "Remove",
+    "hint": "Recommended: 256×256 PNG"
+  },
+
+  "formatPicker": {
+    "title": "Build Format",
+    "standaloneName": "📦 Standalone .exe",
+    "standaloneDesc": "Single portable executable — no installation needed, just run",
+    "standaloneNote": "⏱ Slower build & startup — exe must unpack on every launch",
+    "installerName": "🔧 Installer (Setup)",
+    "installerDesc": "Setup wizard with shortcuts, install directory, uninstaller, and game saves folder",
+    "installerNote": "⚡ Faster build & startup — files are pre-extracted during install"
+  },
+
+  "stats": {
+    "estimatedSize": "Estimated Size:",
+    "scenes": "Scenes:",
+    "characters": "Characters:"
+  },
+
+  "validation": {
+    "errors": "⛔ {{count}} Error(s)",
+    "warnings": "⚠️ {{count}} Warning(s)",
+    "separator": " • "
+  },
+
+  "buildBtn": {
+    "fixErrors": "Fix Errors Before Building",
+    "buildWeb": "Build Web Game",
+    "buildInstaller": "Build Installer",
+    "buildStandalone": "Build Standalone EXE"
+  },
+
+  "helpBox": {
+    "firstTime": "First time?",
+    "before": "After building, you'll get a ZIP file. Upload it to",
+    "after": "and you're done! No command line needed."
+  },
+
+  "progress": {
+    "web": {
+      "prepare": "📋 Preparing",
+      "generate": "⚙️ Generating",
+      "assets": "🎨 Bundling Assets",
+      "finalize": "📦 Finalizing"
+    },
+    "desktop": {
+      "prepare": "📋 Prepare",
+      "generate": "⚙️ Generate",
+      "assets": "🎨 Assets",
+      "install": "📥 Dependencies",
+      "build": "🔨 Build EXE",
+      "save": "💾 Save",
+      "working": "Desktop builds take a few minutes — the app is working in the background."
+    }
+  },
+
+  "success": {
+    "webTitle": "Web Game Built Successfully!",
+    "installerTitle": "Installer Built Successfully!",
+    "desktopTitle": "Desktop App Built Successfully!",
+    "webText": "Your game is ready to share on the web!",
+    "installerText": "Your installer with shortcuts and game saves directory is ready!",
+    "desktopText": "Your standalone desktop game is ready!",
+    "fileSize": "File Size:",
+    "format": "Format:",
+    "formatValue": "HTML5 (ZIP)",
+    "downloadBtn": "Download Web Game ZIP",
+    "execSaved": "Executable saved successfully!",
+    "execLocation": "Check the location you selected to find your game's executable file.",
+    "buildAnotherVersion": "Build Another Version"
+  },
+
+  "nextSteps": {
+    "title": "What's Next?",
+    "web": {
+      "step1Title": "Upload to itch.io (Recommended):",
+      "step1GoTo": "Go to",
+      "step1ChooseHtml": "Choose \"HTML\" as the upload type",
+      "step1Upload": "Upload the ZIP file you just downloaded",
+      "step1Check": "Check \"This file will be played in the browser\"",
+      "step1Publish": "Publish!",
+      "step2Title": "Or host yourself:",
+      "step2Desc": "Unzip and upload the contents to any web host",
+      "step3Title": "Or share offline:",
+      "step3Desc": "Send the ZIP to friends - they can unzip and open index.html"
+    },
+    "desktop": {
+      "step1Title": "Test Your Game:",
+      "step1Installer": "Run the Setup installer to install your game",
+      "step1Standalone": "Double-click the executable to test your game",
+      "step1Windows": "• Windows: .exe file",
+      "step1Mac": "• Mac: .app or .dmg file",
+      "step1Linux": "• Linux: .AppImage file",
+      "step2Title": "Distribute:",
+      "step2ShareInstaller": "Share the installer with players!",
+      "step2ShareStandalone": "Share the executable with players!",
+      "step2InstallerDesc": "The installer will create desktop/start menu shortcuts, an install directory, and a game saves folder",
+      "step2StandaloneDesc": "They just download and run - no installation needed",
+      "step3Title": "Save System:",
+      "step3Desc": "Your game includes:",
+      "step3Item1": "• Automatic file-based saves (persistent between sessions)",
+      "step3Item2": "• Players' progress is saved to their computer",
+      "step3Item3": "• Works offline with no server needed",
+      "step4InstallerTitle": "Installer Features:",
+      "step4Item1": "• Custom install directory selection",
+      "step4Item2": "• Desktop and Start Menu shortcuts",
+      "step4Item3": "• Clean uninstaller included",
+      "step4Item4": "• Game saves stored in user data folder",
+      "step5NoteTitle": "Note:",
+      "step5NoteInstaller": "The installer is platform-specific",
+      "step5NoteStandalone": "The executable is platform-specific",
+      "step5Platform": "Build on Windows for .exe, Mac for .app, Linux for .AppImage"
+    }
+  },
+
+  "error": {
+    "title": "Build Failed",
+    "unknown": "Unknown error occurred",
+    "commonFixes": "Common fixes:",
+    "fix1": "Make sure your project has at least one scene",
+    "fix2": "Check that all assets are properly loaded",
+    "fix3": "Try closing and reopening the app",
+    "tryAgain": "Try Again"
+  }
+}
