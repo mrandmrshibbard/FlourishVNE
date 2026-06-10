@@ -4,7 +4,9 @@ import i18n from '../i18n';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNProject } from '../types/project';
 import { VNVariable, VNVariableScope } from '../features/variables/types';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { useProject } from '../contexts/ProjectContext';
+import BooleanLabelEditor from './BooleanLabelEditor';
 import { PlusIcon, TrashIcon, Cog6ToothIcon, PencilIcon } from './icons';
 import { CommandType, VNCommand, SetVariableCommand, TextInputCommand, ChoiceCommand } from '../features/scene/types';
 import { VNUIScreen, VNUIElement } from '../features/ui/types';
@@ -195,7 +197,9 @@ const VariableManager: React.FC<VariableManagerProps> = ({
     };
 
     const variablesArray = useMemo(
-        () => Object.values(project.variables || {}) as VNVariable[],
+        // Hide system-managed variables (e.g. item-list stock counts, flagged isInternal) to keep this
+        // list calm — they still work everywhere by id (conditions, {name}, SetVariable).
+        () => (Object.values(project.variables || {}) as VNVariable[]).filter(v => !v.isInternal),
         [project.variables]
     );
 
@@ -485,6 +489,7 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
     };
 
     const currentScope: VNVariableScope = variable.scope || 'global';
+    const boolLbls = resolveBoolLabels(variable, t('boolean.true'), t('boolean.false'));
 
     return (
         <div className="flex-1 p-4 overflow-y-auto">
@@ -526,8 +531,8 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                             onChange={(e) => handleDefaultValueChange(e.target.value === 'true')}
                             className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
                         >
-                            <option value="false">{t('boolean.false')}</option>
-                            <option value="true">{t('boolean.true')}</option>
+                            <option value="false">{boolLbls.no}</option>
+                            <option value="true">{boolLbls.yes}</option>
                         </select>
                     ) : variable.type === 'number' ? (
                         <input
@@ -545,6 +550,11 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                         />
                     )}
                 </div>
+
+                {variable.type === 'boolean' && (
+                    <BooleanLabelEditor trueLabel={variable.trueLabel} falseLabel={variable.falseLabel}
+                        onChange={updates => onUpdate(updates)} />
+                )}
 
                 <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-[var(--border-subtle)]">
                     <div>

@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNCondition, VNConditionOperator } from '../../types/shared';
 import { VNVariable, VNVariableType } from '../../features/variables/types';
+import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import { CollapsibleSection } from './CollapsibleSection';
 import { VNProject } from '../../types/project';
 import { FormField, Select, TextInput } from './Form';
 import { XMarkIcon, PlusIcon } from '../icons';
@@ -15,12 +17,26 @@ const getOperatorsForType = (type: VNVariableType | undefined): VNConditionOpera
     }
 };
 
+// Plain-English label key (under `conditions.op.*`) for each operator, so users read
+// "is at least 5" instead of ">= 5". The stored operator value is unchanged.
+const OP_LABEL_KEY: Record<VNConditionOperator, string> = {
+    '==': 'eq', '!=': 'neq', '>': 'gt', '<': 'lt', '>=': 'gte', '<=': 'lte',
+    'contains': 'contains', 'startsWith': 'startsWith', 'is true': 'isOn', 'is false': 'isOff',
+};
+
 const ConditionsEditor: React.FC<{
     conditions: VNCondition[] | undefined;
     project: VNProject;
     onChange: (newConditions: VNCondition[] | undefined) => void;
     isRequired?: boolean;
-}> = ({ conditions, project, onChange, isRequired }) => {
+    /** When true, wraps the editor in a collapsible accordion (count badge on the header)
+     *  so a command/element's conditions can be folded away. */
+    collapsible?: boolean;
+    /** Header title used in collapsible mode (defaults to "Conditions"). */
+    title?: string;
+    /** Optional one-line hint shown under the header while collapsed (collapsible mode only). */
+    hint?: string;
+}> = ({ conditions, project, onChange, isRequired, collapsible, title, hint }) => {
     const { t } = useTranslation('ui');
     const hasVariables = Object.keys(project.variables).length > 0;
 
@@ -82,6 +98,22 @@ const ConditionsEditor: React.FC<{
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conditions, project.variables]);
 
+    // Collapsible mode: fold the editor into an accordion with a count badge. Renders a plain
+    // (non-collapsible) ConditionsEditor inside so the body logic stays in one place.
+    if (collapsible) {
+        const count = conditions?.length ?? 0;
+        return (
+            <CollapsibleSection
+                title={title || t('conditions.sectionTitle')}
+                badge={count ? String(count) : undefined}
+                defaultOpen={count > 0}
+                hint={hint}
+            >
+                <ConditionsEditor conditions={conditions} project={project} onChange={onChange} isRequired={isRequired} />
+            </CollapsibleSection>
+        );
+    }
+
     if (!hasVariables) {
         return <p className="text-xs text-[var(--text-muted)]">{t('conditions.noVariables')}</p>;
     }
@@ -105,6 +137,9 @@ const ConditionsEditor: React.FC<{
                         : ((condition.operator === '!=' ? !truthyVal : truthyVal) ? 'is true' : 'is false'))
                     : condition.operator;
                 const valueIsHidden = displayOperator === 'is true' || displayOperator === 'is false';
+                // Per-variable boolean labels (e.g. Locked/Unlocked); fall back to global Yes/No.
+                const { yes, no } = resolveBoolLabels(variable, t('conditions.true'), t('conditions.false'));
+                const opText = (op: VNConditionOperator) => t(`conditions.op.${OP_LABEL_KEY[op]}`, { value: op === 'is true' ? yes : op === 'is false' ? no : '' });
 
                 return (
                     <React.Fragment key={index}>
@@ -131,15 +166,15 @@ const ConditionsEditor: React.FC<{
                                 <div className="grid grid-cols-2 gap-1">
                                     <FormField label={t('conditions.operator')}>
                                         <Select value={displayOperator} onChange={e => handleUpdateCondition(index, { operator: e.target.value as VNConditionOperator })}>
-                                            {operators.map(op => <option key={op} value={op}>{op}</option>)}
+                                            {operators.map(op => <option key={op} value={op}>{opText(op)}</option>)}
                                         </Select>
                                     </FormField>
                                     {!valueIsHidden && (
                                         <FormField label={t('conditions.value')}>
                                             {variable?.type === 'boolean' ? (
                                                 <Select value={String(condition.value)} onChange={e => handleUpdateCondition(index, { value: e.target.value === 'true' })}>
-                                                    <option value="true">{t('conditions.true')}</option>
-                                                    <option value="false">{t('conditions.false')}</option>
+                                                    <option value="true">{yes}</option>
+                                                    <option value="false">{no}</option>
                                                 </Select>
                                             ) : (
                                                 <TextInput value={String(condition.value || '')} onChange={e => handleUpdateCondition(index, { value: e.target.value })} />
@@ -150,10 +185,18 @@ const ConditionsEditor: React.FC<{
                             </div>
                             <button onClick={() => handleRemoveCondition(index)} className="text-red-400 hover:text-red-300 mt-1 p-1"><XMarkIcon className="w-4 h-4" /></button>
                         </div>
+                        {variable && (
+                            <p className="text-[10px] text-sky-300/70 italic mt-1 px-1">
+                                {variable.name} {opText(displayOperator)}{valueIsHidden ? '' : ` ${String(condition.value ?? '')}`}
+                            </p>
+                        )}
                     </div>
                     </React.Fragment>
                 );
             })}
+            {(conditions || []).length > 1 && (
+                <p className="text-[10px] text-[var(--text-muted)] italic">{t('conditions.evalHint')}</p>
+            )}
             <button onClick={handleAddCondition} className="text-sky-400 hover:text-sky-300 text-xs mt-2 flex items-center gap-1"><PlusIcon className="w-4 h-4"/>{t('conditions.addCondition')}</button>
         </div>
     );

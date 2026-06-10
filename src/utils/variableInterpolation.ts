@@ -1,6 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNVariable } from '../features/variables/types';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 
 /**
  * Variable Interpolation System
@@ -62,6 +63,29 @@ const getAssetNameFromId = (assetId: string, project: VNProject): string | null 
  * @param project The project containing variable definitions
  * @returns The text with variables interpolated
  */
+/**
+ * Formats a single variable value for display: boolean variables use their per-variable
+ * labels (falling back to the global "Yes"/"No"); asset-id values resolve to the asset name.
+ */
+const formatValue = (
+    variable: VNVariable,
+    value: string | number | boolean,
+    project: VNProject
+): string => {
+    if (variable.type === 'boolean') {
+        const truthy = value === true || String(value).toLowerCase() === 'true';
+        const { yes, no } = resolveBoolLabels(variable, 'Yes', 'No');
+        return truthy ? yes : no;
+    }
+    const stringValue = String(value);
+    // If the value looks like an asset ID, try to get the asset name
+    if (stringValue.startsWith('asset-')) {
+        const assetName = getAssetNameFromId(stringValue, project);
+        return assetName || stringValue;
+    }
+    return stringValue;
+};
+
 export const interpolateVariables = (
     text: string,
     variables: Record<VNID, string | number | boolean>,
@@ -77,32 +101,14 @@ export const interpolateVariables = (
         const variableByName = (Object.values(project.variables) as VNVariable[]).find(v => v.name === trimmedPlaceholder);
         if (variableByName) {
             const value = variables[variableByName.id];
-            if (value !== undefined) {
-                const stringValue = String(value);
-                // If the value looks like an asset ID, try to get the asset name
-                if (stringValue.startsWith('asset-')) {
-                    const assetName = getAssetNameFromId(stringValue, project);
-                    return assetName || stringValue;
-                }
-                return stringValue;
-            }
-            return match;
+            return value !== undefined ? formatValue(variableByName, value, project) : match;
         }
 
         // Then try to find by variable ID
         const variableById = project.variables[trimmedPlaceholder];
         if (variableById) {
             const value = variables[variableById.id];
-            if (value !== undefined) {
-                const stringValue = String(value);
-                // If the value looks like an asset ID, try to get the asset name
-                if (stringValue.startsWith('asset-')) {
-                    const assetName = getAssetNameFromId(stringValue, project);
-                    return assetName || stringValue;
-                }
-                return stringValue;
-            }
-            return match;
+            return value !== undefined ? formatValue(variableById, value, project) : match;
         }
 
         // If not found, return the original placeholder

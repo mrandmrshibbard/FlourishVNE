@@ -463,6 +463,10 @@ h1, h2, h3, h4, h5, h6 {
   background-clip: padding-box;
 }
 
+/* Scrollable without a visible scrollbar (e.g. the header tab bar when it overflows on narrow screens) */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Selection — high contrast so highlighted text is clearly visible */
 ::selection {
   background: rgba(168, 85, 247, 0.65);

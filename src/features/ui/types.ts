@@ -236,6 +236,7 @@ export enum UIElementType {
     Checkbox = 'Checkbox',
     AssetCycler = 'AssetCycler',
     CGGallery = 'CGGallery',
+    Inventory = 'Inventory',
     HotSpot = 'HotSpot',
     ImageMap = 'ImageMap',
 }
@@ -498,6 +499,68 @@ export interface UICGGalleryElement extends BaseUIElement {
     categoryFilter?: string;
 }
 
+/** Inventory Grid — auto-renders the player's owned items (from project.items) in a CSS grid:
+ *  icon + name + live quantity, with an optional Use button. Data-driven like the CG gallery, so
+ *  there's no per-item hand placement. */
+export interface UIInventoryGridElement extends BaseUIElement {
+    type: UIElementType.Inventory;
+    /** Columns in the item grid. */
+    columns: number;
+    /** Gap between slots in pixels (legacy/base — used when columnGap/rowGap are unset). */
+    gap: number;
+    /** Minimum number of rows — pads the grid with empty slots up to columns×rows (a fixed
+     *  "backpack" look). Unset/0 = auto-grow with the number of items. */
+    rows?: number;
+    /** Horizontal spacing between columns (px). Falls back to `gap`. */
+    columnGap?: number;
+    /** Vertical spacing between rows (px). Falls back to `gap`. */
+    rowGap?: number;
+    /** Background color for the grid area. */
+    backgroundColor?: string;
+    /** Per-slot background color. */
+    slotColor?: string;
+    /** Per-slot border color. */
+    slotBorderColor?: string;
+    /** Per-slot border radius (px). */
+    slotBorderRadius?: number;
+    /** Show item names under icons (default true). */
+    showNames?: boolean;
+    /** Show a quantity badge (default true; only shows when qty > 1). */
+    showQuantity?: boolean;
+    /** Show a "Use" button on usable items (default false). */
+    showUseButton?: boolean;
+    /** Allow the player to drag-rearrange items in-game (their order persists per save). Default true. */
+    allowReorder?: boolean;
+    /** ── Use-button appearance (when showUseButton) ── */
+    useButtonText?: string;                                    // label (default "Use")
+    useButtonImage?: { type: 'image' | 'video'; id: VNID } | null;       // custom art
+    useButtonHoverImage?: { type: 'image' | 'video'; id: VNID } | null;  // custom hover art
+    useButtonColor?: string;                                   // background (no-art)
+    useButtonHoverColor?: string;
+    useButtonTextColor?: string;
+    useButtonFont?: VNFontSettings;
+    useButtonRadius?: number;                                  // px
+    /** Hide items the player doesn't own (count < 1). Default true. */
+    hideUnowned?: boolean;
+    /** Font for item names. */
+    nameFont?: VNFontSettings;
+    /** Only show items in this category (empty = all). */
+    categoryFilter?: string;
+    /** Text shown when the grid is empty (e.g. "Your bag is empty"). */
+    emptyText?: string;
+    /** Highlight ring colour for the currently-selected item slot. Default #38bdf8. */
+    selectedBorderColor?: string;
+    /** Bind this grid to a specific item list (collection). Unset = the player's own inventory
+     *  (legacy: all owned items from the global registry). Additive-optional. */
+    collectionId?: VNID;
+    /** What the per-slot button does. Unset = derived from `showUseButton` (true→'use', else 'none')
+     *  for backward compatibility. 'buy'/'sell' turn this grid into a shop control. */
+    slotButton?: 'use' | 'buy' | 'sell' | 'none';
+    /** For a 'sell' grid (the player's inventory shown on a shop screen): which shop list receives the
+     *  sale — provides the currency, sell rate, and optional restock target. */
+    sellToCollectionId?: VNID;
+}
+
 /** Hot spot — a trigger zone that fires actions on click, hover, or drag-drop.
  *  Lives as a regular UIElement; rendering is just a debug outline (visible? flag) and a hit-test area. */
 export interface UIHotSpotElement extends BaseUIElement {
@@ -523,7 +586,7 @@ export interface UIImageMapElement extends BaseUIElement {
 
 export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
-    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement
+    | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIInventoryGridElement
     | UIHotSpotElement | UIImageMapElement;
 
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
@@ -542,9 +605,16 @@ export interface VNScreenBackgroundLayer {
 /** Per-background entry transition for screen backgrounds (video + image). */
 export type VNScreenBgTransition = 'none' | 'fade' | 'crossfade' | 'dissolve' | 'slide' | 'iris' | 'wipe';
 
+/** What kind of screen this is — purely an editor-organization aid (color + grouping in the
+ *  screen list, filtering in the Systems hub). Has NO runtime effect. Unset = inferred from the
+ *  screen's role (see utils/screenCategory). */
+export type VNScreenCategory = 'menu' | 'hud' | 'overlay' | 'system' | 'screen';
+
 export interface VNUIScreen {
     id: VNID;
     name:string;
+    /** Optional editor-only category (color/grouping). Unset → inferred. Additive-optional. */
+    category?: VNScreenCategory;
     background: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean };
     music: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
     ambientNoise: { audioId: VNID | null, policy: 'continue' | 'stop', volume?: number };
@@ -585,6 +655,26 @@ export interface VNUIScreen {
      *  player can bring up and interact with this overlay while dialogue/choices are showing.
      *  Empty areas still pass clicks through to advance dialogue. Additive-optional. */
     hudAboveDialogue?: boolean;
+    /** When true, opening this screen as an in-game overlay FREEZES the scene beneath: auto-advance,
+     *  skip, and manual advance are all suspended (the scene stays visible but paused) until the
+     *  overlay closes. Default (unset) = the scene keeps running behind it. Additive-optional. */
+    pauseSceneWhileOpen?: boolean;
+    /** Optional dark backdrop opacity (0–1) drawn between the scene/dialogue and this overlay while
+     *  it's open (a "dim the room behind the popup" effect). 0/undefined = no backdrop. */
+    backdropOpacity?: number;
+    /** Optional blur (px) applied to everything behind this overlay while it's open. 0/undefined = none. */
+    backdropBlur?: number;
+    /** What happens when this overlay closes (via ReturnToPreviousScreen / ReturnToGame / toggle-off):
+     *  'default'/undefined preserves today's behavior; 'resume' returns without advancing the story;
+     *  'advance' advances one step; 'runActions' runs `onCloseActions` then resumes. Additive-optional. */
+    onCloseBehavior?: 'default' | 'resume' | 'advance' | 'runActions';
+    /** Actions run when this overlay closes (used when onCloseBehavior === 'runActions'). */
+    onCloseActions?: VNUIAction[];
+    /** Optional keyboard key that TOGGLES this screen open/closed during gameplay (e.g. 'i' for an
+     *  inventory). Matched case-insensitively; ignored while typing or with another overlay/history open.
+     *  Built-in shortcuts (Space/Enter advance, H history, Ctrl skip, Esc pause) take priority.
+     *  Additive-optional. */
+    openHotkey?: string;
     /** Pre-migration backup of the original hot zone data, written automatically the first time this
      *  screen is migrated to the unified schema. Lets us rebuild the screen verbatim if migration had
      *  a bug. Safe to delete by hand once you're confident the migration worked. */

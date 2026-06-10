@@ -31,6 +31,11 @@ export const COMMAND_CATEGORIES = {
         headerColor: 'bg-pink-600/30 text-pink-200',
         commands: [CommandType.SetVariable, CommandType.TextInput]
     },
+    'Items': {
+        color: 'bg-emerald-500/20 border-emerald-500 text-emerald-300',
+        headerColor: 'bg-emerald-600/30 text-emerald-200',
+        commands: [CommandType.GiveItem, CommandType.UseItem, CommandType.DestroyItem, CommandType.RestockCollection, CommandType.BuyItem, CommandType.SellItem]
+    },
     'Screen FX': {
         color: 'bg-orange-500/20 border-orange-500 text-orange-300',
         headerColor: 'bg-orange-600/30 text-orange-200',

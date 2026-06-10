@@ -31,8 +31,16 @@
     "boolean": "Booleano"
   },
   "boolean": {
-    "true": "Verdadeiro",
-    "false": "Falso"
+    "true": "Sim",
+    "false": "Não"
+  },
+  "boolLabels": {
+    "label": "Rótulos de valor",
+    "defaultPreset": "Sim / Não (padrão)",
+    "custom": "Personalizado…",
+    "truePlaceholder": "Sim",
+    "falsePlaceholder": "Não",
+    "hint": "Como os valores verdadeiro/falso desta variável aparecem em condições, Definir Variável e no rastreador."
   },
   "delete": {
     "inUseTitle": "Variável Em Uso",

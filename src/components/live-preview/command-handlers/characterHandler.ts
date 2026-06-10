@@ -134,7 +134,7 @@ export function handleShowCharacter(
   });
 
   // For slide transitions, use endPosition if specified, otherwise use position
-  const finalPosition = command.endPosition || command.position;
+  let finalPosition = command.endPosition || command.position;
   const startPosition = command.startPosition;
 
   // Use the requested transition (slide is now supported)
@@ -150,6 +150,13 @@ export function handleShowCharacter(
   const existingSameChar = currentCharacters[command.characterId];
   const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag &&
     (existingSameChar.imageUrls.join(',') !== imageUrls.join(',') || existingSameChar.expressionId !== command.expressionId);
+
+  // "Keep current position": when the character is already on stage, an expression/pose change
+  // leaves it exactly where it is instead of snapping to the command's (often default 'center')
+  // position. Only affects position — the new expression/pose/scale/effects still apply.
+  if (command.keepPosition && existingSameChar) {
+    finalPosition = existingSameChar.position;
+  }
   const ghostKey = isPoseChange ? `__ghost_${command.characterId}_${Date.now()}` : null;
   const ghostEntry = isPoseChange ? {
     charId: ghostKey as string,

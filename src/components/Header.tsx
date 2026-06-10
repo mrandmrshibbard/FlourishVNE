@@ -257,7 +257,7 @@ const Header: React.FC<{
                             </h1>
                         )}
                     </div>
-                    <div className="flex-1 flex justify-center">
+                    <div className="flex-1 min-w-0 flex justify-center">
                         {navigationTabs}
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">

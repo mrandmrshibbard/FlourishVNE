@@ -7,6 +7,7 @@ import { VNCommonEvent } from '../../types/commonEvents';
 import { VNSetVariableOperator } from '../../features/variables/types';
 import { VNScene, CommandType, LabelCommand } from '../../features/scene/types';
 import { VNVariable } from '../../features/variables/types';
+import { resolveBoolLabels } from '../../features/variables/booleanLabels';
 import { VNCharacter } from '../../features/character/types';
 import { useProject } from '../../contexts/ProjectContext';
 import { FormField, Select, TextInput } from '../ui/Form';
@@ -20,6 +21,8 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
     UIActionType.CallCommonEvent,
+    UIActionType.GiveItem, UIActionType.UseItem, UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,
+    UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,
     UIActionType.ShowLog, UIActionType.ToggleAutoAdvance, UIActionType.ToggleSkip, UIActionType.SkipBackward,
 ];
 
@@ -116,6 +119,24 @@ const ActionEditor: React.FC<{
                 break;
             case UIActionType.CallCommonEvent:
                 newAction = { ...newAction, commonEventId: Object.keys(project.commonEvents || {})[0] || '' } as CallCommonEventAction;
+                break;
+            case UIActionType.GiveItem:
+            case UIActionType.DestroyItem:
+                newAction = { ...newAction, itemId: Object.keys(project.items || {})[0] || '', quantity: 1 } as any;
+                break;
+            case UIActionType.UseItem:
+                newAction = { ...newAction, itemId: Object.keys(project.items || {})[0] || '' } as any;
+                break;
+            case UIActionType.RestockCollection:
+                newAction = { ...newAction, collectionId: Object.keys(project.itemCollections || {})[0] || '' } as any;
+                break;
+            case UIActionType.BuyItem:
+            case UIActionType.SellItem:
+                newAction = { ...newAction, itemId: Object.keys(project.items || {})[0] || '', collectionId: Object.keys(project.itemCollections || {})[0] || '' } as any;
+                break;
+            case UIActionType.BuySelectedItem:
+            case UIActionType.SellSelectedItem:
+                newAction = { ...newAction, collectionId: Object.keys(project.itemCollections || {})[0] || '' } as any;
                 break;
         }
         onActionChange(newAction);
@@ -310,8 +331,8 @@ const ActionEditor: React.FC<{
                         ) : project.variables[setVariable.variableId]?.type === 'boolean' ? (
                             <FormField label={t('actionEditor.value')}>
                                 <Select value={String(setVariable.value)} onChange={e => onActionChange({ ...setVariable, value: e.target.value === 'true' })}>
-                                    <option value="true">{t('actionEditor.true')}</option>
-                                    <option value="false">{t('actionEditor.false')}</option>
+                                    <option value="true">{resolveBoolLabels(project.variables[setVariable.variableId], t('actionEditor.true'), t('actionEditor.false')).yes}</option>
+                                    <option value="false">{resolveBoolLabels(project.variables[setVariable.variableId], t('actionEditor.true'), t('actionEditor.false')).no}</option>
                                 </Select>
                             </FormField>
                         ) : (
@@ -439,6 +460,85 @@ const ActionEditor: React.FC<{
                     </div>
                 );
             }
+            case UIActionType.GiveItem:
+            case UIActionType.UseItem:
+            case UIActionType.DestroyItem: {
+                const a = action as any;
+                const itemArr = Object.values(project.items || {}) as any[];
+                const showQty = action.type !== UIActionType.UseItem && !a.all;
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label="Item">
+                            <Select value={a.itemId || ''} onChange={e => onActionChange({ ...a, itemId: e.target.value as VNID })}>
+                                {itemArr.length === 0 && <option value="">No items defined (Systems → Items)</option>}
+                                {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                            </Select>
+                        </FormField>
+                        {action.type === UIActionType.DestroyItem && (
+                            <label className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
+                                <input type="checkbox" checked={!!a.all} onChange={e => onActionChange({ ...a, all: e.target.checked || undefined })} /> Destroy all
+                            </label>
+                        )}
+                        {showQty && (
+                            <FormField label="Quantity">
+                                <TextInput type="number" min="1" value={String(a.quantity ?? 1)} onChange={e => onActionChange({ ...a, quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+                            </FormField>
+                        )}
+                    </div>
+                );
+            }
+            case UIActionType.RestockCollection: {
+                const a = action as any;
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label="Item list">
+                            <Select value={a.collectionId || ''} onChange={e => onActionChange({ ...a, collectionId: e.target.value as VNID })}>
+                                {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                                {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                            </Select>
+                        </FormField>
+                    </div>
+                );
+            }
+            case UIActionType.BuyItem:
+            case UIActionType.SellItem: {
+                const a = action as any;
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                const itemArr = Object.values(project.items || {}) as any[];
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label="Item">
+                            <Select value={a.itemId || ''} onChange={e => onActionChange({ ...a, itemId: e.target.value as VNID })}>
+                                {itemArr.length === 0 && <option value="">No items defined (Systems → Items)</option>}
+                                {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                            </Select>
+                        </FormField>
+                        <FormField label={action.type === UIActionType.BuyItem ? 'Shop list to buy from' : 'Shop list to sell to'}>
+                            <Select value={a.collectionId || ''} onChange={e => onActionChange({ ...a, collectionId: e.target.value as VNID })}>
+                                {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                                {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                            </Select>
+                        </FormField>
+                    </div>
+                );
+            }
+            case UIActionType.BuySelectedItem:
+            case UIActionType.SellSelectedItem: {
+                const a = action as any;
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                return (
+                    <div className="space-y-2 p-2 border border-slate-700 rounded">
+                        <FormField label={action.type === UIActionType.BuySelectedItem ? 'Shop list to buy from' : 'Shop list to sell to'}>
+                            <Select value={a.collectionId || ''} onChange={e => onActionChange({ ...a, collectionId: e.target.value as VNID })}>
+                                {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                                {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                            </Select>
+                        </FormField>
+                        <p className="text-[11px] text-[var(--text-secondary)]">Acts on the item the player has selected in the grid. No-op if nothing is selected / it's blocked.</p>
+                    </div>
+                );
+            }
             default:
                 return null;
         }
@@ -453,9 +553,10 @@ const ActionEditor: React.FC<{
             </FormField>
             {renderActionFields()}
             {action.type !== UIActionType.None && (
-                <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
-                    <p className="text-xs text-[var(--text-secondary)] mb-1">{t('actionEditor.runOnlyIf')}</p>
+                <div className="mt-2">
                     <ConditionsEditor
+                        collapsible
+                        title={t('actionEditor.runOnlyIf')}
                         conditions={action.conditions}
                         project={project}
                         onChange={newConditions => onActionChange({ ...action, conditions: newConditions })}

@@ -11,6 +11,7 @@ import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import { VNHotZoneWinCondition } from '../../features/ui/types';
 import { VNConditionOperator } from '../../types/shared';
+import { resolveBoolLabels } from '../../features/variables/booleanLabels';
 import UIActionsListEditor, { ActionTargetableElement } from './UIActionsListEditor';
 
 interface WinConditionEditorProps {
@@ -70,8 +71,8 @@ const WinConditionEditor: React.FC<WinConditionEditorProps> = ({
                         <option value="<">&lt;</option>
                         <option value=">=">&gt;=</option>
                         <option value="<=">&lt;=</option>
-                        <option value="is true">is true</option>
-                        <option value="is false">is false</option>
+                        <option value="is true">is {resolveBoolLabels(project.variables[winCondition.variableId || ''], 'Yes', 'No').yes}</option>
+                        <option value="is false">is {resolveBoolLabels(project.variables[winCondition.variableId || ''], 'Yes', 'No').no}</option>
                     </select>
                     {winCondition.operator !== 'is true' && winCondition.operator !== 'is false' && (
                         <input

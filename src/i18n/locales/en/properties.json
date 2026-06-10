@@ -30,6 +30,8 @@
   },
   "text": {
     "text": "Text",
+    "liveText": "Update live",
+    "liveTextDesc": "Re-check any {variables} in this text every moment, so displayed values update in real time as they change.",
     "maxWidth": "Max Width (px, optional)",
     "maxHeight": "Max Height (px, optional)",
     "styling": "Styling",
@@ -107,10 +109,19 @@
     "add": "Add (+)",
     "subtract": "Subtract (-)",
     "random": "Random (Range)",
-    "true": "True",
-    "false": "False",
+    "true": "Yes",
+    "false": "No",
     "minValue": "Min Value",
-    "maxValue": "Max Value"
+    "maxValue": "Max Value",
+    "preview": {
+      "setNum": "Set {{name}} to {{value}}",
+      "add": "Increase {{name}} by {{value}}",
+      "subtract": "Decrease {{name}} by {{value}}",
+      "random": "Set {{name}} to a random number from {{min}} to {{max}}",
+      "setStr": "Set {{name}} to “{{value}}”",
+      "boolOn": "Set {{name}} to {{value}}",
+      "boolOff": "Set {{name}} to {{value}}"
+    }
   },
   "choice": {
     "options": "Options",
@@ -265,6 +276,8 @@
     "scaleHint": "1 = 100% original size",
     "flipHorizontally": "Flip Horizontally",
     "mirrorSprite": "Mirror sprite horizontally",
+    "keepPosition": "Keep current position (expression change only)",
+    "keepPositionHint": "The character stays where it already is on stage; only its expression/pose changes.",
     "visualEffects": "Visual Effects",
     "noEffects": "No effects applied.",
     "remove": "Remove…",

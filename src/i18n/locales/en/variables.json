@@ -31,8 +31,16 @@
     "boolean": "Boolean"
   },
   "boolean": {
-    "true": "True",
-    "false": "False"
+    "true": "Yes",
+    "false": "No"
+  },
+  "boolLabels": {
+    "label": "Value labels",
+    "defaultPreset": "Yes / No (default)",
+    "custom": "Custom…",
+    "truePlaceholder": "Yes",
+    "falsePlaceholder": "No",
+    "hint": "How this variable's true/false values appear in conditions, Set Variable, and the tracker."
   },
   "delete": {
     "inUseTitle": "Variable In Use",

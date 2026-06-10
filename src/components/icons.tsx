@@ -98,6 +98,16 @@ export const SparklesIcon = ({ className, title, ...props }: React.SVGProps<SVGS
     </svg>
 );
 
+// 📦 Inventory / item registry
+export const ArchiveBoxIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={`w-5 h-5 ${className || ''}`} {...props}>
+        {title && <title>{title}</title>}
+        <path d="M3 7h18v3H3z" />
+        <path d="M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9" />
+        <path d="M9.5 13.5h5" />
+    </svg>
+);
+
 // ⌨️ Keyboard Shortcuts - Keyboard icon (prominent)
 export const KeyboardIcon = ({ className, title, ...props }: React.SVGProps<SVGSVGElement> & { title?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 ${className || ''}`} {...props}>

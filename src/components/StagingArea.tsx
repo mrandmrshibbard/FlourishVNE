@@ -15,6 +15,7 @@ import { VNCondition } from '../types/shared';
 import { combineConditions } from '../utils/conditionLogic';
 import { VNFontSettings } from '../features/ui/types';
 import { VNCharacterLayer } from '../features/character/types';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { EyeIcon, EyeSlashIcon, FilmIcon, VariablesIcon } from './icons';
 import { computeArrangedPositions } from '../utils/characterArrange';
 import Panel from './ui/Panel';
@@ -366,7 +367,13 @@ const StagingArea: React.FC<{
                                 if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
                             }
                         });
-                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: command.position, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY };
+                        // "Keep current position": if the character is already on stage and the command
+                        // opts in, preview it at its existing position (mirrors the runtime handler) so the
+                        // author sees an expression change stay put instead of snapping to center.
+                        const keptPosition = command.keepPosition && characters[command.characterId]
+                            ? characters[command.characterId].position
+                            : command.position;
+                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY };
                     }
                     break;
                 case CommandType.HideCharacter:
@@ -1392,6 +1399,10 @@ const StagingArea: React.FC<{
                 });
                 })()}
                 {stageState.textOverlays.map(o => {
+                     // Interpolate {variables} against the scrubbed state so the preview shows real
+                     // values (matching dialogue/choices). For liveText commands this reflects the
+                     // value at the selected command.
+                     const overlayText = project ? interpolateVariables(o.text, currentVariables, project) : o.text;
                      const isDragging = overlayDrag?.kind === 'text' && overlayDrag.overlayId === o.id;
                      const displayX = isDragging && overlayDragOffset ? overlayDragOffset.x : o.x;
                      const displayY = isDragging && overlayDragOffset ? overlayDragOffset.y : o.y;
@@ -1423,7 +1434,7 @@ const StagingArea: React.FC<{
                              <div style={textStyle} onMouseDown={e => handleOverlayMouseDown(e, 'text', o.id, o.x, o.y)}
                                  onContextMenu={commandRadial ? (e) => { e.preventDefault(); commandRadial.openById(o.id, e.clientX, e.clientY); } : undefined}>
                                  {/* GradientText forces Chromium to re-clip the gradient when colors change live. */}
-                                 {gradientSpanStyle ? <GradientText style={gradientSpanStyle}>{o.text}</GradientText> : <span>{o.text}</span>}
+                                 {gradientSpanStyle ? <GradientText style={gradientSpanStyle}>{overlayText}</GradientText> : <span>{overlayText}</span>}
                              </div>
                              {isDragging && overlayDragOffset && (
                                  <div className="absolute bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none"
@@ -1617,39 +1628,55 @@ const StagingArea: React.FC<{
                 )}
                 
                 {showVariableState && (
-                    <div className="absolute top-2 left-2 bg-black/70 p-2 rounded-lg text-xs max-w-xs max-h-48 overflow-y-auto z-50">
-                        <h4 className="font-bold mb-1">{t('variableStateHeading')}</h4>
-                        <ul>
-                            {Object.entries(currentVariables).map(([id, value]) => {
-                                const varName = project.variables[id]?.name || id;
-                                return <li key={id}>{varName}: {String(value)}</li>
-                            })}
-                        </ul>
+                    <div className="absolute top-2 left-2 bg-black/80 backdrop-blur-sm p-2.5 rounded-lg text-xs max-w-xs max-h-56 overflow-y-auto z-[9999] border border-white/10 shadow-xl">
+                        <h4 className="font-bold mb-1.5 flex items-center gap-1.5 text-sky-300"><VariablesIcon className="w-3.5 h-3.5" />{t('variableStateHeading')}</h4>
+                        {Object.keys(currentVariables).length === 0 ? (
+                            <p className="text-[var(--text-muted)] italic">{t('variableStateEmpty')}</p>
+                        ) : (
+                            <ul className="space-y-0.5">
+                                {Object.entries(currentVariables).map(([id, value]) => {
+                                    const def = project.variables[id];
+                                    const varName = def?.name || id;
+                                    const bl = resolveBoolLabels(def, t('boolOn'), t('boolOff'));
+                                    const display = def?.type === 'boolean' ? (value ? bl.yes : bl.no) : String(value);
+                                    return (
+                                        <li key={id} className="flex items-center justify-between gap-3">
+                                            <span className="text-slate-300 truncate">{varName}</span>
+                                            <span className="font-mono text-white flex-shrink-0">{display}</span>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
                     </div>
                 )}
 
-                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
-                    <button
-                        onClick={() => setShowCommandIndicators(s => !s)}
-                        className={`p-2 rounded-full transition-all border ${
-                            showCommandIndicators
-                                ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
-                                : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
-                        }`}
-                        title={showCommandIndicators ? t('hideEventIndicators') : t('showEventIndicators')}
-                    >
-                        {showCommandIndicators ? <EyeIcon className="w-4 h-4" /> : <EyeSlashIcon className="w-4 h-4" />}
-                    </button>
+                 {/* Preview controls — kept above all per-layer stage content (characters/overlays can
+                     reach z-index 100+, which previously covered these buttons and ate their clicks). */}
+                 <div className="absolute top-2 right-2 flex flex-col gap-2 z-[10000]">
                     <button
                         onClick={() => setShowVariableState(s => !s)}
-                        className={`p-2 rounded-full transition-all border ${
+                        className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                             showVariableState
                                 ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
-                                : 'bg-[var(--bg-primary)]/70 border-[var(--border-default)]/40 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/80 hover:border-slate-400/50'
+                                : 'bg-[var(--bg-primary)]/80 border-[var(--border-default)]/50 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/90 hover:border-slate-400/60'
                         }`}
-                        title={showVariableState ? t('hideVariableState') : t('showVariableState')}
+                        title={t('variableTrackerTip')}
                     >
-                        <VariablesIcon className="w-4 h-4" />
+                        <VariablesIcon className="w-4 h-4 flex-shrink-0" />
+                        <span>{t('variableTrackerToggle')}</span>
+                    </button>
+                    <button
+                        onClick={() => setShowCommandIndicators(s => !s)}
+                        className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            showCommandIndicators
+                                ? 'bg-sky-500/80 border-sky-400/50 text-white shadow-lg shadow-sky-500/20'
+                                : 'bg-[var(--bg-primary)]/80 border-[var(--border-default)]/50 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]/90 hover:border-slate-400/60'
+                        }`}
+                        title={t('eventNotificationsTip')}
+                    >
+                        {showCommandIndicators ? <EyeIcon className="w-4 h-4 flex-shrink-0" /> : <EyeSlashIcon className="w-4 h-4 flex-shrink-0" />}
+                        <span>{t('eventNotificationsToggle')}</span>
                     </button>
                  </div>
                 </div>

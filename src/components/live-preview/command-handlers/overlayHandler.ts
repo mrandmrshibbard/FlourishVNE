@@ -50,7 +50,10 @@ export function handleShowText(
     rotation: command.rotation,
     flipX: command.flipX,
     flipY: command.flipY,
-    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
+    // `live` drives per-render re-evaluation: live conditions (visibility) AND/OR live text
+    // (re-interpolating {variable} tokens). Conditions are only attached for liveConditions.
+    ...((command.liveConditions || command.liveText) ? { live: true } : {}),
+    ...(command.liveConditions ? { conditions: command.conditions } : {}),
   };
 
   // If command specified a non-instant transition, wait for it before advancing

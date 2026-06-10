@@ -338,17 +338,14 @@ export const HotSpotProperties: React.FC<{
 
             <hr className="border-[var(--border-subtle)]" />
 
-            <div className="space-y-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.visibilityConditions')}</span>
-                <p className="text-[10px] text-[var(--text-muted)]">
-                    Hot spot is only active when all conditions are met.
-                </p>
-                <ConditionsEditor
-                    conditions={spot.conditions}
-                    project={project}
-                    onChange={conditions => onUpdate({ conditions })}
-                />
-            </div>
+            <ConditionsEditor
+                collapsible
+                title={t('hotZone.visibilityConditions')}
+                hint="Hot spot is only active when all conditions are met."
+                conditions={spot.conditions}
+                project={project}
+                onChange={conditions => onUpdate({ conditions })}
+            />
 
             <hr className="border-[var(--border-subtle)]" />
 
@@ -743,6 +740,8 @@ export const InteractiveElementProperties: React.FC<{
                                 />
 
                                 <ConditionsEditor
+                                    collapsible
+                                    title={t('conditions.sectionTitle')}
                                     conditions={region.conditions}
                                     project={project}
                                     onChange={cs => updateRegion(idx, { conditions: cs })}
@@ -884,17 +883,14 @@ export const InteractiveElementProperties: React.FC<{
 
             <hr className="border-[var(--border-subtle)]" />
 
-            <div className="space-y-1">
-                <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.visibilityConditions')}</span>
-                <p className="text-[10px] text-[var(--text-muted)]">
-                    Element is only shown when all conditions are met.
-                </p>
-                <ConditionsEditor
-                    conditions={element.conditions}
-                    project={project}
-                    onChange={conditions => onUpdate({ conditions })}
-                />
-            </div>
+            <ConditionsEditor
+                collapsible
+                title={t('hotZone.visibilityConditions')}
+                hint="Element is only shown when all conditions are met."
+                conditions={element.conditions}
+                project={project}
+                onChange={conditions => onUpdate({ conditions })}
+            />
 
             <hr className="border-[var(--border-subtle)]" />
 

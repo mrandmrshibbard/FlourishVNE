@@ -6,6 +6,7 @@
     "assets": "Assets",
     "variables": "Variables",
     "commonEvents": "Events",
+    "systems": "Systems",
     "settings": "Settings"
   },
   "desc": {
@@ -15,6 +16,7 @@
     "assets": "Manage images, audio, and video files",
     "variables": "Create and manage story variables and game state",
     "commonEvents": "Reusable command sequences triggered from scenes",
+    "systems": "Opt-in gameplay systems like Inventory, and the item registry",
     "settings": "Configure project settings and preferences"
   },
   "rightClickHint": " | Right-click to focus manager window",

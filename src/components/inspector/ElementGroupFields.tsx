@@ -16,7 +16,7 @@ import { VNTextAlign } from '../../types/shared';
 import {
     VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement,
-    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, DropdownOption,
+    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, DropdownOption,
     GameSetting, GameToggleSetting,
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
@@ -25,6 +25,7 @@ import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
 import { TrashIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
 import ActionEditor from '../menu-editor/ActionEditor';
+import ActionCard from '../menu-editor/ActionCard';
 import AssetSelector from '../ui/AssetSelector';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import CollapsibleSection from '../ui/CollapsibleSection';
@@ -157,25 +158,21 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
         </>
     );
     const renderConditionsFields = () => (
-        <>
-            <p className="text-[10px] text-slate-500 mb-1">{t('elementInspector.visibilityNote')}</p>
-            <ConditionsEditor conditions={element.conditions} project={project} onChange={(cs) => updateElement({ conditions: cs })} />
-            <p className="text-[10px] text-slate-500 mt-3 mb-1">{t('elementInspector.disabledNote')}</p>
-            <ConditionsEditor conditions={element.disabledConditions} project={project} onChange={(cs) => updateElement({ disabledConditions: cs })} />
-        </>
+        <div className="space-y-2">
+            <ConditionsEditor collapsible title={t('elementInspector.visibilityConditions')} hint={t('elementInspector.visibilityNote')}
+                conditions={element.conditions} project={project} onChange={(cs) => updateElement({ conditions: cs })} />
+            <ConditionsEditor collapsible title={t('elementInspector.disabledConditions')} hint={t('elementInspector.disabledNote')}
+                conditions={element.disabledConditions} project={project} onChange={(cs) => updateElement({ disabledConditions: cs })} />
+        </div>
     );
 
     // Shared "additional actions" list editor (Button / Dropdown / Checkbox / Settings*).
     const renderActionsList = (actions: any[] | undefined): React.ReactNode => (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {(actions || []).map((action, idx) => (
-                <div key={idx} className="p-2 bg-slate-800 rounded space-y-2">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs text-slate-400">Action {idx + 1}</span>
-                        <button onClick={() => updateElement({ actions: (actions || []).filter((_, i) => i !== idx) } as any)} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('elementInspector.removeAction')}><TrashIcon className="w-3 h-3" /></button>
-                    </div>
-                    <ActionEditor action={action} onActionChange={updatedAction => { const na = [...(actions || [])]; na[idx] = updatedAction; updateElement({ actions: na } as any); }} />
-                </div>
+                <ActionCard key={idx} action={action} index={idx}
+                    onActionChange={updatedAction => { const na = [...(actions || [])]; na[idx] = updatedAction; updateElement({ actions: na } as any); }}
+                    onRemove={() => updateElement({ actions: (actions || []).filter((_, i) => i !== idx) } as any)} />
             ))}
             <button onClick={() => updateElement({ actions: [...(actions || []), { type: 'GoToScreen', targetScreenId: '' } as any] } as any)} className="w-full p-2 bg-slate-700 hover:bg-slate-600 rounded transition-colors text-sm">{t('elementInspector.addAction')}</button>
         </div>
@@ -626,6 +623,107 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <FontEditor font={el.nameFont} onFontChange={(prop, value) => updateElement({ nameFont: { ...el.nameFont!, [prop]: value } })} />
                             </>
                         )}
+                    </>,
+                };
+            }
+            case UIElementType.Inventory: {
+                const el = element as UIInventoryGridElement;
+                const itemList = Object.values(project.items || {});
+                const categories = [...new Set(itemList.map((it: any) => it.category).filter(Boolean))] as string[];
+                const itemLists = Object.values(project.itemCollections || {}) as { id: string; name: string }[];
+                return {
+                    content: <>
+                        <h4 className="font-bold my-1 text-slate-400 text-xs">Data source</h4>
+                        <FormField label="Bound list">
+                            <Select value={el.collectionId || ''} onChange={e => updateElement({ collectionId: e.target.value || undefined })}>
+                                <option value="">Player inventory (owned items)</option>
+                                {itemLists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </Select>
+                        </FormField>
+                        <p className="text-[9px] text-slate-500 -mt-1">Which stockpile this grid shows. "Player inventory" = the items the player owns. Pick an item list (Systems → Inventory) to show a shop/library/chest's own separate stock.</p>
+                        <h4 className="font-bold my-1 mt-2 text-slate-400 text-xs">{t('elementInspector.galleryLayout')}</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                            <FormField label={t('elementInspector.columns')}><TextInput type="number" min="1" max="10" value={String(el.columns || 4)} onChange={e => updateElement({ columns: parseInt(e.target.value, 10) || 4 })} /></FormField>
+                            <FormField label="Rows"><TextInput type="number" min="0" max="20" value={el.rows ?? ''} placeholder="Auto" onChange={e => updateElement({ rows: e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0) })} /></FormField>
+                        </div>
+                        <p className="text-[9px] text-slate-500 -mt-1">Rows = minimum slot rows (pads empty slots, like a backpack). Blank = grow with items.</p>
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                            <FormField label="Column spacing"><TextInput type="number" min="0" max="48" value={String(el.columnGap ?? el.gap ?? 8)} onChange={e => updateElement({ columnGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                            <FormField label="Row spacing"><TextInput type="number" min="0" max="48" value={String(el.rowGap ?? el.gap ?? 8)} onChange={e => updateElement({ rowGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        </div>
+                        <FormField label={t('elementInspector.categoryFilter')}>
+                            <Select value={el.categoryFilter || ''} onChange={e => updateElement({ categoryFilter: e.target.value || undefined })}>
+                                <option value="">{t('elementInspector.allCategories')}</option>
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </Select>
+                        </FormField>
+                        <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.display')}</h4>
+                        {el.collectionId
+                            ? <p className="text-[9px] text-slate-500">A bound list always shows its full stock (0 = sold out). "Hide unowned" only applies to the player's inventory.</p>
+                            : <FormField label="Hide unowned items"><input type="checkbox" checked={el.hideUnowned !== false} onChange={e => updateElement({ hideUnowned: e.target.checked })} /></FormField>}
+                        <FormField label={t('elementInspector.showNames')}><input type="checkbox" checked={el.showNames !== false} onChange={e => updateElement({ showNames: e.target.checked })} /></FormField>
+                        <FormField label="Show quantity badge"><input type="checkbox" checked={el.showQuantity !== false} onChange={e => updateElement({ showQuantity: e.target.checked })} /></FormField>
+                        <FormField label="Slot button">
+                            <Select value={el.slotButton ?? (el.showUseButton ? 'use' : 'none')}
+                                onChange={e => { const m = e.target.value as 'use' | 'buy' | 'sell' | 'none'; updateElement({ slotButton: m, showUseButton: m === 'use' || undefined }); }}>
+                                <option value="none">None</option>
+                                <option value="use">Use (consume the item)</option>
+                                <option value="buy">Buy (from this list — a shop)</option>
+                                <option value="sell">Sell (player's items → a shop)</option>
+                            </Select>
+                        </FormField>
+                        {(el.slotButton ?? (el.showUseButton ? 'use' : 'none')) === 'buy' && (
+                            <p className="text-[9px] text-slate-500 -mt-1">Buys from this grid's bound list. Price & currency come from that list's shop settings (Systems → Inventory).</p>
+                        )}
+                        {(el.slotButton ?? (el.showUseButton ? 'use' : 'none')) === 'sell' && (
+                            <FormField label="Sell to shop">
+                                <Select value={el.sellToCollectionId || ''} onChange={e => updateElement({ sellToCollectionId: e.target.value || undefined })}>
+                                    <option value="">Select a shop list…</option>
+                                    {itemLists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </Select>
+                            </FormField>
+                        )}
+                        <FormField label="Player can rearrange"><input type="checkbox" checked={el.allowReorder !== false} onChange={e => updateElement({ allowReorder: e.target.checked })} /></FormField>
+                        <FormField label="Empty text"><TextInput value={el.emptyText || ''} onChange={e => updateElement({ emptyText: e.target.value })} placeholder="Your bag is empty" /></FormField>
+                        <div className="mt-4 p-2 rounded bg-slate-700/30 text-xs text-slate-400">
+                            <p>Items are managed in the <strong>Systems</strong> tab. {el.collectionId ? 'This grid shows the bound item list’s own stock (separate from the player’s inventory).' : 'This grid shows the player’s owned items.'}</p>
+                            <p className="mt-1">{itemList.length} item{itemList.length === 1 ? '' : 's'} defined.</p>
+                        </div>
+                    </>,
+                    appearance: <>
+                        <h4 className="font-bold my-1 text-slate-400 text-xs">Slot styling</h4>
+                        <FormField label="Slot background"><input type="color" className="w-full" value={el.slotColor && el.slotColor.startsWith('#') ? el.slotColor : '#1e293b'} onChange={e => updateElement({ slotColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.borderColor')}><input type="color" className="w-full" value={el.slotBorderColor || '#4D3273'} onChange={e => updateElement({ slotBorderColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.slotBorderRadius ?? 8)} onChange={e => updateElement({ slotBorderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        <FormField label="Selected ring"><input type="color" className="w-full" value={el.selectedBorderColor || '#38bdf8'} onChange={e => updateElement({ selectedBorderColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.backgroundColor')}><input type="color" className="w-full" value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#0f172a'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
+                        {el.showNames !== false && el.nameFont && (
+                            <>
+                                <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.nameFont')}</h4>
+                                <FontEditor font={el.nameFont} onFontChange={(prop, value) => updateElement({ nameFont: { ...el.nameFont!, [prop]: value } })} />
+                            </>
+                        )}
+                        {(el.slotButton ?? (el.showUseButton ? 'use' : 'none')) !== 'none' && (() => {
+                            const mode = el.slotButton ?? (el.showUseButton ? 'use' : 'none');
+                            const defLabel = mode === 'buy' ? 'Buy' : mode === 'sell' ? 'Sell' : 'Use';
+                            return (
+                            <>
+                                <h4 className="font-bold my-2 text-slate-400 text-xs">{defLabel} button</h4>
+                                <FormField label="Button text"><TextInput value={el.useButtonText || ''} onChange={e => updateElement({ useButtonText: e.target.value })} placeholder={defLabel} /></FormField>
+                                <AssetSelector label="Button art" assetType="images" allowVideo value={el.useButtonImage?.id || null} onChange={id => updateElement({ useButtonImage: id ? { type: 'image', id } : null })} />
+                                <AssetSelector label="Hover art" assetType="images" allowVideo value={el.useButtonHoverImage?.id || null} onChange={id => updateElement({ useButtonHoverImage: id ? { type: 'image', id } : null })} />
+                                <div className="grid grid-cols-3 gap-1">
+                                    <FormField label="BG"><input type="color" className="w-full" value={el.useButtonColor && el.useButtonColor.startsWith('#') ? el.useButtonColor : '#0ea5e9'} onChange={e => updateElement({ useButtonColor: e.target.value })} /></FormField>
+                                    <FormField label="Hover"><input type="color" className="w-full" value={el.useButtonHoverColor && el.useButtonHoverColor.startsWith('#') ? el.useButtonHoverColor : '#0284c7'} onChange={e => updateElement({ useButtonHoverColor: e.target.value })} /></FormField>
+                                    <FormField label="Text"><input type="color" className="w-full" value={el.useButtonTextColor && el.useButtonTextColor.startsWith('#') ? el.useButtonTextColor : '#ffffff'} onChange={e => updateElement({ useButtonTextColor: e.target.value })} /></FormField>
+                                </div>
+                                <FormField label="Corner radius (px)"><TextInput type="number" min="0" max="32" value={String(el.useButtonRadius ?? 6)} onChange={e => updateElement({ useButtonRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                                {el.useButtonFont
+                                    ? <><h4 className="font-bold my-2 text-slate-400 text-xs">Button font</h4><FontEditor font={el.useButtonFont} onFontChange={(prop, value) => updateElement({ useButtonFont: { ...el.useButtonFont!, [prop]: value } })} /></>
+                                    : <button onClick={() => updateElement({ useButtonFont: project.ui.dialogueTextFont })} className="text-xs text-sky-400 hover:text-sky-300 mt-1">+ Customize button font</button>}
+                            </>
+                            );
+                        })()}
                     </>,
                 };
             }

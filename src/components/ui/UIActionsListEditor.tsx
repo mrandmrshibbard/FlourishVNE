@@ -16,6 +16,8 @@ import {
     RESET_ALL_VARIABLES,
 } from '../../types/shared';
 import { VNVariable, VNSetVariableOperator } from '../../features/variables/types';
+import { resolveBoolLabels } from '../../features/variables/booleanLabels';
+import { CollapsibleSection } from './CollapsibleSection';
 import { PlusIcon, TrashIcon } from '../icons';
 
 export interface ActionTargetableElement {
@@ -111,8 +113,8 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                                 </div>
                             ) : variable?.type === 'boolean' ? (
                                 <select value={String(a.value ?? '')} onChange={e => updateAction(index, { value: e.target.value === 'true' } as any)} className={inputCls}>
-                                    <option value="true">{t('actionsList.true')}</option>
-                                    <option value="false">{t('actionsList.false')}</option>
+                                    <option value="true">{resolveBoolLabels(variable, t('actionsList.true'), t('actionsList.false')).yes}</option>
+                                    <option value="false">{resolveBoolLabels(variable, t('actionsList.true'), t('actionsList.false')).no}</option>
                                 </select>
                             ) : (
                                 <input
@@ -268,25 +270,40 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
             {actions.length === 0 && (
                 <p className="text-[10px] text-slate-500 italic">{t('actionsList.noActions')}</p>
             )}
-            {actions.map((action, i) => (
-                <React.Fragment key={i}>
-                    <div className="flex items-center gap-1 mb-0.5">
-                        <select
-                            value={action.type}
-                            onChange={e => changeActionType(i, e.target.value as UIActionType)}
-                            className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
+            <div className="space-y-1">
+                {actions.map((action, i) => {
+                    const a = action as any;
+                    let detail = '';
+                    if (action.type === UIActionType.SetVariable || action.type === UIActionType.ResetVariable) detail = project.variables[a.variableId]?.name || '';
+                    else if (action.type === UIActionType.JumpToScene) detail = (project.scenes[a.targetSceneId] as any)?.name || '';
+                    else if (action.type === UIActionType.GoToScreen || action.type === UIActionType.ToggleScreen) detail = (project.uiScreens[a.targetScreenId] as any)?.name || '';
+                    const summary = detail ? `${actionLabel(action.type)}: ${detail}` : actionLabel(action.type);
+                    return (
+                        <CollapsibleSection
+                            key={i}
+                            title={t('actionEditor.actionN', { n: i + 1 })}
+                            summary={summary}
+                            defaultOpen={true}
+                            action={
+                                <button onClick={() => removeAction(i)} title={t('actionEditor.removeAction')} className="text-red-400 hover:text-red-300 p-0.5">
+                                    <TrashIcon className="w-3 h-3" />
+                                </button>
+                            }
                         >
-                            {Object.values(UIActionType).map(at => (
-                                <option key={at} value={at}>{actionLabel(at)}</option>
-                            ))}
-                        </select>
-                        <button onClick={() => removeAction(i)} className="text-red-400 hover:text-red-300 p-0.5">
-                            <TrashIcon className="w-3 h-3" />
-                        </button>
-                    </div>
-                    {renderDetails(action, i)}
-                </React.Fragment>
-            ))}
+                            <select
+                                value={action.type}
+                                onChange={e => changeActionType(i, e.target.value as UIActionType)}
+                                className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px] mb-1"
+                            >
+                                {Object.values(UIActionType).map(at => (
+                                    <option key={at} value={at}>{actionLabel(at)}</option>
+                                ))}
+                            </select>
+                            {renderDetails(action, i)}
+                        </CollapsibleSection>
+                    );
+                })}
+            </div>
         </div>
     );
 };

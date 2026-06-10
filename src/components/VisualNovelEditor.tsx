@@ -20,6 +20,7 @@ const AssetManager = React.lazy(() => import('./AssetManager'));
 const VariableManager = React.lazy(() => import('./VariableManager'));
 const SettingsManager = React.lazy(() => import('./SettingsManager'));
 const CommonEventsManager = React.lazy(() => import('./CommonEventsManager'));
+const SystemsManager = React.lazy(() => import('./SystemsManager'));
 const TemplateGallery = React.lazy(() => import('./templates/TemplateGallery'));
 const TemplateConfigComponent = React.lazy(() => import('./templates/TemplateConfig').then(m => ({ default: m.TemplateConfigComponent })));
 import InfoModal from './ui/InfoModal';
@@ -172,10 +173,20 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     }
     const handleSetActiveMenuScreen = (id: VNID | null) => {
         setActiveMenuScreenId(id);
-        setSelectedCommandIndex(null); 
-        setSelectedUIElementIds([]); 
+        setSelectedCommandIndex(null);
+        setSelectedUIElementIds([]);
         setActiveCharacterId(null);
     }
+    // Switch to the UI editor with a specific screen selected (used by the Systems hub to jump to a
+    // freshly-created inventory screen). Sets the tab directly (not handleTabChange, which would reset
+    // the selection to the first screen).
+    const handleOpenScreenInUIEditor = (screenId: VNID, elementId?: VNID) => {
+        setActiveTab('ui');
+        handleSetActiveMenuScreen(screenId);
+        // Auto-select the element (e.g. the inventory grid) so its inspector (rows, spacing, Use
+        // button, etc.) shows immediately — handleSetActiveMenuScreen clears the selection, so set after.
+        if (elementId) setSelectedUIElementIds([elementId]);
+    };
      const handleSetActiveCharacter = (id: VNID | null) => {
         setActiveCharacterId(id);
         setActiveMenuScreenId(null);
@@ -290,6 +301,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                       (project.videos ? Object.keys(project.videos).length : 0);
     const variableCount = project.variables ? Object.keys(project.variables).length : 0;
     const commonEventCount = (project as any).commonEvents ? Object.keys((project as any).commonEvents).length : 0;
+    const systemItemCount = project.items ? Object.keys(project.items).length : 0;
     
     // Template system integration
     const [selectedTemplateId, setSelectedTemplateId] = useState<VNID | undefined>(undefined);
@@ -529,6 +541,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         assetCount={assetCount}
                         variableCount={variableCount}
                         commonEventCount={commonEventCount}
+                        systemItemCount={systemItemCount}
                     />
                 }
                 onShowKeyboardShortcuts={() => setShowKeyboardShortcuts(true)}
@@ -625,6 +638,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         <ErrorBoundary panelName="Common Events">
                             <Suspense fallback={<div className="text-slate-300 p-4">{t('visualNovelEditor.loadingCommonEvents')}</div>}>
                                 <CommonEventsManager project={project} />
+                            </Suspense>
+                        </ErrorBoundary>
+                    ) : activeTab === 'systems' ? (
+                        <ErrorBoundary panelName="Systems">
+                            <Suspense fallback={<div className="text-slate-300 p-4">Loading systems…</div>}>
+                                <SystemsManager project={project} onOpenScreenInEditor={handleOpenScreenInUIEditor} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : null}

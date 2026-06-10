@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -215,6 +215,25 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 nameFont: project.ui.dialogueTextFont,
                 lockedColor: '#1e293b',
                 lockedText: '🔒',
+            };
+            return el;
+        }
+        case UIElementType.Inventory: {
+            const el: UIInventoryGridElement = {
+                ...base, name: 'Inventory', type,
+                width: 60, height: 60, x: 20, y: 20,
+                columns: 4,
+                gap: 8,
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                slotColor: 'rgba(255,255,255,0.04)',
+                slotBorderColor: '#4D3273',
+                slotBorderRadius: 8,
+                showNames: true,
+                showQuantity: true,
+                showUseButton: false,
+                hideUnowned: true,
+                nameFont: project.ui.dialogueTextFont,
+                emptyText: 'Empty',
             };
             return el;
         }

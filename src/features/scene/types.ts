@@ -80,6 +80,12 @@ export enum CommandType {
     ShowHotSpot = 'ShowHotSpot', // Place an interactive hot spot on the scene (click / hover / drop target)
     HideHotSpot = 'HideHotSpot', // Remove a scene hot spot
     TweenElement = 'TweenElement', // Animate position/size/opacity/etc. of an on-stage element over time
+    GiveItem = 'GiveItem',     // Give the player N of an inventory item
+    UseItem = 'UseItem',       // Consume one of an item (+ run its use-effect)
+    DestroyItem = 'DestroyItem', // Remove N (or all) of an item
+    RestockCollection = 'RestockCollection', // Refill an item list/collection's stock
+    BuyItem = 'BuyItem',       // Buy an item from a shop list (spends currency)
+    SellItem = 'SellItem',     // Sell an item to a shop list (gains currency)
 }
 
 /**
@@ -199,6 +205,9 @@ export interface ShowCharacterCommand extends BaseCommand {
     duration: number; // in seconds
     startPosition?: VNPosition; // for slide transitions
     endPosition?: VNPosition; // for slide transitions
+    /** When true and the character is already on stage, keep its current position (only the
+     *  expression/pose changes — `position` is ignored). Default off. Additive-optional. */
+    keepPosition?: boolean;
     /** Scale multiplier (1 = 100%). Controls character sprite size on stage. */
     scale?: number;
     /** When true, flips the character sprite horizontally (scaleX = -1). Acts as flipX. */
@@ -458,6 +467,11 @@ export interface ShowTextCommand extends BaseCommand {
     rotation?: number;  // degrees, positive = clockwise
     flipX?: boolean;    // mirror horizontally
     flipY?: boolean;    // mirror vertically
+    /** When true, the on-stage text re-interpolates its {variable} tokens against the CURRENT
+     *  variable values on every render, so displayed values update live (e.g. a running score).
+     *  Default (unset) keeps today's behavior: text is interpolated once when the command runs.
+     *  Additive-optional. */
+    liveText?: boolean;
 }
 
 export interface ShowImageCommand extends BaseCommand {
@@ -844,7 +858,16 @@ export type VNCommand =
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand
-  | TweenElementCommand;
+  | TweenElementCommand
+  | GiveItemCommand | UseItemCommand | DestroyItemCommand | RestockCollectionCommand | BuyItemCommand | SellItemCommand;
+
+/** Inventory item commands — sugar over the item's count variable. */
+export interface GiveItemCommand extends BaseCommand { type: CommandType.GiveItem; itemId: VNID; quantity?: number; }
+export interface UseItemCommand extends BaseCommand { type: CommandType.UseItem; itemId: VNID; }
+export interface DestroyItemCommand extends BaseCommand { type: CommandType.DestroyItem; itemId: VNID; quantity?: number; all?: boolean; }
+export interface RestockCollectionCommand extends BaseCommand { type: CommandType.RestockCollection; collectionId: VNID; }
+export interface BuyItemCommand extends BaseCommand { type: CommandType.BuyItem; itemId: VNID; collectionId: VNID; quantity?: number; }
+export interface SellItemCommand extends BaseCommand { type: CommandType.SellItem; itemId: VNID; collectionId: VNID; quantity?: number; }
 
 export interface VNScene {
     id: VNID;

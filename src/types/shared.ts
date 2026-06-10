@@ -67,6 +67,25 @@ export enum UIActionType {
     SkipBackward = 'SkipBackward',
     /** Invokes a Common Event (optionally with arguments) from a button/choice. */
     CallCommonEvent = 'CallCommonEvent',
+    // ─── Inventory items (sugar over each item's count variable) ─── //
+    /** Gives the player N of an item (adds to its count; unique items become owned). */
+    GiveItem = 'GiveItem',
+    /** Uses (consumes one of) an item and runs its use-effect. */
+    UseItem = 'UseItem',
+    /** Removes N of an item (or all of it). */
+    DestroyItem = 'DestroyItem',
+    /** Uses whichever inventory item the player has currently selected (no fixed item id). */
+    UseSelectedItem = 'UseSelectedItem',
+    /** Restocks an item list/collection to its configured amounts (reset or random range). */
+    RestockCollection = 'RestockCollection',
+    /** Buys one of an item from a shop list (spends the shop's currency, moves stock to the player). */
+    BuyItem = 'BuyItem',
+    /** Sells one of an item to a shop list (gives the player currency, removes it from their inventory). */
+    SellItem = 'SellItem',
+    /** Buys whichever grid item the player has selected from a shop list (no fixed item id). */
+    BuySelectedItem = 'BuySelectedItem',
+    /** Sells whichever grid item the player has selected to a shop list (no fixed item id). */
+    SellSelectedItem = 'SellSelectedItem',
 }
 
 export interface BaseUIAction {
@@ -93,5 +112,14 @@ export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL
 export interface PlayAnimationAction extends BaseUIAction { type: UIActionType.PlayAnimation; targetElementId: VNID; animation: string; duration?: number; }
 export interface ChangeImageAction extends BaseUIAction { type: UIActionType.ChangeImage; targetElementId: VNID; newImageId: VNID; }
 export interface CallCommonEventAction extends BaseUIAction { type: UIActionType.CallCommonEvent; commonEventId: VNID; arguments?: Record<VNID, string | number | boolean>; }
+export interface GiveItemAction extends BaseUIAction { type: UIActionType.GiveItem; itemId: VNID; quantity?: number; }
+export interface UseItemAction extends BaseUIAction { type: UIActionType.UseItem; itemId: VNID; }
+export interface DestroyItemAction extends BaseUIAction { type: UIActionType.DestroyItem; itemId: VNID; quantity?: number; all?: boolean; }
+export interface UseSelectedItemAction extends BaseUIAction { type: UIActionType.UseSelectedItem; }
+export interface RestockCollectionAction extends BaseUIAction { type: UIActionType.RestockCollection; collectionId: VNID; }
+export interface BuyItemAction extends BaseUIAction { type: UIActionType.BuyItem; itemId: VNID; collectionId: VNID; quantity?: number; }
+export interface SellItemAction extends BaseUIAction { type: UIActionType.SellItem; itemId: VNID; collectionId: VNID; quantity?: number; }
+export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType.BuySelectedItem; collectionId: VNID; }
+export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | CallCommonEventAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction;

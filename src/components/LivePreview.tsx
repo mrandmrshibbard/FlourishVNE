@@ -5,7 +5,8 @@ import { useToast } from '../contexts/ToastContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
 import { combineConditions } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
-import { XMarkIcon, FilmIcon } from './icons';
+import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
@@ -14,9 +15,10 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, GameSetting, GameToggleSetting, UIElementType,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, GameSetting, GameToggleSetting, UIElementType,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey
 } from '../features/ui/types';
+import { VNItem, VNItemCollection } from '../features/items/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
@@ -182,6 +184,9 @@ import {
     handleCallCommonEvent,
     handleTweenElement,
 } from './live-preview/command-handlers';
+import { handleItemCommand, handleRestockCollectionCommand, handleBuyItemCommand, handleSellItemCommand } from './live-preview/command-handlers/itemCommandHandler';
+import { computeCollectionRestock } from '../features/items/restock';
+import { computeBuy, computeSell, tradePrice } from '../features/items/trade';
 import { CommandScheduler } from './live-preview/runtime/commandScheduler';
 import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
 import { RuntimeDiagnostics } from './live-preview/runtime/runtimeDiagnostics';
@@ -463,7 +468,7 @@ const ButtonOverlayElement: React.FC<{
         }
 
         const allActions: VNUIAction[] = [overlay.onClick, ...(overlay.actions || [])];
-        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
         const setVarActions = allActions.filter(isVarMutation);
         const otherActions = allActions.filter(a => !isVarMutation(a));
 
@@ -862,6 +867,9 @@ interface GameStateSave {
         variables: Record<VNID, string | number | boolean>;
         stageState: StageState;
         musicState: MusicState;
+        inventorySlots?: (VNID | null)[];
+        selectedItemId?: VNID | null;
+        selectedElementId?: VNID | null;
     }
 }
 
@@ -1768,7 +1776,7 @@ const ButtonElement: React.FC<{
         }
         
         // Process SetVariable actions FIRST to ensure variables are updated before navigation/screen changes
-        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
         const setVarActions = allActions.filter(isVarMutation);
         const otherActions = allActions.filter(a => !isVarMutation(a));
 
@@ -2268,6 +2276,197 @@ const CGGalleryGridElement: React.FC<{
                                     {entry.name}
                                 </div>
                             )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// --- Inventory Grid (data-driven; auto-renders owned items from project.items) ---
+const InventoryGridElement: React.FC<{
+    element: UIInventoryGridElement;
+    items: VNItem[];
+    variables: Record<VNID, string | number | boolean>;
+    project: VNProject;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    onAction: (action: VNUIAction) => void;
+    onCommitVariables?: () => void;
+    inventorySlots?: (VNID | null)[];
+    onReorderSlots?: (slots: (VNID | null)[]) => void;
+    selectedItemId?: VNID | null;
+    selectedElementId?: VNID | null;
+    onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
+}> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+    const count = (it: VNItem) => Number(variables[it.countVariableId] ?? 0);
+    const filteredAll = element.categoryFilter ? items.filter(it => it.category === element.categoryFilter) : items;
+    const shown = (element.hideUnowned === false) ? filteredAll : filteredAll.filter(it => count(it) >= 1);
+    const itemById = new Map<VNID, VNItem>(shown.map(it => [it.id, it] as [VNID, VNItem]));
+
+    const cols = element.columns || 4;
+    const colGap = element.columnGap ?? element.gap ?? 8;
+    const rowGap = element.rowGap ?? element.gap ?? 8;
+    // When the author hasn't pinned a row count, fill the element's box with (square) slots so the WHOLE
+    // grid is visible — empty slots included — giving players drop targets across the whole inventory.
+    const gridContainerRef = useRef<HTMLDivElement>(null);
+    const [autoRows, setAutoRows] = useState(0);
+    useEffect(() => {
+        if (element.rows && element.rows > 0) { setAutoRows(0); return; }
+        const node = gridContainerRef.current;
+        if (!node) return;
+        const compute = () => {
+            const cs = window.getComputedStyle(node);
+            const availW = node.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+            const availH = node.clientHeight - parseFloat(cs.paddingTop || '0') - parseFloat(cs.paddingBottom || '0');
+            if (availW <= 0 || availH <= 0) return;
+            const slotW = (availW - colGap * (cols - 1)) / cols;
+            if (slotW <= 0) return;
+            setAutoRows(Math.max(1, Math.floor((availH + rowGap) / (slotW + rowGap)))); // slots are square
+        };
+        compute();
+        const ro = new ResizeObserver(compute);
+        ro.observe(node);
+        return () => ro.disconnect();
+    }, [element.rows, cols, colGap, rowGap]);
+    const minSlots = (element.rows && element.rows > 0) ? cols * element.rows : cols * autoRows;
+    const totalSlots = Math.max(shown.length, minSlots);
+
+    // Positional slot layout: honor the player's saved slots (dropping items no longer shown),
+    // then drop any remaining shown items into the first empty slots. Items can sit in any slot.
+    const slots: (VNID | null)[] = [];
+    const placed = new Set<VNID>();
+    for (let i = 0; i < totalSlots; i++) {
+        const saved = inventorySlots?.[i] ?? null;
+        if (saved && itemById.has(saved) && !placed.has(saved)) { slots.push(saved); placed.add(saved); }
+        else slots.push(null);
+    }
+    const unplaced = shown.filter(it => !placed.has(it.id));
+    let u = 0;
+    for (let i = 0; i < slots.length && u < unplaced.length; i++) { if (!slots[i]) { slots[i] = unplaced[u].id; placed.add(unplaced[u].id); u++; } }
+    while (u < unplaced.length) { slots.push(unplaced[u].id); placed.add(unplaced[u].id); u++; }
+
+    const reorderEnabled = element.allowReorder !== false && !!onReorderSlots;
+    const selectEnabled = !!onSelectItem;
+    const [dragSlot, setDragSlot] = useState<number | null>(null);
+    const [hoverUseId, setHoverUseId] = useState<VNID | null>(null);
+    // Swap two slots — moves to an empty slot, or exchanges positions with another item.
+    const swap = (a: number | null, b: number) => {
+        if (!onReorderSlots || a == null || a === b) { setDragSlot(null); return; }
+        const next = [...slots];
+        const tmp = next[a]; next[a] = next[b]; next[b] = tmp;
+        onReorderSlots(next);
+        setDragSlot(null);
+    };
+
+    const useItem = (it: VNItem) => {
+        if (!it.usable) return;
+        // Mirror the screen Button flow: run SetVariable/ResetVariable mutations FIRST, then COMMIT
+        // them to player state (otherwise they stay in the uncommitted UI-variable buffer and are
+        // lost), then run any navigation/other actions. The count decrement is a var mutation too —
+        // unless the item is reusable (consumeOnUse === false), in which case using only runs the effect.
+        const actions: VNUIAction[] = [
+            ...(it.consumeOnUse === false ? [] : [{ type: UIActionType.SetVariable, variableId: it.countVariableId, operator: 'subtract', value: 1 } as VNUIAction]),
+            ...(it.useEffect || []),
+        ];
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+        const setVarActions = actions.filter(isVarMutation);
+        const otherActions = actions.filter(a => !isVarMutation(a));
+        setVarActions.forEach(a => onAction(a));
+        if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+        otherActions.forEach(a => onAction(a));
+    };
+
+    // Per-slot button mode. Back-compat: unset → derive from the legacy showUseButton flag.
+    const slotButtonMode: 'use' | 'buy' | 'sell' | 'none' = element.slotButton ?? (element.showUseButton ? 'use' : 'none');
+    const tradeCollectionId = slotButtonMode === 'buy' ? element.collectionId : slotButtonMode === 'sell' ? element.sellToCollectionId : undefined;
+    const tradeCollection = tradeCollectionId ? project.itemCollections?.[tradeCollectionId] : undefined;
+    // Fire a Buy/Sell action then commit (mirrors the screen Button var-mutation→commit flow).
+    const tradeItem = (it: VNItem) => {
+        if (!tradeCollectionId) return;
+        onAction({ type: slotButtonMode === 'buy' ? UIActionType.BuyItem : UIActionType.SellItem, itemId: it.id, collectionId: tradeCollectionId } as VNUIAction);
+        if (onCommitVariables) onCommitVariables();
+    };
+    // Can this item be traded right now? (drives the disabled / dimmed state.)
+    const tradeBlocked = (it: VNItem): boolean => {
+        if (!tradeCollection) return true;
+        const res = slotButtonMode === 'buy'
+            ? computeBuy(it.id, tradeCollection, project, variables)
+            : computeSell(it.id, tradeCollection, project, variables);
+        return 'blocked' in res;
+    };
+
+    const slotStyle: React.CSSProperties = { aspectRatio: '1 / 1', borderRadius: `${element.slotBorderRadius ?? 8}px`, border: `2px solid ${element.slotBorderColor || '#4D3273'}`, background: element.slotColor || 'transparent' };
+    const selectedRing = element.selectedBorderColor || '#38bdf8';
+
+    return (
+        <div ref={gridContainerRef} className="w-full h-full overflow-y-auto p-2 rounded" style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}>
+            {totalSlots === 0 && (
+                <div className="w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2">{element.emptyText || ''}</div>
+            )}
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` }}>
+                {slots.map((slotId, i) => {
+                    const it = slotId ? itemById.get(slotId) : undefined;
+                    if (!it) return <div key={`slot-${i}`} style={slotStyle}
+                        onDragOver={reorderEnabled ? (e => e.preventDefault()) : undefined}
+                        onDrop={reorderEnabled ? (() => swap(dragSlot, i)) : undefined} />;
+                    const url = it.icon?.id ? assetResolver(it.icon.id, it.icon.type === 'video' ? 'video' : 'image') : null;
+                    const qty = count(it);
+                    const selected = selectEnabled && selectedItemId === it.id && selectedElementId === element.id;
+                    return (
+                        <div key={`slot-${i}`} className="relative flex flex-col items-center justify-center p-1"
+                            style={{ ...slotStyle, cursor: reorderEnabled ? 'grab' : (selectEnabled ? 'pointer' : undefined), opacity: dragSlot === i ? 0.4 : 1, ...(selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, borderColor: selectedRing } : {}) }}
+                            draggable={reorderEnabled}
+                            onDragStart={reorderEnabled ? () => setDragSlot(i) : undefined}
+                            onDragOver={reorderEnabled ? (e => e.preventDefault()) : undefined}
+                            onDrop={reorderEnabled ? (() => swap(dragSlot, i)) : undefined}
+                            onClick={selectEnabled ? (() => onSelectItem!(selected ? null : it.id, element.id)) : undefined}>
+                            {url
+                                ? <img src={url} alt={it.name} className="w-full flex-1 min-h-0 object-contain" draggable={false} />
+                                : <div className="w-full flex-1 min-h-0" />}
+                            {element.showQuantity !== false && qty > 1 && (
+                                <span className="absolute top-1 right-1 bg-black/70 text-white text-[10px] rounded px-1 leading-tight">×{qty}</span>
+                            )}
+                            {element.showNames !== false && (
+                                <span className="text-[10px] text-white truncate w-full mt-0.5" style={{ ...(element.nameFont ? fontSettingsToStyle(element.nameFont) : {}), textAlign: 'center' }}>{it.name}</span>
+                            )}
+                            {(() => {
+                                // Generalized per-slot button: Use / Buy / Sell. 'use' only on usable items;
+                                // buy/sell show on every slot and dim when the trade can't happen.
+                                const showBtn = slotButtonMode === 'use' ? !!it.usable
+                                    : (slotButtonMode === 'buy' || slotButtonMode === 'sell') ? !!tradeCollection
+                                    : false;
+                                if (!showBtn) return null;
+                                const blocked = (slotButtonMode === 'buy' || slotButtonMode === 'sell') && tradeBlocked(it);
+                                const hovered = hoverUseId === it.id && !blocked;
+                                const baseArt = element.useButtonImage?.id ? assetResolver(element.useButtonImage.id, element.useButtonImage.type === 'video' ? 'video' : 'image') : null;
+                                const hoverArt = element.useButtonHoverImage?.id ? assetResolver(element.useButtonHoverImage.id, element.useButtonHoverImage.type === 'video' ? 'video' : 'image') : null;
+                                const art = hovered && hoverArt ? hoverArt : baseArt;
+                                const bg = art ? undefined : (hovered ? (element.useButtonHoverColor || element.useButtonColor || '#0ea5e9') : (element.useButtonColor || '#0ea5e9'));
+                                const defaultLabel = slotButtonMode === 'buy' ? 'Buy' : slotButtonMode === 'sell' ? 'Sell' : 'Use';
+                                let label = element.useButtonText || defaultLabel;
+                                if (!element.useButtonText && (slotButtonMode === 'buy' || slotButtonMode === 'sell') && tradeCollection) {
+                                    const entry = tradeCollection.entries.find(e => e.itemId === it.id);
+                                    const price = tradePrice(it, entry);
+                                    if (price > 0) label = `${defaultLabel} ${price}`;
+                                }
+                                const onClick = (e: React.MouseEvent) => { e.stopPropagation(); if (blocked) return; slotButtonMode === 'use' ? useItem(it) : tradeItem(it); };
+                                return (
+                                    <button onClick={onClick} disabled={blocked} onMouseEnter={() => setHoverUseId(it.id)} onMouseLeave={() => setHoverUseId(null)}
+                                        className="mt-0.5 px-1.5 py-0.5 relative overflow-hidden leading-tight"
+                                        style={{
+                                            borderRadius: `${element.useButtonRadius ?? 6}px`,
+                                            background: art ? `center / cover no-repeat url(${art})` : bg,
+                                            color: element.useButtonTextColor || '#ffffff',
+                                            fontSize: '9px',
+                                            opacity: blocked ? 0.4 : 1,
+                                            cursor: blocked ? 'not-allowed' : 'pointer',
+                                            ...(element.useButtonFont ? fontSettingsToStyle(element.useButtonFont) : {}),
+                                        }}>
+                                        {label}
+                                    </button>
+                                );
+                            })()}
                         </div>
                     );
                 })}
@@ -2808,7 +3007,12 @@ const UIScreenRenderer: React.FC<{
     isClosing?: boolean;
     evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
     onCommitVariables?: () => void;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables }) => {
+    inventorySlots?: (VNID | null)[];
+    onReorderSlots?: (slots: (VNID | null)[]) => void;
+    selectedItemId?: VNID | null;
+    selectedElementId?: VNID | null;
+    onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -3511,6 +3715,44 @@ const UIScreenRenderer: React.FC<{
                     </div>
                 );
             }
+            case UIElementType.Inventory: {
+                const el = element as UIInventoryGridElement;
+                // If bound to an item list (collection), show THAT list's entries with their own per-list
+                // stock — by swapping each item's countVariableId to the entry's backing var, the grid's
+                // existing count logic "just works". Unset = the player's own inventory (global owned set).
+                const boundCollection = el.collectionId ? project.itemCollections?.[el.collectionId] : undefined;
+                const allOwnedItems = () => (Object.values(project.items || {}) as VNItem[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+                const invItems = !boundCollection
+                    ? allOwnedItems()
+                    : (boundCollection.tracksOwnedItems && boundCollection.entries.length === 0)
+                        // Player inventory with no curated items = show everything the player owns.
+                        ? allOwnedItems()
+                        : boundCollection.entries
+                            .map(e => { const it = project.items?.[e.itemId]; return it ? { ...it, countVariableId: e.countVariableId } : null; })
+                            .filter((x): x is VNItem => !!x);
+                // A SHOP list shows its FULL catalogue (0 = sold out), so force "hide unowned" off. A player-
+                // inventory list behaves like the player's bag, so it keeps the grid's hide-unowned setting.
+                const isShopList = !!boundCollection && !boundCollection.tracksOwnedItems;
+                const gridEl = isShopList ? { ...el, hideUnowned: false } : el;
+                return (
+                    <div key={el.id} style={style}>
+                        <InventoryGridElement
+                            element={gridEl}
+                            items={invItems}
+                            variables={variables}
+                            project={project}
+                            assetResolver={assetResolver}
+                            onAction={onAction}
+                            onCommitVariables={onCommitVariables}
+                            inventorySlots={inventorySlots}
+                            onReorderSlots={onReorderSlots}
+                            selectedItemId={selectedItemId}
+                            selectedElementId={selectedElementId}
+                            onSelectItem={onSelectItem}
+                        />
+                    </div>
+                );
+            }
             default: return null;
         }
     }
@@ -3547,6 +3789,9 @@ const UIScreenRenderer: React.FC<{
                 // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
                 // areas stay pointer-events:none, so clicks there still fall through to advance dialogue.
                 ...(isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {}),
+                // A pausing overlay (modal-style) sits ABOVE the dialogue box + backdrop so it
+                // reads as a popup over a frozen, dimmed scene.
+                ...(screen.pauseSceneWhileOpen ? { zIndex: 46 } : {}),
             }}
         >
             {/* Pass-through (HUD) screens skip their opaque background so the scene shows through. */}
@@ -3807,6 +4052,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     });
     const [playerState, setPlayerState] = useState<PlayerState | null>(null);
     const playerStateRef = useRef<PlayerState | null>(null);
+    // A "pausing overlay": a screen open on the HUD stack flagged `pauseSceneWhileOpen`. While one
+    // is open the scene is FROZEN (no auto-advance / skip / manual advance) but stays visible behind it.
+    const pausingOverlayScreen = (() => {
+        for (let i = hudStack.length - 1; i >= 0; i--) {
+            const s = project.uiScreens[hudStack[i]];
+            if (s?.pauseSceneWhileOpen) return s;
+        }
+        return null;
+    })();
+    const scenePaused = !!pausingOverlayScreen;
+    // Editor-only live Variable Tracker overlay (never shown in exported/standalone games).
+    const [showVarWatcher, setShowVarWatcher] = useState(false);
     // Tween tick counter — forces re-render each frame during active tweens
     const [, setTweenTick] = useState(0);
     useEffect(() => {
@@ -3824,6 +4081,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return next;
         });
     }, []);
+    // Reactive-restock bookkeeping: last-observed condition truth / watched-variable value per collection.
+    // Reset on mount/load so a freshly-loaded save records current state WITHOUT restocking (no re-roll).
+    const restockPrevConditionRef = useRef<Record<VNID, boolean>>({});
+    const restockPrevWatchRef = useRef<Record<VNID, string | number | boolean | undefined>>({});
     // Mirror hudStack into a ref so the parallel scheduler interval can read it without restarting.
     const hudStackRef = useRef<VNID[]>([]);
     hudStackRef.current = hudStack;
@@ -4359,6 +4620,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 variables: playerState.variables,
                 stageState: playerState.stageState,
                 musicState: finalMusicState,
+                inventorySlots: playerState.inventorySlots,
+                selectedItemId: playerState.selectedItemId,
+                selectedElementId: playerState.selectedElementId,
             }
             };
 
@@ -4392,6 +4656,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const saveData = saves[slotNumber];
             if (!saveData) return;
 
+            // Re-arm the reactive-restock guards so a freshly-loaded save records current state without
+            // spuriously restocking (the next effect run treats each list as a first observation).
+            restockPrevConditionRef.current = {};
+            restockPrevWatchRef.current = {};
             updatePlayerState({
                 mode: 'playing',
                 currentSceneId: saveData.playerStateData.currentSceneId,
@@ -4400,6 +4668,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 commandStack: saveData.playerStateData.commandStack || [],
                 variables: saveData.playerStateData.variables,
                 stageState: saveData.playerStateData.stageState,
+                inventorySlots: saveData.playerStateData.inventorySlots,
+                selectedItemId: saveData.playerStateData.selectedItemId,
+                selectedElementId: saveData.playerStateData.selectedElementId,
                 history: [],
                 savedInputs: {},
                 uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -4419,7 +4690,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // --- State Initialization ---
     const startNewGame = useCallback(() => {
         stopAndResetMusic();
-        
+        // Re-arm reactive-restock guards for the fresh playthrough (record-only on first observation).
+        restockPrevConditionRef.current = {};
+        restockPrevWatchRef.current = {};
+
         // Use menuVariables (which may have been modified by character customization) instead of defaults
         const initialVariables: Record<VNID, string | number | boolean> = { ...menuVariables };
 
@@ -4429,6 +4703,23 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if ((v.scope || 'global') === 'persistent' && persistentVars[v.id] !== undefined) {
                 initialVariables[v.id] = persistentVars[v.id];
             }
+        });
+
+        // Economy reset: item counts, shop stock, and shop currencies ALWAYS return to their defaults on
+        // a new game. menuVariables can legitimately carry pre-game customization (name/appearance), but it
+        // must never carry gameplay economy state (e.g. a shop opened from a menu writes to menuVariables) —
+        // otherwise the player would start a new game with their old inventory/money. Persistent-scope vars
+        // are left alone (they survive by design).
+        const resetGameplayVar = (varId?: VNID | null) => {
+            if (!varId) return;
+            const v = project.variables[varId];
+            if (!v || (v.scope || 'global') === 'persistent') return;
+            initialVariables[varId] = v.defaultValue;
+        };
+        Object.values(project.items || {}).forEach((it: any) => resetGameplayVar(it.countVariableId));
+        Object.values(project.itemCollections || {}).forEach((c: any) => {
+            resetGameplayVar(c.currencyVariableId);
+            (c.entries || []).forEach((e: any) => resetGameplayVar(e.countVariableId));
         });
 
         // Note: We can't use navigateToScene here because it's defined after startNewGame
@@ -4779,6 +5070,39 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return result;
         });
     }, [project.variables, getAssetNameFromId, normalizeToBoolean]);
+
+    // Reactive restock: auto-refill item lists whose restock trigger is condition / variableChange.
+    // Transition-based (false→true, or watched value changed) with a first-observation guard so a freshly
+    // started/loaded game records current state WITHOUT restocking (the load path clears the refs). Manual
+    // lists are handled by the Restock command/action only.
+    useEffect(() => {
+        if (!playerState) return;
+        const collections = project.itemCollections;
+        if (!collections) return;
+        const gameVars = playerState.variables;
+        const restockUpdates: Record<VNID, number> = {};
+        for (const collection of Object.values(collections) as VNItemCollection[]) {
+            const rule = collection.restock;
+            if (!rule) continue;
+            if (rule.trigger === 'condition') {
+                const isTrue = evaluateConditions(rule.condition, gameVars);
+                const prev = restockPrevConditionRef.current[collection.id];
+                restockPrevConditionRef.current[collection.id] = isTrue;
+                if (prev === undefined) continue;            // first observation — just record
+                if (isTrue && !prev) Object.assign(restockUpdates, computeCollectionRestock(collection, project.variables));
+            } else if (rule.trigger === 'variableChange' && rule.watchVariableId) {
+                const cur = gameVars[rule.watchVariableId];
+                const seen = Object.prototype.hasOwnProperty.call(restockPrevWatchRef.current, collection.id);
+                const prev = restockPrevWatchRef.current[collection.id];
+                restockPrevWatchRef.current[collection.id] = cur;
+                if (!seen) continue;                          // first observation — just record
+                if (cur !== prev) Object.assign(restockUpdates, computeCollectionRestock(collection, project.variables));
+            }
+        }
+        if (Object.keys(restockUpdates).length > 0) {
+            updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...restockUpdates } } : null);
+        }
+    }, [playerState?.variables, project.itemCollections, project.variables, evaluateConditions, updatePlayerState]);
 
     // Helper function to navigate to a scene with condition checking
     const navigateToScene = useCallback((targetSceneId: VNID, variables: PlayerState['variables']): VNID => {
@@ -5548,6 +5872,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
+        // A pausing overlay is open — freeze command processing until it closes (this effect
+        // re-runs when `scenePaused` flips back to false and resumes from where it left off).
+        if (scenePaused) {
+            return;
+        }
+
         // Pause command execution while any HUD screen is shown
         if (hudStack.length > 0) {
             return;
@@ -6068,6 +6398,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult(result);
                     break;
                 }
+                case CommandType.GiveItem:
+                case CommandType.UseItem:
+                case CommandType.DestroyItem: {
+                    applyResult(handleItemCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.RestockCollection: {
+                    applyResult(handleRestockCollectionCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.BuyItem: {
+                    applyResult(handleBuyItemCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.SellItem: {
+                    applyResult(handleSellItemCommand(command as any, commandContext));
+                    break;
+                }
                 case CommandType.Jump: {
                     // Stop skip-forward on scene change
                     if (playerState.uiState.isSkipping) {
@@ -6563,6 +6911,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     // --- Input & Action Handlers ---
     const handleDialogueAdvance = () => {
+        // Frozen behind a pausing overlay — ignore all advance attempts (click/key/auto/skip).
+        if (scenePaused) return;
         updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
             
@@ -6969,6 +7319,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                  if (wasPaused && musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
                      musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
                  }
+                 // Honor the closing screen's on-close behavior.
+                 if (closingScreen?.onCloseBehavior === 'runActions') {
+                     (closingScreen.onCloseActions || []).forEach(a => executeUIAction(a));
+                 } else if (closingScreen?.onCloseBehavior === 'advance') {
+                     updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                 }
              };
              if (closingId && transOut !== 'none') {
                  // Keep the screen mounted + flagged closing so its out-animation plays, then tear down.
@@ -6989,7 +7345,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 return;
             }
             if (playerState && playerState.mode === 'playing') {
+                const isClosing = hudStack.includes(targetId);
                 setHudStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
+                if (isClosing) {
+                    // Closing an overlay via toggle: honor its on-close behavior (default = nothing).
+                    const cs = project.uiScreens[targetId];
+                    const b = cs?.onCloseBehavior || 'default';
+                    if (b === 'advance') updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                    else if (b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeUIAction(a));
+                }
             } else {
                 setScreenStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
             }
@@ -7094,14 +7458,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
                     const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
                     const hasTransition = effectiveTransitionOut !== 'none';
-                    
+                    // Configurable on-close behavior (default preserves today's "advance on last hud").
+                    const closeBehavior = closingScreen?.onCloseBehavior || 'default';
+                    const advanceOnClose = closeBehavior === 'default' || closeBehavior === 'advance';
+                    const runCloseActions = () => { if (closeBehavior === 'runActions') (closingScreen?.onCloseActions || []).forEach(a => executeUIAction(a)); };
+
                     if (hasTransition) {
                         // Mark screen as closing
                         setClosingScreens(prev => new Set(prev).add(closingScreenId));
-                        
+
                         // Wait for transition to complete before removing from stack
                         setTimeout(() => {
                             setHudStack(s => s.slice(0, -1));
+                            runCloseActions();
                             setClosingScreens(prev => {
                                 const next = new Set(prev);
                                 next.delete(closingScreenId);
@@ -7121,7 +7490,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         return {
                                             ...p,
                                             variables: mergedVariables, // Merge UI variables into game variables
-                                            currentIndex: p.currentIndex + 1,
+                                            currentIndex: advanceOnClose ? p.currentIndex + 1 : p.currentIndex,
+                                            // Explicit "advance" clears the waiting-dialogue gate so the next command actually runs
+                                            // (a bare index bump does nothing while the loop is paused on isWaitingForInput/dialogue).
+                                            ...(closeBehavior === 'advance' ? { uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : {}),
                                             stageState: {
                                                 ...p.stageState,
                                                 buttonOverlays: [],
@@ -7137,6 +7509,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     } else {
                         // No transition, close immediately
                         setHudStack(s => s.slice(0, -1));
+                        runCloseActions();
                         if (hudStack.length === 1) {
                             // Delay advancement to ensure any SetVariable actions from button clicks are processed first
                             setTimeout(() => {
@@ -7151,7 +7524,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         return {
                                             ...p,
                                             variables: mergedVariables, // Merge UI variables into game variables
-                                            currentIndex: p.currentIndex + 1,
+                                            currentIndex: advanceOnClose ? p.currentIndex + 1 : p.currentIndex,
+                                            // Explicit "advance" clears the waiting-dialogue gate so the next command actually runs
+                                            // (a bare index bump does nothing while the loop is paused on isWaitingForInput/dialogue).
+                                            ...(closeBehavior === 'advance' ? { uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : {}),
                                             stageState: {
                                                 ...p.stageState,
                                                 buttonOverlays: [],
@@ -7823,6 +8199,67 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }];
                 return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
             });
+        } else if (action.type === UIActionType.GiveItem) {
+            // Items are sugar over their count variable — translate to SetVariable (clamped via min:0).
+            const a = action as any;
+            const item = project.items?.[a.itemId];
+            if (item) executeUIAction(item.unique
+                ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'set', value: 1 } as VNUIAction
+                : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'add', value: a.quantity ?? 1 } as VNUIAction);
+        } else if (action.type === UIActionType.UseItem) {
+            const a = action as any;
+            const item = project.items?.[a.itemId];
+            if (item) {
+                if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
+                (item.useEffect || []).forEach((eff: VNUIAction) => executeUIAction(eff));
+            }
+        } else if (action.type === UIActionType.DestroyItem) {
+            const a = action as any;
+            const item = project.items?.[a.itemId];
+            if (item) executeUIAction(a.all
+                ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'set', value: 0 } as VNUIAction
+                : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: a.quantity ?? 1 } as VNUIAction);
+        } else if (action.type === UIActionType.UseSelectedItem) {
+            // Use whichever item the player has selected in an inventory grid. Falls back to no-op
+            // if nothing is selected or the item is no longer usable / owned.
+            const selId = playerStateRef.current?.selectedItemId;
+            const item = selId ? project.items?.[selId] : undefined;
+            if (item && item.usable) {
+                if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
+                (item.useEffect || []).forEach((eff: VNUIAction) => executeUIAction(eff));
+            }
+        } else if (action.type === UIActionType.RestockCollection) {
+            // Refill an item list's stock to its configured amounts (each entry → a SetVariable 'set').
+            const a = action as any;
+            const collection = project.itemCollections?.[a.collectionId];
+            if (collection) {
+                const restocked = computeCollectionRestock(collection, project.variables);
+                Object.entries(restocked).forEach(([varId, val]) => {
+                    executeUIAction({ type: UIActionType.SetVariable, variableId: varId, operator: 'set', value: val } as VNUIAction);
+                });
+            }
+        } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
+            // Buy/sell move stock + currency between a shop list and the player. The *Selected variants
+            // act on whichever grid item the player has highlighted; the fixed variants carry an itemId.
+            // Compute against the latest committed variables, then apply each new value as a SetVariable
+            // 'set' (so the button-flow commit picks them up). No-op when blocked (can't afford / out of
+            // stock / not owned / nothing selected).
+            const a = action as any;
+            const collection = project.itemCollections?.[a.collectionId];
+            const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
+            const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
+            const itemId = isSelected ? playerStateRef.current?.selectedItemId : a.itemId;
+            if (collection && itemId) {
+                const curVars = playerStateRef.current?.variables || {};
+                const res = isBuy
+                    ? computeBuy(itemId, collection, project, curVars)
+                    : computeSell(itemId, collection, project, curVars);
+                if (!('blocked' in res)) {
+                    Object.entries(res.updates).forEach(([varId, val]) => {
+                        executeUIAction({ type: UIActionType.SetVariable, variableId: varId, operator: 'set', value: val } as VNUIAction);
+                    });
+                }
+            }
         } else if (action.type === UIActionType.ShowLog) {
             // Open the text history overlay (same as the built-in quick menu's "Log" button).
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: true } } : null);
@@ -7836,6 +8273,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             // Rewind to the previous entry (same as the built-in quick menu's "Back" button).
             handleSkipBackward();
         }
+    };
+
+    // Persist the player's drag-rearranged inventory slot layout (saved with the game).
+    const reorderSlots = (slots: (VNID | null)[]) => {
+        updatePlayerState(p => p ? { ...p, inventorySlots: slots } : null);
+    };
+    // Persist the player's selected inventory item (for a "Use selected item" button).
+    const selectItem = (itemId: VNID | null, elementId: VNID) => {
+        // Track which grid owns the selection so two grids showing the same item don't both highlight.
+        updatePlayerState(p => p ? { ...p, selectedItemId: itemId, selectedElementId: itemId ? elementId : null } : null);
     };
 
     const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
@@ -7961,6 +8408,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
     }, [playerState?.currentSceneId]);
 
+    // Keep a live ref to the action handler so the global keydown listener can call the latest version
+    // (e.g. for per-screen open hotkeys) without stale closures or re-registering every render.
+    const handleUIActionRef = useRef(handleUIAction);
+    handleUIActionRef.current = handleUIAction;
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!playerState) return;
@@ -7994,7 +8446,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }
             
             // Mouse scroll up to skip backward (handled via wheel event separately)
-            
+
+            // Per-screen open hotkeys (e.g. press 'I' to toggle the inventory). Plain keys only, in-game,
+            // not while typing or with the history / text-input overlay open. Built-in shortcuts above win.
+            if (playerState.mode === 'playing' && !playerState.uiState.textInput && !playerState.uiState.showHistory
+                && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const ae = document.activeElement as HTMLElement | null;
+                const typing = !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+                if (!typing) {
+                    const pressed = e.key.toLowerCase();
+                    const target = (Object.values(project.uiScreens) as VNUIScreen[]).find(s => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
+                    if (target) {
+                        e.preventDefault();
+                        handleUIActionRef.current({ type: UIActionType.ToggleScreen, targetScreenId: target.id });
+                        return;
+                    }
+                }
+            }
+
             if (e.key === 'Escape') {
                 // Close history if open
                 if (playerState.uiState.showHistory) {
@@ -8029,11 +8498,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [playerState, project.ui.pauseScreenId, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
+    }, [playerState, project.ui.pauseScreenId, project.uiScreens, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
 
     // Auto-advance effect
     useEffect(() => {
-        if (!settings.autoAdvance || !playerState || playerState.mode !== 'playing') return;
+        if (!settings.autoAdvance || !playerState || playerState.mode !== 'playing' || scenePaused) return;
         if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
         
         const timer = setTimeout(() => {
@@ -8041,12 +8510,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         }, settings.autoAdvanceDelay * 1000);
         
         return () => clearTimeout(timer);
-    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, handleDialogueAdvance]);
+    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, scenePaused, handleDialogueAdvance]);
 
     // Skip-forward effect: rapidly advance through dialogue when skipping is active
     // Stops at choices, text inputs, and scene changes (handled by command execution)
     useEffect(() => {
-        if (!playerState || playerState.mode !== 'playing' || !playerState.uiState.isSkipping) return;
+        if (!playerState || playerState.mode !== 'playing' || !playerState.uiState.isSkipping || scenePaused) return;
         if (!settings.enableSkip) {
             // If skip is disabled in settings, cancel skip mode
             updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
@@ -8066,7 +8535,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             }, 50); // Very fast skip speed
             return () => clearTimeout(timer);
         }
-    }, [playerState?.uiState.isSkipping, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, settings.enableSkip, handleDialogueAdvance]);
+    }, [playerState?.uiState.isSkipping, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, scenePaused, settings.enableSkip, handleDialogueAdvance]);
 
     // --- Stage Rendering ---
     const renderStage = () => {
@@ -9106,6 +9575,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     {(() => {
                         const qmPosition = project.ui.quickMenuPosition ?? 'above-dialogue';
                         if (qmPosition === 'hidden') return null;
+                        // Don't render the quick menu while a full-screen overlay (the text history/log) is
+                        // open — otherwise its buttons paint on top of that overlay.
+                        if (uiState.showHistory) return null;
                         const qmColor = project.ui.quickMenuColor ?? '#0f172a';
                         const qmOpacity = project.ui.quickMenuOpacity ?? 75;
                         const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
@@ -9162,14 +9634,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // quickMenuButtons (keyed by key); custom buttons carry their own config.
                         const qmCfgFor = (key: string): QuickMenuButtonConfig | undefined =>
                             qmButtonCfgs[key as QuickMenuButtonKey] || qmCustomButtons.find(cb => cb.id === key);
-                        const iconCls = 'w-3.5 h-3.5';
+                        // Size the icon relative to the pill's (already --font-scale'd) font size so it
+                        // scales with the window. A fixed px icon would stay big as the slot shrank and
+                        // overflow into neighbouring buttons (the independent-layout overlap bug).
+                        const iconStyle: React.CSSProperties = { width: '1.15em', height: '1.15em', flexShrink: 0 };
                         type QmDesc = { key: string; show: boolean; onClick: (e: React.MouseEvent) => void; disabled?: boolean; title: string; label: string; icon: React.ReactNode; pillClassName: string; pillStyle: React.CSSProperties };
                         const descriptors: QmDesc[] = [
                             {
                                 key: 'skipBackward', show: project.ui.quickMenuShowSkipBackward !== false,
                                 onClick: (e) => { e.stopPropagation(); handleSkipBackward(); },
                                 disabled: !hasHistory, title: 'Skip Backward (Arrow Up)', label: 'Back',
-                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>,
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>,
                                 pillClassName: pillBase,
                                 pillStyle: { ...commonPill, background: hasHistory ? qmBg : qmBgDisabled, border: defBorder, color: hasHistory ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)', cursor: hasHistory ? 'pointer' : 'default' },
                             },
@@ -9177,7 +9652,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 key: 'log', show: project.ui.quickMenuShowLog !== false,
                                 onClick: (e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); },
                                 title: 'Text History (H)', label: 'Log',
-                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
                                 pillClassName: `${pillBase} hover:brightness-125`,
                                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
                             },
@@ -9185,7 +9660,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 key: 'autoAdvance', show: project.ui.quickMenuShowAutoAdvance !== false,
                                 onClick: (e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); },
                                 title: 'Auto-Advance', label: 'Auto',
-                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
                                 pillClassName: pillBase,
                                 pillStyle: { ...commonPill, background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : qmBg, border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`, color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)' },
                             },
@@ -9193,7 +9668,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 key: 'skipForward', show: !!settings.enableSkip && project.ui.quickMenuShowSkipForward !== false,
                                 onClick: (e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); },
                                 title: 'Skip Forward (Ctrl)', label: 'Skip',
-                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>,
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>,
                                 pillClassName: pillBase,
                                 pillStyle: { ...commonPill, background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : qmBg, border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`, color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)' },
                             },
@@ -9201,7 +9676,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 key: 'save', show: project.ui.quickMenuShowSave !== false,
                                 onClick: (e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.SaveGame, slotNumber: 1 }); },
                                 title: 'Save Game', label: 'Save',
-                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" /></svg>,
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" /></svg>,
                                 pillClassName: `${pillBase} hover:brightness-125`,
                                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
                             },
@@ -9209,7 +9684,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 key: 'load', show: project.ui.quickMenuShowLoad !== false,
                                 onClick: (e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.LoadGame, slotNumber: 1 }); },
                                 title: 'Load Game', label: 'Load',
-                                icon: <svg className={iconCls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" /></svg>,
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" /></svg>,
                                 pillClassName: `${pillBase} hover:brightness-125`,
                                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
                             },
@@ -9261,7 +9736,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         const fit = !!cfg.fitToContent;
                                         const slotStyle: React.CSSProperties = fit
                                             ? { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }
-                                            : { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto' };
+                                            // overflow:hidden keeps a button's content inside its own slot so it can't spill over a neighbour.
+                                            : { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto', overflow: 'hidden' };
                                         return (
                                             <div key={d.key} style={slotStyle}>
                                                 <QuickMenuButtonEl
@@ -9296,7 +9772,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     zIndex: qmZIndex,
                                 }}
                             >
-                                <div className="flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
+                                <div className="flex flex-wrap items-center justify-center gap-1.5" style={{ pointerEvents: 'auto', maxWidth: '100%' }}>
                                     {visible.map(d => (
                                         <QuickMenuButtonEl
                                             key={d.key}
@@ -9697,6 +10173,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             isClosing={isClosing}
                             evaluateConditions={evaluateConditions}
                             onCommitVariables={commitUiVariablesToPlayerState}
+                            inventorySlots={playerState?.inventorySlots}
+                            onReorderSlots={reorderSlots}
+                            selectedItemId={playerState?.selectedItemId}
+                            selectedElementId={playerState?.selectedElementId}
+                            onSelectItem={selectItem}
                         />
                     ));
                 })()}
@@ -9741,9 +10222,30 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             isClosing={isClosing}
                             evaluateConditions={evaluateConditions}
                             onCommitVariables={commitUiVariablesToPlayerState}
+                            inventorySlots={playerState?.inventorySlots}
+                            onReorderSlots={reorderSlots}
+                            selectedItemId={playerState?.selectedItemId}
+                            selectedElementId={playerState?.selectedElementId}
+                            onSelectItem={selectItem}
                         />
                     ));
                 })()}
+
+                {/* Backdrop behind a pausing overlay: optional dim + blur, and it captures pointer
+                    events so the frozen scene/dialogue beneath can't be clicked. Sits above dialogue
+                    (z≈44) and below the pausing overlay (z46). */}
+                {scenePaused && pausingOverlayScreen && (
+                    <div
+                        className="absolute inset-0"
+                        style={{
+                            zIndex: 44,
+                            background: pausingOverlayScreen.backdropOpacity ? `rgba(0,0,0,${pausingOverlayScreen.backdropOpacity})` : 'transparent',
+                            backdropFilter: pausingOverlayScreen.backdropBlur ? `blur(${pausingOverlayScreen.backdropBlur}px)` : undefined,
+                            WebkitBackdropFilter: pausingOverlayScreen.backdropBlur ? `blur(${pausingOverlayScreen.backdropBlur}px)` : undefined,
+                        } as React.CSSProperties}
+                        onClick={e => e.stopPropagation()}
+                    />
+                )}
 
                 {activeOverlayEffects.length > 0 && (
                     <ScreenOverlayEffects
@@ -9791,6 +10293,53 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }}
                     onCancel={() => setConfirmDialog(null)}
                 />
+            )}
+            {/* Live Variable Tracker — editor test-play only; never rendered in exported games. */}
+            {!isStandalone && (
+                <div className="absolute top-4 left-4 z-[10000] flex flex-col items-start gap-2 max-w-[18rem]">
+                    <button
+                        onClick={() => setShowVarWatcher(s => !s)}
+                        className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border shadow-lg ${
+                            showVarWatcher
+                                ? 'bg-sky-500/90 border-sky-400/60 text-white'
+                                : 'bg-slate-800/80 border-slate-600/60 text-slate-100 hover:bg-slate-700/90'
+                        }`}
+                        title="Variable Tracker — watch your variables' live values change as you play. (Editor only — not shown in exported games.)"
+                    >
+                        <VariablesIcon className="w-4 h-4 flex-shrink-0" />
+                        <span>Variables</span>
+                    </button>
+                    {showVarWatcher && (() => {
+                        const defs = Object.values(project.variables) as any[];
+                        if (defs.length === 0) return (
+                            <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl">
+                                <p className="text-slate-400 italic">No variables yet — add some in the Variables tab.</p>
+                            </div>
+                        );
+                        const liveVars = playerState?.variables || {};
+                        const scopeColor: Record<string, string> = { local: 'bg-emerald-400', global: 'bg-sky-400', persistent: 'bg-amber-400' };
+                        return (
+                            <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl">
+                                <ul className="space-y-1">
+                                    {defs.map(def => {
+                                        const raw = (def.id in liveVars) ? liveVars[def.id] : def.defaultValue;
+                                        const bl = resolveBoolLabels(def, 'Yes', 'No');
+                                        const display = def.type === 'boolean' ? (raw ? bl.yes : bl.no) : String(raw);
+                                        return (
+                                            <li key={def.id} className="flex items-center justify-between gap-3">
+                                                <span className="flex items-center gap-1.5 min-w-0">
+                                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || 'global'] || 'bg-slate-400'}`} />
+                                                    <span className="text-slate-300 truncate" title={def.name}>{def.name}</span>
+                                                </span>
+                                                <span className="font-mono text-white flex-shrink-0">{display}</span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        );
+                    })()}
+                </div>
             )}
             {!hideCloseButton && (
                 <button onClick={handleClose} className="absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50">

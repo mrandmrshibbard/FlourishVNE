@@ -13,6 +13,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["Checkbox"] = "Checkbox";
     UIElementType2["AssetCycler"] = "AssetCycler";
     UIElementType2["CGGallery"] = "CGGallery";
+    UIElementType2["Inventory"] = "Inventory";
     UIElementType2["HotSpot"] = "HotSpot";
     UIElementType2["ImageMap"] = "ImageMap";
     return UIElementType2;
@@ -43,6 +44,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["ToggleSkip"] = "ToggleSkip";
     UIActionType2["SkipBackward"] = "SkipBackward";
     UIActionType2["CallCommonEvent"] = "CallCommonEvent";
+    UIActionType2["GiveItem"] = "GiveItem";
+    UIActionType2["UseItem"] = "UseItem";
+    UIActionType2["DestroyItem"] = "DestroyItem";
+    UIActionType2["UseSelectedItem"] = "UseSelectedItem";
+    UIActionType2["RestockCollection"] = "RestockCollection";
+    UIActionType2["BuyItem"] = "BuyItem";
+    UIActionType2["SellItem"] = "SellItem";
+    UIActionType2["BuySelectedItem"] = "BuySelectedItem";
+    UIActionType2["SellSelectedItem"] = "SellSelectedItem";
     return UIActionType2;
   })(UIActionType || {});
   const RESET_ALL_VARIABLES = "__ALL_VARIABLES__";
@@ -359,6 +369,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["ShowHotSpot"] = "ShowHotSpot";
     CommandType2["HideHotSpot"] = "HideHotSpot";
     CommandType2["TweenElement"] = "TweenElement";
+    CommandType2["GiveItem"] = "GiveItem";
+    CommandType2["UseItem"] = "UseItem";
+    CommandType2["DestroyItem"] = "DestroyItem";
+    CommandType2["RestockCollection"] = "RestockCollection";
+    CommandType2["BuyItem"] = "BuyItem";
+    CommandType2["SellItem"] = "SellItem";
     return CommandType2;
   })(CommandType || {});
   const REACTIVE_VISUAL_TYPES = /* @__PURE__ */ new Set([
@@ -1636,7 +1652,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
   };
   const generateId = () => Math.random().toString(36).substring(2, 9);
+  const makeEntryCountVar = (id, name, startQty, scope) => ({
+    id,
+    name,
+    type: "number",
+    defaultValue: Math.max(0, Math.floor(startQty) || 0),
+    scope: scope || "global",
+    min: 0,
+    // stock never goes negative
+    isInternal: true
+    // hidden from the Variables manager (kept calm); still works by id everywhere
+  });
   const itemReducer = (state, action) => {
+    var _a, _b, _c, _d;
     switch (action.type) {
       case "ADD_ITEM": {
         const p = action.payload;
@@ -1651,7 +1679,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             name: p.name,
             type: "number",
             defaultValue: 0,
-            scope: p.scope || "global"
+            scope: p.scope || "global",
+            min: 0
+            // inventory counts never go negative (Use/Destroy clamp here)
           };
           variables = { ...variables, [countVariableId]: countVar };
         }
@@ -1708,6 +1738,113 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           ...state,
           variables,
           items: remainingItems
+        };
+      }
+      case "ADD_ITEM_COLLECTION": {
+        const p = action.payload;
+        const id = p.id || `coll-${generateId()}`;
+        const collections = state.itemCollections || {};
+        const newCollection = {
+          id,
+          name: p.name,
+          entries: [],
+          order: Object.keys(collections).length
+        };
+        return { ...state, itemCollections: { ...collections, [id]: newCollection } };
+      }
+      case "UPDATE_ITEM_COLLECTION": {
+        const { collectionId, updates } = action.payload;
+        const collections = state.itemCollections || {};
+        const existing = collections[collectionId];
+        if (!existing) return state;
+        const merged = { ...existing, ...updates };
+        let variables = state.variables;
+        if (updates.name && updates.name !== existing.name) {
+          merged.entries.forEach((e) => {
+            var _a2, _b2;
+            const v = variables[e.countVariableId];
+            if (v) {
+              const itemName = ((_b2 = (_a2 = state.items) == null ? void 0 : _a2[e.itemId]) == null ? void 0 : _b2.name) || "Item";
+              variables = { ...variables, [e.countVariableId]: { ...v, name: `${itemName} — ${updates.name}` } };
+            }
+          });
+        }
+        return { ...state, variables, itemCollections: { ...collections, [collectionId]: merged } };
+      }
+      case "DELETE_ITEM_COLLECTION": {
+        const { collectionId, deleteCountVariables } = action.payload;
+        const collections = state.itemCollections || {};
+        const existing = collections[collectionId];
+        if (!existing) return state;
+        const { [collectionId]: _removed, ...remaining } = collections;
+        let variables = state.variables;
+        if (deleteCountVariables && !existing.tracksOwnedItems) {
+          variables = { ...variables };
+          existing.entries.forEach((e) => {
+            delete variables[e.countVariableId];
+          });
+        }
+        return { ...state, variables, itemCollections: remaining };
+      }
+      case "ADD_COLLECTION_ENTRY": {
+        const { collectionId, itemId, startQty, scope } = action.payload;
+        const collections = state.itemCollections || {};
+        const existing = collections[collectionId];
+        if (!existing) return state;
+        if (existing.entries.some((e) => e.itemId === itemId)) return state;
+        if (existing.tracksOwnedItems) {
+          const ownedVarId = (_b = (_a = state.items) == null ? void 0 : _a[itemId]) == null ? void 0 : _b.countVariableId;
+          if (!ownedVarId) return state;
+          const entry2 = { itemId, countVariableId: ownedVarId };
+          return { ...state, itemCollections: { ...collections, [collectionId]: { ...existing, entries: [...existing.entries, entry2] } } };
+        }
+        const countVariableId = `var-${generateId()}`;
+        const itemName = ((_d = (_c = state.items) == null ? void 0 : _c[itemId]) == null ? void 0 : _d.name) || "Item";
+        const countVar = makeEntryCountVar(countVariableId, `${itemName} — ${existing.name}`, startQty ?? 0, scope);
+        const entry = { itemId, countVariableId, startQty: startQty ?? 0 };
+        const merged = { ...existing, entries: [...existing.entries, entry] };
+        return {
+          ...state,
+          variables: { ...state.variables, [countVariableId]: countVar },
+          itemCollections: { ...collections, [collectionId]: merged }
+        };
+      }
+      case "UPDATE_COLLECTION_ENTRY": {
+        const { collectionId, itemId, updates } = action.payload;
+        const collections = state.itemCollections || {};
+        const existing = collections[collectionId];
+        if (!existing) return state;
+        const idx = existing.entries.findIndex((e) => e.itemId === itemId);
+        if (idx < 0) return state;
+        const entry = existing.entries[idx];
+        const mergedEntry = { ...entry, ...updates };
+        const entries = [...existing.entries];
+        entries[idx] = mergedEntry;
+        let variables = state.variables;
+        if (updates.startQty !== void 0 && variables[entry.countVariableId]) {
+          variables = {
+            ...variables,
+            [entry.countVariableId]: { ...variables[entry.countVariableId], defaultValue: Math.max(0, Math.floor(updates.startQty) || 0) }
+          };
+        }
+        return { ...state, variables, itemCollections: { ...collections, [collectionId]: { ...existing, entries } } };
+      }
+      case "REMOVE_COLLECTION_ENTRY": {
+        const { collectionId, itemId, deleteCountVariable } = action.payload;
+        const collections = state.itemCollections || {};
+        const existing = collections[collectionId];
+        if (!existing) return state;
+        const entry = existing.entries.find((e) => e.itemId === itemId);
+        if (!entry) return state;
+        let variables = state.variables;
+        if (deleteCountVariable !== false && !existing.tracksOwnedItems && variables[entry.countVariableId]) {
+          const { [entry.countVariableId]: _v, ...rest } = variables;
+          variables = rest;
+        }
+        return {
+          ...state,
+          variables,
+          itemCollections: { ...collections, [collectionId]: { ...existing, entries: existing.entries.filter((e) => e.itemId !== itemId) } }
         };
       }
       default:
@@ -2633,6 +2770,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return context;
   };
+  function resolveBoolLabels(variable, fallbackTrue, fallbackFalse) {
+    return {
+      yes: ((variable == null ? void 0 : variable.trueLabel) ?? "").trim() || fallbackTrue,
+      no: ((variable == null ? void 0 : variable.falseLabel) ?? "").trim() || fallbackFalse
+    };
+  }
   const getAssetNameFromId = (assetId, project) => {
     const background = project.backgrounds[assetId];
     if (background) return background.name;
@@ -2650,6 +2793,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return null;
   };
+  const formatValue = (variable, value, project) => {
+    if (variable.type === "boolean") {
+      const truthy = value === true || String(value).toLowerCase() === "true";
+      const { yes, no } = resolveBoolLabels(variable, "Yes", "No");
+      return truthy ? yes : no;
+    }
+    const stringValue = String(value);
+    if (stringValue.startsWith("asset-")) {
+      const assetName = getAssetNameFromId(stringValue, project);
+      return assetName || stringValue;
+    }
+    return stringValue;
+  };
   const interpolateVariables = (text, variables, project) => {
     if (!text) return text;
     let result = text.replace(/\{([^}]+)\}/g, (match, placeholder) => {
@@ -2657,28 +2813,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const variableByName = Object.values(project.variables).find((v) => v.name === trimmedPlaceholder);
       if (variableByName) {
         const value = variables[variableByName.id];
-        if (value !== void 0) {
-          const stringValue = String(value);
-          if (stringValue.startsWith("asset-")) {
-            const assetName = getAssetNameFromId(stringValue, project);
-            return assetName || stringValue;
-          }
-          return stringValue;
-        }
-        return match;
+        return value !== void 0 ? formatValue(variableByName, value, project) : match;
       }
       const variableById = project.variables[trimmedPlaceholder];
       if (variableById) {
         const value = variables[variableById.id];
-        if (value !== void 0) {
-          const stringValue = String(value);
-          if (stringValue.startsWith("asset-")) {
-            const assetName = getAssetNameFromId(stringValue, project);
-            return assetName || stringValue;
-          }
-          return stringValue;
-        }
-        return match;
+        return value !== void 0 ? formatValue(variableById, value, project) : match;
       }
       return match;
     });
@@ -2871,6 +3011,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return out;
   }
+  const VariablesIcon = ({ className, title, ...props }) => /* @__PURE__ */ jsxRuntime2.jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 20 20", fill: "currentColor", className: `w-5 h-5 ${className || ""}`, ...props, children: [
+    title && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: title }),
+    /* @__PURE__ */ jsxRuntime2.jsx("path", { fillRule: "evenodd", d: "M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5zm4.75 6.75a.75.75 0 00-1.5 0v2.546l-.943-1.048a.75.75 0 00-1.114 1.004l2.25 2.5a.75.75 0 001.114 0l2.25-2.5a.75.75 0 10-1.114-1.004l-.943 1.048V8.75zm2.5 5.5a.75.75 0 000 1.5h2.5a.75.75 0 000-1.5h-2.5z", clipRule: "evenodd" })
+  ] });
   const XMarkIcon = ({ className, title, ...props }) => /* @__PURE__ */ jsxRuntime2.jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 20 20", fill: "currentColor", className: `w-5 h-5 ${className || ""}`, ...props, children: [
     title && /* @__PURE__ */ jsxRuntime2.jsx("title", { children: title }),
     /* @__PURE__ */ jsxRuntime2.jsx("path", { d: "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" })
@@ -4761,13 +4905,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       }
     });
-    const finalPosition = command.endPosition || command.position;
+    let finalPosition = command.endPosition || command.position;
     const startPosition = command.startPosition;
     const requestedTransition = command.transition;
     const currentCharacters = playerState.stageState.characters;
     const hasShowTransitionFlag = requestedTransition && requestedTransition !== "instant";
     const existingSameChar = currentCharacters[command.characterId];
     const isPoseChange = !!existingSameChar && !!hasShowTransitionFlag && (existingSameChar.imageUrls.join(",") !== imageUrls.join(",") || existingSameChar.expressionId !== command.expressionId);
+    if (command.keepPosition && existingSameChar) {
+      finalPosition = existingSameChar.position;
+    }
     const ghostKey = isPoseChange ? `__ghost_${command.characterId}_${Date.now()}` : null;
     const ghostEntry = isPoseChange ? {
       charId: ghostKey,
@@ -5436,7 +5583,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       rotation: command.rotation,
       flipX: command.flipX,
       flipY: command.flipY,
-      ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
+      // `live` drives per-render re-evaluation: live conditions (visibility) AND/OR live text
+      // (re-interpolating {variable} tokens). Conditions are only attached for liveConditions.
+      ...command.liveConditions || command.liveText ? { live: true } : {},
+      ...command.liveConditions ? { conditions: command.conditions } : {}
     };
     const hasTransition = command.transition && command.transition !== "instant";
     const delay = hasTransition ? (command.duration ?? 0.5) * 1e3 + 100 : 0;
@@ -6614,6 +6764,128 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       advance: !waitForCompletion
     };
   }
+  const computeCollectionRestock = (collection, variables) => {
+    var _a;
+    const out = {};
+    const mode = ((_a = collection.restock) == null ? void 0 : _a.amount) || "reset";
+    for (const e of collection.entries) {
+      const target = Math.floor(e.restockTo ?? e.startQty ?? 0);
+      let val;
+      if (mode === "randomRange") {
+        const lo = Math.max(0, Math.floor(e.restockMin ?? 0));
+        const hi = Math.max(lo, target);
+        val = lo + Math.floor(Math.random() * (hi - lo + 1));
+      } else {
+        val = Math.max(0, target);
+      }
+      const v = variables[e.countVariableId];
+      if (v) {
+        if (typeof v.min === "number") val = Math.max(v.min, val);
+        if (typeof v.max === "number") val = Math.min(v.max, val);
+      }
+      out[e.countVariableId] = val;
+    }
+    return out;
+  };
+  const num = (v) => Number(v ?? 0);
+  const clampVar = (project, varId, value) => {
+    const v = project.variables[varId];
+    return clampNumberToBounds(value, v == null ? void 0 : v.min, v == null ? void 0 : v.max);
+  };
+  const tradePrice = (item, entry) => Math.max(0, Math.floor((entry == null ? void 0 : entry.price) ?? (item == null ? void 0 : item.price) ?? 0));
+  const computeBuy = (itemId, collection, project, vars) => {
+    var _a;
+    const item = (_a = project.items) == null ? void 0 : _a[itemId];
+    const entry = collection.entries.find((e) => e.itemId === itemId);
+    if (!item || !entry) return { blocked: "invalid" };
+    const price = tradePrice(item, entry);
+    const currencyId = collection.currencyVariableId;
+    if (currencyId && num(vars[currencyId]) < price) return { blocked: "funds" };
+    if (!entry.infiniteStock && num(vars[entry.countVariableId]) < 1) return { blocked: "stock" };
+    const updates = {};
+    if (currencyId) updates[currencyId] = clampVar(project, currencyId, num(vars[currencyId]) - price);
+    if (!entry.infiniteStock) updates[entry.countVariableId] = clampVar(project, entry.countVariableId, num(vars[entry.countVariableId]) - 1);
+    updates[item.countVariableId] = item.unique ? 1 : clampVar(project, item.countVariableId, num(vars[item.countVariableId]) + 1);
+    return { updates };
+  };
+  const computeSell = (itemId, collection, project, vars) => {
+    var _a;
+    const item = (_a = project.items) == null ? void 0 : _a[itemId];
+    if (!item) return { blocked: "invalid" };
+    if (num(vars[item.countVariableId]) < 1) return { blocked: "owned" };
+    const entry = collection.entries.find((e) => e.itemId === itemId);
+    const price = tradePrice(item, entry);
+    const gain = Math.floor(price * (collection.sellMultiplier ?? 0.5));
+    const currencyId = collection.currencyVariableId;
+    const updates = {};
+    updates[item.countVariableId] = clampVar(project, item.countVariableId, num(vars[item.countVariableId]) - 1);
+    if (currencyId) updates[currencyId] = clampVar(project, currencyId, num(vars[currencyId]) + gain);
+    if (collection.sellRestocksShop && entry) updates[entry.countVariableId] = clampVar(project, entry.countVariableId, num(vars[entry.countVariableId]) + 1);
+    return { updates };
+  };
+  const handleItemCommand = (command, context) => {
+    var _a;
+    const { project, playerState } = context;
+    const item = (_a = project.items) == null ? void 0 : _a[command.itemId];
+    if (!item) return { advance: true, updates: {} };
+    const vars = { ...playerState.variables };
+    const countVar = project.variables[item.countVariableId];
+    const clamp = (n) => {
+      const min = (countVar == null ? void 0 : countVar.min) ?? 0;
+      const max = countVar == null ? void 0 : countVar.max;
+      let v = Math.max(min, n);
+      if (max !== void 0) v = Math.min(max, v);
+      return v;
+    };
+    const cur = Number(vars[item.countVariableId] ?? 0);
+    if (command.type === CommandType.GiveItem) {
+      vars[item.countVariableId] = item.unique ? 1 : clamp(cur + (command.quantity ?? 1));
+    } else if (command.type === CommandType.DestroyItem) {
+      const c = command;
+      vars[item.countVariableId] = c.all ? clamp(0) : clamp(cur - (c.quantity ?? 1));
+    } else {
+      if (item.consumeOnUse !== false) vars[item.countVariableId] = clamp(cur - 1);
+      for (const eff of item.useEffect || []) {
+        if (eff.type === UIActionType.SetVariable) {
+          const ea = eff;
+          const ev = project.variables[ea.variableId];
+          if (!ev) continue;
+          const { effectiveOperator } = normalizeSetVariableOperatorByType(ev.type, ev.name, ea.operator);
+          vars[ea.variableId] = calculateVariableValue(effectiveOperator, ev.type, vars[ea.variableId], ea.value, ea.randomMin, ea.randomMax, void 0, ev.min, ev.max);
+        } else if (eff.type === UIActionType.ResetVariable) {
+          const ev = project.variables[eff.variableId];
+          if (ev) vars[eff.variableId] = ev.defaultValue;
+        }
+      }
+    }
+    return { advance: true, updates: { variables: vars } };
+  };
+  const handleRestockCollectionCommand = (command, context) => {
+    var _a;
+    const { project, playerState } = context;
+    const collection = (_a = project.itemCollections) == null ? void 0 : _a[command.collectionId];
+    if (!collection) return { advance: true, updates: {} };
+    const restocked = computeCollectionRestock(collection, project.variables);
+    return { advance: true, updates: { variables: { ...playerState.variables, ...restocked } } };
+  };
+  const handleBuyItemCommand = (command, context) => {
+    var _a;
+    const { project, playerState } = context;
+    const collection = (_a = project.itemCollections) == null ? void 0 : _a[command.collectionId];
+    if (!collection) return { advance: true, updates: {} };
+    const res = computeBuy(command.itemId, collection, project, playerState.variables);
+    if ("blocked" in res) return { advance: true, updates: {} };
+    return { advance: true, updates: { variables: { ...playerState.variables, ...res.updates } } };
+  };
+  const handleSellItemCommand = (command, context) => {
+    var _a;
+    const { project, playerState } = context;
+    const collection = (_a = project.itemCollections) == null ? void 0 : _a[command.collectionId];
+    if (!collection) return { advance: true, updates: {} };
+    const res = computeSell(command.itemId, collection, project, playerState.variables);
+    if ("blocked" in res) return { advance: true, updates: {} };
+    return { advance: true, updates: { variables: { ...playerState.variables, ...res.updates } } };
+  };
   class CommandScheduler {
     constructor() {
       this.lastProcessed = null;
@@ -7055,7 +7327,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       }
       const allActions = [overlay.onClick, ...overlay.actions || []];
-      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
       const setVarActions = allActions.filter(isVarMutation);
       const otherActions = allActions.filter((a) => !isVarMutation(a));
       setVarActions.forEach((action) => onAction(action));
@@ -8067,7 +8339,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (element.actions && element.actions.length > 0) {
         allActions.push(...element.actions);
       }
-      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable;
+      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
       const setVarActions = allActions.filter(isVarMutation);
       const otherActions = allActions.filter((a) => !isVarMutation(a));
       setVarActions.forEach((action) => onAction(action));
@@ -8490,6 +8762,191 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         )
       }
     );
+  };
+  const InventoryGridElement = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+    var _a;
+    const count = (it) => Number(variables[it.countVariableId] ?? 0);
+    const filteredAll = element.categoryFilter ? items.filter((it) => it.category === element.categoryFilter) : items;
+    const shown = element.hideUnowned === false ? filteredAll : filteredAll.filter((it) => count(it) >= 1);
+    const itemById = new Map(shown.map((it) => [it.id, it]));
+    const cols = element.columns || 4;
+    const colGap = element.columnGap ?? element.gap ?? 8;
+    const rowGap = element.rowGap ?? element.gap ?? 8;
+    const gridContainerRef = React2.useRef(null);
+    const [autoRows, setAutoRows] = React2.useState(0);
+    React2.useEffect(() => {
+      if (element.rows && element.rows > 0) {
+        setAutoRows(0);
+        return;
+      }
+      const node = gridContainerRef.current;
+      if (!node) return;
+      const compute = () => {
+        const cs = window.getComputedStyle(node);
+        const availW = node.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+        const availH = node.clientHeight - parseFloat(cs.paddingTop || "0") - parseFloat(cs.paddingBottom || "0");
+        if (availW <= 0 || availH <= 0) return;
+        const slotW = (availW - colGap * (cols - 1)) / cols;
+        if (slotW <= 0) return;
+        setAutoRows(Math.max(1, Math.floor((availH + rowGap) / (slotW + rowGap))));
+      };
+      compute();
+      const ro = new ResizeObserver(compute);
+      ro.observe(node);
+      return () => ro.disconnect();
+    }, [element.rows, cols, colGap, rowGap]);
+    const minSlots = element.rows && element.rows > 0 ? cols * element.rows : cols * autoRows;
+    const totalSlots = Math.max(shown.length, minSlots);
+    const slots = [];
+    const placed = /* @__PURE__ */ new Set();
+    for (let i = 0; i < totalSlots; i++) {
+      const saved = (inventorySlots == null ? void 0 : inventorySlots[i]) ?? null;
+      if (saved && itemById.has(saved) && !placed.has(saved)) {
+        slots.push(saved);
+        placed.add(saved);
+      } else slots.push(null);
+    }
+    const unplaced = shown.filter((it) => !placed.has(it.id));
+    let u = 0;
+    for (let i = 0; i < slots.length && u < unplaced.length; i++) {
+      if (!slots[i]) {
+        slots[i] = unplaced[u].id;
+        placed.add(unplaced[u].id);
+        u++;
+      }
+    }
+    while (u < unplaced.length) {
+      slots.push(unplaced[u].id);
+      placed.add(unplaced[u].id);
+      u++;
+    }
+    const reorderEnabled = element.allowReorder !== false && !!onReorderSlots;
+    const selectEnabled = !!onSelectItem;
+    const [dragSlot, setDragSlot] = React2.useState(null);
+    const [hoverUseId, setHoverUseId] = React2.useState(null);
+    const swap = (a, b) => {
+      if (!onReorderSlots || a == null || a === b) {
+        setDragSlot(null);
+        return;
+      }
+      const next = [...slots];
+      const tmp = next[a];
+      next[a] = next[b];
+      next[b] = tmp;
+      onReorderSlots(next);
+      setDragSlot(null);
+    };
+    const useItem = (it) => {
+      if (!it.usable) return;
+      const actions = [
+        ...it.consumeOnUse === false ? [] : [{ type: UIActionType.SetVariable, variableId: it.countVariableId, operator: "subtract", value: 1 }],
+        ...it.useEffect || []
+      ];
+      const isVarMutation = (a) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+      const setVarActions = actions.filter(isVarMutation);
+      const otherActions = actions.filter((a) => !isVarMutation(a));
+      setVarActions.forEach((a) => onAction(a));
+      if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+      otherActions.forEach((a) => onAction(a));
+    };
+    const slotButtonMode = element.slotButton ?? (element.showUseButton ? "use" : "none");
+    const tradeCollectionId = slotButtonMode === "buy" ? element.collectionId : slotButtonMode === "sell" ? element.sellToCollectionId : void 0;
+    const tradeCollection = tradeCollectionId ? (_a = project.itemCollections) == null ? void 0 : _a[tradeCollectionId] : void 0;
+    const tradeItem = (it) => {
+      if (!tradeCollectionId) return;
+      onAction({ type: slotButtonMode === "buy" ? UIActionType.BuyItem : UIActionType.SellItem, itemId: it.id, collectionId: tradeCollectionId });
+      if (onCommitVariables) onCommitVariables();
+    };
+    const tradeBlocked = (it) => {
+      if (!tradeCollection) return true;
+      const res = slotButtonMode === "buy" ? computeBuy(it.id, tradeCollection, project, variables) : computeSell(it.id, tradeCollection, project, variables);
+      return "blocked" in res;
+    };
+    const slotStyle = { aspectRatio: "1 / 1", borderRadius: `${element.slotBorderRadius ?? 8}px`, border: `2px solid ${element.slotBorderColor || "#4D3273"}`, background: element.slotColor || "transparent" };
+    const selectedRing = element.selectedBorderColor || "#38bdf8";
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: gridContainerRef, className: "w-full h-full overflow-y-auto p-2 rounded", style: { backgroundColor: element.backgroundColor || "rgba(15, 23, 42, 0.9)" }, children: [
+      totalSlots === 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2", children: element.emptyText || "" }),
+      /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "grid", style: { gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` }, children: slots.map((slotId, i) => {
+        var _a2;
+        const it = slotId ? itemById.get(slotId) : void 0;
+        if (!it) return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            style: slotStyle,
+            onDragOver: reorderEnabled ? ((e) => e.preventDefault()) : void 0,
+            onDrop: reorderEnabled ? (() => swap(dragSlot, i)) : void 0
+          },
+          `slot-${i}`
+        );
+        const url = ((_a2 = it.icon) == null ? void 0 : _a2.id) ? assetResolver(it.icon.id, it.icon.type === "video" ? "video" : "image") : null;
+        const qty = count(it);
+        const selected = selectEnabled && selectedItemId === it.id && selectedElementId === element.id;
+        return /* @__PURE__ */ jsxRuntime2.jsxs(
+          "div",
+          {
+            className: "relative flex flex-col items-center justify-center p-1",
+            style: { ...slotStyle, cursor: reorderEnabled ? "grab" : selectEnabled ? "pointer" : void 0, opacity: dragSlot === i ? 0.4 : 1, ...selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, borderColor: selectedRing } : {} },
+            draggable: reorderEnabled,
+            onDragStart: reorderEnabled ? () => setDragSlot(i) : void 0,
+            onDragOver: reorderEnabled ? ((e) => e.preventDefault()) : void 0,
+            onDrop: reorderEnabled ? (() => swap(dragSlot, i)) : void 0,
+            onClick: selectEnabled ? (() => onSelectItem(selected ? null : it.id, element.id)) : void 0,
+            children: [
+              url ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: url, alt: it.name, className: "w-full flex-1 min-h-0 object-contain", draggable: false }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "w-full flex-1 min-h-0" }),
+              element.showQuantity !== false && qty > 1 && /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "absolute top-1 right-1 bg-black/70 text-white text-[10px] rounded px-1 leading-tight", children: [
+                "×",
+                qty
+              ] }),
+              element.showNames !== false && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-[10px] text-white truncate w-full mt-0.5", style: { ...element.nameFont ? fontSettingsToStyle(element.nameFont) : {}, textAlign: "center" }, children: it.name }),
+              (() => {
+                var _a3, _b;
+                const showBtn = slotButtonMode === "use" ? !!it.usable : slotButtonMode === "buy" || slotButtonMode === "sell" ? !!tradeCollection : false;
+                if (!showBtn) return null;
+                const blocked = (slotButtonMode === "buy" || slotButtonMode === "sell") && tradeBlocked(it);
+                const hovered = hoverUseId === it.id && !blocked;
+                const baseArt = ((_a3 = element.useButtonImage) == null ? void 0 : _a3.id) ? assetResolver(element.useButtonImage.id, element.useButtonImage.type === "video" ? "video" : "image") : null;
+                const hoverArt = ((_b = element.useButtonHoverImage) == null ? void 0 : _b.id) ? assetResolver(element.useButtonHoverImage.id, element.useButtonHoverImage.type === "video" ? "video" : "image") : null;
+                const art = hovered && hoverArt ? hoverArt : baseArt;
+                const bg = art ? void 0 : hovered ? element.useButtonHoverColor || element.useButtonColor || "#0ea5e9" : element.useButtonColor || "#0ea5e9";
+                const defaultLabel = slotButtonMode === "buy" ? "Buy" : slotButtonMode === "sell" ? "Sell" : "Use";
+                let label = element.useButtonText || defaultLabel;
+                if (!element.useButtonText && (slotButtonMode === "buy" || slotButtonMode === "sell") && tradeCollection) {
+                  const entry = tradeCollection.entries.find((e) => e.itemId === it.id);
+                  const price = tradePrice(it, entry);
+                  if (price > 0) label = `${defaultLabel} ${price}`;
+                }
+                const onClick = (e) => {
+                  e.stopPropagation();
+                  if (blocked) return;
+                  slotButtonMode === "use" ? useItem(it) : tradeItem(it);
+                };
+                return /* @__PURE__ */ jsxRuntime2.jsx(
+                  "button",
+                  {
+                    onClick,
+                    disabled: blocked,
+                    onMouseEnter: () => setHoverUseId(it.id),
+                    onMouseLeave: () => setHoverUseId(null),
+                    className: "mt-0.5 px-1.5 py-0.5 relative overflow-hidden leading-tight",
+                    style: {
+                      borderRadius: `${element.useButtonRadius ?? 6}px`,
+                      background: art ? `center / cover no-repeat url(${art})` : bg,
+                      color: element.useButtonTextColor || "#ffffff",
+                      fontSize: "9px",
+                      opacity: blocked ? 0.4 : 1,
+                      cursor: blocked ? "not-allowed" : "pointer",
+                      ...element.useButtonFont ? fontSettingsToStyle(element.useButtonFont) : {}
+                    },
+                    children: label
+                  }
+                );
+              })()
+            ]
+          },
+          `slot-${i}`
+        );
+      }) })
+    ] });
   };
   const getTransitionStyle = (transitionIn, duration, delay) => {
     const durationMs = duration || 300;
@@ -8960,7 +9417,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     );
   };
-  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables }) => {
+  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
     var _a, _b;
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
@@ -9070,7 +9527,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       (screen.additionalBackgrounds || []).map((b) => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, void 0, b.transition, b.transitionDuration))
     ] });
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
-      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
+      var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
       if (element.conditions && element.conditions.length > 0) {
         const conditionsMet = evaluateConditions2(element.conditions, variables2);
@@ -9570,6 +10027,35 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
           ) }, el.id);
         }
+        case UIElementType.Inventory: {
+          const el = element;
+          const boundCollection = el.collectionId ? (_w = project2.itemCollections) == null ? void 0 : _w[el.collectionId] : void 0;
+          const allOwnedItems = () => Object.values(project2.items || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+          const invItems = !boundCollection ? allOwnedItems() : boundCollection.tracksOwnedItems && boundCollection.entries.length === 0 ? allOwnedItems() : boundCollection.entries.map((e) => {
+            var _a3;
+            const it = (_a3 = project2.items) == null ? void 0 : _a3[e.itemId];
+            return it ? { ...it, countVariableId: e.countVariableId } : null;
+          }).filter((x) => !!x);
+          const isShopList = !!boundCollection && !boundCollection.tracksOwnedItems;
+          const gridEl = isShopList ? { ...el, hideUnowned: false } : el;
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: /* @__PURE__ */ jsxRuntime2.jsx(
+            InventoryGridElement,
+            {
+              element: gridEl,
+              items: invItems,
+              variables: variables2,
+              project: project2,
+              assetResolver,
+              onAction,
+              onCommitVariables: onCommitVariables2,
+              inventorySlots,
+              onReorderSlots,
+              selectedItemId,
+              selectedElementId,
+              onSelectItem
+            }
+          ) }, el.id);
+        }
         default:
           return null;
       }
@@ -9593,7 +10079,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           // `hudAboveDialogue` is set, lift this overlay above them (but below flash/history z50)
           // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
           // areas stay pointer-events:none, so clicks there still fall through to advance dialogue.
-          ...isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {}
+          ...isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {},
+          // A pausing overlay (modal-style) sits ABOVE the dialogue box + backdrop so it
+          // reads as a popup over a frozen, dimmed scene.
+          ...screen.pauseSceneWhileOpen ? { zIndex: 46 } : {}
         },
         children: [
           !isPassThrough && getBackgroundElement(),
@@ -9824,6 +10313,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     });
     const [playerState, setPlayerState] = React2.useState(null);
     const playerStateRef = React2.useRef(null);
+    const pausingOverlayScreen = (() => {
+      for (let i = hudStack.length - 1; i >= 0; i--) {
+        const s = project.uiScreens[hudStack[i]];
+        if (s == null ? void 0 : s.pauseSceneWhileOpen) return s;
+      }
+      return null;
+    })();
+    const scenePaused = !!pausingOverlayScreen;
+    const [showVarWatcher, setShowVarWatcher] = React2.useState(false);
     const [, setTweenTick] = React2.useState(0);
     React2.useEffect(() => {
       const unsub = TweenManager.subscribe(() => {
@@ -9838,6 +10336,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return next;
       });
     }, []);
+    const restockPrevConditionRef = React2.useRef({});
+    const restockPrevWatchRef = React2.useRef({});
     const hudStackRef = React2.useRef([]);
     hudStackRef.current = hudStack;
     const projectRef = React2.useRef(project);
@@ -10279,7 +10779,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             commandStack: playerState.commandStack,
             variables: playerState.variables,
             stageState: playerState.stageState,
-            musicState: finalMusicState
+            musicState: finalMusicState,
+            inventorySlots: playerState.inventorySlots,
+            selectedItemId: playerState.selectedItemId,
+            selectedElementId: playerState.selectedElementId
           }
         };
         try {
@@ -10321,6 +10824,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
         const saveData = saves[slotNumber];
         if (!saveData) return;
+        restockPrevConditionRef.current = {};
+        restockPrevWatchRef.current = {};
         updatePlayerState({
           mode: "playing",
           currentSceneId: saveData.playerStateData.currentSceneId,
@@ -10329,6 +10834,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           commandStack: saveData.playerStateData.commandStack || [],
           variables: saveData.playerStateData.variables,
           stageState: saveData.playerStateData.stageState,
+          inventorySlots: saveData.playerStateData.inventorySlots,
+          selectedItemId: saveData.playerStateData.selectedItemId,
+          selectedElementId: saveData.playerStateData.selectedElementId,
           history: [],
           savedInputs: {},
           uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -10347,12 +10855,25 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const startNewGame = React2.useCallback(() => {
       var _a2;
       stopAndResetMusic();
+      restockPrevConditionRef.current = {};
+      restockPrevWatchRef.current = {};
       const initialVariables = { ...menuVariables };
       const persistentVars = loadPersistentVariables(project.id);
       Object.values(project.variables).forEach((v) => {
         if ((v.scope || "global") === "persistent" && persistentVars[v.id] !== void 0) {
           initialVariables[v.id] = persistentVars[v.id];
         }
+      });
+      const resetGameplayVar = (varId) => {
+        if (!varId) return;
+        const v = project.variables[varId];
+        if (!v || (v.scope || "global") === "persistent") return;
+        initialVariables[varId] = v.defaultValue;
+      };
+      Object.values(project.items || {}).forEach((it) => resetGameplayVar(it.countVariableId));
+      Object.values(project.itemCollections || {}).forEach((c) => {
+        resetGameplayVar(c.currencyVariableId);
+        (c.entries || []).forEach((e) => resetGameplayVar(e.countVariableId));
       });
       let startSceneId = project.startSceneId;
       const startScene = project.scenes[startSceneId];
@@ -10668,6 +11189,34 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return result;
       });
     }, [project.variables, getAssetNameFromId2, normalizeToBoolean]);
+    React2.useEffect(() => {
+      if (!playerState) return;
+      const collections = project.itemCollections;
+      if (!collections) return;
+      const gameVars = playerState.variables;
+      const restockUpdates = {};
+      for (const collection of Object.values(collections)) {
+        const rule = collection.restock;
+        if (!rule) continue;
+        if (rule.trigger === "condition") {
+          const isTrue = evaluateConditions2(rule.condition, gameVars);
+          const prev = restockPrevConditionRef.current[collection.id];
+          restockPrevConditionRef.current[collection.id] = isTrue;
+          if (prev === void 0) continue;
+          if (isTrue && !prev) Object.assign(restockUpdates, computeCollectionRestock(collection, project.variables));
+        } else if (rule.trigger === "variableChange" && rule.watchVariableId) {
+          const cur = gameVars[rule.watchVariableId];
+          const seen = Object.prototype.hasOwnProperty.call(restockPrevWatchRef.current, collection.id);
+          const prev = restockPrevWatchRef.current[collection.id];
+          restockPrevWatchRef.current[collection.id] = cur;
+          if (!seen) continue;
+          if (cur !== prev) Object.assign(restockUpdates, computeCollectionRestock(collection, project.variables));
+        }
+      }
+      if (Object.keys(restockUpdates).length > 0) {
+        updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, ...restockUpdates } } : null);
+      }
+    }, [playerState == null ? void 0 : playerState.variables, project.itemCollections, project.variables, evaluateConditions2, updatePlayerState]);
     const navigateToScene = React2.useCallback((targetSceneId, variables) => {
       let sceneToPlay = targetSceneId;
       let attempts = 0;
@@ -11411,6 +11960,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (playerState.uiState.isWaitingForInput || playerState.uiState.isTransitioning || playerState.uiState.choices) {
         return;
       }
+      if (scenePaused) {
+        return;
+      }
       if (hudStack.length > 0) {
         return;
       }
@@ -11853,6 +12405,24 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             case CommandType.TextInput: {
               const result = handleTextInput(command, commandContext);
               applyResult(result);
+              break;
+            }
+            case CommandType.GiveItem:
+            case CommandType.UseItem:
+            case CommandType.DestroyItem: {
+              applyResult(handleItemCommand(command, commandContext));
+              break;
+            }
+            case CommandType.RestockCollection: {
+              applyResult(handleRestockCollectionCommand(command, commandContext));
+              break;
+            }
+            case CommandType.BuyItem: {
+              applyResult(handleBuyItemCommand(command, commandContext));
+              break;
+            }
+            case CommandType.SellItem: {
+              applyResult(handleSellItemCommand(command, commandContext));
               break;
             }
             case CommandType.Jump: {
@@ -12306,6 +12876,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       })();
     }, [playerState, project, assetResolver, playSound, evaluateConditions2, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
     const handleDialogueAdvance = () => {
+      if (scenePaused) return;
       updatePlayerState((p) => {
         if (!p || !p.uiState.dialogue) return p;
         const scene = project.scenes[p.currentSceneId];
@@ -12586,7 +13157,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action);
     };
     const executeUIAction = (action) => {
-      var _a2, _b2, _c2;
+      var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l;
       if (!playerState && action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -12613,6 +13184,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (wasPaused && musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
             musicAudioRef.current.play().catch((e) => console.error("Failed to resume music:", e));
           }
+          if ((closingScreen == null ? void 0 : closingScreen.onCloseBehavior) === "runActions") {
+            (closingScreen.onCloseActions || []).forEach((a) => executeUIAction(a));
+          } else if ((closingScreen == null ? void 0 : closingScreen.onCloseBehavior) === "advance") {
+            updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+          }
         };
         if (closingId && transOut !== "none") {
           setClosingScreens((prev) => new Set(prev).add(closingId));
@@ -12634,7 +13210,14 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           return;
         }
         if (playerState && playerState.mode === "playing") {
+          const isClosing = hudStack.includes(targetId);
           setHudStack((s) => s.includes(targetId) ? s.filter((id) => id !== targetId) : [...s, targetId]);
+          if (isClosing) {
+            const cs = project.uiScreens[targetId];
+            const b = (cs == null ? void 0 : cs.onCloseBehavior) || "default";
+            if (b === "advance") updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+            else if (b === "runActions") ((cs == null ? void 0 : cs.onCloseActions) || []).forEach((a) => executeUIAction(a));
+          }
         } else {
           setScreenStack((s) => s.includes(targetId) ? s.filter((id) => id !== targetId) : [...s, targetId]);
         }
@@ -12723,10 +13306,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const transitionDuration = (closingScreen == null ? void 0 : closingScreen.transitionOutDuration) ?? (closingScreen == null ? void 0 : closingScreen.transitionDuration) ?? 300;
             const effectiveTransitionOut = (closingScreen == null ? void 0 : closingScreen.transitionOut) || "fade";
             const hasTransition = effectiveTransitionOut !== "none";
+            const closeBehavior = (closingScreen == null ? void 0 : closingScreen.onCloseBehavior) || "default";
+            const advanceOnClose = closeBehavior === "default" || closeBehavior === "advance";
+            const runCloseActions = () => {
+              if (closeBehavior === "runActions") ((closingScreen == null ? void 0 : closingScreen.onCloseActions) || []).forEach((a) => executeUIAction(a));
+            };
             if (hasTransition) {
               setClosingScreens((prev) => new Set(prev).add(closingScreenId));
               setTimeout(() => {
                 setHudStack((s) => s.slice(0, -1));
+                runCloseActions();
                 setClosingScreens((prev) => {
                   const next = new Set(prev);
                   next.delete(closingScreenId);
@@ -12745,7 +13334,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         ...p,
                         variables: mergedVariables,
                         // Merge UI variables into game variables
-                        currentIndex: p.currentIndex + 1,
+                        currentIndex: advanceOnClose ? p.currentIndex + 1 : p.currentIndex,
+                        // Explicit "advance" clears the waiting-dialogue gate so the next command actually runs
+                        // (a bare index bump does nothing while the loop is paused on isWaitingForInput/dialogue).
+                        ...closeBehavior === "advance" ? { uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : {},
                         stageState: {
                           ...p.stageState,
                           buttonOverlays: [],
@@ -12760,6 +13352,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }, transitionDuration);
             } else {
               setHudStack((s) => s.slice(0, -1));
+              runCloseActions();
               if (hudStack.length === 1) {
                 setTimeout(() => {
                   reactDom.flushSync(() => {
@@ -12774,7 +13367,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         ...p,
                         variables: mergedVariables,
                         // Merge UI variables into game variables
-                        currentIndex: p.currentIndex + 1,
+                        currentIndex: advanceOnClose ? p.currentIndex + 1 : p.currentIndex,
+                        // Explicit "advance" clears the waiting-dialogue gate so the next command actually runs
+                        // (a bare index bump does nothing while the loop is paused on isWaitingForInput/dialogue).
+                        ...closeBehavior === "advance" ? { uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : {},
                         stageState: {
                           ...p.stageState,
                           buttonOverlays: [],
@@ -13367,6 +13963,52 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }];
           return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
         });
+      } else if (action.type === UIActionType.GiveItem) {
+        const a = action;
+        const item = (_d2 = project.items) == null ? void 0 : _d2[a.itemId];
+        if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
+      } else if (action.type === UIActionType.UseItem) {
+        const a = action;
+        const item = (_e = project.items) == null ? void 0 : _e[a.itemId];
+        if (item) {
+          if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
+          (item.useEffect || []).forEach((eff) => executeUIAction(eff));
+        }
+      } else if (action.type === UIActionType.DestroyItem) {
+        const a = action;
+        const item = (_f = project.items) == null ? void 0 : _f[a.itemId];
+        if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
+      } else if (action.type === UIActionType.UseSelectedItem) {
+        const selId = (_g = playerStateRef.current) == null ? void 0 : _g.selectedItemId;
+        const item = selId ? (_h = project.items) == null ? void 0 : _h[selId] : void 0;
+        if (item && item.usable) {
+          if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
+          (item.useEffect || []).forEach((eff) => executeUIAction(eff));
+        }
+      } else if (action.type === UIActionType.RestockCollection) {
+        const a = action;
+        const collection = (_i = project.itemCollections) == null ? void 0 : _i[a.collectionId];
+        if (collection) {
+          const restocked = computeCollectionRestock(collection, project.variables);
+          Object.entries(restocked).forEach(([varId, val]) => {
+            executeUIAction({ type: UIActionType.SetVariable, variableId: varId, operator: "set", value: val });
+          });
+        }
+      } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
+        const a = action;
+        const collection = (_j = project.itemCollections) == null ? void 0 : _j[a.collectionId];
+        const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
+        const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
+        const itemId = isSelected ? (_k = playerStateRef.current) == null ? void 0 : _k.selectedItemId : a.itemId;
+        if (collection && itemId) {
+          const curVars = ((_l = playerStateRef.current) == null ? void 0 : _l.variables) || {};
+          const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
+          if (!("blocked" in res)) {
+            Object.entries(res.updates).forEach(([varId, val]) => {
+              executeUIAction({ type: UIActionType.SetVariable, variableId: varId, operator: "set", value: val });
+            });
+          }
+        }
       } else if (action.type === UIActionType.ShowLog) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, showHistory: true } } : null);
       } else if (action.type === UIActionType.ToggleAutoAdvance) {
@@ -13376,6 +14018,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       } else if (action.type === UIActionType.SkipBackward) {
         handleSkipBackward();
       }
+    };
+    const reorderSlots = (slots) => {
+      updatePlayerState((p) => p ? { ...p, inventorySlots: slots } : null);
+    };
+    const selectItem = (itemId, elementId) => {
+      updatePlayerState((p) => p ? { ...p, selectedItemId: itemId, selectedElementId: itemId ? elementId : null } : null);
     };
     const handleVariableChange = (variableId, value) => {
       runtimeDebugLog("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
@@ -13491,6 +14139,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         liveSfxRef.current.clear();
       };
     }, [playerState == null ? void 0 : playerState.currentSceneId]);
+    const handleUIActionRef = React2.useRef(handleUIAction);
+    handleUIActionRef.current = handleUIAction;
     React2.useEffect(() => {
       const handleKeyDown = (e) => {
         if (!playerState) return;
@@ -13513,6 +14163,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           e.preventDefault();
           handleSkipBackward();
           return;
+        }
+        if (playerState.mode === "playing" && !playerState.uiState.textInput && !playerState.uiState.showHistory && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          const ae = document.activeElement;
+          const typing = !!ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
+          if (!typing) {
+            const pressed = e.key.toLowerCase();
+            const target = Object.values(project.uiScreens).find((s) => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
+            if (target) {
+              e.preventDefault();
+              handleUIActionRef.current({ type: UIActionType.ToggleScreen, targetScreenId: target.id });
+              return;
+            }
+          }
         }
         if (e.key === "Escape") {
           if (playerState.uiState.showHistory) {
@@ -13542,17 +14205,17 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       };
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [playerState, project.ui.pauseScreenId, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
+    }, [playerState, project.ui.pauseScreenId, project.uiScreens, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
     React2.useEffect(() => {
-      if (!settings.autoAdvance || !playerState || playerState.mode !== "playing") return;
+      if (!settings.autoAdvance || !playerState || playerState.mode !== "playing" || scenePaused) return;
       if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
       const timer = setTimeout(() => {
         handleDialogueAdvance();
       }, settings.autoAdvanceDelay * 1e3);
       return () => clearTimeout(timer);
-    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, handleDialogueAdvance]);
+    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, scenePaused, handleDialogueAdvance]);
     React2.useEffect(() => {
-      if (!playerState || playerState.mode !== "playing" || !playerState.uiState.isSkipping) return;
+      if (!playerState || playerState.mode !== "playing" || !playerState.uiState.isSkipping || scenePaused) return;
       if (!settings.enableSkip) {
         updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
         return;
@@ -13567,7 +14230,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }, 50);
         return () => clearTimeout(timer);
       }
-    }, [playerState == null ? void 0 : playerState.uiState.isSkipping, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, settings.enableSkip, handleDialogueAdvance]);
+    }, [playerState == null ? void 0 : playerState.uiState.isSkipping, playerState == null ? void 0 : playerState.uiState.dialogue, playerState == null ? void 0 : playerState.uiState.choices, playerState == null ? void 0 : playerState.uiState.textInput, playerState == null ? void 0 : playerState.mode, scenePaused, settings.enableSkip, handleDialogueAdvance]);
     const renderStage = () => {
       var _a2, _b2;
       if (!playerState) return null;
@@ -14406,6 +15069,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             var _a2, _b2;
             const qmPosition = project.ui.quickMenuPosition ?? "above-dialogue";
             if (qmPosition === "hidden") return null;
+            if (uiState.showHistory) return null;
             const qmColor = project.ui.quickMenuColor ?? "#0f172a";
             const qmOpacity = project.ui.quickMenuOpacity ?? 75;
             const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
@@ -14446,7 +15110,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const qmButtonCfgs = project.ui.quickMenuButtons || {};
             const qmCustomButtons = project.ui.quickMenuCustomButtons || [];
             const qmCfgFor = (key) => qmButtonCfgs[key] || qmCustomButtons.find((cb) => cb.id === key);
-            const iconCls = "w-3.5 h-3.5";
+            const iconStyle = { width: "1.15em", height: "1.15em", flexShrink: 0 };
             const descriptors = [
               {
                 key: "skipBackward",
@@ -14458,7 +15122,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 disabled: !hasHistory,
                 title: "Skip Backward (Arrow Up)",
                 label: "Back",
-                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: iconCls, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M11 19l-7-7 7-7m8 14l-7-7 7-7" }) }),
+                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: iconStyle, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M11 19l-7-7 7-7m8 14l-7-7 7-7" }) }),
                 pillClassName: pillBase,
                 pillStyle: { ...commonPill, background: hasHistory ? qmBg : qmBgDisabled, border: defBorder, color: hasHistory ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.3)", cursor: hasHistory ? "pointer" : "default" }
               },
@@ -14471,7 +15135,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 },
                 title: "Text History (H)",
                 label: "Log",
-                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: iconCls, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" }) }),
+                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: iconStyle, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" }) }),
                 pillClassName: `${pillBase} hover:brightness-125`,
                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: "rgba(255,255,255,0.8)" }
               },
@@ -14484,7 +15148,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 },
                 title: "Auto-Advance",
                 label: "Auto",
-                icon: /* @__PURE__ */ jsxRuntime2.jsxs("svg", { className: iconCls, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: [
+                icon: /* @__PURE__ */ jsxRuntime2.jsxs("svg", { style: iconStyle, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: [
                   /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" }),
                   /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })
                 ] }),
@@ -14500,7 +15164,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 },
                 title: "Skip Forward (Ctrl)",
                 label: "Skip",
-                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: iconCls, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M13 5l7 7-7 7M5 5l7 7-7 7" }) }),
+                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: iconStyle, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M13 5l7 7-7 7M5 5l7 7-7 7" }) }),
                 pillClassName: pillBase,
                 pillStyle: { ...commonPill, background: uiState.isSkipping ? "rgba(239,68,68,0.3)" : qmBg, border: `1px solid ${uiState.isSkipping ? "rgba(239,68,68,0.5)" : "rgba(148,163,184,0.2)"}`, color: uiState.isSkipping ? "rgba(252,165,165,0.95)" : "rgba(255,255,255,0.8)" }
               },
@@ -14513,7 +15177,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 },
                 title: "Save Game",
                 label: "Save",
-                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: iconCls, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" }) }),
+                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: iconStyle, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" }) }),
                 pillClassName: `${pillBase} hover:brightness-125`,
                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: "rgba(255,255,255,0.8)" }
               },
@@ -14526,7 +15190,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 },
                 title: "Load Game",
                 label: "Load",
-                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { className: iconCls, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" }) }),
+                icon: /* @__PURE__ */ jsxRuntime2.jsx("svg", { style: iconStyle, fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, children: /* @__PURE__ */ jsxRuntime2.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" }) }),
                 pillClassName: `${pillBase} hover:brightness-125`,
                 pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: "rgba(255,255,255,0.8)" }
               }
@@ -14565,7 +15229,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 const bw = cfg.width ?? Math.max(4, slotW - 1);
                 const bh = cfg.height ?? qmHPct;
                 const fit = !!cfg.fitToContent;
-                const slotStyle = fit ? { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" } : { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "auto" };
+                const slotStyle = fit ? { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" } : { position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: "auto", overflow: "hidden" };
                 return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: slotStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
                   QuickMenuButtonEl,
                   {
@@ -14597,7 +15261,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   pointerEvents: "none",
                   zIndex: qmZIndex
                 },
-                children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "flex items-center gap-1.5", style: { pointerEvents: "auto" }, children: visible.map((d) => /* @__PURE__ */ jsxRuntime2.jsx(
+                children: /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "flex flex-wrap items-center justify-center gap-1.5", style: { pointerEvents: "auto", maxWidth: "100%" }, children: visible.map((d) => /* @__PURE__ */ jsxRuntime2.jsx(
                   QuickMenuButtonEl,
                   {
                     label: d.label,
@@ -14958,7 +15622,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               onVariableChange: handleVariableChange,
               isClosing,
               evaluateConditions: evaluateConditions2,
-              onCommitVariables: commitUiVariablesToPlayerState
+              onCommitVariables: commitUiVariablesToPlayerState,
+              inventorySlots: playerState == null ? void 0 : playerState.inventorySlots,
+              onReorderSlots: reorderSlots,
+              selectedItemId: playerState == null ? void 0 : playerState.selectedItemId,
+              selectedElementId: playerState == null ? void 0 : playerState.selectedElementId,
+              onSelectItem: selectItem
             },
             `${id}-${isClosing ? "closing" : "open"}`
           ));
@@ -14995,11 +15664,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               onVariableChange: handleVariableChange,
               isClosing,
               evaluateConditions: evaluateConditions2,
-              onCommitVariables: commitUiVariablesToPlayerState
+              onCommitVariables: commitUiVariablesToPlayerState,
+              inventorySlots: playerState == null ? void 0 : playerState.inventorySlots,
+              onReorderSlots: reorderSlots,
+              selectedItemId: playerState == null ? void 0 : playerState.selectedItemId,
+              selectedElementId: playerState == null ? void 0 : playerState.selectedElementId,
+              onSelectItem: selectItem
             },
             `${id}-${isClosing ? "closing" : "open"}`
           ));
         })(),
+        scenePaused && pausingOverlayScreen && /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            className: "absolute inset-0",
+            style: {
+              zIndex: 44,
+              background: pausingOverlayScreen.backdropOpacity ? `rgba(0,0,0,${pausingOverlayScreen.backdropOpacity})` : "transparent",
+              backdropFilter: pausingOverlayScreen.backdropBlur ? `blur(${pausingOverlayScreen.backdropBlur}px)` : void 0,
+              WebkitBackdropFilter: pausingOverlayScreen.backdropBlur ? `blur(${pausingOverlayScreen.backdropBlur}px)` : void 0
+            },
+            onClick: (e) => e.stopPropagation()
+          }
+        ),
         activeOverlayEffects.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx(
           ScreenOverlayEffects,
           {
@@ -15039,6 +15726,38 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           onCancel: () => setConfirmDialog(null)
         }
       ),
+      !isStandalone && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "absolute top-4 left-4 z-[10000] flex flex-col items-start gap-2 max-w-[18rem]", children: [
+        /* @__PURE__ */ jsxRuntime2.jsxs(
+          "button",
+          {
+            onClick: () => setShowVarWatcher((s) => !s),
+            className: `flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border shadow-lg ${showVarWatcher ? "bg-sky-500/90 border-sky-400/60 text-white" : "bg-slate-800/80 border-slate-600/60 text-slate-100 hover:bg-slate-700/90"}`,
+            title: "Variable Tracker — watch your variables' live values change as you play. (Editor only — not shown in exported games.)",
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(VariablesIcon, { className: "w-4 h-4 flex-shrink-0" }),
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { children: "Variables" })
+            ]
+          }
+        ),
+        showVarWatcher && (() => {
+          const defs = Object.values(project.variables);
+          if (defs.length === 0) return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-slate-400 italic", children: "No variables yet — add some in the Variables tab." }) });
+          const liveVars = (playerState == null ? void 0 : playerState.variables) || {};
+          const scopeColor = { local: "bg-emerald-400", global: "bg-sky-400", persistent: "bg-amber-400" };
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("ul", { className: "space-y-1", children: defs.map((def) => {
+            const raw = def.id in liveVars ? liveVars[def.id] : def.defaultValue;
+            const bl = resolveBoolLabels(def, "Yes", "No");
+            const display = def.type === "boolean" ? raw ? bl.yes : bl.no : String(raw);
+            return /* @__PURE__ */ jsxRuntime2.jsxs("li", { className: "flex items-center justify-between gap-3", children: [
+              /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "flex items-center gap-1.5 min-w-0", children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: `w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || "global"] || "bg-slate-400"}` }),
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-slate-300 truncate", title: def.name, children: def.name })
+              ] }),
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "font-mono text-white flex-shrink-0", children: display })
+            ] }, def.id);
+          }) }) });
+        })()
+      ] }),
       !hideCloseButton && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: handleClose, className: "absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50", children: /* @__PURE__ */ jsxRuntime2.jsx(XMarkIcon, { className: "w-8 h-8" }) })
     ] });
   };

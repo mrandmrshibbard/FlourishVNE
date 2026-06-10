@@ -30,6 +30,8 @@
   },
   "text": {
     "text": "Texto",
+    "liveText": "Atualizar em tempo real",
+    "liveTextDesc": "Reavalia quaisquer {variáveis} neste texto a cada instante, para que os valores exibidos sejam atualizados em tempo real conforme mudam.",
     "maxWidth": "Largura Máxima (px, opcional)",
     "maxHeight": "Altura Máxima (px, opcional)",
     "styling": "Estilo",
@@ -107,10 +109,19 @@
     "add": "Somar (+)",
     "subtract": "Subtrair (-)",
     "random": "Aleatório (Intervalo)",
-    "true": "Verdadeiro",
-    "false": "Falso",
+    "true": "Sim",
+    "false": "Não",
     "minValue": "Valor Mínimo",
-    "maxValue": "Valor Máximo"
+    "maxValue": "Valor Máximo",
+    "preview": {
+      "setNum": "Definir {{name}} como {{value}}",
+      "add": "Aumentar {{name}} em {{value}}",
+      "subtract": "Diminuir {{name}} em {{value}}",
+      "random": "Definir {{name}} como um número aleatório de {{min}} a {{max}}",
+      "setStr": "Definir {{name}} como “{{value}}”",
+      "boolOn": "Definir {{name}} como {{value}}",
+      "boolOff": "Definir {{name}} como {{value}}"
+    }
   },
   "choice": {
     "options": "Opções",
@@ -265,6 +276,8 @@
     "scaleHint": "1 = 100% do tamanho original",
     "flipHorizontally": "Espelhar Horizontalmente",
     "mirrorSprite": "Espelhar sprite horizontalmente",
+    "keepPosition": "Manter posição atual (apenas mudança de expressão)",
+    "keepPositionHint": "O personagem permanece onde já está no palco; apenas a expressão/pose muda.",
     "visualEffects": "Efeitos Visuais",
     "noEffects": "Nenhum efeito aplicado.",
     "remove": "Remover…",

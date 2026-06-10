@@ -963,6 +963,7 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
     // --- DATA HYDRATION: Ensure project structure is up-to-date ---
     if (!project.images) project.images = {};
     if (!project.fonts) project.fonts = {} as any;
+    if (!project.itemCollections) project.itemCollections = {};
     if (!project.scripts) project.scripts = {};
     if (!project.plugins) project.plugins = {};
     if (!project.pluginRegistry) project.pluginRegistry = {};

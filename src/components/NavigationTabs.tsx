@@ -1,9 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon } from './icons';
+import { ScenesIcon, CharactersIcon, UIScreensIcon, AssetsIcon, VariablesIcon, SettingsIcon, CommonEventsIcon, ArchiveBoxIcon } from './icons';
 import { isMultiWindowSupported, openManagerWindow, isManagerWindow, focusManagerWindow, type ManagerWindowType } from '../utils/windowManager';
 
-export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'settings';
+export type NavigationTab = 'scenes' | 'characters' | 'ui' | 'assets' | 'variables' | 'commonEvents' | 'systems' | 'settings';
 
 interface NavigationTabsProps {
     activeTab: NavigationTab;
@@ -14,6 +14,7 @@ interface NavigationTabsProps {
     assetCount: number;
     variableCount: number;
     commonEventCount: number;
+    systemItemCount: number;
 }
 
 // Rainbow colors for each tab
@@ -24,6 +25,7 @@ const tabColors: Record<NavigationTab, { base: string; glow: string; pastel: str
     assets: { base: 'var(--accent-mint)', glow: 'var(--shadow-glow-mint)', pastel: 'var(--pastel-mint)' },
     variables: { base: 'var(--accent-cyan)', glow: 'var(--shadow-glow-cyan)', pastel: 'var(--pastel-cyan)' },
     commonEvents: { base: '#f59e0b', glow: '0 0 20px rgba(245, 158, 11, 0.35)', pastel: '#fbbf24' },
+    systems: { base: 'var(--accent-lavender)', glow: '0 0 20px rgba(167, 139, 250, 0.35)', pastel: 'var(--pastel-lavender)' },
     settings: { base: 'var(--accent-sky)', glow: '0 0 20px rgba(102, 179, 255, 0.35)', pastel: 'var(--pastel-sky)' },
 };
 
@@ -35,7 +37,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     uiScreenCount,
     assetCount,
     variableCount,
-    commonEventCount
+    commonEventCount,
+    systemItemCount
 }) => {
     const isChildWindow = isManagerWindow();
     const { t } = useTranslation('nav');
@@ -98,6 +101,13 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 description: 'Reusable command sequences triggered from scenes'
             },
             {
+                id: 'systems',
+                label: 'Systems',
+                icon: <ArchiveBoxIcon className="w-4 h-4" />,
+                count: systemItemCount,
+                description: 'Opt-in gameplay systems like Inventory, and the item registry'
+            },
+            {
                 id: 'settings',
                 label: 'Settings',
                 icon: <SettingsIcon className="w-4 h-4" />,
@@ -114,7 +124,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
         uiScreenCount,
         assetCount,
         variableCount,
-        commonEventCount
+        commonEventCount,
+        systemItemCount
     ]);
 
     const handleOpenInWindow = (tabId: NavigationTab, event: React.MouseEvent) => {
@@ -123,7 +134,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const handleRightClick = (tabId: NavigationTab, event: React.MouseEvent) => {
-        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings') {
+        if (!isChildWindow && isMultiWindowSupported() && tabId !== 'settings' && tabId !== 'systems') {
             event.preventDefault();
             event.stopPropagation();
             focusManagerWindow(tabId as ManagerWindowType);
@@ -131,7 +142,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     };
 
     const focusableTabs = React.useMemo(
-        () => tabs.filter(tab => tab.id !== 'settings'),
+        () => tabs.filter(tab => tab.id !== 'settings' && tab.id !== 'systems'),
         [tabs]
     );
 
@@ -210,8 +221,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     }, [isChildWindow]);
 
     return (
-        <div 
-            className="flex items-center gap-2 p-2 rounded-2xl relative overflow-hidden"
+        <div
+            className="flex items-center gap-1 2xl:gap-2 p-1.5 2xl:p-2 rounded-2xl relative overflow-x-auto overflow-y-hidden max-w-full no-scrollbar"
             style={{
                 background: `linear-gradient(135deg, 
                     color-mix(in srgb, var(--bg-secondary) 90%, var(--accent-pink) 10%) 0%,
@@ -249,11 +260,11 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 const isActive = activeTab === tab.id;
 
                 return (
-                    <div key={tab.id} className="relative group">
+                    <div key={tab.id} className="relative group flex-shrink-0">
                         <button
                             onClick={() => onTabChange(tab.id)}
                             onContextMenu={(e) => handleRightClick(tab.id, e)}
-                            className={`relative flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                            className={`relative flex items-center gap-1.5 2xl:gap-2.5 px-2.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 ${
                                 isActive
                                     ? 'text-white scale-[1.02]'
                                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:scale-[1.02]'
@@ -299,8 +310,8 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                             
                             {/* Count badge with fun styling */}
                             {tab.count > 0 && (
-                                <span 
-                                    className={`relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                <span
+                                    className={`hidden 2xl:inline-block relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
                                         isActive
                                             ? 'bg-white/30 text-white shadow-sm'
                                             : 'text-[var(--text-secondary)]'
@@ -328,7 +339,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         </button>
                     
                         {/* Pop-out Window Button - Only show in main window */}
-                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && (
+                        {!isChildWindow && isMultiWindowSupported() && tab.id !== 'settings' && tab.id !== 'systems' && (
                             <button
                                 onClick={(e) => handleOpenInWindow(tab.id, e)}
                                 className="absolute -top-2 -right-2 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"

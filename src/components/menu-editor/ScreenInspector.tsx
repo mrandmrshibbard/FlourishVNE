@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 import Panel from '../ui/Panel';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
-import { VNUIScreen, VNHotZoneWinCondition, VNUIElement, UIElementType, UIHotSpotElement, UIImageElement, VNScreenBackgroundLayer } from '../../features/ui/types';
+import { VNUIScreen, VNScreenCategory, VNHotZoneWinCondition, VNUIElement, UIElementType, UIHotSpotElement, UIImageElement, VNScreenBackgroundLayer } from '../../features/ui/types';
+import { getScreenCategory, getScreenCategoryColor, SCREEN_CATEGORY_ORDER, SCREEN_CATEGORY_LABEL_KEY } from '../../utils/screenCategory';
 import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
 import WinConditionEditor from '../ui/WinConditionEditor';
+import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { isInteractiveElement } from '../../utils/interactiveElements';
 import { upsertOverlayEffect, type VNScreenOverlayEffectType, type VNEffectParams } from '../../types';
 import CollapsibleSection from '../ui/CollapsibleSection';
@@ -27,6 +29,35 @@ const ParamSlider: React.FC<{ label: string; value: number; onChange: (v: number
     </div>
 );
 
+/** Click-to-capture keyboard shortcut mapper. Click, then press a key; Esc cancels. */
+const HotkeyCapture: React.FC<{ value?: string; onChange: (key: string | undefined) => void; t: any }> = ({ value, onChange, t }) => {
+    const [listening, setListening] = React.useState(false);
+    React.useEffect(() => {
+        if (!listening) return;
+        const onKey = (e: KeyboardEvent) => {
+            e.preventDefault(); e.stopPropagation();
+            if (e.key === 'Escape') { setListening(false); return; }
+            if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return; // wait for a real key
+            onChange(e.key);
+            setListening(false);
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [listening, onChange]);
+    const display = (k?: string) => !k ? '' : (k === ' ' ? 'Space' : k.length === 1 ? k.toUpperCase() : k);
+    return (
+        <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setListening(l => !l)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${listening ? 'bg-sky-500/20 border-sky-500 text-sky-300 animate-pulse' : 'bg-[var(--bg-primary)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--border-default)]'}`}>
+                {listening ? t('screenInspector.openHotkeyPress') : (value ? `${t('screenInspector.openHotkeyKey')}: ${display(value)}` : t('screenInspector.openHotkeySet'))}
+            </button>
+            {value && !listening && (
+                <button type="button" onClick={() => onChange(undefined)} className="text-xs text-red-400 hover:text-red-300">{t('screenInspector.openHotkeyClear')}</button>
+            )}
+        </div>
+    );
+};
+
 const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
@@ -39,6 +70,16 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     };
 
     const isSpecialScreen = Object.values(project.ui).includes(screenId);
+
+    // Overlay/open-behavior controls only make sense for HUD or Overlay screens — gate the whole
+    // section behind the category to cut clutter on menus/system/regular screens. Safety: keep it
+    // visible if the screen already has any overlay setting, so nothing gets orphaned/hidden.
+    const screenCategory = getScreenCategory(screen, project);
+    const hasOverlaySettings = !!(screen.passThrough || screen.hudAboveDialogue || screen.pauseSceneWhileOpen
+        || screen.backdropOpacity || screen.backdropBlur
+        || (screen.onCloseBehavior && screen.onCloseBehavior !== 'default')
+        || (screen.onCloseActions && screen.onCloseActions.length));
+    const showOpenBehavior = screenCategory === 'hud' || screenCategory === 'overlay' || hasOverlaySettings;
 
     const currentEffects = screen.effects ?? [];
     const getIntensity = (type: VNScreenOverlayEffectType): number => {
@@ -87,6 +128,22 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
             <div className="flex-grow overflow-y-auto pr-1 space-y-2">
                 <FormField label={t('screenInspector.screenName')}>
                     <TextInput value={screen.name} onChange={e => updateScreen({ name: e.target.value })} disabled={isSpecialScreen} />
+                </FormField>
+
+                <FormField label={t('screenInspector.category')}>
+                    <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: getScreenCategoryColor(screen, project) }} />
+                        <Select value={screen.category || ''} onChange={e => updateScreen({ category: (e.target.value || undefined) as VNScreenCategory | undefined })} className="flex-1">
+                            <option value="">{t('screenCategory.auto', { name: t(SCREEN_CATEGORY_LABEL_KEY[getScreenCategory(screen, project)]) })}</option>
+                            {SCREEN_CATEGORY_ORDER.map(c => <option key={c} value={c}>{t(SCREEN_CATEGORY_LABEL_KEY[c])}</option>)}
+                        </Select>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">{t('screenInspector.categoryHint')}</p>
+                </FormField>
+
+                <FormField label={t('screenInspector.openHotkey')}>
+                    <HotkeyCapture value={screen.openHotkey} onChange={k => updateScreen({ openHotkey: k })} t={t} />
+                    <p className="text-[10px] text-slate-500 mt-1">{t('screenInspector.openHotkeyHint')}</p>
                 </FormField>
 
                 <CollapsibleSection title={t('screenInspector.background')} defaultOpen>
@@ -308,6 +365,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     </FormField>
                 </CollapsibleSection>
 
+                {showOpenBehavior && (
                 <CollapsibleSection title={t('screenInspector.overlayBehavior')}>
                     <FormField label={t('screenInspector.passThrough')}>
                         <input
@@ -329,7 +387,37 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             <p className="text-[10px] text-slate-500 mt-0.5">Renders this HUD overlay on top of the dialogue box and choices so players can open and interact with it mid-dialogue. Empty areas still pass clicks through to advance.</p>
                         </FormField>
                     )}
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <FormField label={t('screenInspector.pauseScene')}>
+                        <input type="checkbox" checked={!!screen.pauseSceneWhileOpen} onChange={e => updateScreen({ pauseSceneWhileOpen: e.target.checked || undefined })} className="w-5 h-5" />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.pauseSceneHint')}</p>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                        <FormField label={t('screenInspector.backdropDim')}>
+                            <TextInput type="number" min={0} max={1} step={0.05} value={screen.backdropOpacity ?? ''} placeholder="0"
+                                onChange={e => updateScreen({ backdropOpacity: e.target.value === '' ? undefined : Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })} />
+                        </FormField>
+                        <FormField label={t('screenInspector.backdropBlur')}>
+                            <TextInput type="number" min={0} step={1} value={screen.backdropBlur ?? ''} placeholder="0"
+                                onChange={e => updateScreen({ backdropBlur: e.target.value === '' ? undefined : Math.max(0, parseFloat(e.target.value) || 0) })} />
+                        </FormField>
+                    </div>
+                    <FormField label={t('screenInspector.onClose')}>
+                        <Select value={screen.onCloseBehavior || 'default'} onChange={e => updateScreen({ onCloseBehavior: e.target.value === 'default' ? undefined : (e.target.value as VNUIScreen['onCloseBehavior']) })}>
+                            <option value="default">{t('screenInspector.onCloseDefault')}</option>
+                            <option value="resume">{t('screenInspector.onCloseResume')}</option>
+                            <option value="advance">{t('screenInspector.onCloseAdvance')}</option>
+                            <option value="runActions">{t('screenInspector.onCloseRunActions')}</option>
+                        </Select>
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.onCloseHint')}</p>
+                    {screen.onCloseBehavior === 'runActions' && (
+                        <div className="mt-2">
+                            <UIActionsListEditor actions={screen.onCloseActions || []} project={project} onChange={actions => updateScreen({ onCloseActions: actions })} label={t('screenInspector.onCloseActions')} />
+                        </div>
+                    )}
                 </CollapsibleSection>
+                )}
 
                 <CollapsibleSection title="Parallax">
                     <FormField label="Mode">

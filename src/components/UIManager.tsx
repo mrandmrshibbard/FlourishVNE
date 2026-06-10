@@ -4,6 +4,7 @@ import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNUIScreen, VNUIElement, UIElementType } from '../features/ui/types';
+import { getScreenCategory, SCREEN_CATEGORY_COLORS, SCREEN_CATEGORY_LABEL_KEY } from '../utils/screenCategory';
 import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
 import InGameUIEditor from './InGameUIEditor';
@@ -210,12 +211,15 @@ const UIManager: React.FC<UIManagerProps> = ({
                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                 {uiScreensArray.map(screen => {
                                     const isSpecial = specialScreenIds.includes(screen.id);
+                                    const cat = getScreenCategory(screen, project);
                                     return (
                                         <UIScreenItem
                                             key={screen.id}
                                             screen={screen}
                                             isSelected={activeMenuScreenId === screen.id}
                                             isSpecial={isSpecial}
+                                            categoryColor={SCREEN_CATEGORY_COLORS[cat]}
+                                            categoryLabel={t(SCREEN_CATEGORY_LABEL_KEY[cat])}
                                             isRenaming={renamingId === screen.id}
                                             isExpanded={expandedScreens.has(screen.id)}
                                             selectedElementIds={activeMenuScreenId === screen.id ? selectedUIElementIds : []}
@@ -291,6 +295,8 @@ interface UIScreenItemProps {
     screen: VNUIScreen;
     isSelected: boolean;
     isSpecial: boolean;
+    categoryColor: string;
+    categoryLabel: string;
     isRenaming: boolean;
     isExpanded: boolean;
     selectedElementIds: VNID[];
@@ -307,6 +313,8 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
     screen,
     isSelected,
     isSpecial,
+    categoryColor,
+    categoryLabel,
     isRenaming,
     isExpanded,
     selectedElementIds,
@@ -353,7 +361,7 @@ const UIScreenItem: React.FC<UIScreenItemProps> = ({
                         : <ChevronRightIcon className="w-3 h-3" />}
                 </button>
 
-                <BookmarkSquareIcon className="w-4 h-4 text-[var(--text-secondary)] flex-shrink-0" />
+                <BookmarkSquareIcon className="w-4 h-4 flex-shrink-0" style={{ color: categoryColor }} title={categoryLabel} />
 
                 <div className="flex-grow truncate">
                     {isRenaming && !isSpecial ? (

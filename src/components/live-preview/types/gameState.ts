@@ -300,6 +300,15 @@ export interface PlayerState {
     variables: Record<VNID, string | number | boolean>;
     stageState: StageState;
     musicState: MusicState;
+    /** Player's positional inventory layout: index = slot, value = item id (or null for an empty
+     *  slot). Lets items sit in any slot with gaps. Persists in saves. Items not placed here fall
+     *  into the first empty slots in registry order. */
+    inventorySlots?: (VNID | null)[];
+    /** The item the player has selected in an inventory grid (for a "Use selected item" button). */
+    selectedItemId?: VNID | null;
+    /** Which grid element owns the current selection — so two grids showing the same item don't both
+     *  highlight it. The selected-item actions still use `selectedItemId` (the most recent selection). */
+    selectedElementId?: VNID | null;
     history: HistoryEntry[];
     /** Saved choice/input responses for skip-backward replay (keyed by `sceneId:commandIndex`) */
     savedInputs: Record<string, { type: 'choice'; choice: ChoiceOption } | { type: 'textInput'; value: string }>;

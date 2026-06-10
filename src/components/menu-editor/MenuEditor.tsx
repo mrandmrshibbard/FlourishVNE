@@ -5,7 +5,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
@@ -33,6 +33,63 @@ const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject
         console.error('Error rendering UI element:', element.id, err);
         return <div className="w-full h-full bg-red-500/20 text-red-300 text-xs p-1">{t('menuEditor.renderError')}</div>;
     }
+};
+
+// Inventory grid preview for the editor canvas. Mirrors the in-game grid: when no fixed row count is set,
+// it fills the element's box with (square) slots so the author sees the whole grid, not just filled cells.
+const InventoryPreview: React.FC<{ inv: UIInventoryGridElement, project: VNProject }> = ({ inv, project }) => {
+    const invCols = inv.columns || 4;
+    const colGap = inv.columnGap ?? inv.gap ?? 8;
+    const rowGap = inv.rowGap ?? inv.gap ?? 8;
+    const boundColl = inv.collectionId ? project.itemCollections?.[inv.collectionId] : undefined;
+    const everything = () => (Object.values(project.items || {}) as any[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const allItems = !boundColl
+        ? everything()
+        : (boundColl.tracksOwnedItems && boundColl.entries.length === 0)
+            ? everything()
+            : boundColl.entries.map(e => project.items?.[e.itemId]).filter(Boolean) as any[];
+    const invItems = inv.categoryFilter ? allItems.filter(it => it.category === inv.categoryFilter) : allItems;
+
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [autoRows, setAutoRows] = useState(0);
+    useLayoutEffect(() => {
+        if (inv.rows && inv.rows > 0) { setAutoRows(0); return; }
+        const node = containerRef.current;
+        if (!node) return;
+        const compute = () => {
+            const cs = window.getComputedStyle(node);
+            const availW = node.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+            const availH = node.clientHeight - parseFloat(cs.paddingTop || '0') - parseFloat(cs.paddingBottom || '0');
+            if (availW <= 0 || availH <= 0) return;
+            const slotW = (availW - colGap * (invCols - 1)) / invCols;
+            if (slotW <= 0) return;
+            setAutoRows(Math.max(1, Math.floor((availH + rowGap) / (slotW + rowGap))));
+        };
+        compute();
+        const ro = new ResizeObserver(compute);
+        ro.observe(node);
+        return () => ro.disconnect();
+    }, [inv.rows, invCols, colGap, rowGap]);
+
+    const minRows = (inv.rows && inv.rows > 0) ? inv.rows : Math.max(autoRows, 1);
+    const slots = Math.max(invItems.length, invCols * minRows);
+    return <div ref={containerRef} className="w-full h-full overflow-hidden rounded p-2" style={{ backgroundColor: inv.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}>
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${invCols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` }}>
+            {Array.from({ length: slots }).map((_, i) => {
+                const it = invItems[i];
+                const url = it?.icon?.id ? ((project.images[it.icon.id] as any)?.imageUrl || (project.videos?.[it.icon.id] as any)?.videoUrl) : null;
+                return <div key={i} className="flex flex-col items-center justify-center text-[10px] text-white/80 p-1" style={{
+                    backgroundColor: inv.slotColor || 'rgba(255,255,255,0.04)',
+                    borderRadius: `${inv.slotBorderRadius ?? 8}px`,
+                    border: `1px solid ${inv.slotBorderColor || '#4D3273'}`,
+                    aspectRatio: '1 / 1', overflow: 'hidden',
+                }}>
+                    {url ? <img src={url} alt="" className="w-full flex-1 min-h-0 object-contain" /> : <span className="flex-1 min-h-0" />}
+                    {it && inv.showNames !== false && <span className="truncate w-full text-center">{it.name}</span>}
+                </div>;
+            })}
+        </div>
+    </div>;
 };
 
 const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
@@ -384,6 +441,8 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                     })}
                 </div>
             </div>;
+        case UIElementType.Inventory:
+            return <InventoryPreview inv={element as UIInventoryGridElement} project={project} />;
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
@@ -908,6 +967,7 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
                     <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
+                    <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
                 </div>
             </div>
             

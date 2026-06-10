@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
 import { VNVariableType } from '../features/variables/types';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import Panel from './ui/Panel';
 import { FormField, Select, TextInput } from './ui/Form';
 import { TrashIcon } from './icons';
+import BooleanLabelEditor from './BooleanLabelEditor';
 
 const VariablePropertiesEditor: React.FC<{
     selectedVariableId: VNID;
@@ -69,16 +71,27 @@ const VariablePropertiesEditor: React.FC<{
                     </FormField>
                     <FormField label={t('varProps.defaultValue')}>
                         {variable.type === 'boolean' ? (
-                            <Select value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value === 'true' })}>
-                                <option value="true">{t('varProps.valTrue')}</option>
-                                <option value="false">{t('varProps.valFalse')}</option>
-                            </Select>
+                            (() => {
+                                const { yes, no } = resolveBoolLabels(variable, t('varProps.valTrue'), t('varProps.valFalse'));
+                                return (
+                                    <Select value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value === 'true' })}>
+                                        <option value="true">{yes}</option>
+                                        <option value="false">{no}</option>
+                                    </Select>
+                                );
+                            })()
                         ) : variable.type === 'number' ? (
                             <TextInput type="number" value={Number(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: parseFloat(e.target.value) || 0 })} />
                         ) : (
                             <TextInput value={String(variable.defaultValue)} onChange={e => updateVariable({ defaultValue: e.target.value })} />
                         )}
                     </FormField>
+                    {variable.type === 'boolean' && (
+                        <div className="mb-3">
+                            <BooleanLabelEditor trueLabel={variable.trueLabel} falseLabel={variable.falseLabel}
+                                onChange={updates => updateVariable(updates)} />
+                        </div>
+                    )}
                     {variable.type === 'number' && (
                         <FormField label={t('varProps.clampRange')}>
                             <div className="grid grid-cols-2 gap-2">

@@ -22,6 +22,7 @@ import { FormField, Select, TextInput, TextArea, ColorInput } from '../ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon } from '../icons';
 import AssetSelector from '../ui/AssetSelector';
 import ActionEditor from '../menu-editor/ActionEditor';
+import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import SearchableSelect from '../ui/SearchableSelect';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './fields';
@@ -30,6 +31,8 @@ import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspecto
 import { LayerControl, ParallaxDepthControl } from './LayerControl';
 import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './ChoiceAppearanceFields';
+import { SetVariablePreview } from './SetVariablePreview';
+import { resolveBoolLabels } from '../../features/variables/booleanLabels';
 
 export type UpdateCommand = (updates: Partial<VNCommand>) => void;
 
@@ -374,25 +377,17 @@ const ShowButtonGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowButtonComm
                 <h4 className="font-bold text-xs mb-1 mt-2 text-[var(--text-secondary)]">{t('button.primaryAction')}</h4>
                 <ActionEditor action={cmd.onClick} onActionChange={action => updateCommand({ onClick: action } as any)} />
                 <h4 className="font-bold text-xs mb-1 mt-2 text-[var(--text-secondary)]">{t('button.additionalActions')}</h4>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                     {actions.map((action, idx) => (
-                        <div key={idx} className="p-2 bg-[var(--bg-primary)] rounded space-y-2">
-                            <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs text-[var(--text-secondary)]">{t('button.action', { n: idx + 1 })}</span>
-                                <button onClick={() => updateCommand({ actions: actions.filter((_, i) => i !== idx) } as any)} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('button.removeAction')}>
-                                    <TrashIcon className="w-3 h-3" />
-                                </button>
-                            </div>
-                            <ActionEditor action={action} onActionChange={updated => { const next = [...actions]; next[idx] = updated; updateCommand({ actions: next } as any); }} />
-                        </div>
+                        <ActionCard key={idx} action={action} index={idx}
+                            onActionChange={updated => { const next = [...actions]; next[idx] = updated; updateCommand({ actions: next } as any); }}
+                            onRemove={() => updateCommand({ actions: actions.filter((_, i) => i !== idx) } as any)} />
                     ))}
                     <button onClick={() => updateCommand({ actions: [...actions, { type: UIActionType.GoToScreen, targetScreenId: '' } as VNUIAction] } as any)} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">
                         {t('button.addAction')}
                     </button>
                 </div>
-                <h4 className="font-bold text-xs mb-1 mt-2 text-[var(--text-secondary)]">{t('button.showConditions')}</h4>
-                <p className="text-xs text-[var(--text-secondary)] mb-1">{t('button.showConditionsHint')}</p>
-                <ConditionsEditor conditions={cmd.showConditions || []} project={project} onChange={(cs) => updateCommand({ showConditions: cs } as any)} />
+                <ConditionsEditor collapsible title={t('button.showConditions')} hint={t('button.showConditionsHint')} conditions={cmd.showConditions || []} project={project} onChange={(cs) => updateCommand({ showConditions: cs } as any)} />
             </>;
         }
         case 'animation':
@@ -410,7 +405,16 @@ const ShowButtonGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowButtonComm
 const ShowTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowTextCommand; updateCommand: UpdateCommand; t: any }> = ({ groupId, cmd, updateCommand, t }) => {
     switch (groupId) {
         case 'content':
-            return <FormField label={t('text.text')}><TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} /></FormField>;
+            return <>
+                <FormField label={t('text.text')}><TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} /></FormField>
+                <label className="flex items-start gap-2 text-xs mt-1 cursor-pointer">
+                    <input type="checkbox" checked={!!cmd.liveText} onChange={e => updateCommand({ liveText: e.target.checked } as any)} className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                        <span className="font-bold text-[var(--text-primary)]">{t('text.liveText')}</span><br />
+                        <span className="text-[var(--text-muted)]">{t('text.liveTextDesc')}</span>
+                    </span>
+                </label>
+            </>;
         case 'transform':
             return <>
                 <div className="grid grid-cols-2 gap-1">
@@ -593,12 +597,18 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
         case 'transform': {
             const isSlide = cmd.transition === 'slide';
             return <>
-                {isSlide ? <>
-                    <PositionInputs label={t('shared.startPosition')} position={cmd.startPosition || cmd.position} onChange={pos => updateCommand({ startPosition: pos } as any)} />
-                    <PositionInputs label={t('shared.endPosition')} position={cmd.endPosition || cmd.position} onChange={pos => updateCommand({ endPosition: pos } as any)} />
-                </> : (
-                    <PositionInputs label={t('shared.position')} position={cmd.position} onChange={pos => updateCommand({ position: pos } as any)} />
-                )}
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={!!cmd.keepPosition} onChange={e => updateCommand({ keepPosition: e.target.checked || undefined } as any)} className="cursor-pointer" />
+                    {t('character.keepPosition')}
+                </label>
+                {cmd.keepPosition
+                    ? <p className="text-[11px] text-[var(--text-muted)] -mt-1">{t('character.keepPositionHint')}</p>
+                    : (isSlide ? <>
+                        <PositionInputs label={t('shared.startPosition')} position={cmd.startPosition || cmd.position} onChange={pos => updateCommand({ startPosition: pos } as any)} />
+                        <PositionInputs label={t('shared.endPosition')} position={cmd.endPosition || cmd.position} onChange={pos => updateCommand({ endPosition: pos } as any)} />
+                    </> : (
+                        <PositionInputs label={t('shared.position')} position={cmd.position} onChange={pos => updateCommand({ position: pos } as any)} />
+                    ))}
                 <FormField label={t('shared.scale')}>
                     <div className="flex items-center gap-2">
                         <input type="range" min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) } as any)} className="flex-1" />
@@ -770,8 +780,8 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
             <FormField label={t('vars.value')}>
                 {variable?.type === 'boolean' ? (
                     <Select value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value === 'true' } as any)}>
-                        <option value="true">{t('vars.true')}</option>
-                        <option value="false">{t('vars.false')}</option>
+                        <option value="true">{resolveBoolLabels(variable, t('vars.true'), t('vars.false')).yes}</option>
+                        <option value="false">{resolveBoolLabels(variable, t('vars.true'), t('vars.false')).no}</option>
                     </Select>
                 ) : variable?.type === 'number' ? (
                     <TextInput type="number" value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value } as any)} />
@@ -780,6 +790,7 @@ const SetVariableGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 )}
             </FormField>
         )}
+        <SetVariablePreview variable={variable} operator={cmd.operator} value={cmd.value} randomMin={cmd.randomMin} randomMax={cmd.randomMax} />
     </>;
 };
 
@@ -982,15 +993,11 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
         case 'logic':
             return <>
                 <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Actions</h4>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                     {acts.map((action: any, idx: number) => (
-                        <div key={idx} className="p-2 bg-[var(--bg-primary)] rounded space-y-2">
-                            <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs text-[var(--text-secondary)]">{t('button.action', { n: idx + 1 })}</span>
-                                <button onClick={() => updateCommand({ actions: acts.filter((_: any, i: number) => i !== idx) } as any)} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('button.removeAction')}><TrashIcon className="w-3 h-3" /></button>
-                            </div>
-                            <ActionEditor action={action} onActionChange={(updated: any) => { const next = [...acts]; next[idx] = updated; updateCommand({ actions: next } as any); }} />
-                        </div>
+                        <ActionCard key={idx} action={action} index={idx}
+                            onActionChange={(updated: any) => { const next = [...acts]; next[idx] = updated; updateCommand({ actions: next } as any); }}
+                            onRemove={() => updateCommand({ actions: acts.filter((_: any, i: number) => i !== idx) } as any)} />
                     ))}
                     <button onClick={() => updateCommand({ actions: [...acts, { type: 'SetVariable' } as any] } as any)} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">{t('button.addAction')}</button>
                 </div>
@@ -1582,14 +1589,10 @@ const ChoiceGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand
                     <p className="text-xs text-[var(--text-muted)] mb-2">{t('choice.conditionsHint')}</p>
                     <ConditionsEditor conditions={mo.conditions} project={project} onChange={(cs) => updateOption(i, { conditions: cs })} />
                     <h4 className="font-bold text-xs mt-3 mb-1 text-[var(--text-secondary)]">{t('choice.actions')}</h4>
-                    <div className="space-y-2 pl-2 border-l-2 border-[var(--border-default)]">
+                    <div className="space-y-1.5">
                         {(mo.actions || []).map((action: any, ai: number) => (
-                            <div key={ai} className="p-1 bg-[var(--bg-primary)] rounded-md">
-                                <div className="flex justify-end -mb-1">
-                                    <button onClick={() => removeAction(i, ai)} className="text-red-400 hover:text-red-300 p-0.5" title={t('choice.removeOption')}><XMarkIcon className="w-3.5 h-3.5" /></button>
-                                </div>
-                                <ActionEditor action={action} onActionChange={(na) => setAction(i, ai, na)} />
-                            </div>
+                            <ActionCard key={ai} action={action} index={ai}
+                                onActionChange={(na) => setAction(i, ai, na)} onRemove={() => removeAction(i, ai)} />
                         ))}
                         <div className="flex gap-1 pt-1">
                             <button onClick={() => addAnyAction(i)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded flex items-center gap-1"><PlusIcon className="w-3 h-3" />{t('choice.addAction')}</button>

@@ -44,6 +44,9 @@ import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEff
 import { CommandGroupAccordion } from './inspector/CommandGroupFields';
 import { isCommandGrouped } from './inspector/inspectorGroups';
 import { ChoiceLayoutSelect, ChoiceOptionAppearance } from './inspector/ChoiceAppearanceFields';
+import { SetVariablePreview } from './inspector/SetVariablePreview';
+import ActionCard from './menu-editor/ActionCard';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 
 export const useCommandDefaults = (
@@ -112,6 +115,33 @@ export const useCommandDefaults = (
                     }
                 }
                 break;
+            }
+            case CommandType.GiveItem:
+            case CommandType.UseItem:
+            case CommandType.DestroyItem: {
+                const c = command as any;
+                if (!c.itemId) {
+                    const firstItem = Object.keys(project.items || {})[0];
+                    if (firstItem) updateCommand({ itemId: firstItem } as any);
+                }
+                return;
+            }
+            case CommandType.RestockCollection: {
+                const c = command as any;
+                if (!c.collectionId) {
+                    const firstColl = Object.keys(project.itemCollections || {})[0];
+                    if (firstColl) updateCommand({ collectionId: firstColl } as any);
+                }
+                return;
+            }
+            case CommandType.BuyItem:
+            case CommandType.SellItem: {
+                const c = command as any;
+                const patch: any = {};
+                if (!c.collectionId) patch.collectionId = Object.keys(project.itemCollections || {})[0] || '';
+                if (!c.itemId) patch.itemId = Object.keys(project.items || {})[0] || '';
+                if (Object.keys(patch).length) updateCommand(patch);
+                return;
             }
             case CommandType.SetVariable: {
                 const setVariable = command as SetVariableCommand;
@@ -497,7 +527,13 @@ const PropertiesInspector: React.FC<{
                         />
                     </FormField>
                     
-                    {isSlideTransition ? (
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                        <input type="checkbox" checked={!!cmd.keepPosition} onChange={(e) => updateCommand({ keepPosition: e.target.checked || undefined } as any)} className="cursor-pointer" />
+                        {t('character.keepPosition')}
+                    </label>
+                    {cmd.keepPosition ? (
+                        <p className="text-[11px] text-[var(--text-muted)]">{t('character.keepPositionHint')}</p>
+                    ) : isSlideTransition ? (
                         <>
                             <PositionInputs
                                 label={t('shared.startPosition')}
@@ -647,14 +683,10 @@ const PropertiesInspector: React.FC<{
                                <ConditionsEditor conditions={migratedOpt.conditions} project={project} onChange={(cs) => updateOption(i, { conditions: cs })}/>
                                
                                 <h4 className="font-bold text-xs mt-3 mb-1 text-[var(--text-secondary)]">{t('choice.actions')}</h4>
-                                <div className="space-y-2 pl-2 border-l-2 border-[var(--border-default)]">
+                                <div className="space-y-1.5">
                                     {(migratedOpt.actions || []).map((action, actionIndex) => (
-                                        <div key={actionIndex} className="p-1 bg-[var(--bg-primary)] rounded-md">
-                                            <div className="flex justify-end -mb-1">
-                                                <button onClick={() => removeAction(i, actionIndex)} className="text-red-400 hover:text-red-300 p-0.5" title={t('choice.removeOption')}><XMarkIcon className="w-3.5 h-3.5" /></button>
-                                            </div>
-                                            <ActionEditor action={action} onActionChange={(na) => setAction(i, actionIndex, na)} />
-                                        </div>
+                                        <ActionCard key={actionIndex} action={action} index={actionIndex}
+                                            onActionChange={(na) => setAction(i, actionIndex, na)} onRemove={() => removeAction(i, actionIndex)} />
                                     ))}
                                     <div className="flex gap-1 pt-1">
                                        <button onClick={() => addAnyAction(i)} className="text-xs bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded">{t('choice.addAction')}</button>
@@ -848,8 +880,8 @@ const PropertiesInspector: React.FC<{
                         <FormField label={t('vars.value')}>
                             {variable?.type === 'boolean' ? (
                                 <Select value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value === 'true' })}>
-                                    <option value="true">{t('vars.true')}</option>
-                                    <option value="false">{t('vars.false')}</option>
+                                    <option value="true">{resolveBoolLabels(variable, t('vars.true'), t('vars.false')).yes}</option>
+                                    <option value="false">{resolveBoolLabels(variable, t('vars.true'), t('vars.false')).no}</option>
                                 </Select>
                             ) : variable?.type === 'number' ? (
                                 <TextInput type="number" value={String(cmd.value)} onChange={e => updateCommand({ value: e.target.value })}/>
@@ -858,6 +890,65 @@ const PropertiesInspector: React.FC<{
                             )}
                         </FormField>
                     )}
+                    <SetVariablePreview variable={variable} operator={cmd.operator} value={cmd.value} randomMin={cmd.randomMin} randomMax={cmd.randomMax} />
+                </>;
+            }
+            case CommandType.GiveItem:
+            case CommandType.UseItem:
+            case CommandType.DestroyItem: {
+                const c = command as any;
+                const itemArr = Object.values(project.items || {}) as any[];
+                const showQty = command.type !== CommandType.UseItem && !c.all;
+                return <>
+                    <FormField label="Item">
+                        <Select value={c.itemId || ''} onChange={e => updateCommand({ itemId: e.target.value } as any)}>
+                            {itemArr.length === 0 && <option value="">No items defined (Systems → Items)</option>}
+                            {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                        </Select>
+                    </FormField>
+                    {command.type === CommandType.DestroyItem && (
+                        <label className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
+                            <input type="checkbox" checked={!!c.all} onChange={e => updateCommand({ all: e.target.checked || undefined } as any)} /> Destroy all
+                        </label>
+                    )}
+                    {showQty && (
+                        <FormField label="Quantity"><TextInput type="number" min="1" value={String(c.quantity ?? 1)} onChange={e => updateCommand({ quantity: Math.max(1, parseInt(e.target.value, 10) || 1) } as any)} /></FormField>
+                    )}
+                </>;
+            }
+            case CommandType.RestockCollection: {
+                const c = command as any;
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                return <>
+                    <FormField label="Item list">
+                        <Select value={c.collectionId || ''} onChange={e => updateCommand({ collectionId: e.target.value } as any)}>
+                            {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                            {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                        </Select>
+                    </FormField>
+                    <p className="text-[11px] text-[var(--text-muted)]">Refills this list's stock to its restock amounts (set per list in Systems → Inventory).</p>
+                </>;
+            }
+            case CommandType.BuyItem:
+            case CommandType.SellItem: {
+                const c = command as any;
+                const collArr = Object.values(project.itemCollections || {}) as any[];
+                const itemArr = Object.values(project.items || {}) as any[];
+                const verb = command.type === CommandType.BuyItem ? 'buy from' : 'sell to';
+                return <>
+                    <FormField label="Item">
+                        <Select value={c.itemId || ''} onChange={e => updateCommand({ itemId: e.target.value } as any)}>
+                            {itemArr.length === 0 && <option value="">No items defined (Systems → Items)</option>}
+                            {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                        </Select>
+                    </FormField>
+                    <FormField label={`Shop list to ${verb}`}>
+                        <Select value={c.collectionId || ''} onChange={e => updateCommand({ collectionId: e.target.value } as any)}>
+                            {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                            {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                        </Select>
+                    </FormField>
+                    <p className="text-[11px] text-[var(--text-muted)]">Uses the list's currency + the item's price. No-op if the player can't afford it / it's out of stock / they don't own it.</p>
                 </>;
             }
             case CommandType.TextInput: {
@@ -1089,6 +1180,13 @@ const PropertiesInspector: React.FC<{
                     <FormField label={t('text.text')}>
                         <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value })} />
                     </FormField>
+                    <label className="flex items-start gap-2 text-xs mb-2 cursor-pointer">
+                        <input type="checkbox" checked={!!cmd.liveText} onChange={e => updateCommand({ liveText: e.target.checked })} className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                            <span className="font-bold text-[var(--text-primary)]">{t('text.liveText')}</span><br />
+                            <span className="text-[var(--text-muted)]">{t('text.liveTextDesc')}</span>
+                        </span>
+                    </label>
                     <div className="grid grid-cols-2 gap-1">
                         <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                         <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
@@ -1368,33 +1466,18 @@ const PropertiesInspector: React.FC<{
                     <ActionEditor action={cmd.onClick} onActionChange={action => updateCommand({ onClick: action })} />
 
                     <h4 className="font-bold text-xs mb-2 mt-2 text-[var(--text-secondary)]">{t('button.additionalActions')}</h4>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         {(cmd.actions || []).map((action, idx) => (
-                            <div key={idx} className="p-2 bg-[var(--bg-primary)] rounded space-y-2">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs text-[var(--text-secondary)]">{t('button.action', { n: idx + 1 })}</span>
-                                    <button
-                                        onClick={() => {
-                                            const newActions = (cmd.actions || []).filter((_, i) => i !== idx);
-                                            updateCommand({ actions: newActions });
-                                        }}
-                                        className="p-1 hover:bg-red-600 rounded transition-colors"
-                                        title={t('button.removeAction')}
-                                    >
-                                        <TrashIcon className="w-3 h-3" />
-                                    </button>
-                                </div>
-                                <ActionEditor 
-                                    action={action} 
-                                    onActionChange={updatedAction => {
-                                        const newActions = [...(cmd.actions || [])];
-                                        newActions[idx] = updatedAction;
-                                        updateCommand({ actions: newActions });
-                                    }} 
-                                />
-                            </div>
+                            <ActionCard key={idx} action={action} index={idx}
+                                onActionChange={updatedAction => {
+                                    const newActions = [...(cmd.actions || [])];
+                                    newActions[idx] = updatedAction;
+                                    updateCommand({ actions: newActions });
+                                }}
+                                onRemove={() => updateCommand({ actions: (cmd.actions || []).filter((_, i) => i !== idx) })}
+                            />
                         ))}
-                        <button 
+                        <button
                             onClick={() => {
                                 const newAction = { type: 'GoToScreen', targetScreenId: '' } as any;
                                 updateCommand({ actions: [...(cmd.actions || []), newAction] });
@@ -1412,9 +1495,10 @@ const PropertiesInspector: React.FC<{
                     <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand} />
 
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('button.showConditions')}</h4>
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">{t('button.showConditionsHint')}</p>
                     <ConditionsEditor
+                        collapsible
+                        title={t('button.showConditions')}
+                        hint={t('button.showConditionsHint')}
                         conditions={cmd.showConditions || []}
                         project={project}
                         onChange={(cs) => updateCommand({ showConditions: cs })}
@@ -1495,21 +1579,16 @@ const PropertiesInspector: React.FC<{
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
                     <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Actions</h4>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                         {acts.map((action, idx) => (
-                            <div key={idx} className="p-2 bg-[var(--bg-primary)] rounded space-y-2">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs text-[var(--text-secondary)]">{t('button.action', { n: idx + 1 })}</span>
-                                    <button onClick={() => updateCommand({ actions: acts.filter((_, i) => i !== idx) })} className="p-1 hover:bg-red-600 rounded transition-colors" title={t('button.removeAction')}><TrashIcon className="w-3 h-3" /></button>
-                                </div>
-                                <ActionEditor action={action} onActionChange={updated => { const next = [...acts]; next[idx] = updated; updateCommand({ actions: next }); }} />
-                            </div>
+                            <ActionCard key={idx} action={action} index={idx}
+                                onActionChange={updated => { const next = [...acts]; next[idx] = updated; updateCommand({ actions: next }); }}
+                                onRemove={() => updateCommand({ actions: acts.filter((_, i) => i !== idx) })} />
                         ))}
                         <button onClick={() => updateCommand({ actions: [...acts, { type: 'SetVariable' } as any] })} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">{t('button.addAction')}</button>
                     </div>
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('footer.conditions')}</h4>
-                    <ConditionsEditor conditions={cmd.conditions} project={project} onChange={cs => updateCommand({ conditions: cs })} />
+                    <ConditionsEditor collapsible title={t('footer.conditions')} conditions={cmd.conditions} project={project} onChange={cs => updateCommand({ conditions: cs })} />
                 </>;
             }
             case CommandType.HideHotSpot: {
@@ -2450,9 +2529,10 @@ const PropertiesInspector: React.FC<{
                 {!isCommandGrouped(command) && (
                 <>
                     <hr className="border-[var(--border-subtle)] my-4" />
-                    <h3 className="font-bold text-[var(--text-primary)]">{t('footer.conditions')}</h3>
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">{t('footer.conditionsDesc')}</p>
                     <ConditionsEditor
+                        collapsible
+                        title={t('footer.conditions')}
+                        hint={t('footer.conditionsDesc')}
                         conditions={command.conditions}
                         project={project}
                         onChange={(cs) => updateCommand({ conditions: cs })}
