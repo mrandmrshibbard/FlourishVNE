@@ -222,7 +222,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
 
     return (
         <div
-            className="flex items-center gap-1 2xl:gap-2 p-1.5 2xl:p-2 rounded-2xl relative overflow-x-auto overflow-y-hidden max-w-full no-scrollbar"
+            className="flex items-center gap-1 2xl:gap-2 p-1.5 2xl:p-2 rounded-2xl relative overflow-x-auto overflow-y-hidden min-w-0 max-w-full no-scrollbar"
             style={{
                 background: `linear-gradient(135deg, 
                     color-mix(in srgb, var(--bg-secondary) 90%, var(--accent-pink) 10%) 0%,

@@ -16072,7 +16072,7 @@ export const GAME_ENGINE_BUNDLE = `var GameEngine = (function(exports, jsxRuntim
     /**
      * Get version information
      */
-    version: "2.8.5",
+    version: "2.9.0",
     /**
      * Check if the engine is ready
      */
