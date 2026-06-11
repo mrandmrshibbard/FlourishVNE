@@ -304,10 +304,48 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!changed) return project;
     return { ...project, scenes, ...commonEvents ? { commonEvents } : {} };
   }
+  function migrateItemCountVariableBounds(project) {
+    var _a, _b;
+    if (!project || !project.variables) return project;
+    if (!project.items && !project.itemCollections) return project;
+    let changed = false;
+    const variables = { ...project.variables };
+    const ensureNumberVar = (id, name, internal) => {
+      if (!id) return;
+      const existing = variables[id];
+      if (!existing) {
+        variables[id] = {
+          id,
+          name,
+          type: "number",
+          defaultValue: 0,
+          scope: "global",
+          min: 0,
+          ...internal ? { isInternal: true } : {}
+        };
+        changed = true;
+      } else if (existing.type === "number" && existing.min === void 0) {
+        variables[id] = { ...existing, min: 0 };
+        changed = true;
+      }
+    };
+    for (const item of Object.values(project.items || {})) {
+      if (item == null ? void 0 : item.countVariableId) ensureNumberVar(item.countVariableId, item.name || "Item", false);
+    }
+    for (const collection of Object.values(project.itemCollections || {})) {
+      for (const entry of (collection == null ? void 0 : collection.entries) || []) {
+        if (entry == null ? void 0 : entry.countVariableId) {
+          const itemName = ((_b = (_a = project.items) == null ? void 0 : _a[entry.itemId]) == null ? void 0 : _b.name) || "Item";
+          ensureNumberVar(entry.countVariableId, `${itemName} — ${collection.name || "List"}`, true);
+        }
+      }
+    }
+    return changed ? { ...project, variables } : project;
+  }
   const projectReducer = (state, action) => {
     switch (action.type) {
       case "SET_PROJECT":
-        return migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload));
+        return migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)));
       case "UPDATE_PROJECT": {
         return {
           ...state,
@@ -360,6 +398,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["HideImage"] = "HideImage";
     CommandType2["ShowButton"] = "ShowButton";
     CommandType2["HideButton"] = "HideButton";
+    CommandType2["ShowItem"] = "ShowItem";
     CommandType2["CreditRoll"] = "CreditRoll";
     CommandType2["Group"] = "Group";
     CommandType2["RunScript"] = "RunScript";
@@ -382,6 +421,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     "ShowImage",
     "ShowText",
     "ShowButton",
+    "ShowItem",
     "ShowCharacter",
     "ShowHotSpot"
     /* ShowHotSpot */
@@ -2595,7 +2635,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const toast = useToast();
     const [history, setHistory] = React2.useState(() => ({
       past: [],
-      present: migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)),
+      present: migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject))),
       future: []
     }));
     const [lastAutoSave, setLastAutoSave] = React2.useState(null);
@@ -5828,6 +5868,71 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       callback
     };
   }
+  function handleShowItem(command, context) {
+    var _a;
+    const { playerState, project, assetResolver, evaluateConditions: evaluateConditions2 } = context;
+    TweenManager.cancelForTarget(command.id, "button");
+    if (command.pickUpOnce !== false && (playerState.pickedUpItems || []).includes(command.id)) {
+      return { advance: true };
+    }
+    if (!command.liveConditions && command.showConditions && command.showConditions.length > 0) {
+      if (!evaluateConditions2(command.showConditions, playerState.variables)) {
+        return { advance: true };
+      }
+    }
+    const item = (_a = project.items) == null ? void 0 : _a[command.itemId];
+    const visual = command.image || (item == null ? void 0 : item.icon) || null;
+    const give = command.giveOnClick !== false;
+    const extra = command.actions ?? [];
+    const overlay = {
+      id: command.id,
+      layer: command.layer,
+      parallaxDepth: command.parallaxDepth,
+      text: "",
+      x: command.x,
+      y: command.y,
+      width: command.width || 10,
+      height: command.height || 10,
+      anchorX: command.anchorX ?? 0.5,
+      anchorY: command.anchorY ?? 0.5,
+      backgroundColor: "transparent",
+      textColor: "#ffffff",
+      fontSize: 0,
+      fontWeight: "normal",
+      borderRadius: 0,
+      opacity: command.opacity ?? 1,
+      imageUrl: visual ? assetResolver(visual.id, visual.type) : null,
+      hoverImageUrl: command.hoverImage ? assetResolver(command.hoverImage.id, command.hoverImage.type) : null,
+      // The give is applied directly on click (see giveItemId below) — reliable, atomic with the
+      // overlay removal — so it is NOT a click action. Click actions are only the author's extras.
+      onClick: extra[0] ?? { type: UIActionType.None },
+      actions: extra.slice(1),
+      clickSound: command.clickSound ?? null,
+      rotation: command.rotation,
+      flipX: command.flipX,
+      flipY: command.flipY,
+      transition: command.transition !== "instant" ? command.transition : void 0,
+      duration: command.duration || 0.3,
+      action: "show",
+      removeAfterClick: command.removeAfterPickup !== false,
+      pickUpOnceId: command.pickUpOnce !== false ? command.id : null,
+      giveItemId: give ? command.itemId : null,
+      giveQuantity: command.quantity ?? 1,
+      ...command.liveConditions ? { conditions: command.conditions, live: true } : {}
+    };
+    const hasTransition = command.transition && command.transition !== "instant";
+    return {
+      advance: !hasTransition,
+      updates: {
+        stageState: {
+          ...playerState.stageState,
+          buttonOverlays: [...playerState.stageState.buttonOverlays, overlay]
+        }
+      },
+      delay: hasTransition ? (command.duration ?? 0.3) * 1e3 + 100 : 0,
+      callback: hasTransition ? context.advance : void 0
+    };
+  }
   function handleHideButton(command, context) {
     const { playerState, setPlayerState, advance } = context;
     const overlays = playerState.stageState.buttonOverlays;
@@ -7277,7 +7382,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     };
     return /* @__PURE__ */ jsxRuntime2.jsx("div", { className, style, children: gradientSpanStyle ? /* @__PURE__ */ jsxRuntime2.jsx("span", { style: gradientSpanStyle, children: overlay.text }, `grad-${(_a = overlay.textGradient) == null ? void 0 : _a.type}-${(_b = overlay.textGradient) == null ? void 0 : _b.angle}-${(((_c = overlay.textGradient) == null ? void 0 : _c.colors) || []).join(",")}`) : overlay.text });
   };
-  const ButtonOverlayElement = ({ overlay, onAction, playSound, onAdvance, onCommitVariables }) => {
+  const ButtonOverlayElement = ({ overlay, onAction, playSound, onAdvance, onCommitVariables, onPickup }) => {
     const tweenValues = useTween(overlay.id, "button");
     const [isHovered, setIsHovered] = React2.useState(false);
     const hasTransition = overlay.transition && overlay.transition !== "instant";
@@ -7338,6 +7443,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       otherActions.forEach((action) => onAction(action));
       if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene) {
         onAdvance();
+      }
+      if ((overlay.giveItemId || overlay.removeAfterClick || overlay.pickUpOnceId) && onPickup) {
+        onPickup(overlay);
       }
     };
     const applyTransition = playTransition && overlay.transition && overlay.transition !== "instant";
@@ -8767,7 +8875,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     var _a;
     const count = (it) => Number(variables[it.countVariableId] ?? 0);
     const filteredAll = element.categoryFilter ? items.filter((it) => it.category === element.categoryFilter) : items;
-    const shown = element.hideUnowned === false ? filteredAll : filteredAll.filter((it) => count(it) >= 1);
+    const shown = filteredAll.filter((it) => count(it) >= 1 || element.hideUnowned === false && !it.hideWhenEmpty);
     const itemById = new Map(shown.map((it) => [it.id, it]));
     const cols = element.columns || 4;
     const colGap = element.columnGap ?? element.gap ?? 8;
@@ -10782,7 +10890,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             musicState: finalMusicState,
             inventorySlots: playerState.inventorySlots,
             selectedItemId: playerState.selectedItemId,
-            selectedElementId: playerState.selectedElementId
+            selectedElementId: playerState.selectedElementId,
+            pickedUpItems: playerState.pickedUpItems
           }
         };
         try {
@@ -10837,6 +10946,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           inventorySlots: saveData.playerStateData.inventorySlots,
           selectedItemId: saveData.playerStateData.selectedItemId,
           selectedElementId: saveData.playerStateData.selectedElementId,
+          pickedUpItems: saveData.playerStateData.pickedUpItems,
           history: [],
           savedInputs: {},
           uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -12541,7 +12651,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               instantAdvance = false;
               const cmd = command;
               const durationMs = (cmd.duration ?? 1) * 1e3;
-              if (cmd.waitIndefinitelyForInput) {
+              if (cmd.waitForItems) {
+                const targets2 = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
+                const mode = cmd.itemsMode === "any" ? "any" : "all";
+                const isCollected = (itemId) => {
+                  var _a4, _b2;
+                  const item = (_a4 = project.items) == null ? void 0 : _a4[itemId];
+                  if (!item) return true;
+                  const c = Number((((_b2 = playerStateRef.current) == null ? void 0 : _b2.variables) ?? {})[item.countVariableId] ?? 0);
+                  return c >= 1;
+                };
+                const conditionMet = () => targets2.length === 0 ? true : mode === "any" ? targets2.some(isCollected) : targets2.every(isCollected);
+                if (conditionMet()) {
+                  advance();
+                } else {
+                  const poll = () => {
+                    if (conditionMet()) {
+                      advance();
+                      return;
+                    }
+                    const tid2 = window.setTimeout(poll, 150);
+                    activeEffectTimeoutsRef.current.push(tid2);
+                  };
+                  const tid = window.setTimeout(poll, 150);
+                  activeEffectTimeoutsRef.current.push(tid);
+                }
+              } else if (cmd.waitIndefinitelyForInput) {
                 let hasAdvanced = false;
                 const onUserAdvance = () => {
                   if (hasAdvanced) return;
@@ -12742,6 +12877,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             case CommandType.HideButton: {
               const result = handleHideButton(command, commandContext);
+              applyResult(result);
+              break;
+            }
+            case CommandType.ShowItem: {
+              const result = handleShowItem(command, commandContext);
               applyResult(result);
               break;
             }
@@ -14664,7 +14804,33 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                         uiState: { ...p.uiState, isWaitingForInput: false }
                       };
                     });
-                  } : void 0
+                  } : void 0,
+                  onPickup: (ov) => {
+                    updatePlayerState((p) => {
+                      var _a3;
+                      if (!p) return null;
+                      let variables = p.variables;
+                      if (ov.giveItemId) {
+                        const item = (_a3 = project.items) == null ? void 0 : _a3[ov.giveItemId];
+                        if (item && item.countVariableId) {
+                          const countVar = project.variables[item.countVariableId];
+                          const min = (countVar == null ? void 0 : countVar.min) ?? 0;
+                          const max = countVar == null ? void 0 : countVar.max;
+                          const cur = Number(p.variables[item.countVariableId] ?? 0);
+                          let next = item.unique ? 1 : cur + (ov.giveQuantity ?? 1);
+                          next = Math.max(min, next);
+                          if (max !== void 0) next = Math.min(max, next);
+                          variables = { ...variables, [item.countVariableId]: next };
+                        }
+                      }
+                      return {
+                        ...p,
+                        variables,
+                        stageState: ov.removeAfterClick ? { ...p.stageState, buttonOverlays: p.stageState.buttonOverlays.filter((b) => b.id !== ov.id) } : p.stageState,
+                        pickedUpItems: ov.pickUpOnceId ? [...p.pickedUpItems || [], ov.pickUpOnceId] : p.pickedUpItems
+                      };
+                    });
+                  }
                 },
                 overlay.id
               )),

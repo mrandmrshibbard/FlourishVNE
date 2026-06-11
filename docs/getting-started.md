@@ -61,7 +61,7 @@ If this is your first time, you'll see a **Guided Tour** overlay that walks you 
 
 ## 4. Understanding the Editor Layout
 
-The editor has **6 main tabs** across the top. You can switch between them by clicking or pressing **Shift+1** through **Shift+6**:
+The editor has **8 main tabs** across the top. You can switch between them by clicking or pressing **Shift+1** through **Shift+8**:
 
 | Tab | Shortcut | Purpose |
 |-----|----------|---------|
@@ -70,7 +70,11 @@ The editor has **6 main tabs** across the top. You can switch between them by cl
 | **UI Screens** | Shift+3 | Design menus, title screens, and in-game UI with a visual editor |
 | **Assets** | Shift+4 | Upload and organize backgrounds, images, audio, and video files |
 | **Variables** | Shift+5 | Create variables for tracking player choices, stats, and state |
-| **Settings** | Shift+6 | Configure project settings, dialogue box styling, fonts, and build options |
+| **Events** | Shift+6 | Build reusable command sequences (Common Events) callable from any scene |
+| **Systems** | Shift+7 | Opt-in gameplay systems — the item registry, inventories, and shops |
+| **Settings** | Shift+8 | Configure project settings, dialogue box styling, fonts, and build options |
+
+> **Tip:** New to the inventory, shop, choice-styling, layering, and other advanced features? They each have a full walkthrough in the **Feature Workflows Guide** — start there once you're comfortable with the basics below.
 
 ### Header Toolbar
 

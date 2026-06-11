@@ -15,6 +15,7 @@
     "stage:build-tools": "node scripts/stage-build-tools.cjs",
     "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
     "build:player": "node scripts/build-player.js",
+    "build:docs": "node scripts/build-docs.mjs",
     "build:full": "npm run build:engine && npm run build",
     "electron:dev": "npm run build:full && electron .",
     "electron:dev:nogpu": "npm run build:full && electron . --disable-gpu --disable-gpu-compositing",

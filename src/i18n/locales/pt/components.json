@@ -162,6 +162,14 @@
       "escape": "Fechar painel ou cancelar ação"
     },
     "tips": {
+      "itemsTitle": "Itens são variáveis numéricas",
+      "itemsTip": "Cada item é sustentado por uma variável numérica com o nome dele, então você pode verificar a posse em qualquer condição e mostrar a contagem com {NomeDoItem}.",
+      "inventoryTitle": "Deixe Linhas em branco para preencher",
+      "inventoryTip": "Deixar o campo Linhas de uma grade em branco preenche a caixa com slots automaticamente, mantendo todo o inventário visível. Redimensione o elemento para adicionar linhas.",
+      "shopTitle": "Duas grades formam uma loja",
+      "shopTip": "Uma tela de loja usa duas grades: uma vinculada à lista da loja com botão Comprar, e uma de inventário do jogador com botão Vender apontado para ela.",
+      "hotkeysTitle": "Abra telas com uma tecla",
+      "hotkeysTip": "No inspetor de uma tela, defina um Atalho de teclado para alterná-la no jogo (ótimo para inventários). Evite Espaço/Enter, H, Ctrl e Esc, que são reservados.",
       "organizeTitle": "Organize com Cenas",
       "organizeTip": "Divida a sua história em cenas lógicas. Cada cena deve representar um local, conversa ou evento distinto. Isso facilita a navegação e a edição do seu projeto.",
       "variablesTitle": "Use Variáveis para Ramificação",
@@ -180,6 +188,12 @@
       "effectsTip": "Combine os efeitos Tremer Tela, Flash de Tela e Tingir Tela com efeitos sonoros para momentos dramáticos impactantes como explosões ou revelações."
     },
     "commands": {
+      "GiveItem": { "desc": "Dá ao jogador uma quantidade de um item do inventário (define a quantidade como 1 para itens Únicos).", "example": "Após a cena do baú, Dar Item para Chave Dourada (quantidade 1) para o jogador abrir a porta trancada." },
+      "UseItem": { "desc": "Usa um item: executa seu efeito de uso e, se for consumível, diminui a quantidade em um.", "example": "Usar Item em uma Poção de Vida executa o efeito (aumenta a vida em 50) e remove uma poção da bolsa." },
+      "DestroyItem": { "desc": "Remove parte ou todo um item do jogador sem usá-lo; a quantidade nunca fica abaixo de zero.", "example": "Quando a ponte queima, Destruir Item em Corda com 'todos' ativado para retirar todas as cordas." },
+      "RestockCollection": { "desc": "Reabastece uma lista de itens (loja ou armazenamento) aos seus níveis de estoque, conforme a regra da lista.", "example": "Após 'Você descansa', Reabastecer Lista de Itens na Loja Geral para as mercadorias voltarem de manhã." },
+      "BuyItem": { "desc": "Compra um item de uma lista-loja, gastando a moeda dessa lista (não faz nada se não puder pagar ou faltar estoque).", "example": "Em uma cena, Comprar Item em uma Espada da lista do Ferreiro; o Ouro é descontado automaticamente." },
+      "SellItem": { "desc": "Vende um item que o jogador possui para uma lista-loja, pagando o preço vezes a taxa de venda da loja.", "example": "Após uma missão, Vender Item em um Anel Velho à lista do Mercador para removê-lo e pagar moedas." },
       "Dialogue": { "desc": "Exibe o diálogo de um personagem com nome do falante e retrato opcionais.", "example": "Mostre Sakura dizendo \"Olá!\" no lado esquerdo da tela." },
       "Choice": { "desc": "Apresenta ao jogador várias opções que afetam o caminho da história.", "example": "Pergunte ao jogador \"Para onde você vai?\" com as opções \"Parque\", \"Biblioteca\", \"Casa\"." },
       "BranchStart": { "desc": "Inicia uma seção de ramificação nomeada para organizar visualmente os caminhos da história.", "example": "Inicie uma ramificação chamada \"Rota da Sakura\" colorida de rosa para agrupar comandos relacionados." },

@@ -21,13 +21,6 @@
     --table-stripe: #1a1a24;
     --link: #93c5fd;
     --rainbow: linear-gradient(135deg,#f472b6,#a78bfa,#60a5fa,#34d399);
-    --kw: #c792ea;
-    --fn: #82aaff;
-    --str: #c3e88d;
-    --num: #f78c6c;
-    --cmt: #676e95;
-    --var: #f07178;
-    --op: #89ddff;
   }
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth;font-size:16px}
@@ -39,7 +32,7 @@
   .sidebar-brand h2{background:var(--rainbow);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:1.2rem;letter-spacing:.5px}
   .sidebar-brand span{display:block;font-size:.75rem;color:var(--text-muted);margin-top:2px}
   .sidebar nav{padding:0 12px}
-  .sidebar nav a{display:block;padding:6px 16px;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:.85rem;transition:background .15s,color .15s}
+  .sidebar nav a{display:block;padding:6px 16px;border-radius:6px;color:var(--text-muted);text-decoration:none;font-size:.82rem;transition:background .15s,color .15s}
   .sidebar nav a:hover{background:var(--accent-glow);color:var(--accent)}
   .sidebar nav a.active{background:var(--accent-glow);color:var(--accent);font-weight:600}
   .sidebar .nav-section{font-size:.7rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);padding:16px 16px 4px;opacity:.6}
@@ -60,13 +53,12 @@
   ul,ol{margin:0 0 16px 24px}
   li{margin-bottom:6px}
   li > ul, li > ol {margin-top:6px}
+  .tabs-involved{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:.82rem;color:var(--accent);margin-bottom:12px}
 
   /* ── Code ── */
   code{font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:.88em;background:var(--code-bg);padding:2px 6px;border-radius:4px;color:#c4b5fd}
   pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:18px 22px;overflow-x:auto;margin:12px 0 20px;line-height:1.55}
   pre code{background:none;padding:0;font-size:.85rem;color:#d4d4d8}
-  /* syntax highlights */
-  .kw{color:var(--kw)}.fn{color:var(--fn)}.str{color:var(--str)}.num{color:var(--num)}.cmt{color:var(--cmt);font-style:italic}.vr{color:var(--var)}.op{color:var(--op)}
 
   /* ── Tables ── */
   table{width:100%;border-collapse:collapse;margin:12px 0 24px;font-size:.9rem}
@@ -77,12 +69,8 @@
   /* ── Tips ── */
   .tip{background:var(--tip-bg);border-left:3px solid var(--tip-border);border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:.92rem}
   .tip strong{color:var(--tip-border)}
-  .warning{background:#2a1f1a;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0;font-size:.92rem}
-  .warning strong{color:#f59e0b}
 
   kbd{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-family:inherit;font-size:.82em;color:var(--text);box-shadow:0 1px 0 var(--border)}
-
-  .divider{border:none;border-top:2px solid var(--accent2);margin:60px 0}
 
   .menu-toggle{display:none;position:fixed;top:14px;left:14px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;cursor:pointer;font-size:1.1rem}
 
@@ -104,25 +92,31 @@
     <span>Scripting &amp; Plugins</span>
   </div>
   <nav>
-    <div class="nav-section">Scripting</div>
     <a href="#getting-started">Getting Started</a>
-    <a href="#triggers">Script Triggers</a>
-    <a href="#game-api">The game API</a>
+    <a href="#script-triggers">Script Triggers</a>
+    <a href="#the-game-api">The game API</a>
     <a href="#examples">Examples</a>
-    <a href="#runscript">Using RunScript</a>
-    <a href="#security">Security &amp; Sandbox</a>
+    <a href="#using-runscript-in-scenes">Using RunScript in Scenes</a>
+    <a href="#security--sandbox">Security &amp; Sandbox</a>
     <a href="#validation">Validation</a>
-    <a href="#script-tips">Tips</a>
-
-    <div class="nav-section">Plugin System</div>
-    <a href="#plugin-start">Getting Started</a>
+    <a href="#where-errors-show-up">Where errors show up</a>
+    <a href="#tips">Tips</a>
+    <a href="#building-a-common-event">Building a Common Event</a>
+    <a href="#triggers">Triggers</a>
+    <a href="#calling-a-common-event">Calling a Common Event</a>
+    <a href="#parameters-local-scope">Parameters (local scope)</a>
+    <a href="#safety-limits">Safety limits</a>
+    <a href="#parallel-events--what-they-can-do">Parallel events — what they can do</a>
+    <a href="#sharing-across-projects">Sharing across projects</a>
+    <a href="#tips">Tips</a>
+    <a href="#getting-started">Getting Started</a>
     <a href="#plugin-structure">Plugin Structure</a>
     <a href="#plugin-categories">Plugin Categories</a>
-    <a href="#plugin-api">Plugin API</a>
-    <a href="#plugin-examples">Example Plugins</a>
+    <a href="#plugin-api-api">Plugin API (api)</a>
+    <a href="#example-plugins">Example Plugins</a>
     <a href="#plugin-lifecycle">Plugin Lifecycle</a>
-    <a href="#plugin-tips">Tips</a>
-
+    <a href="#plugin-details-view">Plugin Details View</a>
+    <a href="#tips">Tips</a>
     <div class="doc-links">
       <div class="nav-section">Other Docs</div>
       <a href="getting-started.html">Getting Started</a>
@@ -132,534 +126,562 @@
 </aside>
 
 <main class="main">
-  <h1>Scripting &amp; Plugins</h1>
-  <p class="subtitle">Write custom JavaScript logic and extend the engine with plugins.</p>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!--              SCRIPTING SYSTEM              -->
-  <!-- ═══════════════════════════════════════════ -->
-
-  <h2 id="getting-started">Getting Started with Scripting</h2>
-  <p>The Scripting System lets you write custom JavaScript logic that runs inside your visual novel. Scripts can manipulate variables, trigger scene jumps, play audio, show dialogue, and much more — all through a safe, sandboxed API.</p>
+  <h1>FlourishVNE Scripting System</h1>
+  <p class="subtitle">The Scripting System lets you write custom JavaScript logic that runs inside your visual novel. Scripts can manipulate variables, trigger scene jumps, play audio, show dialogue, and much more — all through a safe, sandboxed API.</p>
+  <hr>
+  <h2 id="getting-started">Getting Started</h2>
   <ol>
-    <li>Open the <strong>Script Editor</strong> from the <strong>Tools</strong> menu in the header toolbar</li>
-    <li>Click <strong>New Script</strong> to create a script</li>
-    <li>Write your logic using the <code>game</code> API object</li>
-    <li>Save with <kbd>Ctrl+S</kbd> and test with the <strong>▶ Test Run</strong> button</li>
-    <li>Use the <strong>Run Script</strong> command (Flow Control category) in your scene timeline to execute a script during gameplay</li>
-    <li>Click <strong>📖 API</strong> in the editor toolbar for a clickable reference of every <code>game</code> method</li>
-  </ol>
-  <p class="tip"><strong>About Test Run:</strong> it runs against a <em>mock</em> game — variables start at their defaults and side-effects (dialogue, audio, navigation, runScript/callCommonEvent) are printed to the Console instead of actually happening. To see a script truly affect the game, run it from a <strong>Run Script</strong> command in <strong>Test Play</strong>.</p>
-
-  <!-- Triggers -->
-  <h2 id="triggers">Script Triggers</h2>
+  <li>Open the <strong>Script Editor</strong> from the <strong>Tools</strong> menu in the header toolbar</li>
+  <li>Click <strong>New Script</strong> to create a script</li>
+  <li>Write your logic using the <code>game</code> API object</li>
+  <li>Save with <strong><kbd>Ctrl+S</kbd></strong> and test with the <strong>▶ Test Run</strong> button</li>
+  <li>Use the <strong>Run Script</strong> command in your scene timeline to execute a script during gameplay</li>
+  <li>Click <strong>📖 API</strong> in the editor toolbar for a clickable reference of every <code>game</code> method</li>
+</ol>
+  <blockquote><strong>About Test Run:</strong> it executes your script against a <em>mock</em> game — variables start at their defaults and side-effects (dialogue, audio, navigation, <code>runScript</code>/<code>callCommonEvent</code>) are <strong>printed to the console instead of actually happening</strong>. It's for checking logic and catching errors. To see a script truly affect the game, run it from a <strong>Run Script</strong> command in <strong>Test Play</strong>.</blockquote>
+  <hr>
+  <h2 id="script-triggers">Script Triggers</h2>
   <p>Each script has a <strong>trigger</strong> that determines when it can run:</p>
   <table>
-    <thead><tr><th>Trigger</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>command</code></td><td>Runs when a <strong>RunScript</strong> command executes in the scene timeline.</td></tr>
-      <tr><td><code>onSceneEnter</code></td><td>Runs automatically on <strong>every scene change</strong>, as the new scene begins. These are global lifecycle hooks (not bound to one scene) — check <code>game.currentScene</code> inside if you only want certain scenes. Navigation calls are ignored here to avoid loops.</td></tr>
-      <tr><td><code>onSceneExit</code></td><td>Runs automatically as you <strong>leave</strong> a scene (just before the next scene's enter hooks). Same global behavior as onSceneEnter.</td></tr>
-      <tr><td><code>global</code></td><td>Utility script — never runs on its own; call it from another script with <code>game.runScript("Name")</code>.</td></tr>
-    </tbody>
-  </table>
-
-  <!-- Game API -->
-  <h2 id="game-api">The <code>game</code> API</h2>
+<thead><tr><th>Trigger</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>command</code></td><td>Runs when a <strong>RunScript</strong> command executes in the scene timeline.</td></tr>
+<tr><td><code>onSceneEnter</code></td><td>Runs automatically <strong>on every scene change, as the new scene begins</strong>. These are <em>global</em> lifecycle hooks — they are not bound to a specific scene, so use <code>game.currentScene</code> / <code>game.currentSceneId</code> inside the script if you only want to act on certain scenes. Navigation calls (<code>jumpToScene</code>/<code>jumpToLabel</code>) from these scripts are ignored to prevent scene-change loops.</td></tr>
+<tr><td><code>onSceneExit</code></td><td>Runs automatically <strong>as you leave a scene</strong> (just before the next one's enter hooks). Same global, not-scene-bound behavior as <code>onSceneEnter</code>.</td></tr>
+<tr><td><code>global</code></td><td>Utility script — never runs on its own. Call it from another script with <code>game.runScript("Name")</code>.</td></tr>
+</tbody>
+</table>
+  <hr>
+  <h2 id="the-game-api">The <code>game</code> API</h2>
   <p>Inside every script, a <code>game</code> object is available with the following methods and properties:</p>
-
   <h3>Variables</h3>
-  <pre><code><span class="cmt">// Get a variable value by name or ID</span>
-<span class="kw">let</span> hp = game.<span class="fn">getVariable</span>(<span class="str">"playerHP"</span>);
+  <pre><code>// Get a variable value by name or ID
+let hp = game.getVariable("playerHP");
 
-<span class="cmt">// Set a variable value</span>
-game.<span class="fn">setVariable</span>(<span class="str">"playerHP"</span>, <span class="num">100</span>);
-game.<span class="fn">setVariable</span>(<span class="str">"playerName"</span>, <span class="str">"Alex"</span>);
-game.<span class="fn">setVariable</span>(<span class="str">"hasKey"</span>, <span class="kw">true</span>);</code></pre>
-
+// Set a variable value
+game.setVariable("playerHP", 100);
+game.setVariable("playerName", "Alex");
+game.setVariable("hasKey", true);</code></pre>
   <h3>Navigation</h3>
-  <pre><code><span class="cmt">// Jump to a different scene by name</span>
-game.<span class="fn">jumpToScene</span>(<span class="str">"Chapter 2"</span>);
+  <pre><code>// Jump to a different scene by name (or ID)
+game.jumpToScene("Chapter 2");
 
-<span class="cmt">// Jump to a label within the current scene</span>
-game.<span class="fn">jumpToLabel</span>(<span class="str">"battle_start"</span>);</code></pre>
+// Jump to a label within the current scene
+game.jumpToLabel("battle_start");</code></pre>
+  <blockquote>Note: navigation is applied <strong>after</strong> the script finishes. Calling <code>jumpToScene</code> twice means the last call wins. Navigation from <code>onSceneEnter</code>/<code>onSceneExit</code> scripts is ignored (to avoid infinite scene-change loops).</blockquote>
+  <h3>Calling Other Scripts &amp; Common Events</h3>
+  <pre><code>// Run another script (by name or ID). The 'global' trigger exists for exactly this.
+game.runScript("ApplyDamage");
 
+// Pass arguments — they arrive in the other script as game.args (see Parameters below)
+game.runScript("ApplyDamage", { amount: 12, crit: true });
+
+// Invoke a Common Event (by name or ID), optionally with arguments.
+// When a script calls a Common Event, the event's command list runs next,
+// then execution returns to where you were.
+game.callCommonEvent("ShowQuestComplete", { questId: "q_07" });</code></pre>
   <h3>Dialogue &amp; Notifications</h3>
-  <pre><code><span class="cmt">// Show a dialogue box (character name, text)</span>
-game.<span class="fn">showDialogue</span>(<span class="str">"Narrator"</span>, <span class="str">"The adventure begins..."</span>);
-game.<span class="fn">showDialogue</span>(<span class="str">"Luna"</span>, <span class="str">"Watch out!"</span>);
+  <pre><code>// Show a dialogue box (character name, text)
+game.showDialogue("Narrator", "The adventure begins...");
+game.showDialogue("Luna", "Watch out!");
 
-<span class="cmt">// Show a notification toast</span>
-game.<span class="fn">notify</span>(<span class="str">"Auto-saved!"</span>, <span class="str">"info"</span>);      <span class="cmt">// types: "info", "warning", "error", "success"</span></code></pre>
-
+// Show a notification toast
+game.notify("Auto-saved!", "info");      // types: "info", "warning", "error", "success"</code></pre>
   <h3>Audio</h3>
-  <pre><code><span class="cmt">// Play a sound effect (name, optional volume 0-1)</span>
-game.<span class="fn">playSFX</span>(<span class="str">"sword_clash"</span>, <span class="num">0.8</span>);
+  <pre><code>// Play a sound effect (name, optional volume 0-1)
+game.playSFX("sword_clash", 0.8);
 
-<span class="cmt">// Play background music (name, loop, optional volume)</span>
-game.<span class="fn">playMusic</span>(<span class="str">"battle_theme"</span>, <span class="kw">true</span>, <span class="num">0.5</span>);
+// Play background music (name, loop, optional volume)
+game.playMusic("battle_theme", true, 0.5);
 
-<span class="cmt">// Stop all music (optional fade duration in seconds)</span>
-game.<span class="fn">stopMusic</span>(<span class="num">2</span>);</code></pre>
-
+// Stop all music (optional fade duration in seconds)
+game.stopMusic(2);</code></pre>
   <h3>Project Info (Read-Only)</h3>
-  <pre><code><span class="cmt">// The current scene's name and ID</span>
-<span class="kw">let</span> name = game.currentScene;
-<span class="kw">let</span> sceneId = game.currentSceneId;
+  <pre><code>// The current scene's name and ID
+let name = game.currentScene;     // e.g. "Chapter 1"
+let sceneId = game.currentSceneId;
 
-<span class="cmt">// A list of all scene names</span>
-<span class="kw">let</span> scenes = game.<span class="fn">getScenes</span>();
-<span class="cmt">// Returns: ["Chapter 1", "Chapter 2", ...]</span>
+// A list of all scene names in the project
+let scenes = game.getScenes();
+// Returns: ["Chapter 1", "Chapter 2", ...]
 
-<span class="cmt">// All variables as a { name: value } map (current values)</span>
-<span class="kw">let</span> vars = game.<span class="fn">getVariables</span>();
-<span class="cmt">// Returns: { playerHP: 100, hasKey: false, ... }  (getAllVariables is an alias)</span></code></pre>
+// All variables as a { name: value } map (current values)
+let vars = game.getVariables();
+// Returns: { playerHP: 100, hasKey: false, ... }
+// game.getAllVariables() is an alias of game.getVariables().</code></pre>
+  <h3>Parameters (<code>game.args</code>)</h3>
+  <p>A script can declare <strong>parameters</strong> in the Script Editor (name, type, default). When the script is invoked — via a <strong>RunScript</strong> command, or <code>game.runScript(name, args)</code> — the supplied arguments are exposed as a <strong>read-only</strong> <code>game.args</code> map (keyed by parameter name), with defaults filled in for anything not supplied:</p>
+  <pre><code>// Script "ApplyDamage" declares params: amount (number, default 0), crit (boolean, default false)
+let dmg = game.args.amount;
+if (game.args.crit) dmg *= 2;
 
-  <h3>Parameters &amp; Calling Other Scripts</h3>
-  <pre><code><span class="cmt">// Declare params in the Script Editor; supplied args arrive as read-only game.args</span>
-<span class="kw">let</span> dmg = game.args.amount;
-<span class="kw">if</span> (game.args.crit) dmg *= <span class="num">2</span>;
-
-<span class="cmt">// Run another script (by name or ID), optionally passing args → its game.args</span>
-game.<span class="fn">runScript</span>(<span class="str">"ApplyDamage"</span>, { amount: <span class="num">12</span>, crit: <span class="kw">true</span> });
-
-<span class="cmt">// Invoke a Common Event; its commands run, then execution returns here</span>
-game.<span class="fn">callCommonEvent</span>(<span class="str">"ShowQuestComplete"</span>, { questId: <span class="str">"q_07"</span> });
-
-<span class="cmt">// Pause (native setTimeout is blocked — use game.wait)</span>
-<span class="kw">await</span> game.<span class="fn">wait</span>(<span class="num">1.5</span>);</code></pre>
-
+let hp = game.getVariable("enemyHP") - dmg;
+game.setVariable("enemyHP", hp);</code></pre>
+  <p>Arguments are <strong>never</strong> written into your project's variables, so there is no leakage between calls — <code>game.args</code> is local to each invocation.</p>
+  <h3>Waiting</h3>
+  <pre><code>// Pause this script for a number of seconds (returns a Promise).
+// Note: native setTimeout/setInterval are blocked — use game.wait().
+await game.wait(1.5);</code></pre>
   <h3>Inventory</h3>
-  <p>If your project has <strong>Items</strong> (created by the <strong>Shop / Inventory System Wizard</strong> in the In‑Game UI editor), scripts can read/change the player's inventory. Each item is backed by a number "count" variable, so these are a no-op if no items exist yet.</p>
-  <pre><code><span class="kw">let</span> potions = game.<span class="fn">getItemCount</span>(<span class="str">"Potion"</span>);   <span class="cmt">// by name or id</span>
-<span class="kw">if</span> (game.<span class="fn">hasItem</span>(<span class="str">"Key"</span>)) game.<span class="fn">jumpToScene</span>(<span class="str">"Locked Room"</span>);
-game.<span class="fn">addItem</span>(<span class="str">"Potion"</span>, <span class="num">3</span>);    <span class="cmt">// unique items cap at 1</span>
-game.<span class="fn">removeItem</span>(<span class="str">"Potion"</span>);    <span class="cmt">// never below 0</span>
-<span class="kw">let</span> all = game.<span class="fn">getItems</span>();    <span class="cmt">// [{ id, name, count }, ...]</span></code></pre>
+  <p>If your project has <strong>Items</strong>, scripts can read and change the player's inventory. Items are created by the <strong>Shop / Inventory System Wizard</strong> (In‑Game UI editor → "Generate Shop/Inventory System"), which registers each item with a backing number "count" variable. These helpers are just sugar over <code>getVariable</code>/<code>setVariable</code> on that count, so they're a no-op if no items exist yet:</p>
+  <pre><code>let potions = game.getItemCount("Potion");   // by item name or id
+if (game.hasItem("Key")) game.jumpToScene("Locked Room");
 
+game.addItem("Potion", 3);    // give 3 (unique items cap at 1)
+game.removeItem("Potion");    // take 1 (never below 0)
+
+let all = game.getItems();    // [{ id, name, count }, ...]</code></pre>
   <h3>Characters</h3>
-  <pre><code><span class="kw">let</span> chars = game.<span class="fn">getCharacters</span>();   <span class="cmt">// [{ id, name }, ...]</span></code></pre>
-
+  <pre><code>let chars = game.getCharacters();   // [{ id, name }, ...]</code></pre>
   <h3>Math Utilities</h3>
-  <pre><code><span class="kw">let</span> r = game.<span class="fn">random</span>(<span class="num">1</span>, <span class="num">10</span>);      <span class="cmt">// random integer between 1 and 10</span>
-<span class="kw">let</span> c = game.<span class="fn">clamp</span>(value, <span class="num">0</span>, <span class="num">100</span>); <span class="cmt">// clamp value between min and max</span>
-<span class="kw">let</span> l = game.<span class="fn">lerp</span>(<span class="num">0</span>, <span class="num">100</span>, <span class="num">0.5</span>);    <span class="cmt">// linear interpolation → 50</span></code></pre>
+  <pre><code>let r = game.random(1, 10);        // random integer between 1 and 10 (inclusive)
+let c = game.clamp(value, 0, 100); // clamp value between min and max
+let l = game.lerp(0, 100, 0.5);    // linear interpolation → 50
 
+// The same helpers also live under game.math, plus randomFloat:
+game.math.clamp(v, 0, 1);
+game.math.lerp(a, b, t);
+game.math.randomFloat(0, 1);       // random float in [0, 1)</code></pre>
   <h3>Logging</h3>
-  <pre><code>game.<span class="fn">log</span>(<span class="str">"Debug message"</span>);          <span class="cmt">// appears in the console output</span>
-game.<span class="fn">log</span>(<span class="str">"HP:"</span>, game.<span class="fn">getVariable</span>(<span class="str">"playerHP"</span>));</code></pre>
-
-  <!-- Examples -->
+  <pre><code>game.log("Debug message");          // appears in the console output
+game.log("HP:", game.getVariable("playerHP"));</code></pre>
+  <hr>
   <h2 id="examples">Examples</h2>
-
   <h3>Damage Calculation</h3>
-  <pre><code><span class="cmt">// Calculate damage with randomness</span>
-<span class="kw">let</span> attack = game.<span class="fn">getVariable</span>(<span class="str">"playerAttack"</span>);
-<span class="kw">let</span> defense = game.<span class="fn">getVariable</span>(<span class="str">"enemyDefense"</span>);
-<span class="kw">let</span> baseDamage = Math.<span class="fn">max</span>(<span class="num">1</span>, attack - defense);
-<span class="kw">let</span> finalDamage = baseDamage + game.<span class="fn">random</span>(<span class="num">0</span>, <span class="num">5</span>);
+  <pre><code>// Calculate damage with randomness
+let attack = game.getVariable("playerAttack");
+let defense = game.getVariable("enemyDefense");
+let baseDamage = Math.max(1, attack - defense);
+let finalDamage = baseDamage + game.random(0, 5);
 
-game.<span class="fn">setVariable</span>(<span class="str">"lastDamage"</span>, finalDamage);
+game.setVariable("lastDamage", finalDamage);
 
-<span class="kw">let</span> enemyHP = game.<span class="fn">getVariable</span>(<span class="str">"enemyHP"</span>);
+let enemyHP = game.getVariable("enemyHP");
 enemyHP -= finalDamage;
-game.<span class="fn">setVariable</span>(<span class="str">"enemyHP"</span>, enemyHP);
+game.setVariable("enemyHP", enemyHP);
 
-game.<span class="fn">showDialogue</span>(<span class="str">"System"</span>, <span class="str">`You deal ${finalDamage} damage!`</span>);
+game.showDialogue("System", `You deal ${finalDamage} damage!`);
 
-<span class="kw">if</span> (enemyHP &lt;= <span class="num">0</span>) {
-    game.<span class="fn">notify</span>(<span class="str">"Enemy defeated!"</span>, <span class="str">"success"</span>);
-    game.<span class="fn">jumpToScene</span>(<span class="str">"Victory"</span>);
+if (enemyHP &lt;= 0) {
+    game.notify("Enemy defeated!", "success");
+    game.jumpToScene("Victory");
 }</code></pre>
-
   <h3>Day/Night Cycle</h3>
-  <pre><code><span class="kw">let</span> hour = game.<span class="fn">getVariable</span>(<span class="str">"gameHour"</span>);
-hour += <span class="num">1</span>;
+  <pre><code>let hour = game.getVariable("gameHour");
+hour += 1;
 
-<span class="kw">if</span> (hour >= <span class="num">24</span>) {
-    hour = <span class="num">0</span>;
-    <span class="kw">let</span> day = game.<span class="fn">getVariable</span>(<span class="str">"gameDay"</span>);
-    game.<span class="fn">setVariable</span>(<span class="str">"gameDay"</span>, day + <span class="num">1</span>);
+if (hour &gt;= 24) {
+    hour = 0;
+    let day = game.getVariable("gameDay");
+    game.setVariable("gameDay", day + 1);
 }
 
-game.<span class="fn">setVariable</span>(<span class="str">"gameHour"</span>, hour);
+game.setVariable("gameHour", hour);
 
-<span class="kw">if</span> (hour >= <span class="num">6</span> &amp;&amp; hour &lt; <span class="num">18</span>) {
-    game.<span class="fn">setVariable</span>(<span class="str">"timeOfDay"</span>, <span class="str">"day"</span>);
-} <span class="kw">else</span> {
-    game.<span class="fn">setVariable</span>(<span class="str">"timeOfDay"</span>, <span class="str">"night"</span>);
+if (hour &gt;= 6 &amp;&amp; hour &lt; 18) {
+    game.setVariable("timeOfDay", "day");
+} else {
+    game.setVariable("timeOfDay", "night");
 }</code></pre>
-
   <h3>Inventory Check</h3>
-  <pre><code><span class="kw">let</span> hasKey = game.<span class="fn">getVariable</span>(<span class="str">"hasKey"</span>);
-<span class="kw">let</span> hasMap = game.<span class="fn">getVariable</span>(<span class="str">"hasMap"</span>);
+  <pre><code>let hasKey = game.getVariable("hasKey");
+let hasMap = game.getVariable("hasMap");
 
-<span class="kw">if</span> (hasKey &amp;&amp; hasMap) {
-    game.<span class="fn">jumpToScene</span>(<span class="str">"Secret Room"</span>);
-} <span class="kw">else if</span> (hasKey) {
-    game.<span class="fn">showDialogue</span>(<span class="str">"Narrator"</span>, <span class="str">"You have the key, but you need a map to find the door."</span>);
-} <span class="kw">else</span> {
-    game.<span class="fn">showDialogue</span>(<span class="str">"Narrator"</span>, <span class="str">"The path forward is blocked."</span>);
+if (hasKey &amp;&amp; hasMap) {
+    game.jumpToScene("Secret Room");
+} else if (hasKey) {
+    game.showDialogue("Narrator", "You have the key, but you need a map to find the door.");
+} else {
+    game.showDialogue("Narrator", "The path forward is blocked.");
 }</code></pre>
-
-  <!-- RunScript -->
-  <h2 id="runscript">Using RunScript in Scenes</h2>
+  <hr>
+  <h2 id="using-runscript-in-scenes">Using RunScript in Scenes</h2>
   <ol>
-    <li>In the <strong>Command Palette</strong>, open the <strong>Flow Control</strong> category</li>
-    <li>Drag <strong>Run Script</strong> into your scene timeline</li>
-    <li>In the <strong>Properties Inspector</strong>, select which script to run (and fill in any <strong>Arguments</strong> if the script has parameters)</li>
-    <li>Toggle <strong>Wait for Completion</strong> to control whether the engine pauses until the script finishes</li>
-  </ol>
-
-  <!-- Security -->
-  <h2 id="security">Security &amp; Sandbox</h2>
-  <p>Scripts run in a sandboxed environment. The following are <strong>blocked</strong> for security:</p>
+  <li>In the <strong>Command Palette</strong>, open the <strong>Flow Control</strong> category</li>
+  <li>Drag <strong>Run Script</strong> into your scene timeline</li>
+  <li>In the <strong>Properties Inspector</strong>, select which script to run</li>
+  <li>If the chosen script declares <strong>parameters</strong>, an <strong>Arguments</strong> section appears — fill in the values to pass (anything left blank uses the parameter's default)</li>
+  <li>Toggle <strong>Wait for Completion</strong> to control whether the engine pauses until the script finishes</li>
+</ol>
+  <hr>
+  <h2 id="security--sandbox">Security &amp; Sandbox</h2>
+  <p>Scripts run in a sandboxed <code>Function</code>-constructor environment (not <code>eval</code>). The following are <strong>blocked</strong>:</p>
   <ul>
-    <li><code>document</code>, <code>window</code>, <code>globalThis</code>, <code>self</code></li>
-    <li><code>fetch</code>, <code>XMLHttpRequest</code>, <code>WebSocket</code></li>
-    <li><code>eval</code>, <code>Function</code></li>
-    <li><code>localStorage</code>, <code>sessionStorage</code>, <code>indexedDB</code></li>
-    <li><code>setTimeout</code>, <code>setInterval</code>, <code>requestAnimationFrame</code>, <code>queueMicrotask</code> — use <code>await game.wait(seconds)</code> for delays</li>
-    <li><code>.constructor</code> access (the prototype-chain escape to <code>Function</code>) is rejected before the script runs</li>
-  </ul>
-  <p>Scripts can only interact with the game through the <code>game</code> API object. Note: this is a practical sandbox, not a hardened security boundary — only run scripts you trust.</p>
-
-  <!-- Validation -->
+  <li><code>document</code>, <code>window</code>, <code>globalThis</code>, <code>self</code></li>
+  <li><code>fetch</code>, <code>XMLHttpRequest</code>, <code>WebSocket</code></li>
+  <li><code>eval</code>, <code>Function</code></li>
+  <li><code>localStorage</code>, <code>sessionStorage</code>, <code>indexedDB</code></li>
+  <li><code>setTimeout</code>, <code>setInterval</code>, <code>clearTimeout</code>, <code>clearInterval</code>, <code>requestAnimationFrame</code>, <code>queueMicrotask</code> — use <code>await game.wait(seconds)</code> for timed delays</li>
+  <li><code>.constructor</code> access (the classic prototype-chain escape to <code>Function</code>) is rejected before the script runs</li>
+</ul>
+  <p>Scripts can only interact with the game through the <code>game</code> API object.</p>
+  <blockquote>Heads-up: this is a <em>practical</em> sandbox, not a hardened security boundary. Only run scripts you trust (yours or from sources you trust). Stronger isolation is on the roadmap.</blockquote>
+  <hr>
   <h2 id="validation">Validation</h2>
   <p>Click <strong>Validate</strong> in the Script Editor to check for:</p>
   <ul>
-    <li><strong>Syntax errors</strong> — invalid JavaScript</li>
-    <li><strong>Blocked API usage</strong> — references to restricted globals</li>
-    <li><strong>Best practices</strong> — warnings about potentially unsafe patterns</li>
-  </ul>
-
-  <!-- Script Tips -->
-  <h2 id="script-tips">Tips</h2>
+  <li><strong>Syntax errors</strong> — invalid JavaScript</li>
+  <li><strong>Blocked API usage</strong> — references to restricted globals</li>
+  <li><strong>Best practices</strong> — warnings about potentially unsafe patterns</li>
+</ul>
+  <hr>
+  <h2 id="where-errors-show-up">Where errors show up</h2>
   <ul>
-    <li>Use <code>game.log()</code> instead of <code>console.log()</code> for debugging — output appears in the Script Editor console</li>
-    <li>Keep scripts focused — one script per gameplay mechanic</li>
-    <li>Test scripts with <strong>▶ Test Run</strong> before using them in scenes</li>
-    <li>Disable scripts you're not using to prevent accidental execution</li>
-  </ul>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <hr class="divider">
-  <!-- ═══════════════════════════════════════════ -->
-
-  <h1 style="margin-top:8px">Common Events</h1>
-  <p class="subtitle">Reusable command sequences — like functions for your story.</p>
-
-  <h2 id="ce-triggers">Triggers</h2>
+  <li><strong>Test Run / Validate:</strong> errors and <code>game.log()</code> output appear in the Script Editor's <strong>Console</strong> panel.</li>
+  <li><strong>During play (Test Play or exported game):</strong> a script error pops a red toast (e.g. <em>Script "X" error: …</em>)</li>
+</ul>
+  <p>and the full stack is written to the browser/dev console. The rest of the scene keeps running.</p>
+  <hr>
+  <h2 id="tips">Tips</h2>
+  <ul>
+  <li>Scripts operate on <strong>variables you've already created</strong> in the Variables manager — define them first.</li>
+  <li>Use <code>game.log()</code> instead of <code>console.log()</code> for debugging — output appears in the Script Editor console</li>
+  <li>Keep scripts focused — one script per gameplay mechanic</li>
+  <li>Test scripts with <strong>▶ Test Run</strong> before using them in scenes</li>
+  <li>Disable scripts you're not using to prevent accidental execution</li>
+</ul>
+  <hr>
+  <h1>FlourishVNE Common Events</h1>
+  <p><strong>Common Events</strong> are reusable command sequences you author once and invoke from anywhere — like functions for your story. Open the <strong>Common Events</strong> manager from the editor's navigation bar to create them.</p>
+  <hr>
+  <h2 id="building-a-common-event">Building a Common Event</h2>
+  <ol>
+  <li>In the <strong>Common Events</strong> manager, click <strong>New Event</strong> and give it a name.</li>
+  <li>Pick its <strong>trigger</strong> (<code>called</code> / <code>auto</code> / <code>parallel</code>) — see below.</li>
+  <li>Add commands to the event's list (the same commands you use in scenes).</li>
+  <li>(Optional) For a <code>called</code> event, add <strong>parameters</strong> — typed inputs (string/number/boolean with a</li>
+</ol>
+  <p>default) that callers fill in; read them inside the event like any variable (by the parameter's id).</p>
+  <ol>
+  <li>(Optional) For <code>auto</code> / <code>parallel</code>, set a <strong>condition variable</strong> to gate when it runs.</li>
+</ol>
+  <p>Use the <strong>Export / Import</strong> buttons to move events between projects (see <em>Sharing across projects</em>).</p>
+  <hr>
+  <h2 id="triggers">Triggers</h2>
+  <p>Each Common Event has a <strong>trigger</strong> that decides how it runs:</p>
   <table>
-    <thead><tr><th>Trigger</th><th>Behavior</th></tr></thead>
-    <tbody>
-      <tr><td><code>called</code></td><td>Runs only when invoked — by a <strong>Call Common Event</strong> command, a button/choice <strong>Call Common Event</strong> action, or <code>game.callCommonEvent()</code>. Can declare parameters.</td></tr>
-      <tr><td><code>auto</code></td><td>Runs once at the start of every scene, before the scene's own commands. Optional condition variable gates it. Re-entering a scene after visiting another one runs it again.</td></tr>
-      <tr><td><code>parallel</code></td><td>Runs continuously in the background alongside the scene, looping its command list. Optional condition variable turns it on/off live.</td></tr>
-    </tbody>
-  </table>
-
-  <h2 id="ce-calling">Calling a Common Event</h2>
+<thead><tr><th>Trigger</th><th>Behavior</th></tr></thead>
+<tbody>
+<tr><td><code>called</code></td><td>Runs only when explicitly invoked — by a <strong>Call Common Event</strong> command, a button/choice <strong>Call Common Event</strong> action, or a script's <code>game.callCommonEvent()</code>. Can declare <strong>parameters</strong>.</td></tr>
+<tr><td><code>auto</code></td><td>Runs <strong>once automatically at the start of every scene</strong>, <em>before</em> the scene's own commands. Optional <strong>condition variable</strong>: if set, it only runs when that variable is truthy. (Re-entering a scene after visiting another one runs it again.)</td></tr>
+<tr><td><code>parallel</code></td><td>Runs <strong>continuously in the background</strong> alongside the scene, looping its command list. Optional <strong>condition variable</strong> gates it on/off live.</td></tr>
+</tbody>
+</table>
+  <hr>
+  <h2 id="calling-a-common-event">Calling a Common Event</h2>
+  <p>There are four ways to invoke a <code>called</code> event:</p>
   <ol>
-    <li><strong>Call Common Event command</strong> in a scene timeline (pick the event + arguments).</li>
-    <li><strong>Button / choice action</strong> — choose <strong>Call Common Event</strong> and select the event.</li>
-    <li><strong>From a script</strong> — <code>game.callCommonEvent("Event Name", { arg: value })</code>.</li>
-    <li><strong>Nested</strong> — a Common Event can call another. Execution returns after the call.</li>
-  </ol>
-
-  <h2 id="ce-params">Parameters (local scope)</h2>
-  <p>A <code>called</code> event can declare typed parameters (string / number / boolean with defaults).
-  Arguments are injected only for the duration of the call and the prior values are <strong>restored on
-  return</strong> — no leakage. Arguments are coerced to the declared type; deleting a parameter cleans up
-  dangling arguments on existing calls.</p>
-
-  <h2 id="ce-safety">Safety limits</h2>
+  <li><strong>Call Common Event command</strong> — add it to a scene timeline; pick the event and fill in any arguments.</li>
+  <li><strong>Button / choice action</strong> — choose <strong>Call Common Event</strong> as a UI action and select the event (+ arguments).</li>
+  <li><strong>From a script</strong> — <code>game.callCommonEvent("Event Name", { arg: value })</code>.</li>
+  <li><strong>Nested</strong> — a Common Event can call another Common Event.</li>
+</ol>
+  <p>When the event finishes, execution returns to right after the call (a call stack handles nesting).</p>
+  <hr>
+  <h2 id="parameters-local-scope">Parameters (local scope)</h2>
+  <p>A <code>called</code> event can declare typed <strong>parameters</strong> (string / number / boolean, each with a default). Arguments you pass at the call site are injected as variables <strong>only for the duration of that call</strong>, and the previous values are <strong>restored when the event returns</strong> — so parameters don't leak into the rest of your game. Arguments are coerced to the parameter's declared type. Deleting a parameter automatically cleans up any now-dangling arguments on existing Call Common Event commands.</p>
+  <hr>
+  <h2 id="safety-limits">Safety limits</h2>
   <ul>
-    <li><strong>Call depth</strong> is capped (32) — exceeding it shows an error instead of freezing.</li>
-    <li><strong>Cycles are detected</strong> — re-entering an event already on the call stack (A → B → A) is blocked.</li>
-  </ul>
-
-  <h2 id="ce-parallel">Parallel events</h2>
-  <p>Parallel events are for background logic. Each tick advances one command per active event, and only
-  <strong>background-safe</strong> commands run: Set Variable, Run Script, Wait, Play/Stop Music,
-  Play/Stop Sound Effect, Call Common Event. Presentation-takeover commands (Dialogue, Choice, Show
-  Text/Image/Character, Set Background, Jump, Text Input, Credit Roll, screen effects, particles, tweens)
-  are <strong>skipped</strong>. Use <code>Wait</code> to pace them. Parallel events are not part of save
-  data — they resume from the loaded variable state.</p>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <hr class="divider">
-  <!-- ═══════════════════════════════════════════ -->
-
-  <h1 style="margin-top:8px">Plugin / Extension System</h1>
-  <p class="subtitle">Extend FlourishVNE with custom commands, effects, and hooks.</p>
-
-  <!-- Plugin Getting Started -->
-  <h2 id="plugin-start">Getting Started with Plugins</h2>
+  <li><strong>Call depth</strong> is capped (32 levels). Exceeding it is blocked with an on-screen error rather than</li>
+</ul>
+  <p>freezing the game.</p>
+  <ul>
+  <li><strong>Cycles are detected</strong>: if event A is already running and something tries to call A again (A → B → A),</li>
+</ul>
+  <p>the re-entry is blocked (a normal sequential call of the same event twice is fine).</p>
+  <hr>
+  <h2 id="parallel-events--what-they-can-do">Parallel events — what they can do</h2>
+  <p>Parallel events are for <strong>background logic</strong> (timers, ambient flags, looping music logic). To keep them from hijacking the main flow, each tick advances <strong>one</strong> command per active parallel event, and only <strong>background-safe</strong> commands run:</p>
+  <ul>
+  <li>✅ Set Variable, Run Script, Wait, Play/Stop Music, Play/Stop Sound Effect, Call Common Event</li>
+  <li>❌ <strong>Skipped:</strong> Dialogue, Choice, Show Text/Image/Character, Set Background, Jump, Text Input, Credit</li>
+</ul>
+  <p>Roll, screen effects, particles, tweens — anything that would take over the main presentation.</p>
+  <p>Use <code>Wait</code> inside a parallel event to pace it (e.g., increment a clock every few seconds). Parallel events restart from the top when their condition turns on again, and they are not part of save data (they simply resume based on the loaded variable state).</p>
+  <hr>
+  <h2 id="sharing-across-projects">Sharing across projects</h2>
+  <p>The Common Events manager has <strong>Export</strong> and <strong>Import</strong> buttons. Export writes all your common events to a <code>common-events.json</code> file; Import adds them to another project (each gets a fresh id). Note: commands inside an imported event that reference <em>variables</em> by id won't automatically resolve in a different project — re-point them after importing.</p>
+  <hr>
+  <h2 id="tips">Tips</h2>
+  <ul>
+  <li>Put shared logic (stat changes, quest checks, flag toggles) in a <code>called</code> event and invoke it from</li>
+</ul>
+  <p>many places instead of copy-pasting commands.</p>
+  <ul>
+  <li>Use <code>auto</code> + a condition variable for "first time entering any scene after X happened" setup.</li>
+  <li>Keep <code>parallel</code> events small and <code>Wait</code>-paced; they share your variables with the main scene.</li>
+</ul>
+  <hr>
+  <h1>FlourishVNE Plugin / Extension System</h1>
+  <p>The Plugin System lets you extend FlourishVNE with custom functionality. Plugins can register new commands, effects, hook into lifecycle events, and modify engine behavior.</p>
+  <hr>
+  <h2 id="getting-started">Getting Started</h2>
   <ol>
-    <li>Open the <strong>Plugin Manager</strong> from the <strong>Tools</strong> menu</li>
-    <li>Click the <strong>Install Plugin</strong> tab</li>
-    <li>Paste your plugin source code</li>
-    <li>Click <strong>Install Plugin</strong></li>
-    <li>Enable/disable plugins from the <strong>Installed</strong> tab</li>
-  </ol>
-
-  <!-- Plugin Structure -->
+  <li>Open the <strong>Plugin Manager</strong> from the <strong>Tools</strong> menu</li>
+  <li>Click the <strong>Install Plugin</strong> tab</li>
+  <li>Paste your plugin source code</li>
+  <li>Click <strong>Install Plugin</strong></li>
+  <li>Enable/disable plugins from the <strong>Installed</strong> tab</li>
+</ol>
+  <hr>
   <h2 id="plugin-structure">Plugin Structure</h2>
   <p>Every plugin must define a <code>manifest</code> object and a <code>plugin</code> variable that bundles the manifest with hook functions:</p>
-  <pre><code><span class="cmt">// Required: Plugin manifest</span>
-<span class="kw">const</span> manifest = {
-    id: <span class="str">'my-plugin'</span>,              <span class="cmt">// unique identifier (lowercase, hyphens)</span>
-    name: <span class="str">'My Plugin'</span>,            <span class="cmt">// display name</span>
-    version: <span class="str">'1.0.0'</span>,             <span class="cmt">// semver version string</span>
-    description: <span class="str">'What this plugin does'</span>,
-    author: <span class="str">'Your Name'</span>,          <span class="cmt">// optional</span>
-    category: <span class="str">'utility'</span>,          <span class="cmt">// see categories below</span>
-    capabilities: [],             <span class="cmt">// reserved for future use</span>
-    dependencies: [],             <span class="cmt">// other plugin IDs this depends on</span>
+  <pre><code>// Required: Plugin manifest
+const manifest = {
+    id: 'my-plugin',              // unique identifier (lowercase, hyphens)
+    name: 'My Plugin',            // display name
+    version: '1.0.0',             // semver version string
+    description: 'What this plugin does',
+    author: 'Your Name',          // optional
+    category: 'utility',          // see categories below
+    capabilities: [],             // reserved for future use
+    dependencies: [],             // other plugin IDs this depends on
 };
 
-<span class="cmt">// Lifecycle hooks (all optional)</span>
-<span class="kw">function</span> <span class="fn">onLoad</span>(api) {
-    <span class="cmt">// Called when the plugin is first loaded</span>
+// Lifecycle hooks (all optional)
+function onLoad(api) {
+    // Called when the plugin is first loaded
 }
 
-<span class="kw">function</span> <span class="fn">onEnable</span>(api) {
-    <span class="cmt">// Called when the plugin is enabled</span>
+function onEnable(api) {
+    // Called when the plugin is enabled
 }
 
-<span class="kw">function</span> <span class="fn">onDisable</span>(api) {
-    <span class="cmt">// Called when the plugin is disabled</span>
+function onDisable(api) {
+    // Called when the plugin is disabled
 }
 
-<span class="kw">function</span> <span class="fn">onBeforeCommand</span>(api, command) {
-    <span class="cmt">// Called before each command executes</span>
-    <span class="cmt">// Return modified command or undefined</span>
+function onBeforeCommand(api, command) {
+    // Called before each command executes
+    // Return modified command or undefined
 }
 
-<span class="kw">function</span> <span class="fn">onAfterCommand</span>(api, command, result) {
-    <span class="cmt">// Called after each command executes</span>
+function onAfterCommand(api, command, result) {
+    // Called after each command executes
 }
 
-<span class="kw">function</span> <span class="fn">onSceneChange</span>(api, fromSceneId, toSceneId) {
-    <span class="cmt">// Called when the scene changes</span>
+function onSceneChange(api, fromSceneId, toSceneId) {
+    // Called when the scene changes
 }
 
-<span class="kw">function</span> <span class="fn">onVariableChange</span>(api, variableId, oldValue, newValue) {
-    <span class="cmt">// Called when a variable changes</span>
+function onVariableChange(api, variableId, oldValue, newValue) {
+    // Called when a variable changes
 }
 
-<span class="kw">function</span> <span class="fn">onSave</span>(api, saveData) {
-    <span class="cmt">// Called before the game state is saved</span>
-    <span class="cmt">// Can modify saveData</span>
+function onSave(api, saveData) {
+    // Called before the game state is saved (may mutate saveData)
 }
 
-<span class="kw">function</span> <span class="fn">onLoadAfterSave</span>(api, saveData) {
-    <span class="cmt">// Called after a save is loaded</span>
+function onLoadAfterSave(api, saveData) {
+    // Called after a save is loaded
 }
 
-<span class="cmt">// Required: Export the plugin</span>
-<span class="kw">const</span> plugin = {
+function onRuntimeInit(api) {
+    // Called once when a play session starts (LivePreview / exported game)
+}
+
+// Required: Export the plugin (bundles the manifest + hooks)
+const plugin = {
     manifest,
-    onLoad, onEnable, onDisable,
-    onBeforeCommand, onAfterCommand,
-    onSceneChange, onVariableChange,
-    onSave, onLoadAfterSave,
+    onLoad,
+    onEnable,
+    onDisable,
+    onBeforeCommand,
+    onAfterCommand,
+    onSceneChange,
+    onVariableChange,
+    onSave,
+    onLoadAfterSave,
+    onRuntimeInit,
 };</code></pre>
-  <p class="tip">Hooks fire only during a play session. <code>onBeforeCommand</code>/<code>onAfterCommand</code> are observe-only in this version. Variable reads/writes via <code>api</code> are live during play.</p>
-
-  <!-- Plugin Categories -->
+  <blockquote>Note: hooks fire only while a play session is active (Test Play or an exported game). <code>onBeforeCommand</code> / <code>onAfterCommand</code> are observe-only in this version (returning a modified command is not yet applied). Variable reads/writes via <code>api</code> are <strong>live</strong> during play.</blockquote>
+  <hr>
   <h2 id="plugin-categories">Plugin Categories</h2>
   <table>
-    <thead><tr><th>Category</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>commands</code></td><td>Adds new command types</td></tr>
-      <tr><td><code>effects</code></td><td>Adds custom visual/audio effects</td></tr>
-      <tr><td><code>ui</code></td><td>Modifies or extends the UI</td></tr>
-      <tr><td><code>assets</code></td><td>Adds asset processing pipelines</td></tr>
-      <tr><td><code>gameplay</code></td><td>Extends gameplay mechanics</td></tr>
-      <tr><td><code>integration</code></td><td>Reserved — the sandbox has no network access (fetch/XHR/WebSocket blocked), so external integrations aren't possible yet.</td></tr>
-      <tr><td><code>utility</code></td><td>General-purpose utilities</td></tr>
-    </tbody>
-  </table>
-
-  <!-- Plugin API -->
-  <h2 id="plugin-api">Plugin API (<code>api</code>)</h2>
+<thead><tr><th>Category</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>commands</code></td><td>Adds new command types</td></tr>
+<tr><td><code>effects</code></td><td>Adds custom visual/audio effects</td></tr>
+<tr><td><code>ui</code></td><td>Modifies or extends the UI</td></tr>
+<tr><td><code>assets</code></td><td>Adds asset processing pipelines</td></tr>
+<tr><td><code>gameplay</code></td><td>Extends gameplay mechanics</td></tr>
+<tr><td><code>integration</code></td><td>Reserved. <strong>Note:</strong> the sandbox has no network access (<code>fetch</code>/XHR/WebSocket are blocked), so true external integrations aren't possible yet.</td></tr>
+<tr><td><code>utility</code></td><td>General-purpose utilities</td></tr>
+</tbody>
+</table>
+  <hr>
+  <h2 id="plugin-api-api">Plugin API (<code>api</code>)</h2>
   <p>Every hook function receives an <code>api</code> object with these methods:</p>
-
   <h3>Variables</h3>
-  <pre><code><span class="cmt">// Live during play (by name or id). In the editor, getVariable returns the</span>
-<span class="cmt">// default and setVariable is a no-op.</span>
-<span class="kw">let</span> hp = api.<span class="fn">getVariable</span>(<span class="str">'playerHP'</span>);
-api.<span class="fn">setVariable</span>(<span class="str">'playerHP'</span>, <span class="num">100</span>);</code></pre>
-
+  <pre><code>// During play these read &amp; write the LIVE game variable store (by name or id).
+// In the editor (not playing), getVariable returns the variable's default and
+// setVariable is a no-op (with a console warning).
+let hp = api.getVariable('playerHP');
+api.setVariable('playerHP', 100);</code></pre>
   <h3>Project Info</h3>
-  <pre><code>api.<span class="fn">getProjectInfo</span>();
-<span class="cmt">// Returns: { title, version, sceneCount, characterCount }</span>
+  <pre><code>api.getProjectInfo();
+// Returns: { title, version, sceneCount, characterCount }
 
-api.<span class="fn">getScenes</span>();      <span class="cmt">// [{ id, name }, ...]</span>
-api.<span class="fn">getCharacters</span>(); <span class="cmt">// [{ id, name }, ...]</span></code></pre>
-
+api.getScenes();      // Returns: [{ id, name }, ...]
+api.getCharacters();  // Returns: [{ id, name }, ...]</code></pre>
   <h3>Custom Commands &amp; Effects</h3>
-  <p>Register from <code>onLoad</code>/<code>onEnable</code>. Registered commands appear in the Command Palette's 🧩 Plugins group and run your <code>handler</code> during play. The full type becomes <code>&lt;pluginId&gt;.&lt;type&gt;</code>.</p>
-  <pre><code>api.<span class="fn">registerCommand</span>({
-    type: <span class="str">'rollDice'</span>,
-    displayName: <span class="str">'Roll Dice'</span>,
-    category: <span class="str">'RPG'</span>,
-    description: <span class="str">'Roll dice and store the result'</span>,
+  <p>Register these from <code>onLoad</code> / <code>onEnable</code>. A registered command appears in the <strong>Command Palette</strong> under a "🧩 Plugins" group and runs your <code>handler</code> during play.</p>
+  <pre><code>// Register a custom command. The full type becomes "&lt;pluginId&gt;.&lt;type&gt;".
+api.registerCommand({
+    type: 'rollDice',                // unique within your plugin
+    displayName: 'Roll Dice',        // shown in the palette
+    category: 'RPG',
+    description: 'Roll dice and store the result',
     parameters: [
-        { name: <span class="str">'sides'</span>, label: <span class="str">'Sides'</span>, type: <span class="str">'number'</span>, defaultValue: <span class="num">6</span> },
-        { name: <span class="str">'target'</span>, label: <span class="str">'Result Variable'</span>, type: <span class="str">'variable'</span> },
+        { name: 'sides', label: 'Sides', type: 'number', defaultValue: 6 },
+        { name: 'target', label: 'Result Variable', type: 'variable' },
     ],
+    // Use api.* for effects. Optionally return { advance: false } to NOT auto-advance.
     handler: (params, api) =&gt; {
-        <span class="kw">const</span> roll = Math.floor(Math.random() * params.sides) + <span class="num">1</span>;
-        <span class="kw">if</span> (params.target) api.<span class="fn">setVariable</span>(params.target, roll);
+        const roll = Math.floor(Math.random() * params.sides) + 1;
+        if (params.target) api.setVariable(params.target, roll);
     },
 });
 
-api.<span class="fn">registerEffect</span>({
-    type: <span class="str">'myEffect'</span>,
-    displayName: <span class="str">'My Effect'</span>,
-    description: <span class="str">'A cool effect'</span>,
-    parameters: [{ name: <span class="str">'intensity'</span>, label: <span class="str">'Intensity'</span>, type: <span class="str">'number'</span>, defaultValue: <span class="num">0.5</span> }],
-    apply: (params, api) =&gt; { <span class="cmt">/* ... */</span> },
-    remove: (api) =&gt; { <span class="cmt">/* ... */</span> },
+// Register a custom effect (registered + listed in the plugin's Details view).
+api.registerEffect({
+    type: 'myEffect',
+    displayName: 'My Effect',
+    description: 'A cool effect',
+    parameters: [{ name: 'intensity', label: 'Intensity', type: 'number', defaultValue: 0.5 }],
+    apply: (params, api) =&gt; { /* ... */ },
+    remove: (api) =&gt; { /* ... */ },
 });</code></pre>
-  <p>Parameter <code>type</code>: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>select</code> (with <code>options</code>), <code>color</code>, <code>variable</code>, or <code>asset</code>.</p>
-
+  <p>Parameter <code>type</code> is one of: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>select</code> (with <code>options</code>), <code>color</code>, <code>variable</code> (a variable picker), or <code>asset</code>.</p>
   <h3>Settings</h3>
-  <p>Declare a <code>settings</code> array on the manifest to get a configuration form in the plugin's Details view. Read the values at runtime with <code>api.getConfig()</code>.</p>
-  <pre><code><span class="kw">const</span> manifest = {
-    <span class="cmt">/* …id, name, version, … */</span>
+  <p>Declare a <code>settings</code> array on the manifest to give your plugin a configuration form. It renders in the plugin's <strong>Details</strong> view, and the values are read at runtime with <code>api.getConfig()</code>:</p>
+  <pre><code>const manifest = {
+    id: 'my-plugin', name: 'My Plugin', version: '1.0.0',
+    description: '…', author: 'You', category: 'utility', capabilities: [],
     settings: [
-        { name: <span class="str">'difficulty'</span>, label: <span class="str">'Difficulty'</span>, type: <span class="str">'select'</span>,
-          defaultValue: <span class="str">'normal'</span>,
-          options: [{ label: <span class="str">'Easy'</span>, value: <span class="str">'easy'</span> }, { label: <span class="str">'Normal'</span>, value: <span class="str">'normal'</span> }] },
-        { name: <span class="str">'showHints'</span>, label: <span class="str">'Show hints'</span>, type: <span class="str">'boolean'</span>, defaultValue: <span class="kw">true</span> },
+        { name: 'difficulty', label: 'Difficulty', type: 'select',
+          defaultValue: 'normal',
+          options: [{ label: 'Easy', value: 'easy' }, { label: 'Normal', value: 'normal' }] },
+        { name: 'showHints', label: 'Show hints', type: 'boolean', defaultValue: true },
     ],
 };
 
-<span class="kw">function</span> <span class="fn">onRuntimeInit</span>(api) {
-    <span class="kw">const</span> cfg = api.<span class="fn">getConfig</span>();   <span class="cmt">// defaults merged with the user's choices</span>
-    <span class="kw">if</span> (cfg.showHints) api.<span class="fn">notify</span>(<span class="str">'Hints are on'</span>);
+function onRuntimeInit(api) {
+    const cfg = api.getConfig();        // { difficulty, showHints } (defaults merged with user overrides)
+    if (cfg.showHints) api.notify('Hints are on');
 }</code></pre>
-  <p>Setting <code>type</code>: <code>string</code>, <code>number</code>, <code>boolean</code>, or <code>select</code>.</p>
-
+  <p>Setting <code>type</code> is one of <code>string</code>, <code>number</code>, <code>boolean</code>, or <code>select</code> (with <code>options</code>).</p>
   <h3>Plugin-Scoped Storage</h3>
-  <pre><code><span class="cmt">// Persists in the PROJECT (travels with .flourish exports — not localStorage)</span>
-api.<span class="fn">setStorage</span>(<span class="str">'key'</span>, value);
-<span class="kw">let</span> value = api.<span class="fn">getStorage</span>(<span class="str">'key'</span>);</code></pre>
-
+  <pre><code>// Persists in the PROJECT (travels with .flourish exports — not browser localStorage).
+api.setStorage('key', value);
+let value = api.getStorage('key');</code></pre>
   <h3>Logging</h3>
-  <pre><code>api.<span class="fn">log</span>(<span class="str">'Plugin message'</span>);    <span class="cmt">// prefixed with [PluginName]</span></code></pre>
-
-  <!-- Plugin Examples -->
-  <h2 id="plugin-examples">Example Plugins</h2>
-
+  <pre><code>api.log('Plugin message');    // prefixed with [PluginName]</code></pre>
+  <hr>
+  <h2 id="example-plugins">Example Plugins</h2>
   <h3>Auto-Save Plugin</h3>
-  <pre><code><span class="kw">const</span> manifest = {
-    id: <span class="str">'auto-save'</span>,
-    name: <span class="str">'Auto Save'</span>,
-    version: <span class="str">'1.0.0'</span>,
-    description: <span class="str">'Automatically saves progress at scene transitions'</span>,
-    author: <span class="str">'FlourishVNE'</span>,
-    category: <span class="str">'utility'</span>,
+  <pre><code>const manifest = {
+    id: 'auto-save',
+    name: 'Auto Save',
+    version: '1.0.0',
+    description: 'Automatically saves progress at scene transitions',
+    author: 'FlourishVNE',
+    category: 'utility',
     capabilities: [],
 };
 
-<span class="kw">let</span> saveCount = <span class="num">0</span>;
+let saveCount = 0;
 
-<span class="kw">function</span> <span class="fn">onEnable</span>(api) {
-    saveCount = api.<span class="fn">getStorage</span>(<span class="str">'saveCount'</span>) || <span class="num">0</span>;
-    api.<span class="fn">log</span>(<span class="str">`Auto-save enabled. ${saveCount} saves so far.`</span>);
+function onEnable(api) {
+    saveCount = api.getStorage('saveCount') || 0;
+    api.log(`Auto-save enabled. ${saveCount} saves so far.`);
 }
 
-<span class="kw">function</span> <span class="fn">onSceneChange</span>(api, fromSceneId, toSceneId) {
+function onSceneChange(api, fromSceneId, toSceneId) {
     saveCount++;
-    api.<span class="fn">setStorage</span>(<span class="str">'saveCount'</span>, saveCount);
-    api.<span class="fn">log</span>(<span class="str">`Auto-saving at scene change #${saveCount}`</span>);
+    api.setStorage('saveCount', saveCount);
+    api.log(`Auto-saving at scene change #${saveCount}`);
 }
 
-<span class="kw">const</span> plugin = { manifest, onEnable, onSceneChange };</code></pre>
-
+const plugin = { manifest, onEnable, onSceneChange };</code></pre>
   <h3>Variable Logger Plugin</h3>
-  <pre><code><span class="kw">const</span> manifest = {
-    id: <span class="str">'var-logger'</span>,
-    name: <span class="str">'Variable Logger'</span>,
-    version: <span class="str">'1.0.0'</span>,
-    description: <span class="str">'Logs all variable changes to the console'</span>,
-    category: <span class="str">'utility'</span>,
+  <pre><code>const manifest = {
+    id: 'var-logger',
+    name: 'Variable Logger',
+    version: '1.0.0',
+    description: 'Logs all variable changes to the console',
+    category: 'utility',
     capabilities: [],
 };
 
-<span class="kw">function</span> <span class="fn">onVariableChange</span>(api, variableId, oldValue, newValue) {
-    api.<span class="fn">log</span>(<span class="str">`Variable changed: ${variableId} = ${oldValue} → ${newValue}`</span>);
+function onVariableChange(api, variableId, oldValue, newValue) {
+    api.log(`Variable changed: ${variableId} = ${oldValue} → ${newValue}`);
 }
 
-<span class="kw">const</span> plugin = { manifest, onVariableChange };</code></pre>
-
+const plugin = { manifest, onVariableChange };</code></pre>
   <h3>Custom Dice Roll Command</h3>
-  <pre><code><span class="kw">const</span> manifest = {
-    id: <span class="str">'dice-roller'</span>,
-    name: <span class="str">'Dice Roller'</span>,
-    version: <span class="str">'1.0.0'</span>,
-    description: <span class="str">'Adds a dice roll command for RPG mechanics'</span>,
-    category: <span class="str">'commands'</span>,
+  <pre><code>const manifest = {
+    id: 'dice-roller',
+    name: 'Dice Roller',
+    version: '1.0.0',
+    description: 'Adds a dice roll command for RPG mechanics',
+    category: 'commands',
     capabilities: [],
 };
 
-<span class="kw">function</span> <span class="fn">onEnable</span>(api) {
-    api.<span class="fn">registerCommand</span>({
-        type: <span class="str">'rollDice'</span>,
-        displayName: <span class="str">'Roll Dice'</span>,
-        description: <span class="str">'Roll dice and store the result in a variable'</span>,
-        category: <span class="str">'RPG'</span>,
+function onEnable(api) {
+    api.registerCommand({
+        type: 'rollDice',
+        displayName: 'Roll Dice',
+        description: 'Roll dice and store the result in a variable',
+        category: 'RPG',
         parameters: [
-            { name: <span class="str">'sides'</span>, label: <span class="str">'Sides'</span>, type: <span class="str">'number'</span>, defaultValue: <span class="num">6</span> },
-            { name: <span class="str">'count'</span>, label: <span class="str">'Count'</span>, type: <span class="str">'number'</span>, defaultValue: <span class="num">1</span> },
-            { name: <span class="str">'target'</span>, label: <span class="str">'Result Variable'</span>, type: <span class="str">'variable'</span> },
+            { name: 'sides', label: 'Sides', type: 'number', defaultValue: 6 },
+            { name: 'count', label: 'Count', type: 'number', defaultValue: 1 },
+            { name: 'target', label: 'Result Variable', type: 'variable' },
         ],
         handler: (params, api) =&gt; {
-            <span class="kw">let</span> total = <span class="num">0</span>;
-            <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; params.count; i++) {
-                total += Math.<span class="fn">floor</span>(Math.<span class="fn">random</span>() * params.sides) + <span class="num">1</span>;
+            let total = 0;
+            for (let i = 0; i &lt; params.count; i++) {
+                total += Math.floor(Math.random() * params.sides) + 1;
             }
-            <span class="kw">if</span> (params.target) api.<span class="fn">setVariable</span>(params.target, total);
+            if (params.target) api.setVariable(params.target, total);
         },
     });
 }
 
-<span class="kw">const</span> plugin = { manifest, onEnable };</code></pre>
-
-  <!-- Plugin Lifecycle -->
+const plugin = { manifest, onEnable };</code></pre>
+  <blockquote>Drag <strong>Roll Dice</strong> from the palette's 🧩 Plugins group into a scene; its parameters appear in the Properties inspector, and the handler runs (rolling + storing) when the command executes.</blockquote>
+  <hr>
   <h2 id="plugin-lifecycle">Plugin Lifecycle</h2>
   <ol>
-    <li><strong>Install</strong> — Plugin source is parsed and validated</li>
-    <li><strong>Load</strong> — <code>onLoad()</code> is called, plugin is in <code>loaded</code> state</li>
-    <li><strong>Enable</strong> — <code>onEnable()</code> is called, hooks become active</li>
-    <li><strong>Disable</strong> — <code>onDisable()</code> is called, hooks are deactivated</li>
-    <li><strong>Uninstall</strong> — Plugin is removed from the project</li>
-  </ol>
-
-  <h3>Plugin Details View</h3>
+  <li><strong>Install</strong> — Plugin source is parsed and validated</li>
+  <li><strong>Load</strong> — <code>onLoad()</code> is called, plugin is in <code>loaded</code> state</li>
+  <li><strong>Enable</strong> — <code>onEnable()</code> is called, hooks become active</li>
+  <li><strong>Disable</strong> — <code>onDisable()</code> is called, hooks are deactivated</li>
+  <li><strong>Uninstall</strong> — Plugin is removed from the project</li>
+</ol>
+  <hr>
+  <h2 id="plugin-details-view">Plugin Details View</h2>
   <p>From the <strong>Installed</strong> tab, click <strong>Details</strong> on any plugin to see:</p>
   <ul>
-    <li>Manifest information (ID, version, author, category)</li>
-    <li>Registered custom commands</li>
-    <li>Registered custom effects</li>
-    <li>Plugin configuration</li>
-    <li>Enable/disable/uninstall controls</li>
-  </ul>
-
-  <!-- Plugin Tips -->
-  <h2 id="plugin-tips">Tips</h2>
+  <li>Manifest information (ID, version, author, category)</li>
+  <li>Registered custom commands</li>
+  <li>Registered custom effects</li>
+  <li>Plugin configuration</li>
+  <li>Enable/disable/uninstall controls</li>
+</ul>
+  <hr>
+  <h2 id="tips">Tips</h2>
   <ul>
-    <li>Keep plugin IDs unique and lowercase (e.g., <code>my-cool-plugin</code>)</li>
-    <li>Use <code>api.log()</code> for debugging — output goes to the Plugin Manager console</li>
-    <li>Use scoped storage (<code>api.setStorage</code>) instead of global state</li>
-    <li>Test plugins in isolation before combining multiple plugins</li>
-    <li>Plugins run in a sandboxed environment similar to scripts</li>
-  </ul>
+  <li>Keep plugin IDs unique and lowercase (e.g., <code>my-cool-plugin</code>)</li>
+  <li>Use <code>api.log()</code> for debugging — output goes to the Plugin Manager console</li>
+  <li>Use scoped storage (<code>api.setStorage</code>) instead of global state — it travels with the project</li>
+  <li>Share plugins via <strong>Export</strong> (Details view) → a <code>.plugin.js</code> file; install it elsewhere with <strong>Import from file…</strong></li>
+  <li>Declare <code>dependencies</code> / <code>engineVersion</code> in the manifest — install is blocked if a dependency is missing or the engine is too old</li>
+  <li>Plugins run in the same hardened sandbox as scripts (no <code>document</code>/<code>window</code>/<code>fetch</code>/timers/<code>.constructor</code>). This is a practical sandbox, not a security boundary — only install plugins you trust.</li>
+</ul>
 </main>
 
 <script>

@@ -73,6 +73,10 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
             // transition; click sound; waitForClick/quickMenu/onClick/actions/showConditions;
             // run-conditions + live.
             return order(['content', 'transform', 'appearance', 'media', 'animation', 'audio', 'logic', 'conditions']);
+        case CommandType.ShowItem:
+            // item + quantity; x/y/w/h/anchor/orientation; opacity; image override; transition;
+            // click sound; give/disappear/pick-up-once + extra actions + showConditions; run-conditions.
+            return order(['content', 'transform', 'appearance', 'media', 'animation', 'audio', 'logic', 'conditions']);
         case CommandType.ShowText:
             // text; x/y/max-w/h/orientation; font/colour/align; shadow/gradient/border; transition.
             return order(['content', 'transform', 'appearance', 'effects', 'animation', 'conditions']);

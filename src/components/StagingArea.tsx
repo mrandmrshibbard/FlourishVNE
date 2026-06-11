@@ -6,7 +6,7 @@ import { VNProject } from '../types/project';
 import {
     CommandType, ShowCharacterCommand, DialogueCommand, FlashScreenCommand, ChoiceOption,
     ChoiceCommand, SetBackgroundCommand, ShowTextCommand, ShowImageCommand, VNScene, ShowButtonCommand,
-    PlayMovieCommand, VNCommand, TextInputCommand
+    PlayMovieCommand, VNCommand, TextInputCommand, ShowItemCommand
 } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
@@ -115,6 +115,7 @@ interface ButtonOverlay {
     textAlign: 'left' | 'center' | 'right';
     paddingX: number;
     borderRadius: number;
+    opacity?: number;
     imageUrl?: string;
     hoverImageUrl?: string;
     rotation?: number;
@@ -465,6 +466,42 @@ const StagingArea: React.FC<{
                             imageUrl,
                             hoverImageUrl,
                             rotation: buttonCmd.rotation, flipX: buttonCmd.flipX, flipY: buttonCmd.flipY,
+                        });
+                    }
+                    break;
+                case CommandType.ShowItem:
+                    if (evaluateConditions(command.showConditions, currentVariables)) {
+                        const itemCmd = command as ShowItemCommand;
+                        const item = project.items?.[itemCmd.itemId];
+                        // Default the on-canvas visual to the item's registry icon; an
+                        // explicit image override wins. Resolve the SAME way the runtime does.
+                        const visual = itemCmd.image || item?.icon || null;
+                        const resolveItemAsset = (asset?: { type: 'image' | 'video'; id: VNID } | null): string | undefined => {
+                            if (!asset?.id) return undefined;
+                            const id = asset.id;
+                            return project.backgrounds[id]?.videoUrl || project.backgrounds[id]?.imageUrl ||
+                                   project.images?.[id]?.videoUrl || project.images?.[id]?.imageUrl ||
+                                   project.videos[id]?.videoUrl || undefined;
+                        };
+                        buttonOverlays.push({
+                            id: itemCmd.id,
+                            layer: itemCmd.layer,
+                            text: '',
+                            x: itemCmd.x,
+                            y: itemCmd.y,
+                            width: itemCmd.width || 10,
+                            height: itemCmd.height || 10,
+                            backgroundColor: 'transparent',
+                            textColor: '#ffffff',
+                            fontSize: 0,
+                            fontWeight: 'normal',
+                            textAlign: 'center',
+                            paddingX: 0,
+                            borderRadius: 0,
+                            opacity: itemCmd.opacity,
+                            imageUrl: resolveItemAsset(visual),
+                            hoverImageUrl: resolveItemAsset(itemCmd.hoverImage),
+                            rotation: itemCmd.rotation, flipX: itemCmd.flipX, flipY: itemCmd.flipY,
                         });
                     }
                     break;
@@ -1502,6 +1539,7 @@ const StagingArea: React.FC<{
                                     // Image buttons let the height follow the image aspect (box conforms to art).
                                     height: btn.imageUrl ? 'auto' : `${displayH}%`,
                                     transform: `translate(-50%, -50%) ${buildOrientationTransform({ rotation: btn.rotation, flipX: btn.flipX, flipY: btn.flipY })}`.trim(),
+                                    opacity: btn.opacity ?? 1,
                                     cursor: isResizing ? 'nwse-resize' : (isDragging ? 'grabbing' : 'grab'),
                                     zIndex: (isDragging || isResizing) ? 100000 : 1 + (btn.layer ?? 0) * 100,
                                 }}

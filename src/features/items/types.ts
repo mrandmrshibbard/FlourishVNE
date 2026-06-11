@@ -35,6 +35,10 @@ export interface VNItem {
     category?: string;
     /** Sort order within the registry / a generated screen. */
     order?: number;
+    /** When true, this item is hidden from an inventory grid once its count hits 0 — even on a grid
+     *  that otherwise shows unowned items. (A grid's own "hide unowned" setting already hides every
+     *  0-count item; this is the per-item override for grids that show empties.) Additive-optional. */
+    hideWhenEmpty?: boolean;
 }
 
 /**

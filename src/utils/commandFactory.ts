@@ -243,6 +243,32 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             };
             return command;
         }
+        case CommandType.ShowItem: {
+            const firstItemId = Object.keys(project.items || {})[0] || '';
+            const command = {
+                type,
+                itemId: firstItemId,
+                quantity: 1,
+                x: 50,
+                y: 50,
+                width: 10,
+                height: 10,
+                anchorX: 0.5,
+                anchorY: 0.5,
+                opacity: 1,
+                image: null,
+                hoverImage: null,
+                giveOnClick: true,
+                removeAfterPickup: true,
+                pickUpOnce: true,
+                actions: [],
+                clickSound: null,
+                showConditions: [],
+                transition: 'fade' as const,
+                duration: 0.3,
+            };
+            return command;
+        }
         case CommandType.HideButton: {
             const command = {
                 type,

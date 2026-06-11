@@ -24,7 +24,7 @@ import {
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
-    ShowButtonCommand, HideButtonCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
+    ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
@@ -165,6 +165,7 @@ import {
     handleHideImage,
     handleShowButton,
     handleHideButton,
+    handleShowItem,
     handleJump,
     handleJumpToLabel,
     handleLabel,
@@ -404,13 +405,14 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
     );
 };
 
-const ButtonOverlayElement: React.FC<{ 
-    overlay: ButtonOverlay; 
+const ButtonOverlayElement: React.FC<{
+    overlay: ButtonOverlay;
     onAction: (action: VNUIAction) => void;
     playSound: (soundId: VNID | null) => void;
     onAdvance?: () => void;
     onCommitVariables?: () => void;
-}> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables }) => {
+    onPickup?: (overlay: ButtonOverlay) => void;
+}> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables, onPickup }) => {
     const tweenValues = useTween(overlay.id, 'button');
     const [isHovered, setIsHovered] = useState(false);
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
@@ -490,6 +492,12 @@ const ButtonOverlayElement: React.FC<{
         // and never advance for quick-menu buttons (they fire actions but don't consume the click).
         if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene) {
             onAdvance();
+        }
+
+        // Show Item pickups: give the item, remove the icon, and (if "pick up once") record it —
+        // all applied directly to playerState in one atomic update by onPickup.
+        if ((overlay.giveItemId || overlay.removeAfterClick || overlay.pickUpOnceId) && onPickup) {
+            onPickup(overlay);
         }
     };
 
@@ -870,6 +878,7 @@ interface GameStateSave {
         inventorySlots?: (VNID | null)[];
         selectedItemId?: VNID | null;
         selectedElementId?: VNID | null;
+        pickedUpItems?: VNID[];
     }
 }
 
@@ -2301,7 +2310,9 @@ const InventoryGridElement: React.FC<{
 }> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
     const count = (it: VNItem) => Number(variables[it.countVariableId] ?? 0);
     const filteredAll = element.categoryFilter ? items.filter(it => it.category === element.categoryFilter) : items;
-    const shown = (element.hideUnowned === false) ? filteredAll : filteredAll.filter(it => count(it) >= 1);
+    // An item shows when owned (count >= 1). At 0 it's hidden if either the grid hides unowned items
+    // OR the item itself is flagged hideWhenEmpty (per-item override for grids that show empties).
+    const shown = filteredAll.filter(it => count(it) >= 1 || (element.hideUnowned === false && !it.hideWhenEmpty));
     const itemById = new Map<VNID, VNItem>(shown.map(it => [it.id, it] as [VNID, VNItem]));
 
     const cols = element.columns || 4;
@@ -4623,6 +4634,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 inventorySlots: playerState.inventorySlots,
                 selectedItemId: playerState.selectedItemId,
                 selectedElementId: playerState.selectedElementId,
+                pickedUpItems: playerState.pickedUpItems,
             }
             };
 
@@ -4671,6 +4683,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 inventorySlots: saveData.playerStateData.inventorySlots,
                 selectedItemId: saveData.playerStateData.selectedItemId,
                 selectedElementId: saveData.playerStateData.selectedElementId,
+                pickedUpItems: saveData.playerStateData.pickedUpItems,
                 history: [],
                 savedInputs: {},
                 uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
@@ -6541,8 +6554,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const cmd = command as any;
                     const durationMs = ((cmd.duration ?? 1) * 1000);
 
+                    // Wait until the player has collected the target item(s), then advance. Items are
+                    // owned when their count variable is >= 1; polled so Show Item / button pickups during
+                    // the wait release it. Indefinite (no duration), like waitIndefinitelyForInput.
+                    if (cmd.waitForItems) {
+                        const targets: VNID[] = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
+                        const mode: 'all' | 'any' = cmd.itemsMode === 'any' ? 'any' : 'all';
+                        const isCollected = (itemId: VNID): boolean => {
+                            const item = project.items?.[itemId];
+                            if (!item) return true; // unknown item → satisfied, so we never deadlock on a stale id
+                            const c = Number((playerStateRef.current?.variables ?? {})[item.countVariableId] ?? 0);
+                            return c >= 1;
+                        };
+                        const conditionMet = (): boolean =>
+                            targets.length === 0 ? true : (mode === 'any' ? targets.some(isCollected) : targets.every(isCollected));
+
+                        if (conditionMet()) {
+                            advance();
+                        } else {
+                            // Recursive timeout (not setInterval) so each pending poll lives in
+                            // activeEffectTimeoutsRef and is cleared on scene jump / unmount.
+                            const poll = () => {
+                                if (conditionMet()) { advance(); return; }
+                                const tid = window.setTimeout(poll, 150);
+                                activeEffectTimeoutsRef.current.push(tid);
+                            };
+                            const tid = window.setTimeout(poll, 150);
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                    }
                     // If waitIndefinitelyForInput is enabled, wait only for user input (ignore duration)
-                    if (cmd.waitIndefinitelyForInput) {
+                    else if (cmd.waitIndefinitelyForInput) {
                         let hasAdvanced = false;
 
                         const onUserAdvance = () => {
@@ -6774,6 +6816,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.HideButton: {
                     const result = handleHideButton(command as HideButtonCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.ShowItem: {
+                    const result = handleShowItem(command as ShowItemCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -9080,6 +9127,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                         };
                                     });
                                 } : undefined}
+                                onPickup={(ov) => {
+                                    // Apply the give + removal + pick-up-once record in ONE atomic playerState
+                                    // update. The give goes straight to playerState.variables (the item's count
+                                    // variable, clamped), bypassing the UI-variable buffer so it always persists.
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        let variables = p.variables;
+                                        if (ov.giveItemId) {
+                                            const item = project.items?.[ov.giveItemId];
+                                            // Give even if the count variable isn't registered (a dangling
+                                            // reference): write straight to the count var id, defaulting min 0.
+                                            // The load migration also re-registers it, but this keeps the
+                                            // pickup working immediately without a reload.
+                                            if (item && item.countVariableId) {
+                                                const countVar = project.variables[item.countVariableId] as any;
+                                                const min = countVar?.min ?? 0;
+                                                const max = countVar?.max;
+                                                const cur = Number(p.variables[item.countVariableId] ?? 0);
+                                                let next = item.unique ? 1 : cur + (ov.giveQuantity ?? 1);
+                                                next = Math.max(min, next);
+                                                if (max !== undefined) next = Math.min(max, next);
+                                                variables = { ...variables, [item.countVariableId]: next };
+                                            }
+                                        }
+                                        return {
+                                            ...p,
+                                            variables,
+                                            stageState: ov.removeAfterClick
+                                                ? { ...p.stageState, buttonOverlays: p.stageState.buttonOverlays.filter(b => b.id !== ov.id) }
+                                                : p.stageState,
+                                            pickedUpItems: ov.pickUpOnceId ? [...(p.pickedUpItems || []), ov.pickUpOnceId] : p.pickedUpItems,
+                                        };
+                                    });
+                                }}
                             />
                         ))}
                         {(state.hotSpotOverlays || []).map((overlay: HotSpotOverlay) => (

@@ -49,15 +49,22 @@ const COMMAND_DOC_META: { name: string; category: string; params: string[] }[] =
   { name: 'PanZoomScreen', category: 'Effects', params: ['zoom', 'panX', 'panY', 'duration'] },
   { name: 'ResetScreenEffects', category: 'Effects', params: ['duration'] },
   { name: 'SetScreenOverlayEffect', category: 'Effects', params: ['effectType', 'intensity', 'variant', 'color'] },
+  { name: 'GiveItem', category: 'Items', params: ['itemId', 'quantity'] },
+  { name: 'UseItem', category: 'Items', params: ['itemId'] },
+  { name: 'DestroyItem', category: 'Items', params: ['itemId', 'quantity', 'all'] },
+  { name: 'RestockCollection', category: 'Items', params: ['collectionId'] },
+  { name: 'BuyItem', category: 'Items', params: ['itemId', 'collectionId', 'quantity'] },
+  { name: 'SellItem', category: 'Items', params: ['itemId', 'collectionId', 'quantity'] },
   { name: 'Group', category: 'Organization', params: ['name', 'commandIds'] },
 ];
 
-const CATEGORIES = ['Story', 'Visual', 'Audio', 'Logic', 'Flow', 'Effects', 'Organization'];
+const CATEGORIES = ['Story', 'Visual', 'Audio', 'Items', 'Logic', 'Flow', 'Effects', 'Organization'];
 
 const CATEGORY_COLORS: Record<string, string> = {
   Story: '#f472b6',
   Visual: '#a78bfa',
   Audio: '#34d399',
+  Items: '#10b981',
   Logic: '#fbbf24',
   Flow: '#60a5fa',
   Effects: '#fb923c',
@@ -84,7 +91,7 @@ const KEYBOARD_SHORTCUT_META: { keys: string; key: string }[] = [
   { keys: 'Escape', key: 'escape' },
 ];
 
-const TIP_KEYS = ['organize', 'variables', 'preview', 'audio', 'labels', 'stacking', 'branches', 'effects'];
+const TIP_KEYS = ['organize', 'variables', 'preview', 'audio', 'labels', 'stacking', 'branches', 'effects', 'items', 'inventory', 'shop', 'hotkeys'];
 
 const ChevronIcon: React.FC<{ isOpen: boolean }> = ({ isOpen }) => (
   <svg

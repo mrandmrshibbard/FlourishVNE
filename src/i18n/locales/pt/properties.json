@@ -197,7 +197,14 @@
     "waitMode": "Modo de Espera",
     "timed": "Espera cronometrada",
     "allowClick": "Permitir avanço por clique",
-    "indefinite": "Aguardar indefinidamente a entrada do usuário"
+    "indefinite": "Aguardar indefinidamente a entrada do usuário",
+    "untilItems": "Aguardar até coletar item(ns)",
+    "itemsRequire": "Exigir",
+    "requireAll": "Todos estes itens",
+    "requireAny": "Qualquer um destes itens",
+    "noItems": "Nenhum item definido ainda",
+    "addItem": "+ Adicionar item",
+    "removeItem": "Remover item"
   },
   "screen": {
     "intensity": "Intensidade: {{value}}",
@@ -324,6 +331,17 @@
     "showConditionsHint": "O botão só será exibido se estas condições forem atendidas.",
     "targetButton": "Botão Alvo para Ocultar",
     "selectButton": "Selecionar Botão..."
+  },
+  "showItem": {
+    "item": "Item",
+    "noItems": "Nenhum item definido ainda",
+    "quantity": "Quantidade Dada",
+    "imageOverride": "Substituir Imagem",
+    "imageHint": "Deixe em branco para usar o ícone do item no registro.",
+    "giveOnClick": "Dar item ao clicar",
+    "removeAfterPickup": "Desaparecer após coletar",
+    "pickUpOnce": "Lembrar (coletar uma vez)",
+    "pickUpOnceHint": "Depois de coletado, não reaparecerá quando o jogador revisitar esta cena, e a coleta é salva. Desative para itens que reaparecem."
   },
   "imageMap": {
     "background": "Fundo do Mapa de Imagem",

@@ -118,6 +118,16 @@ export interface ButtonOverlay {
     /** Live (reactive) conditions: when `live`, re-evaluated every render to show/hide. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
+    /** When true, the overlay removes itself once clicked (used by Show Item pickups). */
+    removeAfterClick?: boolean;
+    /** When set (a source command id), clicking records the pickup in `playerState.pickedUpItems`
+     *  so a "pick up once" Show Item stays gone across scene revisits + saves. */
+    pickUpOnceId?: VNID | null;
+    /** Show Item pickups: the item to add to the player's inventory on click. The give is applied
+     *  directly to playerState (atomic with removal/record), NOT via the UI-variable action buffer. */
+    giveItemId?: VNID | null;
+    /** Quantity to give on click (default 1; ignored for `unique` items, which clamp to 1). */
+    giveQuantity?: number;
 }
 
 /** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
@@ -309,6 +319,9 @@ export interface PlayerState {
     /** Which grid element owns the current selection — so two grids showing the same item don't both
      *  highlight it. The selected-item actions still use `selectedItemId` (the most recent selection). */
     selectedElementId?: VNID | null;
+    /** Command ids of "pick up once" Show Item pickups the player has already collected, so they don't
+     *  reappear on scene revisits. Persisted in saves; reset on a new game. */
+    pickedUpItems?: VNID[];
     history: HistoryEntry[];
     /** Saved choice/input responses for skip-backward replay (keyed by `sceneId:commandIndex`) */
     savedInputs: Record<string, { type: 'choice'; choice: ChoiceOption } | { type: 'textInput'; value: string }>;

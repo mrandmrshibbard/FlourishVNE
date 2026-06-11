@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNProject } from '../../types/project';
 import {
-    VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, REACTIVE_VISUAL_TYPES,
+    VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, REACTIVE_VISUAL_TYPES,
 } from '../../features/scene/types';
 import { VNUIAction, UIActionType } from '../../types/shared';
 import { FormField, Select, TextInput, TextArea, ColorInput } from '../ui/Form';
@@ -39,7 +39,7 @@ export type UpdateCommand = (updates: Partial<VNCommand>) => void;
 /** Visual scene commands whose stacking order the author can change (the stage band system).
  *  Movies and hot spots keep their fixed bands for now. */
 const VISUAL_LAYER_TYPES = new Set<CommandType>([
-    CommandType.ShowImage, CommandType.ShowCharacter, CommandType.ShowText, CommandType.ShowButton,
+    CommandType.ShowImage, CommandType.ShowCharacter, CommandType.ShowText, CommandType.ShowButton, CommandType.ShowItem,
 ]);
 
 /** Effective `layer` of the other visual commands in the same scene (for Front/Back). */
@@ -102,6 +102,9 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     }
     if (command.type === CommandType.ShowButton) {
         return <>{<ShowButtonGroup groupId={groupId} cmd={command as ShowButtonCommand} updateCommand={updateCommand} project={project} t={t} />}{layerCtl}</>;
+    }
+    if (command.type === CommandType.ShowItem) {
+        return <>{<ShowItemGroup groupId={groupId} cmd={command as ShowItemCommand} updateCommand={updateCommand} project={project} t={t} />}{layerCtl}</>;
     }
     if (command.type === CommandType.ShowText) {
         return <>{<ShowTextGroup groupId={groupId} cmd={command as ShowTextCommand} updateCommand={updateCommand} t={t} />}{layerCtl}</>;
@@ -188,15 +191,40 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.Wait) {
         if (groupId !== 'content') return null;
         const c = command as any;
+        const waitItems = Object.values(project.items || {}) as any[];
+        const seedItems = () => (c.targetItemIds && c.targetItemIds.length > 0) ? c.targetItemIds : (waitItems[0] ? [waitItems[0].id] : []);
         return <>
-            <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={c.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} disabled={c.waitIndefinitelyForInput} /></FormField>
+            <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={c.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} disabled={c.waitIndefinitelyForInput || c.waitForItems} /></FormField>
             <FormField label={t('wait.waitMode')}>
                 <div className="space-y-2">
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!c.waitIndefinitelyForInput && !c.waitForInput} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.timed')}</span></label>
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForInput && !c.waitIndefinitelyForInput} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.allowClick')}</span></label>
-                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitIndefinitelyForInput} onChange={e => updateCommand({ waitIndefinitelyForInput: e.target.checked, waitForInput: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.indefinite')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!c.waitIndefinitelyForInput && !c.waitForInput && !c.waitForItems} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false, waitForItems: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.timed')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForInput && !c.waitIndefinitelyForInput && !c.waitForItems} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false, waitForItems: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.allowClick')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitIndefinitelyForInput && !c.waitForItems} onChange={() => updateCommand({ waitIndefinitelyForInput: true, waitForInput: false, waitForItems: false } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.indefinite')}</span></label>
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.waitForItems} onChange={() => updateCommand({ waitForItems: true, waitForInput: false, waitIndefinitelyForInput: false, targetItemIds: seedItems() } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('wait.untilItems')}</span></label>
                 </div>
             </FormField>
+            {c.waitForItems && (
+                <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
+                    <FormField label={t('wait.itemsRequire')}>
+                        <Select value={c.itemsMode === 'any' ? 'any' : 'all'} onChange={e => updateCommand({ itemsMode: e.target.value } as any)}>
+                            <option value="all">{t('wait.requireAll')}</option>
+                            <option value="any">{t('wait.requireAny')}</option>
+                        </Select>
+                    </FormField>
+                    <div className="space-y-1">
+                        {(c.targetItemIds || []).map((id: string, idx: number) => (
+                            <div key={idx} className="flex items-center gap-1">
+                                <Select value={id} onChange={e => { const next = [...(c.targetItemIds || [])]; next[idx] = e.target.value; updateCommand({ targetItemIds: next } as any); }}>
+                                    {waitItems.length === 0 && <option value="">{t('wait.noItems')}</option>}
+                                    {waitItems.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                                </Select>
+                                <button onClick={() => updateCommand({ targetItemIds: (c.targetItemIds || []).filter((_: string, i: number) => i !== idx) } as any)} className="px-2 py-1 text-xs text-red-400 hover:text-red-300 rounded hover:bg-[var(--bg-tertiary)]" title={t('wait.removeItem')}>✕</button>
+                            </div>
+                        ))}
+                        <button onClick={() => updateCommand({ targetItemIds: [...(c.targetItemIds || []), waitItems[0]?.id || ''] } as any)} className="w-full p-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">{t('wait.addItem')}</button>
+                    </div>
+                </div>
+            )}
         </>;
     }
     if (command.type === CommandType.TextInput) {
@@ -376,6 +404,87 @@ const ShowButtonGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowButtonComm
                 </FormField>
                 <h4 className="font-bold text-xs mb-1 mt-2 text-[var(--text-secondary)]">{t('button.primaryAction')}</h4>
                 <ActionEditor action={cmd.onClick} onActionChange={action => updateCommand({ onClick: action } as any)} />
+                <h4 className="font-bold text-xs mb-1 mt-2 text-[var(--text-secondary)]">{t('button.additionalActions')}</h4>
+                <div className="space-y-1.5">
+                    {actions.map((action, idx) => (
+                        <ActionCard key={idx} action={action} index={idx}
+                            onActionChange={updated => { const next = [...actions]; next[idx] = updated; updateCommand({ actions: next } as any); }}
+                            onRemove={() => updateCommand({ actions: actions.filter((_, i) => i !== idx) } as any)} />
+                    ))}
+                    <button onClick={() => updateCommand({ actions: [...actions, { type: UIActionType.GoToScreen, targetScreenId: '' } as VNUIAction] } as any)} className="w-full p-2 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">
+                        {t('button.addAction')}
+                    </button>
+                </div>
+                <ConditionsEditor collapsible title={t('button.showConditions')} hint={t('button.showConditionsHint')} conditions={cmd.showConditions || []} project={project} onChange={(cs) => updateCommand({ showConditions: cs } as any)} />
+            </>;
+        }
+        case 'animation':
+            return <TransitionFields transition={cmd.transition} duration={cmd.duration} onUpdate={updateCommand as any} />;
+        case 'audio':
+            return <AssetSelector label={t('button.clickSound')} assetType="audio" value={cmd.clickSound} onChange={id => updateCommand({ clickSound: id } as any)} />;
+        default:
+            return null;
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ShowItem (a clickable scene pickup — reuses the button overlay; icon-only)
+// ─────────────────────────────────────────────────────────────────────────────
+const ShowItemGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowItemCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const items = Object.values(project.items || {}) as any[];
+    switch (groupId) {
+        case 'content':
+            return <>
+                <FormField label={t('showItem.item')}>
+                    <Select value={cmd.itemId || ''} onChange={e => updateCommand({ itemId: e.target.value } as any)}>
+                        {items.length === 0 && <option value="">{t('showItem.noItems')}</option>}
+                        {items.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                    </Select>
+                </FormField>
+                <FormField label={t('showItem.quantity')}><TextInput type="number" min={1} value={cmd.quantity ?? 1} onChange={e => updateCommand({ quantity: Math.max(1, parseInt(e.target.value, 10) || 1) } as any)} /></FormField>
+            </>;
+        case 'transform':
+            return <>
+                <div className="grid grid-cols-2 gap-1">
+                    <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                    <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                    <FormField label={t('shared.widthPercent')}><TextInput type="number" value={cmd.width} onChange={e => updateCommand({ width: parseFloat(e.target.value) || 10 } as any)} /></FormField>
+                    <FormField label={t('shared.heightPercent')}><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 10 } as any)} /></FormField>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                    <FormField label={t('button.anchorX')}><TextInput type="number" step="0.1" value={cmd.anchorX} onChange={e => updateCommand({ anchorX: parseFloat(e.target.value) || 0.5 } as any)} /></FormField>
+                    <FormField label={t('button.anchorY')}><TextInput type="number" step="0.1" value={cmd.anchorY} onChange={e => updateCommand({ anchorY: parseFloat(e.target.value) || 0.5 } as any)} /></FormField>
+                </div>
+                <OrientationFields rotation={cmd.rotation} flipX={cmd.flipX} flipY={cmd.flipY} onChange={p => updateCommand(p as any)} />
+            </>;
+        case 'appearance':
+            return <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
+                <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+            </FormField>;
+        case 'media':
+            return <>
+                <AssetSelector label={t('showItem.imageOverride')} assetType="images" value={cmd.image?.id || null} allowVideo onChange={id => updateCommand({ image: id ? { type: 'image', id } : null } as any)} />
+                <AssetSelector label={t('button.hoverImage')} assetType="images" value={cmd.hoverImage?.id || null} allowVideo onChange={id => updateCommand({ hoverImage: id ? { type: 'image', id } : null } as any)} />
+                <p className="text-[10px] text-[var(--text-muted)] -mt-1">{t('showItem.imageHint')}</p>
+            </>;
+        case 'logic': {
+            const actions = cmd.actions || [];
+            return <>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={cmd.giveOnClick !== false} onChange={e => updateCommand({ giveOnClick: e.target.checked } as any)} className="w-4 h-4" />
+                    {t('showItem.giveOnClick')}
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={cmd.removeAfterPickup !== false} onChange={e => updateCommand({ removeAfterPickup: e.target.checked } as any)} className="w-4 h-4" />
+                    {t('showItem.removeAfterPickup')}
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={cmd.pickUpOnce !== false} onChange={e => updateCommand({ pickUpOnce: e.target.checked } as any)} className="w-4 h-4" />
+                    {t('showItem.pickUpOnce')}
+                </label>
+                <p className="text-[10px] text-[var(--text-muted)] -mt-1">{t('showItem.pickUpOnceHint')}</p>
                 <h4 className="font-bold text-xs mb-1 mt-2 text-[var(--text-secondary)]">{t('button.additionalActions')}</h4>
                 <div className="space-y-1.5">
                     {actions.map((action, idx) => (
@@ -1814,7 +1923,11 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
         if (groupId === 'content') return project.scenes[(command as any).targetSceneId]?.name || '—';
     }
     if (command.type === CommandType.Wait) {
-        if (groupId === 'content') { const c = command as any; return c.waitIndefinitelyForInput ? 'until input' : c.waitForInput ? `${c.duration}s or click` : `${c.duration}s`; }
+        if (groupId === 'content') {
+            const c = command as any;
+            if (c.waitForItems) { const n = (c.targetItemIds || []).filter(Boolean).length; return `until ${c.itemsMode === 'any' ? 'any' : 'all'} of ${n} item${n === 1 ? '' : 's'}`; }
+            return c.waitIndefinitelyForInput ? 'until input' : c.waitForInput ? `${c.duration}s or click` : `${c.duration}s`;
+        }
     }
     if (command.type === CommandType.TextInput) {
         if (groupId === 'content') { const c = command as any; const n = project.variables[c.variableId]?.name || '?'; return `→ ${n}`; }

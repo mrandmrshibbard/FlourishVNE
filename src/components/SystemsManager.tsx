@@ -260,6 +260,13 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                     </div>
                                 )}
 
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={!!selected.hideWhenEmpty} onChange={e => update(selected.id, { hideWhenEmpty: e.target.checked || undefined })} className="w-4 h-4" />
+                                    <span className="text-sm text-[var(--text-primary)]">Hide from inventory when the count reaches 0</span>
+                                </label>
+                                <p className="text-[11px] text-[var(--text-muted)] -mt-1">Vanishes this item from an inventory grid once the player runs out — even on a grid that otherwise shows empty/unowned slots. (Grids set to "hide unowned items" already hide every 0-count item.)</p>
+
+
                                 <div className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-secondary)]/40 rounded-lg p-2.5 mt-2">
                                     Quantity is tracked by the number variable <span className="font-mono text-[var(--text-secondary)]">{countVarName}</span>. Use <span className="font-mono">{'{'}{countVarName}{'}'}</span> in any text to show how many the player owns, or check it in conditions.
                                 </div>

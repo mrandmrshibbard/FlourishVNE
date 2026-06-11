@@ -71,6 +71,7 @@ export enum CommandType {
     HideImage = 'HideImage',
     ShowButton = 'ShowButton',
     HideButton = 'HideButton',
+    ShowItem = 'ShowItem',
     CreditRoll = 'CreditRoll',
     Group = 'Group', // Visual grouping only, no execution
     RunScript = 'RunScript', // Execute a user-defined script
@@ -99,6 +100,7 @@ export const REACTIVE_VISUAL_TYPES: ReadonlySet<CommandType> = new Set([
     CommandType.ShowImage,
     CommandType.ShowText,
     CommandType.ShowButton,
+    CommandType.ShowItem,
     CommandType.ShowCharacter,
     CommandType.ShowHotSpot,
 ]);
@@ -374,6 +376,13 @@ export interface WaitCommand extends BaseCommand {
     duration: number; // in seconds
     waitForInput?: boolean; // Allow early advancement via input while still respecting duration
     waitIndefinitelyForInput?: boolean; // Wait indefinitely until user input (ignores duration)
+    /** Wait until the player has collected the target item(s) (owned count >= 1), then advance.
+     *  Pairs with Show Item pickups / Give Item. Ignores duration like waitIndefinitelyForInput. */
+    waitForItems?: boolean;
+    /** Items to wait for (collected = the item's count variable is >= 1). */
+    targetItemIds?: VNID[];
+    /** Whether ALL target items must be collected (default) or ANY one of them. */
+    itemsMode?: 'all' | 'any';
 }
 export interface ShakeScreenCommand extends BaseCommand {
     type: CommandType.ShakeScreen;
@@ -555,6 +564,35 @@ export interface ShowButtonCommand extends BaseCommand {
 export interface HideButtonCommand extends BaseCommand {
     type: CommandType.HideButton;
     targetCommandId: VNID;
+    transition?: VNTransition;
+    duration?: number; // in seconds
+}
+
+/** A clickable item placed in the scene. Shows the item's icon; clicking it gives the item to the
+ *  player and (by default) removes itself. Reuses the ButtonOverlay render/staging path. */
+export interface ShowItemCommand extends BaseCommand {
+    type: CommandType.ShowItem;
+    itemId: VNID;
+    quantity?: number;                 // given on pickup (default 1; unique items set to 1)
+    x: number; // percentage
+    y: number; // percentage
+    width?: number;  // percentage (default ~10%)
+    height?: number; // percentage (default auto from icon)
+    anchorX?: number; // 0-1, default 0.5
+    anchorY?: number; // 0-1, default 0.5
+    opacity?: number; // 0-1, default 1
+    /** Optional visual override; defaults to the item's registry icon. */
+    image?: { type: 'image' | 'video', id: VNID } | null;
+    hoverImage?: { type: 'image' | 'video', id: VNID } | null;
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
+    giveOnClick?: boolean;        // default true → click runs GiveItem(itemId, quantity)
+    removeAfterPickup?: boolean;  // default true → the icon disappears on click
+    pickUpOnce?: boolean;         // default true → remembered across scene revisits + saves
+    actions?: VNUIAction[];       // extra on-click actions
+    clickSound?: VNID | null;
+    showConditions?: VNCondition[];
     transition?: VNTransition;
     duration?: number; // in seconds
 }
@@ -855,7 +893,7 @@ export type VNCommand =
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
     | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
-  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | CreditRollCommand | GroupCommand | RunScriptCommand
+  | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | ShowItemCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand
   | TweenElementCommand

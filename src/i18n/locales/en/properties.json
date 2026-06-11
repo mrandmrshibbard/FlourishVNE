@@ -197,7 +197,14 @@
     "waitMode": "Wait Mode",
     "timed": "Timed wait",
     "allowClick": "Allow click advance",
-    "indefinite": "Wait indefinitely for user input"
+    "indefinite": "Wait indefinitely for user input",
+    "untilItems": "Wait until item(s) collected",
+    "itemsRequire": "Require",
+    "requireAll": "All of these items",
+    "requireAny": "Any one of these items",
+    "noItems": "No items defined yet",
+    "addItem": "+ Add item",
+    "removeItem": "Remove item"
   },
   "screen": {
     "intensity": "Intensity: {{value}}",
@@ -324,6 +331,17 @@
     "showConditionsHint": "Button will only show if these conditions are met.",
     "targetButton": "Target Button to Hide",
     "selectButton": "Select Button..."
+  },
+  "showItem": {
+    "item": "Item",
+    "noItems": "No items defined yet",
+    "quantity": "Quantity Given",
+    "imageOverride": "Image Override",
+    "imageHint": "Leave blank to use the item's registry icon.",
+    "giveOnClick": "Give item on click",
+    "removeAfterPickup": "Disappear after pickup",
+    "pickUpOnce": "Remember (pick up once)",
+    "pickUpOnceHint": "Once collected, it won't reappear when the player revisits this scene, and the pickup is saved. Turn off for respawning pickups."
   },
   "imageMap": {
     "background": "Image Map Background",

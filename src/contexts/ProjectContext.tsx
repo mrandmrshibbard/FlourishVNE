@@ -8,6 +8,7 @@ import { WorkflowTracker } from '../features/analytics/WorkflowTracker';
 import { useToast } from './ToastContext';
 import { migrateProjectToUnifiedScreens } from '../utils/unifiedScreenMigration';
 import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigration';
+import { migrateItemCountVariableBounds } from '../utils/itemVariableMigration';
 import { pluginManager } from '../features/plugins/PluginManagerService';
 
 interface UndoRedoState {
@@ -48,7 +49,7 @@ export const ProjectProvider: React.FC<{
   // or stranded hot zone data never makes it into `screen.elements`.
   const [history, setHistory] = useState<UndoRedoState>(() => ({
     past: [],
-    present: migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)),
+    present: migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject))),
     future: []
   }));
   const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);

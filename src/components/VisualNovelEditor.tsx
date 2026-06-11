@@ -64,7 +64,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [isPlaying, setIsPlaying] = useState(false);
     const [activeTab, setActiveTab] = useState<NavigationTab>(initialTab || 'scenes');
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
-    const [isConfiguringScene, setIsConfiguringScene] = useState(false);
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
     const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
     const [showTour, setShowTour] = useState(() => !localStorage.getItem('flourish:tourCompleted'));
@@ -203,15 +202,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 <p className="text-xs text-slate-400">{t('visualNovelEditor.selectUiScreenHint')}</p>
             </Panel>;
         }
-        if (isConfiguringScene) {
-            return <PropertiesInspector
-                activeSceneId={activeSceneId}
-                selectedCommandIndex={null}
-                setSelectedCommandIndex={setSelectedCommandIndex}
-                isConfigScene={true}
-                onCloseSceneConfig={() => setIsConfiguringScene(false)}
-            />;
-        }
         if (activeCharacterId) {
             // Character properties are now integrated into the unified CharacterEditor
             return null;
@@ -282,11 +272,14 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                 setSelectedCommandIndex={setSelectedCommandIndex}
             />;
         }
-        // Always show properties panel for scenes tab, even if nothing selected
+        // Scenes tab with nothing selected → show Scene Settings (contextual, like the command inspector).
         if (activeTab === 'scenes') {
-            return <Panel title={t('visualNovelEditor.propertiesTitle')} style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
-                <p className="text-xs text-slate-400">{t('visualNovelEditor.selectCommandHint')}</p>
-            </Panel>;
+            return <PropertiesInspector
+                activeSceneId={activeSceneId}
+                selectedCommandIndex={null}
+                setSelectedCommandIndex={setSelectedCommandIndex}
+                isConfigScene={true}
+            />;
         }
         return null; // Other tabs handle their own inspectors internally
     }
@@ -472,7 +465,6 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
             setActiveCharacterId(null);
             setSelectedExpressionId(null);
             setSelectedVariableId(null);
-            setIsConfiguringScene(false);
         }
     };
 
@@ -587,7 +579,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 setSelectedCommandIndex={setSelectedCommandIndex}
                                 setSelectedVariableId={setSelectedVariableId}
                                 onConfigureScene={() => {
-                                    setIsConfiguringScene(true);
+                                    // Scene Settings is the inspector's default when nothing is selected,
+                                    // so the header button just clears the command selection to reveal it.
                                     setSelectedCommandIndex(null);
                                 }}
                                 isCollapsed={isSceneEditorCollapsed}

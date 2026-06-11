@@ -162,6 +162,14 @@
       "escape": "Close panel or cancel action"
     },
     "tips": {
+      "itemsTitle": "Items are number variables",
+      "itemsTip": "Every item is backed by a number variable named after it, so you can check ownership in any condition and show the count with {ItemName}.",
+      "inventoryTitle": "Leave Rows blank to auto-fill",
+      "inventoryTip": "Leaving an inventory grid's Rows blank auto-fills its box with slots, so the whole inventory is visible. Resize the element to add rows.",
+      "shopTitle": "Two grids make a shop",
+      "shopTip": "A shop screen uses two item grids: one bound to the shop list with a Buy button, and a player-inventory grid with a Sell button pointed at it.",
+      "hotkeysTitle": "Open screens with a key",
+      "hotkeysTip": "In a screen's inspector, set a Keyboard shortcut to toggle it in-game (great for inventories). Avoid Space/Enter, H, Ctrl and Esc, which are reserved.",
       "organizeTitle": "Organize with Scenes",
       "organizeTip": "Break your story into logical scenes. Each scene should represent a distinct location, conversation, or event. This makes it easier to navigate and edit your project.",
       "variablesTitle": "Use Variables for Branching",
@@ -180,6 +188,12 @@
       "effectsTip": "Combine ShakeScreen, FlashScreen, and TintScreen effects with sound effects for impactful dramatic moments like explosions or revelations."
     },
     "commands": {
+      "GiveItem": { "desc": "Gives the player a quantity of an inventory item (sets the count to 1 for Unique items).", "example": "After a chest scene, Give Item to Gold Key (quantity 1) so the player can open the locked door." },
+      "UseItem": { "desc": "Uses an item: runs its Use effect and, if the item is consumable, decreases its count by one.", "example": "Use Item on a Health Potion runs its effect (raise health 50) and removes one potion from the bag." },
+      "DestroyItem": { "desc": "Removes some or all of an item from the player without using it; the count never drops below zero.", "example": "When the bridge burns, Destroy Item on Rope with 'all' on to take every rope from the player." },
+      "RestockCollection": { "desc": "Refills a shop or storage item list back to its stock levels, following that list's restock rule.", "example": "After 'You rest for the night', Restock Item List on the General Store so its wares return by morning." },
+      "BuyItem": { "desc": "Buys an item from a shop list, spending that list's currency (does nothing if unaffordable or out of stock).", "example": "In a cutscene, Buy Item on a Sword from the Blacksmith list; the Gold is deducted automatically." },
+      "SellItem": { "desc": "Sells an item the player owns to a shop list, paying its price times the shop's sell rate.", "example": "After a quest, Sell Item on an Old Ring to the Merchant list to remove it and pay out coins." },
       "Dialogue": { "desc": "Display character dialogue with optional speaker name and portrait.", "example": "Show Sakura saying \"Hello!\" on the left side of the screen." },
       "Choice": { "desc": "Present the player with multiple options that affect the story path.", "example": "Ask the player \"Where do you go?\" with options \"Park\", \"Library\", \"Home\"." },
       "BranchStart": { "desc": "Begin a named branch section for organizing story paths visually.", "example": "Start a branch called \"Sakura Route\" colored pink to group related commands." },

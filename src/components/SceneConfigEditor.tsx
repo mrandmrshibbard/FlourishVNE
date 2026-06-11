@@ -9,8 +9,7 @@ import ConditionsEditor from './ui/ConditionsEditor';
 
 const SceneConfigEditor: React.FC<{
     activeSceneId: VNID;
-    onCloseSceneConfig?: () => void;
-}> = ({ activeSceneId, onCloseSceneConfig }) => {
+}> = ({ activeSceneId }) => {
     const { project, dispatch } = useProject();
     const { t } = useTranslation('scenes');
     const activeScene = project.scenes[activeSceneId];
@@ -139,14 +138,6 @@ const SceneConfigEditor: React.FC<{
                             </FormField>
                         </div>
                     )}
-                </div>
-                <div className="pt-4 mt-auto">
-                    <button 
-                        onClick={onCloseSceneConfig} 
-                        className="w-full bg-[var(--accent-cyan)] hover:opacity-80 text-black font-bold py-1 px-2 rounded-lg transition-colors"
-                    >
-                        {t('config.done')}
-                    </button>
                 </div>
             </div>
         </Panel>

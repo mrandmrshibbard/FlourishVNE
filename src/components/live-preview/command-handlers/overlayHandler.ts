@@ -5,9 +5,11 @@ import {
   HideImageCommand,
   ShowButtonCommand,
   HideButtonCommand,
+  ShowItemCommand,
 } from '../../../features/scene/types';
 import { TextOverlay, ImageOverlay, ButtonOverlay } from '../types/gameState';
 import { interpolateVariables } from '../../../utils/variableInterpolation';
+import { UIActionType, VNUIAction } from '../../../types/shared';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
 
@@ -368,6 +370,86 @@ export function handleShowButton(
     },
     delay,
     callback,
+  };
+}
+
+/**
+ * Handles a Show Item pickup: shows the item's icon as a clickable overlay. Reuses the ButtonOverlay
+ * render path — the default click action is GiveItem, and the overlay removes/records itself on click.
+ */
+export function handleShowItem(
+  command: ShowItemCommand,
+  context: CommandContext
+): CommandResult {
+  const { playerState, project, assetResolver, evaluateConditions } = context;
+
+  TweenManager.cancelForTarget(command.id, 'button');
+
+  // "Pick up once": if already collected, don't show it again.
+  if (command.pickUpOnce !== false && (playerState.pickedUpItems || []).includes(command.id)) {
+    return { advance: true };
+  }
+
+  // Show conditions (evaluated at show-time unless live).
+  if (!command.liveConditions && command.showConditions && command.showConditions.length > 0) {
+    if (!evaluateConditions(command.showConditions, playerState.variables)) {
+      return { advance: true };
+    }
+  }
+
+  const item = project.items?.[command.itemId];
+  const visual = command.image || item?.icon || null;
+  const give = command.giveOnClick !== false;
+  const extra = command.actions ?? [];
+
+  const overlay: ButtonOverlay = {
+    id: command.id,
+    layer: command.layer,
+    parallaxDepth: command.parallaxDepth,
+    text: '',
+    x: command.x,
+    y: command.y,
+    width: command.width || 10,
+    height: command.height || 10,
+    anchorX: command.anchorX ?? 0.5,
+    anchorY: command.anchorY ?? 0.5,
+    backgroundColor: 'transparent',
+    textColor: '#ffffff',
+    fontSize: 0,
+    fontWeight: 'normal',
+    borderRadius: 0,
+    opacity: command.opacity ?? 1,
+    imageUrl: visual ? assetResolver(visual.id, visual.type) : null,
+    hoverImageUrl: command.hoverImage ? assetResolver(command.hoverImage.id, command.hoverImage.type) : null,
+    // The give is applied directly on click (see giveItemId below) — reliable, atomic with the
+    // overlay removal — so it is NOT a click action. Click actions are only the author's extras.
+    onClick: extra[0] ?? { type: UIActionType.None } as VNUIAction,
+    actions: extra.slice(1),
+    clickSound: command.clickSound ?? null,
+    rotation: command.rotation,
+    flipX: command.flipX,
+    flipY: command.flipY,
+    transition: command.transition !== 'instant' ? command.transition : undefined,
+    duration: command.duration || 0.3,
+    action: 'show',
+    removeAfterClick: command.removeAfterPickup !== false,
+    pickUpOnceId: command.pickUpOnce !== false ? command.id : null,
+    giveItemId: give ? command.itemId : null,
+    giveQuantity: command.quantity ?? 1,
+    ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
+  };
+
+  const hasTransition = command.transition && command.transition !== 'instant';
+  return {
+    advance: !hasTransition,
+    updates: {
+      stageState: {
+        ...playerState.stageState,
+        buttonOverlays: [...playerState.stageState.buttonOverlays, overlay],
+      },
+    },
+    delay: hasTransition ? (command.duration ?? 0.3) * 1000 + 100 : 0,
+    callback: hasTransition ? context.advance : undefined,
   };
 }
 

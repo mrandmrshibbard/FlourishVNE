@@ -285,7 +285,8 @@ function createSplashWindow() {
   body { margin:0; display:flex; flex-direction:column; align-items:center;
          justify-content:center; height:100vh; background:#1a102c;
          font-family:'Segoe UI',sans-serif; color:#fff; overflow:hidden; }
-  .brand { font-size:2.2rem; font-weight:700; margin-bottom:1.4rem;
+  .brand { font-size:2.2rem; font-weight:700; margin-bottom:1.4rem; text-align:center;
+           padding:0 1rem;
            background:linear-gradient(135deg,#ff00a5,#8a2be2,#00f2ea);
            -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
   .bar-wrap { width:200px; height:4px; border-radius:4px;

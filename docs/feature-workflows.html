@@ -92,29 +92,38 @@
     <span>Feature Workflows</span>
   </div>
   <nav>
-    <a href="#character-setup">1. Character Setup</a>
-    <a href="#branching">2. Branching &amp; Variables</a>
-    <a href="#ui-screens">3. UI Screens</a>
-    <a href="#char-customization">4. Character Customization</a>
-    <a href="#cg-gallery">5. CG Gallery</a>
-    <a href="#audio">6. Audio &amp; Music</a>
-    <a href="#screen-effects">7. Screen Effects</a>
-    <a href="#video">8. Video &amp; Movies</a>
-    <a href="#overlays">9. In-Scene Overlays</a>
-    <a href="#scripting">10. Scripting System</a>
-    <a href="#localization">11. Localization</a>
-    <a href="#build">12. Build &amp; Export</a>
-    <a href="#templates">13. Template Systems</a>
-    <a href="#dialogue-styling">14. Dialogue Styling</a>
-    <a href="#save-load">15. Save/Load Setup</a>
-    <a href="#credits">16. Credit Roll</a>
-    <a href="#stacking">17. Command Stacking</a>
-    <a href="#scene-gating">18. Scene Gating</a>
-    <a href="#voice-sync">19. Voice Sync &amp; Lip Sync</a>
-    <a href="#text-effects">20. Dialogue Text Effects</a>
-    <a href="#char-visual-effects">21. Character Visual Effects</a>
-    <a href="#particles">22. Particle System</a>
-
+    <a href="#1-character-setup--scene-usage">1. Character Setup &amp; Scene Usage</a>
+    <a href="#2-branching-story-paths-with-variables">2. Branching Story Paths with Variables</a>
+    <a href="#3-customizing-ui-screens">3. Customizing UI Screens</a>
+    <a href="#4-character-customization-system">4. Character Customization System</a>
+    <a href="#5-cg-gallery-system">5. CG Gallery System</a>
+    <a href="#6-audio--music-workflow">6. Audio &amp; Music Workflow</a>
+    <a href="#7-screen-effects--overlay-effects">7. Screen Effects &amp; Overlay Effects</a>
+    <a href="#8-video--movie-integration">8. Video &amp; Movie Integration</a>
+    <a href="#9-in-scene-overlays-text-images-buttons">9. In-Scene Overlays (Text, Images, Buttons)</a>
+    <a href="#10-scripting-system">10. Scripting System</a>
+    <a href="#11-localization-workflow">11. Localization Workflow</a>
+    <a href="#12-build--export-workflow">12. Build &amp; Export Workflow</a>
+    <a href="#13-template-systems">13. Template Systems</a>
+    <a href="#14-dialogue-box--choice-styling">14. Dialogue Box &amp; Choice Styling</a>
+    <a href="#15-saveload-system-setup">15. Save/Load System Setup</a>
+    <a href="#16-credit-roll-system">16. Credit Roll System</a>
+    <a href="#17-command-stacking-parallel-execution">17. Command Stacking (Parallel Execution)</a>
+    <a href="#18-scene-conditions--gating">18. Scene Conditions &amp; Gating</a>
+    <a href="#19-voice-sync--lip-sync">19. Voice Sync &amp; Lip Sync</a>
+    <a href="#20-dialogue-text-effects">20. Dialogue Text Effects</a>
+    <a href="#21-character-visual-effects">21. Character Visual Effects</a>
+    <a href="#22-particle-system-spawn--stop-particles">22. Particle System (Spawn &amp; Stop Particles)</a>
+    <a href="#23-inventory-items-with-the-systems-hub">23. Inventory Items with the Systems Hub</a>
+    <a href="#24-building-an-inventory-screen-the-inventory-grid">24. Building an Inventory Screen (the Inventory Grid)</a>
+    <a href="#25-item-lists--collections-shops-libraries-chests-and-restock">25. Item Lists &amp; Collections (Shops, Libraries, Chests) and Restock</a>
+    <a href="#26-making-a-shop-buy-sell-and-currency">26. Making a Shop (Buy, Sell, and Currency)</a>
+    <a href="#27-screen-categories-overlay-behavior--open-hotkeys">27. Screen Categories, Overlay Behavior &amp; Open Hotkeys</a>
+    <a href="#28-customizing-the-in-game-quick-menu">28. Customizing the In-Game Quick Menu</a>
+    <a href="#29-customizing-choice-buttons">29. Customizing Choice Buttons</a>
+    <a href="#30-layering--parallax-depth">30. Layering &amp; Parallax Depth</a>
+    <a href="#31-keep-character-expressions-in-place">31. Keep Character Expressions in Place</a>
+    <a href="#32-variables-conditions--the-live-variable-tracker">32. Variables, Conditions &amp; the Live Variable Tracker</a>
     <div class="doc-links">
       <div class="nav-section">Other Docs</div>
       <a href="getting-started.html">Getting Started</a>
@@ -124,563 +133,506 @@
 </aside>
 
 <main class="main">
-  <h1>Feature Workflows Guide</h1>
-  <p class="subtitle">Multi-step workflows that span multiple tabs — complete walkthroughs from start to finish.</p>
-
-  <!-- 1 ──────────────────────────────────── -->
-  <h2 id="character-setup">1. Character Setup &amp; Scene Usage</h2>
+  <h1>FlourishVNE — Feature Workflows Guide</h1>
+  <p class="subtitle">This guide covers <strong>multi-step workflows</strong> — features that require working across multiple tabs or sections of the editor. Each workflow is a complete walkthrough from start to finish.</p>
+  <hr>
+  <h2 id="1-character-setup--scene-usage">1. Character Setup &amp; Scene Usage</h2>
   <div class="tabs-involved">Assets → Characters → Scenes</div>
   <p>This is the most common multi-step workflow. Characters need sprites uploaded, layers configured, and expressions defined before they can appear in scenes.</p>
-
   <h3>Step 1: Upload sprites (Assets tab)</h3>
   <ol>
-    <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>)</li>
-    <li>Select the <strong>Images</strong> category</li>
-    <li>Click <strong>Upload</strong> or drag-and-drop your character sprite files</li>
-    <li>Optionally create a folder for the character (e.g., "Luna") to keep files organized</li>
-  </ol>
-
+  <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>)</li>
+  <li>Select the <strong>Images</strong> category</li>
+  <li>Click <strong>Upload</strong> or drag-and-drop your character sprite files</li>
+  <li>Optionally create a folder for the character (e.g., "Luna") to keep files organized</li>
+</ol>
   <h3>Step 2: Create the character (Characters tab)</h3>
   <ol>
-    <li>Go to <strong>Characters</strong> (<kbd>Shift+2</kbd>)</li>
-    <li>Click <strong>+ Add Character</strong></li>
-    <li>Set the character <strong>name</strong> and <strong>name color</strong> (shown on the dialogue nameplate)</li>
-  </ol>
-
+  <li>Go to <strong>Characters</strong> (<kbd>Shift+2</kbd>)</li>
+  <li>Click <strong>+ Add Character</strong></li>
+  <li>Set the character <strong>name</strong> and <strong>name color</strong> (shown on the dialogue nameplate)</li>
+</ol>
   <h3>Step 3: Add layers</h3>
   <ol>
-    <li>In the character editor, select the <strong>Layers</strong> tab</li>
-    <li>Click <strong>Add Layer</strong> for each compositable part:
-      <ul>
-        <li>Simple characters: one layer (e.g., "Base") is enough</li>
-        <li>Complex characters: separate layers for body, eyes, mouth, hair, outfit, accessories</li>
-      </ul>
-    </li>
-    <li>For each layer, add assets by selecting from your uploaded images</li>
-    <li>Give each asset a descriptive name (e.g., "eyes_happy", "eyes_sad")</li>
-  </ol>
+  <li>In the character editor, select the <strong>Layers</strong> tab</li>
+  <li>Click <strong>Add Layer</strong> for each compositable part:
+  <ul>
+  <li>Simple characters: one layer (e.g., "Base") is enough</li>
+  <li>Complex characters: separate layers for body, eyes, mouth, hair, outfit, accessories</li>
+</ul></li>
+  <li>For each layer, add assets by selecting from your uploaded images</li>
+  <li>Give each asset a descriptive name (e.g., "eyes_happy", "eyes_sad")</li>
+</ol>
   <div class="tip"><strong>Tip:</strong> Layers can also use video files for animated parts (e.g., blinking eyes, flowing hair).</div>
-
   <h3>Step 4: Define expressions</h3>
   <ol>
-    <li>Switch to the <strong>Expressions</strong> tab</li>
-    <li>Click <strong>Add Expression</strong> and name it (e.g., "Happy", "Sad", "Angry", "Surprised")</li>
-    <li>For each expression, select which asset to display on each layer:
-      <ul>
-        <li>"Happy" → Body: default, Eyes: eyes_happy, Mouth: mouth_smile</li>
-        <li>"Sad" → Body: default, Eyes: eyes_sad, Mouth: mouth_frown</li>
-      </ul>
-    </li>
-    <li>The <strong>Character Preview</strong> (left side) shows the composited result in real-time</li>
-  </ol>
-
+  <li>Switch to the <strong>Expressions</strong> tab</li>
+  <li>Click <strong>Add Expression</strong> and name it (e.g., "Happy", "Sad", "Angry", "Surprised")</li>
+  <li>For each expression, select which asset to display on each layer:
+  <ul>
+  <li>"Happy" → Body: default, Eyes: eyes_happy, Mouth: mouth_smile</li>
+  <li>"Sad" → Body: default, Eyes: eyes_sad, Mouth: mouth_frown</li>
+</ul></li>
+  <li>The <strong>Character Preview</strong> (left side) shows the composited result in real-time</li>
+</ol>
   <h3>Step 5: Customize style (optional)</h3>
   <ol>
-    <li>Switch to the <strong>Style</strong> tab</li>
-    <li>Set a custom font for this character's name display (family, size, weight, italic)</li>
-    <li>Optionally set a base image or video for the character</li>
-  </ol>
-
+  <li>Switch to the <strong>Style</strong> tab</li>
+  <li>Set a custom font for this character's name display (family, size, weight, italic)</li>
+  <li>Optionally set a base image or video for the character</li>
+</ol>
   <h3>Step 6: Use in scenes (Scenes tab)</h3>
   <ol>
-    <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>)</li>
-    <li>Drag <strong>ShowCharacter</strong> from the Command Palette (Characters category) into your scene</li>
-    <li>In the Properties Inspector:
-      <ul>
-        <li>Select the <strong>Character</strong> you created</li>
-        <li>Choose an <strong>Expression</strong> (e.g., "Happy")</li>
-        <li>Set <strong>Position</strong>: left, center, right, off-left, off-right, or custom X/Y%</li>
-        <li>Set <strong>Transition</strong>: fade, slide, dissolve, iris-in, wipe-right, instant, cross-fade</li>
-        <li>Set <strong>Duration</strong> for the transition</li>
-      </ul>
-    </li>
-    <li>To change expressions mid-scene, add another <strong>ShowCharacter</strong> command with a different expression</li>
-    <li>To remove the character, use <strong>HideCharacter</strong> with a transition</li>
-  </ol>
-
-  <!-- 2 ──────────────────────────────────── -->
-  <h2 id="branching">2. Branching Story Paths with Variables</h2>
+  <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>)</li>
+  <li>Drag <strong>ShowCharacter</strong> from the Command Palette (Characters category) into your scene</li>
+  <li>In the Properties Inspector:
+  <ul>
+  <li>Select the <strong>Character</strong> you created</li>
+  <li>Choose an <strong>Expression</strong> (e.g., "Happy")</li>
+  <li>Set <strong>Position</strong>: left, center, right, off-left, off-right, or custom X/Y%</li>
+  <li>Set <strong>Transition</strong>: fade, slide, dissolve, iris-in, wipe-right, instant, cross-fade</li>
+  <li>Set <strong>Duration</strong> for the transition</li>
+</ul></li>
+  <li>To change expressions mid-scene, add another <strong>ShowCharacter</strong> command with a different expression</li>
+  <li>To remove the character, use <strong>HideCharacter</strong> with a transition</li>
+</ol>
+  <hr>
+  <h2 id="2-branching-story-paths-with-variables">2. Branching Story Paths with Variables</h2>
   <div class="tabs-involved">Variables → Scenes</div>
   <p>This workflow creates story branches where player choices affect what happens next.</p>
-
   <h3>Step 1: Create tracking variables (Variables tab)</h3>
   <ol>
-    <li>Go to <strong>Variables</strong> (<kbd>Shift+5</kbd>)</li>
-    <li>Create variables to track player decisions:
-      <ul>
-        <li><code>relationship_luna</code> (Number, Global, default: 0)</li>
-        <li><code>chose_sword</code> (Boolean, Global, default: false)</li>
-        <li><code>playerName</code> (String, Global, default: "")</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Go to <strong>Variables</strong> (<kbd>Shift+5</kbd>)</li>
+  <li>Create variables to track player decisions:
+  <ul>
+  <li>Example: <code>relationship_luna</code> (Number, Global, default: 0)</li>
+  <li>Example: <code>chose_sword</code> (Boolean, Global, default: false)</li>
+  <li>Example: <code>playerName</code> (String, Global, default: "")</li>
+</ul></li>
+</ol>
   <h3>Step 2: Set variables via choices (Scenes tab)</h3>
   <ol>
-    <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>)</li>
-    <li>Add a <strong>Choice</strong> command to your scene</li>
-    <li>For each choice option, add a <strong>SetVariable</strong> action:
-      <ul>
-        <li>"Be kind to Luna" → SetVariable: <code>relationship_luna</code> add 1</li>
-        <li>"Ignore Luna" → SetVariable: <code>relationship_luna</code> subtract 1</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>)</li>
+  <li>Add a <strong>Choice</strong> command to your scene</li>
+  <li>For each choice option, add a <strong>SetVariable</strong> action:
+  <ul>
+  <li>"Be kind to Luna" → SetVariable: <code>relationship_luna</code> add 1</li>
+  <li>"Ignore Luna" → SetVariable: <code>relationship_luna</code> subtract 1</li>
+</ul></li>
+</ol>
   <h3>Step 3: Use conditions on commands</h3>
   <ol>
-    <li>Select any command in your scene timeline</li>
-    <li>In the Properties Inspector, scroll to <strong>Conditions</strong></li>
-    <li>Click <strong>Add Condition</strong></li>
-    <li>Set: Variable → Operator → Value (e.g., <code>relationship_luna</code> &gt;= 3)</li>
-    <li>This command will only execute when the condition is met</li>
-  </ol>
-
+  <li>Select any command in your scene timeline</li>
+  <li>In the Properties Inspector, scroll to <strong>Conditions</strong></li>
+  <li>Click <strong>Add Condition</strong></li>
+  <li>Set: Variable → Operator → Value
+  <ul>
+  <li>Example: <code>relationship_luna</code> &gt;= 3</li>
+</ul></li>
+  <li>This command will only execute when the condition is met</li>
+</ol>
   <h3>Step 4: Create branches (visual grouping)</h3>
   <ol>
-    <li>Drag <strong>BranchStart</strong> from the Command Palette (Flow Control category)</li>
-    <li>Name the branch (e.g., "Luna's Good Ending")</li>
-    <li>Add commands inside the branch that should only run conditionally</li>
-    <li>Add conditions to the BranchStart command</li>
-    <li>Close with <strong>BranchEnd</strong></li>
-    <li>Branches are color-coded and collapsible for easy visualization</li>
-  </ol>
-
+  <li>Drag <strong>BranchStart</strong> from the Command Palette (Flow Control category)</li>
+  <li>Name the branch (e.g., "Luna's Good Ending")</li>
+  <li>Add commands inside the branch that should only run conditionally</li>
+  <li>Add conditions to the BranchStart command</li>
+  <li>Close with <strong>BranchEnd</strong></li>
+  <li>Branches are color-coded and collapsible for easy visualization</li>
+</ol>
   <h3>Step 5: Jump between scenes/labels</h3>
   <ul>
-    <li><strong>Jump</strong> command: go to a different scene entirely</li>
-    <li><strong>JumpToLabel</strong> command: jump to a <strong>Label</strong> within the current scene</li>
-    <li>Both support conditions, so jumps can be conditional</li>
-  </ul>
-
+  <li><strong>Jump</strong> command: go to a different scene entirely</li>
+  <li><strong>JumpToLabel</strong> command: jump to a <strong>Label</strong> within the current scene</li>
+  <li>Both support conditions, so jumps can be conditional</li>
+</ul>
   <h3>Variable interpolation</h3>
   <p>Insert variable values into dialogue text:</p>
   <pre><code>{playerName}, Luna's affection is at {relationship_luna} points.</code></pre>
-
   <h3>Usage tracking</h3>
   <p>In the Variables tab, click any variable and use the <strong>Usage Tracker</strong> to see every place it's referenced — across all scenes, commands, conditions, UI elements, and dialogue text.</p>
-
-  <!-- 3 ──────────────────────────────────── -->
-  <h2 id="ui-screens">3. Customizing UI Screens</h2>
+  <hr>
+  <h2 id="3-customizing-ui-screens">3. Customizing UI Screens</h2>
   <div class="tabs-involved">Assets → UI Screens → Settings</div>
   <p>Flourish comes with 5 default screens (Title, Save, Load, Settings, Pause Menu). You can customize them or create new ones.</p>
-
   <h3>Step 1: Upload UI assets (Assets tab)</h3>
   <ol>
-    <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>)</li>
-    <li>Upload any images you want to use for backgrounds, buttons, or decorative elements</li>
-    <li>Upload audio files for screen background music</li>
-  </ol>
-
+  <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>)</li>
+  <li>Upload any images you want to use for backgrounds, buttons, or decorative elements</li>
+  <li>Upload audio files for screen background music</li>
+</ol>
   <h3>Step 2: Edit screens (UI Screens tab)</h3>
   <ol>
-    <li>Go to <strong>UI Screens</strong> (<kbd>Shift+3</kbd>)</li>
-    <li>Select a screen from the list on the left (e.g., "Title Screen")</li>
-    <li>The center area shows the <strong>Visual Editor</strong> — a WYSIWYG canvas where you can drag and resize elements</li>
-    <li>Below the canvas, you'll find buttons to add elements</li>
-  </ol>
-
+  <li>Go to <strong>UI Screens</strong> (<kbd>Shift+3</kbd>)</li>
+  <li>Select a screen from the list on the left (e.g., "Title Screen")</li>
+  <li>The center area shows the <strong>Visual Editor</strong> — a WYSIWYG canvas where you can drag and resize elements</li>
+  <li>Below the canvas, you'll find buttons to add elements</li>
+</ol>
   <h3>Step 3: Configure screen properties</h3>
   <p>Click the screen background (not an element) to see screen-level properties:</p>
   <ul>
-    <li><strong>Background</strong>: solid color, image, or video</li>
-    <li><strong>Music</strong>: audio asset + playback policy (continue playing, restart, stop)</li>
-    <li><strong>Ambient noise</strong>: secondary audio layer</li>
-    <li><strong>Overlay effects</strong>: CRT, Glitch, Sunbeams, Shimmer, Rain, Snow/Ash</li>
-    <li><strong>Transitions</strong>: in/out animations (fade, slide, crossfade, etc.)</li>
-  </ul>
-
+  <li><strong>Background</strong>: solid color, image, or video</li>
+  <li><strong>Music</strong>: audio asset + playback policy (continue playing, restart, stop)</li>
+  <li><strong>Ambient noise</strong>: secondary audio layer</li>
+  <li><strong>Overlay effects</strong>: CRT, Glitch, Sunbeams, Shimmer, Rain, Snow/Ash</li>
+  <li><strong>Transitions</strong>: in/out animations (fade, slide, crossfade, etc.)</li>
+</ul>
   <h3>Step 4: Add and edit UI elements</h3>
   <p>Click the <strong>Add</strong> buttons below the canvas to add elements:</p>
   <table>
-    <thead><tr><th>Element</th><th>Use Case</th></tr></thead>
-    <tbody>
-      <tr><td><strong>Button</strong></td><td>Navigation, actions (Start Game, Load, Quit, etc.)</td></tr>
-      <tr><td><strong>Text</strong></td><td>Titles, labels, descriptions</td></tr>
-      <tr><td><strong>Image</strong></td><td>Logos, decorations, backgrounds</td></tr>
-      <tr><td><strong>SaveSlotGrid</strong></td><td>Grid of save/load slots</td></tr>
-      <tr><td><strong>SettingsSlider</strong></td><td>Volume controls, text speed</td></tr>
-      <tr><td><strong>SettingsToggle</strong></td><td>On/off settings (Skip, Auto-advance)</td></tr>
-      <tr><td><strong>CharacterPreview</strong></td><td>Live character preview (for character creators)</td></tr>
-      <tr><td><strong>TextInput</strong></td><td>Player name entry fields</td></tr>
-      <tr><td><strong>Dropdown</strong></td><td>Selection lists</td></tr>
-      <tr><td><strong>Checkbox</strong></td><td>Toggle options</td></tr>
-      <tr><td><strong>AssetCycler</strong></td><td>Browse character layer assets with arrows</td></tr>
-      <tr><td><strong>CGGallery</strong></td><td>Gallery grid with unlock tracking</td></tr>
-    </tbody>
-  </table>
-
+<thead><tr><th>Element</th><th>Use Case</th></tr></thead>
+<tbody>
+<tr><td><strong>Button</strong></td><td>Navigation, actions (Start Game, Load, Quit, etc.)</td></tr>
+<tr><td><strong>Text</strong></td><td>Titles, labels, descriptions</td></tr>
+<tr><td><strong>Image</strong></td><td>Logos, decorations, backgrounds</td></tr>
+<tr><td><strong>SaveSlotGrid</strong></td><td>Grid of save/load slots</td></tr>
+<tr><td><strong>SettingsSlider</strong></td><td>Volume controls, text speed</td></tr>
+<tr><td><strong>SettingsToggle</strong></td><td>On/off settings (Skip, Auto-advance)</td></tr>
+<tr><td><strong>CharacterPreview</strong></td><td>Live character preview (for character creators)</td></tr>
+<tr><td><strong>TextInput</strong></td><td>Player name entry fields</td></tr>
+<tr><td><strong>Dropdown</strong></td><td>Selection lists</td></tr>
+<tr><td><strong>Checkbox</strong></td><td>Toggle options</td></tr>
+<tr><td><strong>AssetCycler</strong></td><td>Browse character layer assets with arrows</td></tr>
+<tr><td><strong>CGGallery</strong></td><td>Gallery grid with unlock tracking</td></tr>
+</tbody>
+</table>
   <h3>Step 5: Configure element properties</h3>
   <p>Click any element in the canvas to see its properties in the right panel:</p>
   <ul>
-    <li><strong>Position &amp; Size</strong>: drag to move, resize handles to resize; or set exact values</li>
-    <li><strong>Styling</strong>: colors, fonts, images, opacity, border radius</li>
-    <li><strong>Actions</strong>: what happens on click (buttons) — 14 action types available</li>
-    <li><strong>Conditions</strong>: show/hide based on variables</li>
-    <li><strong>Transitions</strong>: entry animations with duration and delay</li>
-  </ul>
-
+  <li><strong>Position &amp; Size</strong>: drag to move, resize handles to resize; or set exact values</li>
+  <li><strong>Styling</strong>: colors, fonts, images, opacity, border radius</li>
+  <li><strong>Actions</strong>: what happens on click (buttons) — 14 action types available</li>
+  <li><strong>Conditions</strong>: show/hide based on variables</li>
+  <li><strong>Transitions</strong>: entry animations with duration and delay</li>
+</ul>
   <h3>Step 6: Assign screens to roles (Settings tab)</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Under <strong>Screen Configuration</strong>, assign screens to their roles:
-      <ul>
-        <li>Title Screen → which screen shows when the game starts</li>
-        <li>Save Screen → which screen shows when the player saves</li>
-        <li>Load Screen → which screen shows when the player loads</li>
-        <li>Settings Screen → which screen shows for game settings</li>
-        <li>Pause Menu → which screen shows when the player pauses</li>
-        <li>Game HUD → optional always-visible overlay during gameplay</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Under <strong>Screen Configuration</strong>, assign screens to their roles:
+  <ul>
+  <li>Title Screen → which screen shows when the game starts</li>
+  <li>Save Screen → which screen shows when the player saves</li>
+  <li>Load Screen → which screen shows when the player loads</li>
+  <li>Settings Screen → which screen shows for game settings</li>
+  <li>Pause Menu → which screen shows when the player pauses</li>
+  <li>Game HUD → optional always-visible overlay during gameplay</li>
+</ul></li>
+</ol>
   <h3>Restoring defaults</h3>
   <p>If you accidentally break a built-in screen, click <strong>Restore Default Screens</strong> at the bottom of the screen list. This adds fresh default screens without deleting your existing ones.</p>
-
-  <!-- 4 ──────────────────────────────────── -->
-  <h2 id="char-customization">4. Character Customization System</h2>
+  <hr>
+  <h2 id="4-character-customization-system">4. Character Customization System</h2>
   <div class="tabs-involved">Assets → Characters → Variables → UI Screens → Scenes</div>
   <p>This is the most complex multi-step workflow. It creates a screen where players customize their character's appearance by cycling through sprite parts.</p>
-
   <h3>Step 1: Upload character parts (Assets tab)</h3>
   <ol>
-    <li>Upload all character sprite parts organized by category:
-      <ul>
-        <li>Hair styles: hair_1.png, hair_2.png, hair_3.png</li>
-        <li>Eye types: eyes_1.png, eyes_2.png, eyes_3.png</li>
-        <li>Outfit options: outfit_1.png, outfit_2.png, outfit_3.png</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Upload all character sprite parts organized by category:
+  <ul>
+  <li>Hair styles: hair_1.png, hair_2.png, hair_3.png</li>
+  <li>Eye types: eyes_1.png, eyes_2.png, eyes_3.png</li>
+  <li>Outfit options: outfit_1.png, outfit_2.png, outfit_3.png</li>
+</ul></li>
+</ol>
   <h3>Step 2: Create the character with layers (Characters tab)</h3>
   <ol>
-    <li>Create a new character (e.g., "Player Character")</li>
-    <li>Add layers matching your categories:
-      <ul>
-        <li>Layer: "Hair" → add all hair assets</li>
-        <li>Layer: "Eyes" → add all eye assets</li>
-        <li>Layer: "Outfit" → add all outfit assets</li>
-      </ul>
-    </li>
-    <li>Create a default expression that uses one asset from each layer</li>
-  </ol>
-
+  <li>Create a new character (e.g., "Player Character")</li>
+  <li>Add layers matching your categories:
+  <ul>
+  <li>Layer: "Hair" → add all hair assets</li>
+  <li>Layer: "Eyes" → add all eye assets</li>
+  <li>Layer: "Outfit" → add all outfit assets</li>
+</ul></li>
+  <li>Create a default expression that uses one asset from each layer</li>
+</ol>
   <h3>Step 3: Create selection variables (Variables tab)</h3>
   <ol>
-    <li>Create a <strong>String</strong> variable for each customizable layer:
-      <ul>
-        <li><code>selected_hair</code> (String, Global)</li>
-        <li><code>selected_eyes</code> (String, Global)</li>
-        <li><code>selected_outfit</code> (String, Global)</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Create a <strong>String</strong> variable for each customizable layer:
+  <ul>
+  <li><code>selected_hair</code> (String, Global)</li>
+  <li><code>selected_eyes</code> (String, Global)</li>
+  <li><code>selected_outfit</code> (String, Global)</li>
+</ul></li>
+</ol>
   <h3>Step 4: Build the customization screen (UI Screens tab)</h3>
   <p><strong>Option A: Use the Character Customization Wizard</strong></p>
   <ol>
-    <li>Click the <strong>Character Customization Wizard</strong> button</li>
-    <li>Follow the guided steps — the wizard automatically creates the screen, elements, and variable bindings</li>
-  </ol>
+  <li>Click the <strong>Character Customization Wizard</strong> button</li>
+  <li>Follow the guided steps — the wizard automatically creates the screen, elements, and variable bindings</li>
+</ol>
   <p><strong>Option B: Manual setup</strong></p>
   <ol>
-    <li>Create a new UI screen (e.g., "Character Creator")</li>
-    <li>Add <strong>AssetCycler</strong> elements for each customizable layer:
-      <ul>
-        <li>Set the <strong>Layer</strong> to the character layer (e.g., "Hair")</li>
-        <li>Set the <strong>Variable</strong> to the tracking variable (e.g., <code>selected_hair</code>)</li>
-        <li>Each AssetCycler shows left/right arrows to browse layer assets</li>
-      </ul>
-    </li>
-    <li>Add a <strong>CharacterPreview</strong> element:
-      <ul>
-        <li>Assign the <strong>Character</strong></li>
-        <li>Set the <strong>Default Expression</strong></li>
-        <li>Map each layer to its corresponding variable (Hair → <code>selected_hair</code>, etc.)</li>
-        <li>The preview updates in real-time as the player cycles through assets</li>
-      </ul>
-    </li>
-    <li>Add a <strong>Button</strong> to proceed (e.g., "Confirm" → action: JumpToScene → "Chapter 1")</li>
-  </ol>
-
+  <li>Create a new UI screen (e.g., "Character Creator")</li>
+  <li>Add <strong>AssetCycler</strong> elements for each customizable layer:
+  <ul>
+  <li>Set the <strong>Layer</strong> to the character layer (e.g., "Hair")</li>
+  <li>Set the <strong>Variable</strong> to the tracking variable (e.g., <code>selected_hair</code>)</li>
+  <li>Each AssetCycler shows left/right arrows to browse layer assets</li>
+</ul></li>
+  <li>Add a <strong>CharacterPreview</strong> element:
+  <ul>
+  <li>Assign the <strong>Character</strong></li>
+  <li>Set the <strong>Default Expression</strong></li>
+  <li>Map each layer to its corresponding variable (Hair → <code>selected_hair</code>, Eyes → <code>selected_eyes</code>, etc.)</li>
+  <li>The preview updates in real-time as the player cycles through assets</li>
+</ul></li>
+  <li>Add a <strong>Button</strong> to proceed (e.g., "Confirm" → action: JumpToScene → "Chapter 1")</li>
+</ol>
   <h3>Step 5: Show the creator from a scene (Scenes tab)</h3>
   <ol>
-    <li>In your starting scene, add a <strong>ShowScreen</strong> command</li>
-    <li>Set it to show your character creator screen</li>
-    <li>The player interacts with the creator, then the button's action jumps them into the story</li>
-  </ol>
-
+  <li>In your starting scene, add a <strong>ShowScreen</strong> command</li>
+  <li>Set it to show your character creator screen</li>
+  <li>The player interacts with the creator, then the button's action jumps them into the story</li>
+</ol>
   <h3>Step 6: Use the customized character in scenes</h3>
   <p>When you use <strong>ShowCharacter</strong> in later scenes, the character will display with the assets the player selected, because the character's layers are bound to the selection variables.</p>
-
-  <!-- 5 ──────────────────────────────────── -->
-  <h2 id="cg-gallery">5. CG Gallery System</h2>
+  <hr>
+  <h2 id="5-cg-gallery-system">5. CG Gallery System</h2>
   <div class="tabs-involved">Variables → Assets → UI Screens → Settings → Scenes</div>
-
   <h3>Step 1: Upload CG images (Assets tab)</h3>
   <ol>
-    <li>Upload all gallery images to <strong>Images</strong> category</li>
-    <li>Optionally create a "CG" folder for organization</li>
-  </ol>
-
+  <li>Upload all gallery images to <strong>Images</strong> category</li>
+  <li>Optionally create a "CG" folder for organization</li>
+</ol>
   <h3>Step 2: Create unlock variables (Variables tab)</h3>
   <ol>
-    <li>Create a <strong>Boolean</strong> variable for each CG (e.g., <code>cg_beach_unlocked</code>, <code>cg_festival_unlocked</code>)</li>
-    <li>Set scope to <strong>Persistent</strong> (so unlocks survive across play sessions) or <strong>Global</strong> (per-playthrough)</li>
-    <li>Default value: <code>false</code></li>
-  </ol>
-
+  <li>Create a <strong>Boolean</strong> variable for each CG (e.g., <code>cg_beach_unlocked</code>, <code>cg_festival_unlocked</code>)</li>
+  <li>Set scope to <strong>Persistent</strong> (so unlocks survive across play sessions) or <strong>Global</strong> (per-playthrough)</li>
+  <li>Default value: <code>false</code></li>
+</ol>
   <h3>Step 3: Configure CG Gallery entries (Settings tab)</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Find the <strong>CG Gallery</strong> section</li>
-    <li>Add entries:
-      <ul>
-        <li><strong>Name</strong>: display name for the CG</li>
-        <li><strong>Asset</strong>: the full gallery image</li>
-        <li><strong>Thumbnail</strong>: smaller preview image (optional — uses asset if not set)</li>
-        <li><strong>Category</strong>: group CGs into categories</li>
-        <li><strong>Unlock Variable</strong>: the boolean variable that controls unlock state</li>
-      </ul>
-    </li>
-    <li>Set grid configuration (columns, locked placeholder image)</li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Find the <strong>CG Gallery</strong> section</li>
+  <li>Add entries:
+  <ul>
+  <li><strong>Name</strong>: display name for the CG</li>
+  <li><strong>Asset</strong>: the full gallery image</li>
+  <li><strong>Thumbnail</strong>: smaller preview image (optional — uses asset if not set)</li>
+  <li><strong>Category</strong>: group CGs into categories</li>
+  <li><strong>Unlock Variable</strong>: the boolean variable that controls unlock state</li>
+</ul></li>
+  <li>Set grid configuration (columns, locked placeholder image)</li>
+</ol>
   <h3>Step 4: Build the gallery screen (UI Screens tab)</h3>
-  <p><strong>Option A:</strong> Use the <strong>CG Gallery Wizard</strong> button for guided setup.</p>
-  <p><strong>Option B:</strong> Create a new UI screen manually, add a <strong>CGGallery</strong> element, and add a navigation button to return to the title screen.</p>
-
+  <p><strong>Option A: Use the CG Gallery Wizard</strong></p>
+  <ol>
+  <li>Click the <strong>CG Gallery Wizard</strong> button</li>
+  <li>Follow the guided steps</li>
+</ol>
+  <p><strong>Option B: Manual setup</strong></p>
+  <ol>
+  <li>Create a new UI screen (e.g., "Gallery")</li>
+  <li>Add a <strong>CGGallery</strong> element</li>
+  <li>The element automatically connects to your CG Gallery settings</li>
+  <li>Add a navigation button to return to the title screen</li>
+</ol>
   <h3>Step 5: Unlock CGs during gameplay (Scenes tab)</h3>
   <ol>
-    <li>At the point in your story where a CG should be revealed, add a <strong>SetVariable</strong> command</li>
-    <li>Set the unlock variable to <code>true</code> (e.g., <code>cg_beach_unlocked</code> = true)</li>
-    <li>Optionally add a <strong>ShowImage</strong> command to display the CG at that moment</li>
-  </ol>
-
+  <li>At the point in your story where a CG should be revealed, add a <strong>SetVariable</strong> command</li>
+  <li>Set the unlock variable to <code>true</code> (e.g., <code>cg_beach_unlocked</code> = true)</li>
+  <li>Optionally add a <strong>ShowImage</strong> command to display the CG at that moment</li>
+</ol>
   <h3>Step 6: Link gallery from title screen</h3>
   <ol>
-    <li>In your <strong>Title Screen</strong> (UI Screens tab), add a <strong>Button</strong></li>
-    <li>Set its action to <strong>GoToScreen</strong> → your Gallery screen</li>
-    <li>Optionally add a <strong>Condition</strong> so the button only appears after at least one CG is unlocked</li>
-  </ol>
-
-  <!-- 6 ──────────────────────────────────── -->
-  <h2 id="audio">6. Audio &amp; Music Workflow</h2>
+  <li>In your <strong>Title Screen</strong> (UI Screens tab), add a <strong>Button</strong></li>
+  <li>Set its action to <strong>GoToScreen</strong> → your Gallery screen</li>
+  <li>Optionally add a <strong>Condition</strong> so the button only appears after at least one CG is unlocked</li>
+</ol>
+  <hr>
+  <h2 id="6-audio--music-workflow">6. Audio &amp; Music Workflow</h2>
   <div class="tabs-involved">Assets → Scenes → UI Screens → Settings</div>
-
   <h3>Step 1: Upload audio (Assets tab)</h3>
   <ol>
-    <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>) → <strong>Audio</strong> category</li>
-    <li>Upload your music tracks, sound effects, and ambient sounds</li>
-    <li>Organize into folders (e.g., "Music/", "SFX/", "Ambient/")</li>
-  </ol>
-
+  <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>) → <strong>Audio</strong> category</li>
+  <li>Upload your music tracks, sound effects, and ambient sounds</li>
+  <li>Organize into folders (e.g., "Music/", "SFX/", "Ambient/")</li>
+</ol>
   <h3>Step 2: Add music to scenes (Scenes tab)</h3>
   <ol>
-    <li>Drag <strong>PlayMusic</strong> from the Command Palette (Audio category) into your scene</li>
-    <li>In Properties Inspector:
-      <ul>
-        <li>Select the audio <strong>Asset</strong></li>
-        <li>Toggle <strong>Loop</strong> on/off</li>
-        <li>Set <strong>Fade-in duration</strong> (seconds)</li>
-        <li>Set <strong>Volume</strong> (0–1) for this specific music command</li>
-      </ul>
-    </li>
-    <li>To stop music: add <strong>StopMusic</strong> with fade-out duration</li>
-    <li>To layer sound effects: add <strong>PlaySoundEffect</strong> (plays alongside music)</li>
-  </ol>
-
+  <li>Drag <strong>PlayMusic</strong> from the Command Palette (Audio category) into your scene</li>
+  <li>In Properties Inspector:
+  <ul>
+  <li>Select the audio <strong>Asset</strong></li>
+  <li>Toggle <strong>Loop</strong> on/off</li>
+  <li>Set <strong>Fade-in duration</strong> (seconds)</li>
+  <li>Set <strong>Volume</strong> (0-1) for this specific music command</li>
+</ul></li>
+  <li>To stop music: add <strong>StopMusic</strong> with fade-out duration</li>
+  <li>To layer sound effects: add <strong>PlaySoundEffect</strong> (plays alongside music)</li>
+</ol>
   <h3>Step 3: Add music to UI screens (UI Screens tab)</h3>
   <ol>
-    <li>Select a screen and view its properties (click background area)</li>
-    <li>Set <strong>Music</strong>: choose an audio asset</li>
-    <li>Set <strong>Playback Policy</strong>:
-      <ul>
-        <li><strong>Restart</strong> — restart the track when entering this screen</li>
-        <li><strong>Continue</strong> — keep playing if the same track is already playing</li>
-        <li><strong>Stop</strong> — stop all music when entering this screen</li>
-      </ul>
-    </li>
-    <li>Set <strong>Ambient</strong>: add a second audio layer (e.g., rain sounds, crowd noise)</li>
-  </ol>
-
+  <li>Select a screen and view its properties (click background area)</li>
+  <li>Set <strong>Music</strong>: choose an audio asset</li>
+  <li>Set <strong>Playback Policy</strong>:
+  <ul>
+  <li><strong>Restart</strong> — restart the track when entering this screen</li>
+  <li><strong>Continue</strong> — keep playing if the same track is already playing</li>
+  <li><strong>Stop</strong> — stop all music when entering this screen</li>
+</ul></li>
+  <li>Set <strong>Ambient</strong>: add a second audio layer (e.g., rain sounds, crowd noise)</li>
+</ol>
   <h3>Step 4: Configure default volumes (Settings tab)</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Set default values for Music Volume, SFX Volume, and Ambient Volume (0–100%)</li>
-    <li>These are the starting volumes — players can adjust them via the Settings screen in-game</li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Set default values for:
+  <ul>
+  <li><strong>Music Volume</strong> (0-100%)</li>
+  <li><strong>SFX Volume</strong> (0-100%)</li>
+  <li><strong>Ambient Volume</strong> (0-100%)</li>
+</ul></li>
+  <li>These are the starting volumes — players can adjust them via the Settings screen in-game</li>
+</ol>
   <h3>Audio channels</h3>
   <p>Flourish supports 3 independent audio channels:</p>
   <ul>
-    <li><strong>Music</strong> — background music (one track at a time)</li>
-    <li><strong>SFX</strong> — sound effects (multiple can play simultaneously)</li>
-    <li><strong>Ambient</strong> — environmental audio (one track at a time)</li>
-  </ul>
-
-  <!-- 7 ──────────────────────────────────── -->
-  <h2 id="screen-effects">7. Screen Effects &amp; Overlay Effects</h2>
+  <li><strong>Music</strong> — background music (one track at a time)</li>
+  <li><strong>SFX</strong> — sound effects (multiple can play simultaneously)</li>
+  <li><strong>Ambient</strong> — environmental audio (one track at a time)</li>
+</ul>
+  <hr>
+  <h2 id="7-screen-effects--overlay-effects">7. Screen Effects &amp; Overlay Effects</h2>
   <div class="tabs-involved">Scenes</div>
   <p>All screen effects are commands added to scene timelines.</p>
-
   <h3>Basic screen effects</h3>
   <p>Drag these from <strong>Screen FX</strong> in the Command Palette:</p>
   <table>
-    <thead><tr><th>Command</th><th>What it does</th><th>Key properties</th></tr></thead>
-    <tbody>
-      <tr><td><strong>ShakeScreen</strong></td><td>Camera shake</td><td>Duration, Intensity</td></tr>
-      <tr><td><strong>FlashScreen</strong></td><td>Brief color flash</td><td>Color, Duration</td></tr>
-      <tr><td><strong>TintScreen</strong></td><td>Color overlay</td><td>Color, Duration</td></tr>
-      <tr><td><strong>PanZoomScreen</strong></td><td>Camera movement</td><td>Zoom level, Pan X/Y (%), Duration</td></tr>
-      <tr><td><strong>ResetScreenEffects</strong></td><td>Clear all effects</td><td>Duration (transition time)</td></tr>
-    </tbody>
-  </table>
-
+<thead><tr><th>Command</th><th>What it does</th><th>Key properties</th></tr></thead>
+<tbody>
+<tr><td><strong>ShakeScreen</strong></td><td>Camera shake</td><td>Duration, Intensity</td></tr>
+<tr><td><strong>FlashScreen</strong></td><td>Brief color flash</td><td>Color, Duration</td></tr>
+<tr><td><strong>TintScreen</strong></td><td>Color overlay</td><td>Color, Duration</td></tr>
+<tr><td><strong>PanZoomScreen</strong></td><td>Camera movement</td><td>Zoom level, Pan X/Y (%), Duration</td></tr>
+<tr><td><strong>ResetScreenEffects</strong></td><td>Clear all effects</td><td>Duration (transition time)</td></tr>
+</tbody>
+</table>
   <h3>Overlay effects (particle/shader system)</h3>
   <ol>
-    <li>Drag <strong>SetScreenOverlayEffect</strong> from Screen FX</li>
-    <li>Choose an <strong>Effect Type</strong>:</li>
-  </ol>
+  <li>Drag <strong>SetScreenOverlayEffect</strong> from Screen FX</li>
+  <li>Choose an <strong>Effect Type</strong>:</li>
+</ol>
   <table>
-    <thead><tr><th>Effect</th><th>Key Parameters</th></tr></thead>
-    <tbody>
-      <tr><td><strong>CRT Scanlines</strong></td><td>Line spacing</td></tr>
-      <tr><td><strong>Chromatic Glitch</strong></td><td>Chromatic spread</td></tr>
-      <tr><td><strong>Sunbeams</strong></td><td>Spread, color, blend mode</td></tr>
-      <tr><td><strong>Shimmer</strong></td><td>Particle density, shimmer side (left/right/full), shimmer direction</td></tr>
-      <tr><td><strong>Rain</strong></td><td>Wind strength, drop length</td></tr>
-      <tr><td><strong>Snow/Ash</strong></td><td>Variant (snow or ash), particle size</td></tr>
-    </tbody>
-  </table>
-  <p>All effects share: Intensity (0–1), Speed, Blend mode (screen/overlay/soft-light/normal), Color, Duration (0 = persistent).</p>
-
+<thead><tr><th>Effect</th><th>Key Parameters</th></tr></thead>
+<tbody>
+<tr><td><strong>CRT Scanlines</strong></td><td>Line spacing</td></tr>
+<tr><td><strong>Chromatic Glitch</strong></td><td>Chromatic spread</td></tr>
+<tr><td><strong>Sunbeams</strong></td><td>Spread, color, blend mode</td></tr>
+<tr><td><strong>Shimmer</strong></td><td>Particle density, shimmer side (left/right/full), shimmer direction</td></tr>
+<tr><td><strong>Rain</strong></td><td>Wind strength, drop length</td></tr>
+<tr><td><strong>Snow/Ash</strong></td><td>Variant (snow or ash), particle size</td></tr>
+</tbody>
+</table>
+  <ol>
+  <li>All effects share: Intensity (0-1), Speed, Blend mode (screen/overlay/soft-light/normal), Color, Duration (0 = persistent)</li>
+</ol>
   <h3>Combining effects</h3>
   <ul>
-    <li>Effects can stack — multiple overlays active simultaneously</li>
-    <li>Use <strong>command stacking</strong> (async execution) to trigger multiple effects at the same time</li>
-    <li>Use <strong>ResetScreenEffects</strong> to clear all active effects with a smooth transition</li>
-  </ul>
-
-  <!-- 8 ──────────────────────────────────── -->
-  <h2 id="video">8. Video &amp; Movie Integration</h2>
+  <li>Effects can stack — multiple overlays active simultaneously</li>
+  <li>Use <strong>command stacking</strong> (async execution) to trigger multiple effects at the same time</li>
+  <li>Use <strong>ResetScreenEffects</strong> to clear all active effects with a smooth transition</li>
+</ul>
+  <hr>
+  <h2 id="8-video--movie-integration">8. Video &amp; Movie Integration</h2>
   <div class="tabs-involved">Assets → Scenes</div>
-
   <h3>Step 1: Upload videos (Assets tab)</h3>
   <ol>
-    <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>) → <strong>Videos</strong> category</li>
-    <li>Upload video files (MP4, WebM, MOV, AVI, MKV)</li>
-  </ol>
-
+  <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>) → <strong>Videos</strong> category</li>
+  <li>Upload video files (MP4, WebM, MOV, AVI, MKV)</li>
+</ol>
   <h3>Step 2: Use videos in scenes</h3>
-  <h4>As a background</h4>
+  <p><strong>As a background:</strong></p>
   <ol>
-    <li>Drag <strong>SetBackground</strong> to your scene</li>
-    <li>Select a video file instead of an image</li>
-    <li>The video will loop as the scene background</li>
-  </ol>
-  <h4>As a cutscene</h4>
+  <li>Drag <strong>SetBackground</strong> to your scene</li>
+  <li>Select a video file instead of an image</li>
+  <li>The video will loop as the scene background</li>
+</ol>
+  <p><strong>As a cutscene:</strong></p>
   <ol>
-    <li>Drag <strong>PlayMovie</strong> from Media in the Command Palette</li>
-    <li>Configure in Properties Inspector:
-      <ul>
-        <li><strong>Asset</strong>: select the video</li>
-        <li><strong>Display mode</strong>: Fullscreen (opaque overlay) or Overlay (over existing stage)</li>
-        <li><strong>Position/Size</strong>: X, Y, Width, Height (0–100%)</li>
-        <li><strong>Object fit</strong>: cover, contain, fill, or custom</li>
-        <li><strong>Loop</strong>: toggle on/off</li>
-        <li><strong>Opacity</strong>: 0–1</li>
-        <li><strong>Wait for completion</strong>: toggle — if on, the game pauses until the video finishes</li>
-      </ul>
-    </li>
-    <li>Add <strong>StopMovie</strong> to end video playback</li>
-  </ol>
-  <h4>As a character layer</h4>
+  <li>Drag <strong>PlayMovie</strong> from Media in the Command Palette</li>
+  <li>Configure in Properties Inspector:
+  <ul>
+  <li><strong>Asset</strong>: select the video</li>
+  <li><strong>Display mode</strong>: Fullscreen (opaque overlay) or Overlay (over existing stage)</li>
+  <li><strong>Position/Size</strong>: X, Y, Width, Height (0-100%)</li>
+  <li><strong>Object fit</strong>: cover, contain, fill, or custom</li>
+  <li><strong>Loop</strong>: toggle on/off</li>
+  <li><strong>Opacity</strong>: 0-1</li>
+  <li><strong>Wait for completion</strong>: toggle — if on, the game pauses until the video finishes</li>
+</ul></li>
+  <li>Add <strong>StopMovie</strong> to end video playback</li>
+</ol>
+  <p><strong>As a character layer:</strong></p>
   <ol>
-    <li>In the Characters tab, add a video asset to a character layer</li>
-    <li>Set loop/autoplay options</li>
-    <li>The video will play as part of the character's sprite composite</li>
-  </ol>
-
-  <!-- 9 ──────────────────────────────────── -->
-  <h2 id="overlays">9. In-Scene Overlays (Text, Images, Buttons)</h2>
+  <li>In the Characters tab, add a video asset to a character layer</li>
+  <li>Set loop/autoplay options</li>
+  <li>The video will play as part of the character's sprite composite</li>
+</ol>
+  <hr>
+  <h2 id="9-in-scene-overlays-text-images-buttons">9. In-Scene Overlays (Text, Images, Buttons)</h2>
   <div class="tabs-involved">Assets → Scenes</div>
   <p>These commands place persistent visual elements on the stage that remain until explicitly hidden.</p>
-
   <h3>ShowText / HideText</h3>
   <ol>
-    <li>Drag <strong>ShowText</strong> from UI Elements in the Command Palette</li>
-    <li>Configure:
-      <ul>
-        <li><strong>Text content</strong> (supports <code>{variable}</code> interpolation)</li>
-        <li><strong>Position</strong>: X, Y (%)</li>
-        <li><strong>Size</strong>: Width, Height</li>
-        <li><strong>Font</strong>: family, size, color, weight, style</li>
-        <li><strong>Alignment</strong>: horizontal + vertical</li>
-        <li><strong>Text effects</strong>: shadow (offset, blur, color), gradient (linear/radial), border (width, color)</li>
-        <li><strong>Transition</strong>: entry animation + duration</li>
-      </ul>
-    </li>
-    <li>The text stays on screen until a <strong>HideText</strong> command removes it</li>
-  </ol>
-
+  <li>Drag <strong>ShowText</strong> from UI Elements in the Command Palette</li>
+  <li>Configure:
+  <ul>
+  <li><strong>Text content</strong> (supports <code>{variable}</code> interpolation)</li>
+  <li><strong>Position</strong>: X, Y (%)</li>
+  <li><strong>Size</strong>: Width, Height</li>
+  <li><strong>Font</strong>: family, size, color, weight, style</li>
+  <li><strong>Alignment</strong>: horizontal + vertical</li>
+  <li><strong>Text effects</strong>: shadow (offset, blur, color), gradient (linear/radial), border (width, color)</li>
+  <li><strong>Transition</strong>: entry animation + duration</li>
+</ul></li>
+  <li>The text stays on screen until a <strong>HideText</strong> command removes it</li>
+</ol>
   <h3>ShowImage / HideImage</h3>
   <ol>
-    <li>Drag <strong>ShowImage</strong> from UI Elements</li>
-    <li>Configure: asset, position, dimensions, rotation, opacity, scaleX/Y, transition</li>
-    <li>Stays visible until <strong>HideImage</strong></li>
-  </ol>
-
+  <li>Drag <strong>ShowImage</strong> from UI Elements</li>
+  <li>Configure: asset, position, dimensions, rotation, opacity, scaleX/Y, transition</li>
+  <li>Stays visible until <strong>HideImage</strong></li>
+</ol>
   <h3>ShowButton / HideButton</h3>
   <ol>
-    <li>Drag <strong>ShowButton</strong> from UI Elements</li>
-    <li>Configure:
-      <ul>
-        <li><strong>Text</strong>, <strong>Position</strong>, <strong>Size</strong>, <strong>Styling</strong> (background, text color, font, border radius)</li>
-        <li><strong>Images</strong>: button image + hover image</li>
-        <li><strong>Sounds</strong>: click sound</li>
-        <li><strong>Actions</strong>: onClick array (14 action types)</li>
-        <li><strong>waitForClick</strong>: pause the game until the player clicks this button</li>
-        <li><strong>Conditions</strong>: only show when variable conditions are met</li>
-      </ul>
-    </li>
-    <li>Stays visible until <strong>HideButton</strong></li>
-  </ol>
-
+  <li>Drag <strong>ShowButton</strong> from UI Elements</li>
+  <li>Configure:
+  <ul>
+  <li><strong>Text</strong>, <strong>Position</strong>, <strong>Size</strong>, <strong>Styling</strong> (background, text color, font, border radius)</li>
+  <li><strong>Images</strong>: button image + hover image</li>
+  <li><strong>Sounds</strong>: click sound</li>
+  <li><strong>Actions</strong>: onClick array (14 action types)</li>
+  <li><strong>waitForClick</strong>: pause the game until the player clicks this button</li>
+  <li><strong>Conditions</strong>: only show when variable conditions are met</li>
+</ul></li>
+  <li>Stays visible until <strong>HideButton</strong></li>
+</ol>
   <h3>Common patterns</h3>
   <ul>
-    <li><strong>UI prompts</strong>: ShowButton with waitForClick to create interactive moments</li>
-    <li><strong>Persistent labels</strong>: ShowText for HUD-like info (HP, score, time)</li>
-    <li><strong>Clickable images</strong>: ShowImage + ShowButton (invisible) layered for image-based interaction</li>
-    <li><strong>Narrative moments</strong>: ShowImage for CG/flashback scenes</li>
-  </ul>
-
-  <!-- 10 ──────────────────────────────────── -->
-  <h2 id="scripting">10. Scripting System</h2>
+  <li><strong>UI prompts</strong>: ShowButton with waitForClick to create interactive moments</li>
+  <li><strong>Persistent labels</strong>: ShowText for HUD-like info (HP, score, time)</li>
+  <li><strong>Clickable images</strong>: ShowImage + ShowButton (invisible) layered for image-based interaction</li>
+  <li><strong>Narrative moments</strong>: ShowImage for CG/flashback scenes</li>
+</ul>
+  <hr>
+  <h2 id="10-scripting-system">10. Scripting System</h2>
   <div class="tabs-involved">Tools menu → Script Editor → Scenes</div>
-
   <h3>Step 1: Open the Script Editor</h3>
   <ol>
-    <li>Click <strong>Tools</strong> in the header toolbar</li>
-    <li>Select <strong>Script Editor</strong></li>
-  </ol>
-
+  <li>Click <strong>Tools</strong> in the header toolbar</li>
+  <li>Select <strong>Script Editor</strong></li>
+</ol>
   <h3>Step 2: Create a script</h3>
   <ol>
-    <li>Click <strong>New Script</strong></li>
-    <li>Enter a <strong>name</strong> and optional <strong>description</strong></li>
-    <li>Select a <strong>trigger</strong>:
-      <ul>
-        <li><code>command</code> — runs when called by a RunScript command in a scene</li>
-        <li><code>onSceneEnter</code> — runs automatically when entering a scene</li>
-        <li><code>onSceneExit</code> — runs automatically when leaving a scene</li>
-        <li><code>global</code> — utility script, only runs when explicitly called</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Click <strong>New Script</strong></li>
+  <li>Enter a <strong>name</strong> and optional <strong>description</strong></li>
+  <li>Select a <strong>trigger</strong>:
+  <ul>
+  <li><code>command</code> — runs when called by a RunScript command in a scene</li>
+  <li><code>onSceneEnter</code> — runs automatically when entering a scene</li>
+  <li><code>onSceneExit</code> — runs automatically when leaving a scene</li>
+  <li><code>global</code> — utility script, only runs when explicitly called</li>
+</ul></li>
+</ol>
   <h3>Step 3: Write your script</h3>
   <p>Use the <code>game</code> API object:</p>
   <pre><code>// Variables
@@ -702,560 +654,1037 @@ game.playMusic("battle_theme", true);
 let roll = game.random(1, 20);
 game.log("Debug:", roll);
 game.notify("Critical hit!", "success");</code></pre>
-
   <h3>Step 4: Validate and test</h3>
   <ol>
-    <li>Click <strong>Validate</strong> to check for syntax errors</li>
-    <li>Click <strong>Test Run</strong> to execute in a sandboxed mock context and see console output</li>
-  </ol>
-
+  <li>Click <strong>Validate</strong> to check for syntax errors (shows line-level error/warning reports)</li>
+  <li>Click <strong>Test Run</strong> to execute in a sandboxed mock context and see console output</li>
+</ol>
   <h3>Step 5: Use in scenes (Scenes tab)</h3>
   <ol>
-    <li>Drag <strong>RunScript</strong> from the Scripting category in the Command Palette</li>
-    <li>In the Properties Inspector:
-      <ul>
-        <li>Select which <strong>Script</strong> to run</li>
-        <li>Toggle <strong>Wait for Completion</strong> — if on, the game pauses until the script finishes</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Drag <strong>RunScript</strong> from the Scripting category in the Command Palette</li>
+  <li>In the Properties Inspector:
+  <ul>
+  <li>Select which <strong>Script</strong> to run</li>
+  <li>Toggle <strong>Wait for Completion</strong> — if on, the game pauses until the script finishes</li>
+</ul></li>
+</ol>
   <h3>Security</h3>
   <p>Scripts run in a sandbox. Blocked: <code>document</code>, <code>window</code>, <code>fetch</code>, <code>eval</code>, <code>localStorage</code>, <code>setTimeout</code>, and all network/DOM access. Scripts can only interact through the <code>game</code> API.</p>
-
-  <!-- 11 ──────────────────────────────────── -->
-  <h2 id="localization">11. Localization Workflow</h2>
+  <hr>
+  <h2 id="11-localization-workflow">11. Localization Workflow</h2>
   <div class="tabs-involved">Tools menu → Localization → Assets</div>
-
   <h3>Step 1: Open the Localization Panel</h3>
   <ol>
-    <li>Click <strong>Tools</strong> in the header toolbar</li>
-    <li>Select <strong>Localization</strong></li>
-  </ol>
-
+  <li>Click <strong>Tools</strong> in the header toolbar</li>
+  <li>Select <strong>Localization</strong></li>
+</ol>
   <h3>Step 2: Add languages</h3>
   <ol>
-    <li>Choose from 10 preset languages: English, Japanese, Spanish, French, German, Korean, Chinese, Portuguese, Russian, Arabic</li>
-    <li>Click to add each language you want to support</li>
-  </ol>
-
+  <li>Choose from 10 preset languages: English, Japanese, Spanish, French, German, Korean, Chinese, Portuguese, Russian, Arabic</li>
+  <li>Click to add each language you want to support</li>
+</ol>
   <h3>Step 3: Extract strings</h3>
-  <p>The panel automatically scans your project and extracts all translatable text: dialogue text, choice option text, UI element text, and button labels.</p>
-
+  <p>The panel automatically scans your project and extracts all translatable text:</p>
+  <ul>
+  <li>Dialogue text</li>
+  <li>Choice option text</li>
+  <li>UI element text</li>
+  <li>Button labels</li>
+</ul>
   <h3>Step 4: Translate</h3>
   <ol>
-    <li>Use the <strong>inline translation editor</strong> to enter translations for each string in each language</li>
-    <li>Use <strong>Search</strong> to find specific strings</li>
-    <li>Use <strong>tag filtering</strong> to filter by category</li>
-  </ol>
-
+  <li>Use the <strong>inline translation editor</strong> to enter translations for each string in each language</li>
+  <li>Use <strong>Search</strong> to find specific strings</li>
+  <li>Use <strong>tag filtering</strong> to filter by category</li>
+</ol>
   <h3>Step 5: Export/Import for collaboration</h3>
   <ul>
-    <li><strong>Export CSV</strong>: download a spreadsheet of all strings for professional translators</li>
-    <li><strong>Import CSV</strong>: upload completed translations back into the project</li>
-  </ul>
-
-  <!-- 12 ──────────────────────────────────── -->
-  <h2 id="build">12. Build &amp; Export Workflow</h2>
+  <li><strong>Export CSV</strong>: download a spreadsheet of all strings for professional translators</li>
+  <li><strong>Import CSV</strong>: upload completed translations back into the project</li>
+</ul>
+  <hr>
+  <h2 id="12-build--export-workflow">12. Build &amp; Export Workflow</h2>
   <div class="tabs-involved">Settings → Build</div>
-
   <h3>Step 1: Configure project settings (Settings tab)</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Set your <strong>project title</strong>, <strong>author</strong>, <strong>description</strong>, and <strong>version</strong></li>
-    <li>Set the <strong>starting scene</strong></li>
-    <li>Configure <strong>game resolution</strong> (1920×1080, 1280×720, etc. or custom)</li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Set your <strong>project title</strong>, <strong>author</strong>, <strong>description</strong>, and <strong>version</strong></li>
+  <li>Set the <strong>starting scene</strong></li>
+  <li>Configure <strong>game resolution</strong> (1920×1080, 1280×720, etc. or custom)</li>
+</ol>
   <h3>Step 2: Configure UI screens</h3>
   <ol>
-    <li>Ensure your Title Screen, Save/Load screens, and Pause Menu are set up properly</li>
-    <li>Assign screens to roles in Settings → Screen Configuration</li>
-  </ol>
-
+  <li>Ensure your Title Screen, Save/Load screens, and Pause Menu are set up properly</li>
+  <li>Assign screens to roles in Settings → Screen Configuration</li>
+</ol>
   <h3>Step 3: Validate</h3>
   <ol>
-    <li>Open the <strong>Build</strong> panel (in Settings or via the Build button)</li>
-    <li>Click <strong>Validate</strong> to run pre-build checks:
-      <ul>
-        <li>Missing assets referenced by commands</li>
-        <li>Broken scene/label references</li>
-        <li>Unresolved variable references</li>
-      </ul>
-    </li>
-    <li>Review and fix any warnings before building</li>
-  </ol>
-
+  <li>Open the <strong>Build</strong> panel (in Settings or via the Build button)</li>
+  <li>Click <strong>Validate</strong> to run pre-build checks:
+  <ul>
+  <li>Missing assets referenced by commands</li>
+  <li>Broken scene/label references</li>
+  <li>Unresolved variable references</li>
+</ul></li>
+  <li>Review and fix any warnings before building</li>
+</ol>
   <h3>Step 4: Build</h3>
   <ol>
-    <li>Select your <strong>build target</strong>:
-      <ul>
-        <li><strong>Web (HTML)</strong>: single self-contained HTML file — works in any browser</li>
-        <li><strong>Desktop (Standalone EXE)</strong>: a portable executable</li>
-        <li><strong>Desktop (Installer)</strong>: an NSIS installer with desktop shortcut</li>
-      </ul>
-    </li>
-    <li>Click <strong>Build</strong></li>
-    <li>Watch the visual progress indicator</li>
-    <li>The estimated file size is shown before building</li>
-  </ol>
-
+  <li>Select your <strong>build target</strong>:
+  <ul>
+  <li><strong>Web (HTML)</strong>: single self-contained HTML file — works in any browser</li>
+  <li><strong>Desktop (Standalone EXE)</strong>: a portable executable</li>
+  <li><strong>Desktop (Installer)</strong>: an NSIS installer with desktop shortcut</li>
+</ul></li>
+  <li>Click <strong>Build</strong></li>
+  <li>Watch the visual progress indicator</li>
+  <li>The estimated file size is shown before building</li>
+</ol>
   <h3>Step 5: Download</h3>
   <ol>
-    <li>When the build completes, click <strong>Download</strong></li>
-    <li>For web builds: you get an HTML file (or ZIP for itch.io upload)</li>
-    <li>For desktop builds: you get an EXE or installer</li>
-  </ol>
-
+  <li>When the build completes, click <strong>Download</strong></li>
+  <li>For web builds: you get an HTML file (or ZIP for itch.io upload)</li>
+  <li>For desktop builds: you get an EXE or installer</li>
+</ol>
   <h3>Deploying to itch.io</h3>
   <ol>
-    <li>Build as <strong>Web (HTML)</strong></li>
-    <li>Go to <a href="https://itch.io" target="_blank" rel="noopener">itch.io</a> → create a new project</li>
-    <li>Upload the HTML file (or ZIP if generated)</li>
-    <li>Set the project type to "HTML" and enable "This file will be played in the browser"</li>
-    <li>Publish</li>
-  </ol>
-
-  <!-- 13 ──────────────────────────────────── -->
-  <h2 id="templates">13. Template Systems</h2>
+  <li>Build as <strong>Web (HTML)</strong></li>
+  <li>Go to <a href="https://itch.io">itch.io</a> → create a new project</li>
+  <li>Upload the HTML file (or ZIP if generated)</li>
+  <li>Set the project type to "HTML" and enable "This file will be played in the browser"</li>
+  <li>Publish</li>
+</ol>
+  <hr>
+  <h2 id="13-template-systems">13. Template Systems</h2>
   <div class="tabs-involved">Settings (Templates section) → Variables → UI Screens → Scenes</div>
-
   <h3>Browsing templates</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Find the <strong>Templates</strong> section</li>
-    <li>Browse available templates by category: character creation, outfit picker, shop system, stat tracker, dating sim, mini-game, dialogue system, inventory, combat, exploration, and more</li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Find the <strong>Templates</strong> section</li>
+  <li>Browse available templates by category:
+  <ul>
+  <li>Character creation, outfit picker, shop system, stat tracker</li>
+  <li>Dating sim, mini-game, dialogue system, inventory</li>
+  <li>Combat, exploration, and more</li>
+</ul></li>
+</ol>
   <h3>Applying a template</h3>
   <ol>
-    <li>Select a template and click to configure</li>
-    <li>The <strong>Template Config UI</strong> provides a no-code form with validation</li>
-    <li>Fill in the configuration (e.g., stat names, shop items, character layers)</li>
-    <li>Click <strong>Generate</strong></li>
-    <li>The template automatically creates:
-      <ul>
-        <li>Required <strong>variables</strong> (in the Variables tab)</li>
-        <li>A pre-built <strong>UI screen</strong> (in the UI Screens tab)</li>
-        <li>All necessary <strong>UI elements</strong> with proper bindings</li>
-      </ul>
-    </li>
-    <li>You can then customize the generated screen and variables as needed</li>
-  </ol>
-
+  <li>Select a template and click to configure</li>
+  <li>The <strong>Template Config UI</strong> provides a no-code form with validation</li>
+  <li>Fill in the configuration (e.g., stat names, shop items, character layers)</li>
+  <li>Click <strong>Generate</strong></li>
+  <li>The template automatically creates:
+  <ul>
+  <li>Required <strong>variables</strong> (in the Variables tab)</li>
+  <li>A pre-built <strong>UI screen</strong> (in the UI Screens tab)</li>
+  <li>All necessary <strong>UI elements</strong> with proper bindings</li>
+</ul></li>
+  <li>You can then customize the generated screen and variables as needed</li>
+</ol>
   <h3>Using the generated system in scenes</h3>
   <ol>
-    <li>Add a <strong>ShowScreen</strong> command in your scene to display the template's screen</li>
-    <li>The screen's buttons and elements handle the logic through variable bindings</li>
-    <li>Use conditions on scene commands to react to variable changes made by the template system</li>
-  </ol>
-
-  <!-- 14 ──────────────────────────────────── -->
-  <h2 id="dialogue-styling">14. Dialogue Box &amp; Choice Styling</h2>
+  <li>Add a <strong>ShowScreen</strong> command in your scene to display the template's screen</li>
+  <li>The screen's buttons and elements handle the logic through variable bindings</li>
+  <li>Use conditions on scene commands to react to variable changes made by the template system</li>
+</ol>
+  <hr>
+  <h2 id="14-dialogue-box--choice-styling">14. Dialogue Box &amp; Choice Styling</h2>
   <div class="tabs-involved">Assets → Settings</div>
-
   <h3>Step 1: Create styling assets (Assets tab)</h3>
   <ol>
-    <li>Upload your dialogue box background image (often a semi-transparent PNG)</li>
-    <li>Upload a border image for 9-slice scaling (optional — for resizable borders)</li>
-    <li>Upload choice button images (normal + hover states)</li>
-    <li>Upload input box images (if using TextInput commands)</li>
-  </ol>
-
+  <li>Upload your dialogue box background image (often a semi-transparent PNG)</li>
+  <li>Upload a border image for 9-slice scaling (optional — for resizable borders)</li>
+  <li>Upload choice button images (normal + hover states)</li>
+  <li>Upload input box images (if using TextInput commands)</li>
+</ol>
   <h3>Step 2: Configure styling (Settings tab)</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Find the <strong>UI Assets</strong> section</li>
-    <li>Set:
-      <ul>
-        <li><strong>Dialogue box image</strong> and <strong>border image</strong> (with border padding for 9-slice)</li>
-        <li><strong>Dialogue box width</strong> (%), <strong>height</strong>, <strong>bottom margin</strong>, <strong>inner padding</strong></li>
-        <li><strong>Choice button image</strong> and <strong>border image</strong></li>
-        <li><strong>Choice button width/height</strong>, <strong>inner padding</strong></li>
-        <li><strong>Input box image</strong> and <strong>border image</strong> (for TextInput commands)</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Find the <strong>UI Assets</strong> section</li>
+  <li>Set:
+  <ul>
+  <li><strong>Dialogue box image</strong> and <strong>border image</strong> (with border padding for 9-slice)</li>
+  <li><strong>Dialogue box width</strong> (%), <strong>height</strong>, <strong>bottom margin</strong>, <strong>inner padding</strong></li>
+  <li><strong>Choice button image</strong> and <strong>border image</strong></li>
+  <li><strong>Choice button width/height</strong>, <strong>inner padding</strong></li>
+  <li><strong>Input box image</strong> and <strong>border image</strong> (for TextInput commands)</li>
+</ul></li>
+</ol>
   <h3>Step 3: Configure fonts</h3>
   <p>In the same Settings section:</p>
   <ul>
-    <li><strong>Dialogue name font</strong>: family, size, color, weight, italic, alignment</li>
-    <li><strong>Dialogue text font</strong>: family, size, color, weight, italic, alignment, letter spacing</li>
-    <li><strong>Choice text font</strong>: family, size, color, weight, italic, alignment</li>
-    <li><strong>Input fonts</strong>: prompt font, field font, submit button font</li>
-  </ul>
+  <li><strong>Dialogue name font</strong>: family, size, color, weight, italic, alignment</li>
+  <li><strong>Dialogue text font</strong>: family, size, color, weight, italic, alignment, letter spacing</li>
+  <li><strong>Choice text font</strong>: family, size, color, weight, italic, alignment</li>
+  <li><strong>Input fonts</strong>: prompt font, field font, submit button font</li>
+</ul>
   <p>Each font setting supports:</p>
   <ul>
-    <li>Text shadow (X/Y offset, blur, color)</li>
-    <li>Text gradient (linear/radial, angle, color stops)</li>
-    <li>Text border (width, color)</li>
-  </ul>
-
+  <li>Text shadow (X/Y offset, blur, color)</li>
+  <li>Text gradient (linear/radial, angle, color stops)</li>
+  <li>Text border (width, color)</li>
+</ul>
   <h3>Step 4: Upload custom fonts</h3>
   <ol>
-    <li>In the Settings font manager, click to upload custom font files (TTF/OTF)</li>
-    <li>The fonts become available in all font family dropdowns throughout the editor</li>
-    <li>Fonts are embedded in your project and included in builds</li>
-  </ol>
-
+  <li>In the Settings font manager, click to upload custom font files (TTF/OTF)</li>
+  <li>The fonts become available in all font family dropdowns throughout the editor</li>
+  <li>Fonts are embedded in your project and included in builds</li>
+</ol>
   <h3>Reset to defaults</h3>
   <p>If you want to start over, click <strong>Reset to Defaults</strong> in the UI Assets section.</p>
-
-  <!-- 15 ──────────────────────────────────── -->
-  <h2 id="save-load">15. Save/Load System Setup</h2>
+  <hr>
+  <h2 id="15-saveload-system-setup">15. Save/Load System Setup</h2>
   <div class="tabs-involved">UI Screens → Settings</div>
   <p>The save/load system works automatically in desktop builds with 10 save slots. To customize the UI:</p>
-
   <h3>Step 1: Edit the Save and Load screens (UI Screens tab)</h3>
   <ol>
-    <li>Go to <strong>UI Screens</strong> (<kbd>Shift+3</kbd>)</li>
-    <li>Select your <strong>Save Screen</strong></li>
-    <li>Ensure it has a <strong>SaveSlotGrid</strong> element — this displays the grid of save slots</li>
-    <li>Configure the grid: number of visible slots, grid styling (colors, borders, fonts), slot metadata display (timestamp, scene name, playtime)</li>
-    <li>Repeat for the <strong>Load Screen</strong> (can be the same screen or separate)</li>
-  </ol>
-
+  <li>Go to <strong>UI Screens</strong> (<kbd>Shift+3</kbd>)</li>
+  <li>Select your <strong>Save Screen</strong></li>
+  <li>Ensure it has a <strong>SaveSlotGrid</strong> element — this displays the grid of save slots</li>
+  <li>Configure the grid:
+  <ul>
+  <li>Number of visible slots</li>
+  <li>Grid styling (colors, borders, fonts)</li>
+  <li>Slot metadata display (timestamp, scene name, playtime)</li>
+</ul></li>
+  <li>Repeat for the <strong>Load Screen</strong> (can be the same screen or separate)</li>
+</ol>
   <h3>Step 2: Assign screens to roles (Settings tab)</h3>
   <ol>
-    <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
-    <li>Under <strong>Screen Configuration</strong>: set <strong>Save Screen</strong> and <strong>Load Screen</strong></li>
-  </ol>
-
+  <li>Go to <strong>Settings</strong> (<kbd>Shift+6</kbd>)</li>
+  <li>Under <strong>Screen Configuration</strong>:
+  <ul>
+  <li>Set <strong>Save Screen</strong> → your save screen</li>
+  <li>Set <strong>Load Screen</strong> → your load screen</li>
+</ul></li>
+</ol>
   <h3>Step 3: Access from menus</h3>
   <ol>
-    <li>In your <strong>Pause Menu</strong> (UI Screens tab), add buttons with actions:
-      <ul>
-        <li>Save button → <strong>SaveGame</strong> action</li>
-        <li>Load button → <strong>GoToScreen</strong> → Load Screen</li>
-        <li>Or use <strong>LoadGame</strong> action for direct load</li>
-      </ul>
-    </li>
-    <li>In your <strong>Title Screen</strong>, add a "Load Game" button → <strong>GoToScreen</strong> → Load Screen</li>
-  </ol>
-
+  <li>In your <strong>Pause Menu</strong> (UI Screens tab), add buttons with actions:
+  <ul>
+  <li>Save button → <strong>SaveGame</strong> action</li>
+  <li>Load button → <strong>GoToScreen</strong> → Load Screen</li>
+  <li>Or use <strong>LoadGame</strong> action for direct load</li>
+</ul></li>
+  <li>In your <strong>Title Screen</strong>, add a "Load Game" button → <strong>GoToScreen</strong> → Load Screen</li>
+</ol>
   <h3>What gets saved</h3>
   <p>Each save slot stores:</p>
   <ul>
-    <li>Current scene and command index</li>
-    <li>All variable values (Global + Persistent scopes)</li>
-    <li>Stage state (background, visible characters, screen effects, overlays)</li>
-    <li>Visited scenes list</li>
-    <li>Playtime counter</li>
-    <li>Timestamp</li>
-  </ul>
-
-  <!-- 16 ──────────────────────────────────── -->
-  <h2 id="credits">16. Credit Roll System</h2>
+  <li>Current scene and command index</li>
+  <li>All variable values (Global + Persistent scopes)</li>
+  <li>Stage state (background, visible characters, screen effects, overlays)</li>
+  <li>Visited scenes list</li>
+  <li>Playtime counter</li>
+  <li>Timestamp</li>
+</ul>
+  <hr>
+  <h2 id="16-credit-roll-system">16. Credit Roll System</h2>
   <div class="tabs-involved">Assets → Scenes</div>
-
   <h3>Step 1: Upload assets (Assets tab)</h3>
   <ol>
-    <li>Upload any background images for a slideshow behind the credits</li>
-    <li>Upload any foreground images/videos (logos, artwork)</li>
-  </ol>
-
+  <li>Upload any background images for a slideshow behind the credits</li>
+  <li>Upload any foreground images/videos (logos, artwork)</li>
+</ol>
   <h3>Step 2: Add the CreditRoll command (Scenes tab)</h3>
   <ol>
-    <li>Drag <strong>CreditRoll</strong> from Media in the Command Palette</li>
-    <li>Configure in Properties Inspector:</li>
-  </ol>
-
-  <h4>Credit entries</h4>
+  <li>Drag <strong>CreditRoll</strong> from Media in the Command Palette</li>
+  <li>Configure in Properties Inspector:</li>
+</ol>
+  <p><strong>Credit entries:</strong></p>
   <ul>
-    <li>Add <strong>Headings</strong> (section titles like "Director", "Art", "Music")</li>
-    <li>Add <strong>Credit</strong> pairs (role + name, like "Lead Artist: Jane Doe")</li>
-  </ul>
-
-  <h4>Customization</h4>
+  <li>Add <strong>Headings</strong> (section titles like "Director", "Art", "Music")</li>
+  <li>Add <strong>Credit</strong> pairs (role + name, like "Lead Artist: Jane Doe")</li>
+</ul>
+  <p><strong>Customization:</strong></p>
   <ul>
-    <li><strong>Duration</strong>: total scroll time</li>
-    <li><strong>Background color</strong> and <strong>Text color</strong></li>
-    <li><strong>Skip control</strong>: allow or prevent skipping</li>
-    <li><strong>On complete</strong>: advance to next command or return to title screen</li>
-  </ul>
-
-  <h4>Slideshow backgrounds</h4>
+  <li><strong>Duration</strong>: total scroll time</li>
+  <li><strong>Background color</strong> and <strong>Text color</strong></li>
+  <li><strong>Skip control</strong>: allow or prevent skipping</li>
+  <li><strong>On complete</strong>: advance to next command or return to title screen</li>
+</ul>
+  <p><strong>Slideshow backgrounds:</strong></p>
   <ul>
-    <li>Add multiple background images</li>
-    <li>They cycle automatically during the credit roll with transitions</li>
-  </ul>
-
-  <h4>Foreground media</h4>
+  <li>Add multiple background images</li>
+  <li>They cycle automatically during the credit roll with transitions</li>
+</ul>
+  <p><strong>Foreground media:</strong></p>
   <ul>
-    <li>Add images or videos with positioning, opacity, and timing</li>
-    <li>Control when they appear and disappear during the credits</li>
-  </ul>
-
-  <!-- 17 ──────────────────────────────────── -->
-  <h2 id="stacking">17. Command Stacking (Parallel Execution)</h2>
+  <li>Add images or videos with positioning, opacity, and timing</li>
+  <li>Control when they appear and disappear during the credits</li>
+</ul>
+  <hr>
+  <h2 id="17-command-stacking-parallel-execution">17. Command Stacking (Parallel Execution)</h2>
   <div class="tabs-involved">Scenes</div>
   <p>Command stacking lets multiple commands execute simultaneously instead of sequentially.</p>
-
   <h3>How it works</h3>
   <ol>
-    <li>Select a command in your scene timeline</li>
-    <li>In the Properties Inspector, enable <strong>Run Async</strong> (the <code>runAsync</code> flag)</li>
-    <li>Set a <strong>Stack ID</strong> — commands with the same Stack ID run in parallel</li>
-    <li>Set <strong>Stack Order</strong> to control the visual grouping</li>
-  </ol>
-
+  <li>Select a command in your scene timeline</li>
+  <li>In the Properties Inspector, enable <strong>Run Async</strong> (the <code>runAsync</code> flag)</li>
+  <li>Set a <strong>Stack ID</strong> — commands with the same Stack ID run in parallel</li>
+  <li>Set <strong>Stack Order</strong> to control the visual grouping</li>
+</ol>
   <h3>Example: Character enters while music starts and screen fades</h3>
-  <p><strong>Without stacking</strong> (sequential):</p>
+  <p>Without stacking (sequential):</p>
   <pre><code>1. PlayMusic "dramatic_theme"      (waits for music to start)
 2. ShowCharacter Luna "Angry"       (waits for character animation)
 3. TintScreen red                   (then tints screen)</code></pre>
-  <p><strong>With stacking</strong> (parallel — all happen at once):</p>
+  <p>With stacking (parallel — all happen at once):</p>
   <pre><code>Stack "entrance_moment":
   PlayMusic "dramatic_theme"        ┐
   ShowCharacter Luna "Angry"        ├── All execute simultaneously
   TintScreen red                    ┘</code></pre>
-
   <h3>Visual representation</h3>
   <p>Stacked commands appear grouped on the same line in the Scene Editor with a visual indicator showing they're parallel.</p>
-
-  <!-- 18 ──────────────────────────────────── -->
-  <h2 id="scene-gating">18. Scene Conditions &amp; Gating</h2>
+  <hr>
+  <h2 id="18-scene-conditions--gating">18. Scene Conditions &amp; Gating</h2>
   <div class="tabs-involved">Variables → Scenes → Settings</div>
   <p>Scene conditions prevent players from accessing scenes until criteria are met.</p>
-
   <h3>Step 1: Create gate variables (Variables tab)</h3>
   <ol>
-    <li>Create boolean or number variables that track prerequisites:
-      <ul>
-        <li><code>has_key</code> (Boolean, Global)</li>
-        <li><code>completed_tutorial</code> (Boolean, Global)</li>
-        <li><code>player_level</code> (Number, Global)</li>
-      </ul>
-    </li>
-  </ol>
-
+  <li>Create boolean or number variables that track prerequisites:
+  <ul>
+  <li><code>has_key</code> (Boolean, Global)</li>
+  <li><code>completed_tutorial</code> (Boolean, Global)</li>
+  <li><code>player_level</code> (Number, Global)</li>
+</ul></li>
+</ol>
   <h3>Step 2: Add conditions to scenes</h3>
   <ol>
-    <li>In the <strong>Scenes</strong> tab, select a scene in the scene list</li>
-    <li>In the scene properties, find <strong>Conditions</strong></li>
-    <li>Add conditions that must be met to enter this scene:
-      <ul><li>Example: <code>has_key</code> is true AND <code>player_level</code> &gt;= 5</li></ul>
-    </li>
-    <li>Set a <strong>Fallback Scene</strong> — where the player goes if conditions aren't met</li>
-  </ol>
-
+  <li>In the <strong>Scenes</strong> tab, select a scene in the scene list</li>
+  <li>In the scene properties, find <strong>Conditions</strong></li>
+  <li>Add conditions that must be met to enter this scene:
+  <ul>
+  <li>Example: <code>has_key</code> is true AND <code>player_level</code> &gt;= 5</li>
+</ul></li>
+  <li>Set a <strong>Fallback Scene</strong> — where the player goes if conditions aren't met</li>
+</ol>
   <h3>Step 3: Set conditions via gameplay</h3>
   <ol>
-    <li>Use <strong>SetVariable</strong> commands in other scenes to set gate variables</li>
-    <li>Use <strong>Choice</strong> actions to set variables</li>
-    <li>When a <strong>Jump</strong> command tries to enter a gated scene:
-      <ul>
-        <li>If conditions pass → player enters the scene</li>
-        <li>If conditions fail → player is sent to the fallback scene</li>
-      </ul>
-    </li>
-  </ol>
-  <!-- 19 ──────────────────────────────────── -->
-  <h2 id="voice-sync">19. Voice Sync &amp; Lip Sync</h2>
-  <div class="tabs-involved">Assets → Characters → Scenes</div>
-  <p>Attach voice audio clips to dialogue lines so they play automatically when the line appears. You can set a per-character default voice or override it on individual lines.</p>
-
+  <li>Use <strong>SetVariable</strong> commands in other scenes to set gate variables</li>
+  <li>Use <strong>Choice</strong> actions to set variables</li>
+  <li>When a <strong>Jump</strong> command tries to enter a gated scene:
+  <ul>
+  <li>If conditions pass → player enters the scene</li>
+  <li>If conditions fail → player is sent to the fallback scene</li>
+</ul></li>
+</ol>
+  <hr>
+  <h2 id="19-voice-sync--lip-sync">19. Voice Sync &amp; Lip Sync</h2>
+  <div class="tabs-involved">Assets → Characters → Scenes → Settings</div>
+  <p>Attach voice audio clips to dialogue lines so they play automatically the moment the line appears on screen. You can set a per-character default voice (great for "voice grunt" styles) or override it on individual lines for fully-voiced games. Flourish does not auto-animate a character's mouth — "lip sync" is achieved by swapping mouth expressions yourself (see Step 5).</p>
   <h3>Step 1: Upload voice files (Assets tab)</h3>
   <ol>
-    <li>Go to <strong>Assets</strong> (<kbd>Shift+4</kbd>)</li>
-    <li>Select the <strong>Audio</strong> category</li>
-    <li>Upload your voice clips (WAV, MP3, OGG). Organise them into folders per character for clarity — e.g., "Luna/line_001.mp3"</li>
-  </ol>
-
+  <li>Go to <strong>Assets</strong> (<code>Shift+4</code>).</li>
+  <li>Select the <strong>Audio</strong> category.</li>
+  <li>Upload your voice clips (WAV, MP3, OGG). Organize them into folders per character for clarity — e.g., "Luna/line_001.mp3".</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Voice clips live in the same Audio library as music and sound effects, so any audio asset can be used as a voice line.</div>
   <h3>Step 2: Set a default voice (Characters tab — optional)</h3>
   <ol>
-    <li>Go to <strong>Characters</strong> (<kbd>Shift+2</kbd>)</li>
-    <li>Select a character and open the <strong>Style</strong> tab</li>
-    <li>Under <strong>Default Voice</strong>, choose an audio clip. This clip will play for every dialogue line by this character unless overridden</li>
-  </ol>
-  <div class="tip"><strong>Tip:</strong> A default voice is useful for "voice grunt" styles (a short clip that plays for every line). For fully-voiced games, leave the default empty and set the clip per-line instead.</div>
-
+  <li>Go to <strong>Characters</strong> (<code>Shift+2</code>) and select a character.</li>
+  <li>Open the <strong>Style</strong> tab.</li>
+  <li>Under <strong>Default Voice</strong>, use the <strong>Voice Clip</strong> dropdown to choose an audio clip. This clip plays for every dialogue line spoken by this character unless a line overrides it. Leave it on <strong>None</strong> for no default.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> A default voice is perfect for a short "blip" that sounds on every line. For fully-voiced games, leave the default empty and assign a unique clip per line instead (Step 3).</div>
   <h3>Step 3: Assign voice clips per line (Scenes tab)</h3>
   <ol>
-    <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>)</li>
-    <li>Select a <strong>Dialogue</strong> command in your scene timeline</li>
-    <li>In the Properties Inspector, find the <strong>Voice Clip</strong> field</li>
-    <li>Search and select the audio clip for this specific line</li>
-    <li>The voice clip will play as soon as the dialogue line appears on screen</li>
-  </ol>
-
-  <h3>Priority order</h3>
-  <table>
-    <thead><tr><th>Priority</th><th>Source</th><th>Notes</th></tr></thead>
-    <tbody>
-      <tr><td>1 (highest)</td><td>Per-line voice clip</td><td>Set on the Dialogue command itself</td></tr>
-      <tr><td>2</td><td>Character default voice</td><td>Set on the character's Style tab</td></tr>
-      <tr><td>3</td><td>None</td><td>No voice plays</td></tr>
-    </tbody>
-  </table>
-
-  <!-- 20 ──────────────────────────────────── -->
-  <h2 id="text-effects">20. Dialogue Text Effects</h2>
-  <div class="tabs-involved">Characters → Scenes</div>
-  <p>Make dialogue text visually expressive with animated per-character effects. Each letter of the dialogue is individually animated.</p>
-
-  <h3>Available effects</h3>
-  <table>
-    <thead><tr><th>Effect</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><strong>Shake</strong></td><td>Each letter jitters randomly — great for fear, anger, or earthquakes</td></tr>
-      <tr><td><strong>Wave</strong></td><td>Letters undulate up and down in a sine-wave pattern</td></tr>
-      <tr><td><strong>Rainbow</strong></td><td>Each letter cycles through HSL hues, creating a flowing rainbow</td></tr>
-      <tr><td><strong>Glitch</strong></td><td>Letters randomly shift position and skew — digital corruption / malfunction</td></tr>
-      <tr><td><strong>Pulse</strong></td><td>Letters rhythmically scale up and down — heartbeat, emphasis</td></tr>
-      <tr><td><strong>Fade-In</strong></td><td>Each letter fades in with a staggered delay — ghostly, mysterious</td></tr>
-      <tr><td><strong>Bounce</strong></td><td>Letters bounce in one by one — playful, energetic</td></tr>
-      <tr><td><strong>Typewriter Bounce</strong></td><td>Letters drop in from above with a slight bounce — classic typewriter feel</td></tr>
-    </tbody>
-  </table>
-
-  <h3>Step 1: Set a character default (Characters tab — optional)</h3>
+  <li>Go to <strong>Scenes</strong> (<code>Shift+1</code>).</li>
+  <li>Select a <strong>Dialogue</strong> command in your scene timeline.</li>
+  <li>In the Properties Inspector, find the <strong>Voice Clip</strong> field (under the Content/Dialogue group).</li>
+  <li>Search and select the audio clip for this specific line.</li>
+  <li>The voice clip plays automatically as soon as the dialogue line appears.</li>
+</ol>
+  <p><strong>Which voice plays?</strong> Flourish resolves the voice in this order:</p>
   <ol>
-    <li>Go to <strong>Characters</strong> (<kbd>Shift+2</kbd>)</li>
-    <li>Select a character and open the <strong>Style</strong> tab</li>
-    <li>Under <strong>Text Effect</strong>, choose an effect type</li>
-    <li>Adjust <strong>Speed</strong> (0.1× – 5×) and <strong>Intensity</strong> (0.1× – 3×) sliders</li>
-    <li>All dialogue from this character will use this effect unless overridden</li>
-  </ol>
-
-  <h3>Step 2: Override per dialogue line (Scenes tab)</h3>
+  <li><strong>Per-line Voice Clip</strong> — set on the Dialogue command (highest priority).</li>
+  <li><strong>Character Default Voice</strong> — set on the character's Style tab.</li>
+  <li><strong>None</strong> — no voice plays.</li>
+</ol>
+  <h3>Step 4: Set the voice volume (Settings tab)</h3>
   <ol>
-    <li>Select a <strong>Dialogue</strong> command in the Scene Editor</li>
-    <li>In the Properties Inspector, find the <strong>Text Effect</strong> section</li>
-    <li>Choose an effect from the dropdown — this overrides the character default for this line only</li>
-    <li>Adjust <strong>Speed</strong> and <strong>Intensity</strong> if desired</li>
-  </ol>
-  <div class="tip"><strong>Tip:</strong> Use <strong>Shake</strong> for screaming dialogue, <strong>Wave</strong> for dreamy speech, <strong>Rainbow</strong> for magical incantations, and <strong>Glitch</strong> for corrupted AI or broken fourth-wall moments.</div>
-
-  <h3>Priority order</h3>
-  <table>
-    <thead><tr><th>Priority</th><th>Source</th></tr></thead>
-    <tbody>
-      <tr><td>1 (highest)</td><td>Per-line text effect (set on the Dialogue command)</td></tr>
-      <tr><td>2</td><td>Character default text effect (set on the character's Style tab)</td></tr>
-      <tr><td>3</td><td>None — standard text rendering</td></tr>
-    </tbody>
-  </table>
-
-  <!-- 21 ──────────────────────────────────── -->
-  <h2 id="char-visual-effects">21. Character Visual Effects</h2>
+  <li>Go to <strong>Settings</strong> (<code>Shift+8</code>).</li>
+  <li>Adjust the <strong>Voice Volume</strong> slider (0–100%). This is the default in-game volume for all voice clips; players can also change it from the in-game settings menu.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Voice Volume is separate from Music, Sound Effects, and Ambient volume, so you can balance voices independently of your soundtrack.</div>
+  <h3>Step 5: "Lip sync" the mouth manually (optional)</h3>
+  <p>Flourish does not move a character's mouth automatically while a voice clip plays. To simulate talking, animate the mouth yourself:</p>
+  <ol>
+  <li>In the <strong>Characters</strong> tab, give the character a separate <strong>mouth</strong> layer with open/closed (or several) mouth assets, and create expressions that use them (e.g., "talk_open", "talk_closed"). See the <strong>Character Setup</strong> workflow for the layer/expression steps.</li>
+  <li>In the <strong>Scenes</strong> tab, add extra <strong>ShowCharacter</strong> commands (with <strong>Keep Position</strong> on, so only the expression changes) to switch between the open and closed mouth expressions across consecutive dialogue lines or with short <strong>Wait</strong> commands.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> For a hands-off "talking" look, use a short looping <strong>video</strong> asset as the mouth layer (configured in the character's Layers tab) instead of hand-swapping expressions.</div>
+  <hr>
+  <h2 id="20-dialogue-text-effects">20. Dialogue Text Effects</h2>
+  <div class="tabs-involved">Scenes (with the Properties panel), Settings</div>
+  <p>FlourishVNE can make your dialogue text come alive: letters can shake, ripple in a wave, cycle through rainbow colors, glitch, pulse, fade in, or bounce. There are two separate things you control here. The <strong>typewriter reveal</strong> (how fast letters appear one-by-one) is a global game setting, while <strong>text effects</strong> (shake, wave, rainbow, and so on) are chosen per dialogue line. Neither one requires any code.</p>
+  <h3>Step 1: Set the typewriter reveal speed</h3>
+  <p>Dialogue in FlourishVNE always types out one character at a time. To change how fast that happens for the whole game:</p>
+  <ol>
+  <li>Open the <strong>Settings</strong> tab.</li>
+  <li>Scroll to the <strong>Default Game Settings</strong> section.</li>
+  <li>Drag the <strong>Text Speed</strong> slider (range <strong>Slow</strong> to <strong>Fast</strong>, 1-100). Higher is faster; the lower end reveals letters more slowly for a deliberate, dramatic feel.</li>
+</ol>
+  <p>This is the default speed your players start with. A blinking cursor shows while the line is still typing, and clicking advances/finishes the line instantly.</p>
+  <div class="tip"><strong>Tip:</strong> If you add a Text Speed control to one of your in-game menus (UI/Screens), players can adjust this themselves while playing — your Settings value is just the starting point.</div>
+  <h3>Step 2: Pick a text effect for a dialogue line</h3>
+  <p>Text effects are applied to individual <strong>Dialogue</strong> commands, so you can use them sparingly for emphasis (an angry shout, a magical whisper) rather than on every line.</p>
+  <ol>
+  <li>In the <strong>Scenes</strong> tab, click the Dialogue command you want to animate so it opens in the <strong>Properties</strong> panel on the right.</li>
+  <li>Find the <strong>Effects</strong> group (open it if the section is collapsed).</li>
+  <li>Use the <strong>Text Effect</strong> dropdown to choose one of:
+  <ul>
+  <li><strong>None</strong> — plain text (the default).</li>
+  <li><strong>Shake</strong> — letters jitter in place. Great for fear, anger, or impact.</li>
+  <li><strong>Wave</strong> — letters rise and fall in a flowing ripple.</li>
+  <li><strong>Rainbow</strong> — letters cycle through shifting colors.</li>
+  <li><strong>Glitch</strong> — letters jolt and skew with a digital, corrupted look.</li>
+  <li><strong>Pulse</strong> — letters gently grow and shrink in a heartbeat rhythm.</li>
+  <li><strong>Fade In</strong> — letters softly fade and drift into place as they appear.</li>
+  <li><strong>Bounce</strong> — letters bob up and down playfully.</li>
+  <li><strong>Typewriter Bounce</strong> — each letter pops in with a springy bounce as it's revealed.</li>
+</ul></li>
+</ol>
+  <h3>Step 3: Fine-tune speed and intensity</h3>
+  <p>When you choose any effect other than <strong>None</strong>, two sliders appear beneath the dropdown:</p>
+  <ul>
+  <li><strong>Effect Speed</strong> (0.1x to 5x) — how quickly the animation cycles. Lower is slower and calmer; higher is faster and more frantic.</li>
+  <li><strong>Effect Intensity</strong> (0.1x to 3x) — how strong the movement is, such as how far letters shake, wave, or bounce.</li>
+</ul>
+  <p>The current value is shown next to each slider (for example, "1.0x").</p>
+  <div class="tip"><strong>Tip:</strong> Subtlety reads better than chaos. For most lines, an Intensity around 1x with a moderate Speed feels natural. Save high-intensity Shake or Glitch for big dramatic moments.</div>
+  <div class="tip"><strong>Tip:</strong> Effects animate the letters <em>after</em> they finish typing in. So a slow Text Speed (Step 1) paired with an effect like Wave gives a calm, steady reveal followed by a gentle motion — the two settings work together.</div>
+  <h3>Step 4: Preview your effect</h3>
+  <p>Use <strong>Test Play</strong> / the live preview to watch the line in motion. Text effects don't show as movement in the static editor canvas, so previewing is the best way to judge whether the speed and intensity feel right. Adjust the sliders and preview again until you're happy.</p>
+  <hr>
+  <h2 id="21-character-visual-effects">21. Character Visual Effects</h2>
   <div class="tabs-involved">Scenes</div>
-  <p>Apply continuous visual effects to characters on stage. These are CSS-based animations applied to the entire character sprite.</p>
-
-  <h3>Available effects</h3>
-  <table>
-    <thead><tr><th>Effect</th><th>Description</th><th>Uses Color?</th></tr></thead>
-    <tbody>
-      <tr><td><strong>Shake</strong></td><td>Rapid jittering for fear, cold, or anger</td><td>No</td></tr>
-      <tr><td><strong>Bounce</strong></td><td>Playful hopping motion</td><td>No</td></tr>
-      <tr><td><strong>Float</strong></td><td>Gentle up/down hovering — ghosts, levitation, dreaming</td><td>No</td></tr>
-      <tr><td><strong>Pulse</strong></td><td>Rhythmic scale breathing — emphasis, power-up</td><td>No</td></tr>
-      <tr><td><strong>Glow</strong></td><td>Animated drop-shadow halo around the character</td><td>Yes — glow color</td></tr>
-      <tr><td><strong>Tint</strong></td><td>Apply a static color overlay via CSS hue-rotate</td><td>Yes — tint color</td></tr>
-      <tr><td><strong>Silhouette</strong></td><td>Turn the sprite into a solid shadow with optional color tint</td><td>Yes — silhouette color</td></tr>
-      <tr><td><strong>Breathing</strong></td><td>Subtle vertical scale — idle breathing animation</td><td>No</td></tr>
-      <tr><td><strong>Flicker</strong></td><td>Rapid opacity changes — hologram, glitch, power failure</td><td>No</td></tr>
-    </tbody>
-  </table>
-
-  <h3>Step 1: Add to ShowCharacter command (Scenes tab)</h3>
+  <p>Visual effects bring a character sprite to life while it is on stage — a gentle breathing idle, a nervous shake, a magical glow, and more. Effects are attached to the <strong>ShowCharacter</strong> command, so the same character can have different effects in different moments of a scene. You can stack several effects on one character, and each effect has its own speed and strength sliders.</p>
+  <h3>Step 1: Select a ShowCharacter command</h3>
   <ol>
-    <li>Select a <strong>ShowCharacter</strong> command in the Scene Editor</li>
-    <li>In the Properties Inspector, find the <strong>Visual Effect</strong> section</li>
-    <li>Choose an effect from the dropdown</li>
-    <li>Adjust <strong>Speed</strong> (0.1× – 5×) — how fast the animation cycles</li>
-    <li>Adjust <strong>Intensity</strong> (0.1× – 3×) — how pronounced the effect is</li>
-    <li>For Glow, Tint, and Silhouette, pick a <strong>Color</strong> using the color picker</li>
-  </ol>
-
-  <h3>Step 2: Changing or removing effects</h3>
+  <li>Go to <strong>Scenes</strong> (<kbd>Shift+1</kbd>) and open the scene you are working on.</li>
+  <li>Click the <strong>ShowCharacter</strong> command for the character you want to animate (or drag a new one in from the Command Palette, Characters category, and pick the character and expression first).</li>
+  <li>In the <strong>Properties Inspector</strong> on the right, open the <strong>Effects</strong> group (marked with the ✦ glyph).</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Effects belong to the moment, not the character. If you want a character to keep an effect after changing expression or position, add the same effect to the next ShowCharacter command too.</div>
+  <h3>Step 2: Add a visual effect</h3>
   <ol>
-    <li>To change the effect, add another <strong>ShowCharacter</strong> command later in the scene with a different visual effect (or "None" to clear it)</li>
-    <li>The effect persists on the character until changed or the character is hidden</li>
-  </ol>
-
-  <h3>Combining with transitions</h3>
-  <p>Visual effects work alongside character transitions. For example, you can have a character slide in from the left (<strong>Transition: slide-in-left</strong>) and immediately start Floating once the transition completes.</p>
-  <div class="tip"><strong>Tip:</strong> Use <strong>Breathing</strong> as a default idle animation for all characters to add life to static sprites. Use <strong>Glow</strong> to highlight the currently speaking character.</div>
-
-  <!-- 22 ──────────────────────────────────── -->
-  <h2 id="particles">22. Particle System</h2>
+  <li>In the Effects group, click <strong>+ Add Visual Effect</strong>.</li>
+  <li>A new effect card appears (it starts as <strong>Breathing</strong>). Use the dropdown at the top of the card to choose the effect type:
+  <ul>
+  <li><strong>Shake</strong> — rapid jitter, good for fear, cold, or impact.</li>
+  <li><strong>Bounce</strong> — an up-and-down hop.</li>
+  <li><strong>Float</strong> — a slow, drifting hover.</li>
+  <li><strong>Pulse</strong> — a rhythmic scale in and out.</li>
+  <li><strong>Glow</strong> — a colored halo around the sprite.</li>
+  <li><strong>Tint</strong> — washes the sprite in a color.</li>
+  <li><strong>Silhouette</strong> — fills the sprite with a solid color (a shadowy/blacked-out look).</li>
+  <li><strong>Breathing</strong> — a subtle idle rise and fall, like calm breathing.</li>
+  <li><strong>Flicker</strong> — flickers the character's opacity on and off.</li>
+</ul></li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> When the card's dropdown is empty, it shows <strong>No effects applied.</strong> Choosing <strong>Remove…</strong> in the dropdown (or clicking the ✕ on the card) deletes that effect.</div>
+  <h3>Step 3: Tune speed and power</h3>
+  <p>Each effect card has two sliders:</p>
+  <ol>
+  <li><strong>Speed</strong> — how fast the effect plays (0.1x to 5.0x, default 1.0x). Lower is slower and calmer; higher is quicker and more energetic.</li>
+  <li><strong>Power</strong> — the effect's strength or amplitude (0.1x to 3.0x, default 1.0x). Lower is subtle; higher is dramatic.</li>
+</ol>
+  <p>The value to the right of each slider shows the current multiplier (for example, <strong>1.5x</strong>).</p>
+  <h3>Step 4: Pick a color (color effects only)</h3>
+  <p>For <strong>Glow</strong>, <strong>Tint</strong>, and <strong>Silhouette</strong>, a <strong>Color</strong> swatch appears below the sliders. Click it to open the color picker and choose the effect's color (white by default). The Color control is hidden for all other effect types because they do not use a color.</p>
+  <h3>Step 5: Stack multiple effects (optional)</h3>
+  <ol>
+  <li>Click <strong>+ Add Visual Effect</strong> again to add another card.</li>
+  <li>The effects combine on the same character — for example, <strong>Breathing</strong> for a calm idle plus a soft <strong>Glow</strong> for a magical aura.</li>
+  <li>Re-order is by add order; to remove one, click the ✕ on its card or set its dropdown to <strong>Remove…</strong>.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Stacking is additive, so start light. Two strong effects (high Power) can fight each other visually — pair a subtle idle like Breathing or Float with a single accent like Glow or Tint for the cleanest look.</div>
+  <p>Use <strong>Test Play</strong> to preview the effects in motion, since the sliders animate over time and are easiest to judge while the scene is running.</p>
+  <hr>
+  <h2 id="22-particle-system-spawn--stop-particles">22. Particle System (Spawn &amp; Stop Particles)</h2>
   <div class="tabs-involved">Scenes</div>
-  <p>Spawn canvas-based particle emitters on the stage for atmospheric effects like fireflies, rain sparks, confetti, magic sparkles, and more. Particles render on a transparent canvas layer above characters but below dialogue.</p>
-
-  <h3>Available presets</h3>
-  <table>
-    <thead><tr><th>Preset</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><strong>Fireflies</strong></td><td>Soft yellow-green dots drifting gently — forests, night scenes</td></tr>
-      <tr><td><strong>Sparks</strong></td><td>Upward-shooting orange/yellow particles — fires, forges, explosions</td></tr>
-      <tr><td><strong>Bubbles</strong></td><td>Rising translucent circles — underwater, potions, dreams</td></tr>
-      <tr><td><strong>Confetti</strong></td><td>Multi-colored squares falling — celebrations, victories</td></tr>
-      <tr><td><strong>Embers</strong></td><td>Small rising orange dots — campfires, destruction, warmth</td></tr>
-      <tr><td><strong>Dust</strong></td><td>Tiny floating motes — old rooms, abandoned places, beams of light</td></tr>
-      <tr><td><strong>Petals</strong></td><td>Pink/white hearts drifting down — romance, cherry blossoms, spring</td></tr>
-      <tr><td><strong>Magic</strong></td><td>Multi-colored sparkle stars — spellcasting, enchantment, transformation</td></tr>
-      <tr><td><strong>Stars</strong></td><td>Twinkling white/gold stars — night sky, space, wonder</td></tr>
-      <tr><td><strong>Custom</strong></td><td>Full manual control over every particle parameter</td></tr>
-    </tbody>
-  </table>
-
-  <h3>Step 1: Spawn particles (Scenes tab)</h3>
+  <p>Particles let you sprinkle atmospheric effects across the stage — drifting fireflies, falling confetti, rising embers, floating bubbles, and more. You add a <strong>Spawn Particles</strong> command where you want the effect to begin, then (optionally) a <strong>Stop Particles</strong> command later to clear it. Pick a ready-made preset for instant results, or switch to <strong>Custom</strong> to design your own emitter. Everything is no-code: presets, sliders, and dropdowns.</p>
+  <h3>Step 1: Add a Spawn Particles command</h3>
   <ol>
-    <li>Drag <strong>SpawnParticles</strong> from the <strong>Effects</strong> category in the Command Palette</li>
-    <li>In the Properties Inspector, configure:
-      <ul>
-        <li><strong>Tag</strong> — a unique name for this emitter (e.g., "forest_fireflies"). Used to stop it later</li>
-        <li><strong>Preset</strong> — choose from the 10 built-in presets, or select <strong>Custom</strong></li>
-        <li><strong>Duration</strong> — how long the emitter runs (0 = forever, until stopped manually)</li>
-      </ul>
-    </li>
-  </ol>
-
-  <h3>Step 2: Custom particle configuration</h3>
-  <p>When using the <strong>Custom</strong> preset (or to fine-tune any preset), expand the custom editor:</p>
-  <table>
-    <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><strong>Shape</strong></td><td>circle, square, star, heart, or sparkle</td></tr>
-      <tr><td><strong>Emit Rate</strong></td><td>Particles spawned per second</td></tr>
-      <tr><td><strong>Lifetime</strong></td><td>How long each particle lives (seconds)</td></tr>
-      <tr><td><strong>Speed Min/Max</strong></td><td>Velocity range in pixels/second</td></tr>
-      <tr><td><strong>Size Min/Max</strong></td><td>Particle radius range in pixels</td></tr>
-      <tr><td><strong>Gravity</strong></td><td>Downward pull (negative = upward). 0 = no gravity</td></tr>
-      <tr><td><strong>Wind</strong></td><td>Horizontal push (positive = rightward). 0 = no wind</td></tr>
-      <tr><td><strong>Direction</strong></td><td>Emission angle range in degrees (0° = right, 90° = down)</td></tr>
-      <tr><td><strong>Emitter Position</strong></td><td>X/Y percentage of the stage (50/50 = center)</td></tr>
-      <tr><td><strong>Emitter Size</strong></td><td>Width/Height of the spawn area (100/100 = full stage)</td></tr>
-      <tr><td><strong>Colors</strong></td><td>Array of hex colors — particles pick randomly from these</td></tr>
-      <tr><td><strong>Fade Out</strong></td><td>Particles fade to transparent as they age</td></tr>
-      <tr><td><strong>Shrink</strong></td><td>Particles shrink to zero as they age</td></tr>
-      <tr><td><strong>Rotation Speed</strong></td><td>How fast particles rotate (degrees/second)</td></tr>
-      <tr><td><strong>Opacity</strong></td><td>Base opacity of newly spawned particles</td></tr>
-    </tbody>
-  </table>
-
-  <h3>Step 3: Stop particles</h3>
+  <li>Open the <strong>Scenes</strong> tab and select the scene you want to add the effect to.</li>
+  <li>In the command list, add a new command and open the <strong>Command Palette</strong>.</li>
+  <li>Find the <strong>Screen FX</strong> group and choose <strong>Spawn Particles</strong>.</li>
+</ol>
+  <p>The command is added with the <strong>Fireflies</strong> preset by default, so you will see particles immediately when you test-play.</p>
+  <div class="tip"><strong>Tip:</strong> Particles render on the stage above your characters but below the dialogue box, so they never cover up the text.</div>
+  <h3>Step 2: Choose a preset (the easy way)</h3>
+  <p>With the Spawn Particles command selected, open the inspector and look in the <strong>Content</strong> group:</p>
+  <ul>
+  <li><strong>Particle Tag</strong> — an optional name for this effect (for example <code>firefly_glow</code>). Leave it blank and the editor gives it a unique tag automatically. You only need a tag if you plan to stop this specific effect later (see Step 5).</li>
+  <li><strong>Preset</strong> — pick a built-in look:
+  <ul>
+  <li><strong>Fireflies</strong> — soft glowing dots drifting upward</li>
+  <li><strong>Sparks</strong> — fast orange sparks shooting up</li>
+  <li><strong>Bubbles</strong> — light bubbles rising from the bottom</li>
+  <li><strong>Confetti</strong> — colorful squares falling and spinning</li>
+  <li><strong>Embers</strong> — glowing embers rising on the wind</li>
+  <li><strong>Dust</strong> — slow drifting dust motes</li>
+  <li><strong>Petals</strong> — heart-shaped petals blowing sideways</li>
+  <li><strong>Magic</strong> — sparkly multicolor magic dust</li>
+  <li><strong>Stars</strong> — slow twinkling stars</li>
+  <li><strong>Custom</strong> — design your own (see Step 4)</li>
+</ul></li>
+  <li><strong>Duration (sec)</strong> — how long the effect runs before it stops on its own. Set it to <strong>0</strong> to keep it going until you stop it with a Stop Particles command.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Presets already include their own colors, shape, gravity, and motion. When a preset (anything other than Custom) is selected, the shape/color/gravity/wind fields are hidden — the preset controls them for you.</div>
+  <h3>Step 3: Adjust the spread and intensity</h3>
+  <p>Open the <strong>Effects</strong> group in the inspector to fine-tune any preset:</p>
+  <ul>
+  <li><strong>Density (emit rate)</strong> — a slider for how many particles spawn per second (1–200). The hint shows the current value.</li>
+  <li><strong>Speed (min / max)</strong> — the starting speed range of each particle, in pixels per second.</li>
+  <li><strong>Size (min / max)</strong> — the size range of each particle, in pixels.</li>
+  <li><strong>Emission Area</strong> — a quick dropdown for where particles spawn from:
+  <ul>
+  <li><strong>Full Screen</strong>, <strong>Top Edge</strong>, <strong>Bottom Edge</strong>, <strong>Horizontal Line (center)</strong>, <strong>Point Source</strong>, or <strong>Custom Area</strong>.</li>
+</ul></li>
+  <li><strong>Emitter Center (X% / Y%)</strong> — the center of the spawn area as a percentage of the stage (0 = left/top, 100 = right/bottom).</li>
+  <li><strong>Emitter Spread (W% / H%)</strong> — how wide and tall the spawn area is. 0 = a single point, 100 = the full width/height.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Use <strong>Top Edge</strong> for falling effects (confetti, petals, snow-like dust) and <strong>Bottom Edge</strong> for rising effects (bubbles, embers, sparks).</div>
+  <h3>Step 4: Build a Custom effect</h3>
+  <p>Set <strong>Preset</strong> to <strong>Custom</strong> in the <strong>Content</strong> group, and the <strong>Effects</strong> group reveals extra controls so you can design the look yourself:</p>
+  <ul>
+  <li><strong>Shape</strong> — Circle, Square, Star, Heart, or Sparkle.</li>
+  <li><strong>Lifetime (sec)</strong> — how long each particle lives before disappearing.</li>
+  <li><strong>Gravity</strong> — a slider from -100 to 100. Negative pulls particles up, positive pulls them down. The hint reminds you which is which.</li>
+  <li><strong>Wind</strong> — a slider from -50 to 50 for sideways drift.</li>
+  <li><strong>Color(s)</strong> — a comma-separated list of hex colors (for example <code>#FF0000, #00FF00, #0000FF</code>). Each particle randomly picks one of the colors you list.</li>
+  <li><strong>Options</strong> — checkboxes for <strong>Fade out</strong> (particles fade as they age) and <strong>Shrink over lifetime</strong> (particles shrink as they age).</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> List several colors in <strong>Color(s)</strong> for a livelier, varied effect — great for magic or confetti looks.</div>
+  <h3>Step 5: Stop the particles</h3>
+  <p>If you set <strong>Duration</strong> to 0 (persistent), add a <strong>Stop Particles</strong> command later in the scene to clear the effect:</p>
   <ol>
-    <li>Drag <strong>StopParticles</strong> from the <strong>Effects</strong> category in the Command Palette</li>
-    <li>In the Properties Inspector:
-      <ul>
-        <li><strong>Tag</strong> — enter the tag of the emitter to stop (leave empty to stop <em>all</em> active emitters)</li>
-        <li><strong>Fade Duration</strong> — how long the particles take to fade out (in seconds). Set to 0 for instant removal</li>
-      </ul>
-    </li>
-  </ol>
-
-  <h3>Multiple emitters</h3>
-  <p>You can have multiple particle emitters active simultaneously. Each one needs a unique <strong>Tag</strong>. For example:</p>
-  <pre><code>SpawnParticles tag="fireflies"  preset=Fireflies  duration=0
-SpawnParticles tag="dust_motes"  preset=Dust       duration=0
---- later in the scene ---
-StopParticles tag="fireflies"   fadeDuration=2
-(dust_motes keeps running)</code></pre>
-  <div class="tip"><strong>Tip:</strong> Particles work in all build types — editor preview, web exports, and desktop exports. They render on a canvas layer at z-index 6, above characters but below dialogue UI.</div>
-
+  <li>Add a command, open the <strong>Command Palette</strong>, and from the <strong>Screen FX</strong> group choose <strong>Stop Particles</strong>.</li>
+  <li>In the inspector, set the <strong>Particle Tag</strong>:
+  <ul>
+  <li>Choose <strong>All particle effects</strong> to clear everything currently on screen, or</li>
+  <li>Pick a specific emitter from the list (this is where naming your effect's Particle Tag in Step 2 pays off).</li>
+</ul></li>
+  <li>Set <strong>Fade Duration (sec)</strong> for how long the effect takes to fade away. Use <strong>0</strong> for an instant cut.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Persistent effects (Duration 0) carry on until you stop them — including across dialogue lines and choices — so remember to add a Stop Particles command when the mood changes.</div>
+  <hr>
+  <h2 id="23-inventory-items-with-the-systems-hub">23. Inventory Items with the Systems Hub</h2>
+  <div class="tabs-involved">Systems → Items / Inventory (plus Scenes and UI/Screens to use items)</div>
+  <p>FlourishVNE collects opt-in gameplay mechanics under the new <strong>Systems</strong> top tab. The first system is <strong>Inventory</strong>, and it works through an <strong>item registry</strong> you manage in <strong>Systems → Items</strong>. Each item is really just a number variable in disguise: the item's quantity is stored in a backing number variable, so everything you already know — conditions, <code>{name}</code> text, the Set Variable command — works on it automatically. You never have to write any code.</p>
+  <h3>Step 1: Open the Systems tab and create an item</h3>
+  <ol>
+  <li>Click the <strong>Systems</strong> tab in the top navigation.</li>
+  <li>In the left pane you'll see your systems. Click <strong>Items</strong> (it shows a count badge of how many items exist).</li>
+  <li>In the middle <strong>Items</strong> column, click <strong>Add</strong> to create a new item. It's named <code>Item 1</code> by default and is automatically selected.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Creating an item silently creates a matching number variable that tracks how many the player owns. You don't manage that variable by hand — editing the item keeps it in sync.</div>
+  <h3>Step 2: Fill in the item details</h3>
+  <p>In the right-hand details pane, set up your item:</p>
+  <ul>
+  <li><strong>Name</strong> — the item's label (also the name of its backing count variable).</li>
+  <li><strong>Description (optional)</strong> — shown in tooltips / detail panes.</li>
+  <li><strong>Icon</strong> — click to pick a project image (videos are allowed too) for inventory and shop slots.</li>
+  <li><strong>Category (optional)</strong> — a grouping label, e.g. <code>Consumables</code> or <code>Key Items</code>.</li>
+  <li><strong>Shop price (optional)</strong> — leave blank for items you never sell.</li>
+  <li><strong>Starts with</strong> — how many the player begins a new game holding. <code>0</code> means it isn't in their inventory at the start.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Quantity is tracked by a number variable named after the item. Type <code>{ItemName}</code> in any dialogue, screen text, or condition to show or check how many the player owns.</div>
+  <h3>Step 3: Mark special item behavior</h3>
+  <p>Two checkboxes change how the item behaves:</p>
+  <ul>
+  <li><strong>Unique (owned 0 or 1 — a key item, not stackable)</strong> — turns the item into a one-of flag. Giving it sets the count to 1 instead of stacking.</li>
+  <li><strong>Usable (player can "Use" it from an inventory)</strong> — lets the player consume/use the item from an inventory screen.</li>
+</ul>
+  <p>When you tick <strong>Usable</strong>, an extra panel appears:</p>
+  <ul>
+  <li><strong>Using decreases the count by one (consumable)</strong> — on by default. Leave it checked for consumables (a potion). Uncheck it for a reusable item like a tool or key that fires its effect without being spent.</li>
+  <li><strong>Use effect</strong> — add actions (e.g. Set Variable to raise health) that run when the item is used. If the item is consumable, its count is decremented automatically alongside these actions.</li>
+</ul>
+  <h3>Step 4: Order your items</h3>
+  <p>Hover an item in the middle column and use the ▲ / ▼ arrows to move it up or down. This sets the default order used by the in-game inventory grid.</p>
+  <h3>Step 5: Use items in your story</h3>
+  <p>You give, spend, and remove items from your scenes using three scene commands. In the <strong>Scenes</strong> tab, drag one of these into your command list:</p>
+  <ul>
+  <li><strong>Give Item</strong> — adds to the player's count (sets it to 1 for Unique items). Optional <strong>quantity</strong> (defaults to 1).</li>
+  <li><strong>Use Item</strong> — runs the item's Use effect and, if the item is consumable, decreases its count by one.</li>
+  <li><strong>Destroy Item</strong> — removes some or all of the item. Set a <strong>quantity</strong> to remove, or turn on <strong>all</strong> to clear it entirely. Counts never drop below zero.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> These same three actions are also available as button actions in the <strong>UI/Screens</strong> editor — so an inventory screen's "Use" button can run <strong>Use Item</strong> directly, and a story event can hand out loot with <strong>Give Item</strong>.</div>
+  <h3>Step 6: Show an inventory in-game</h3>
+  <ol>
+  <li>In <strong>Systems</strong>, click <strong>Inventory</strong> (or the <strong>Player Inventory</strong> entry beneath it).</li>
+  <li>Click <strong>Create inventory screen</strong>. This builds a System-categorized screen pre-loaded with an item grid and a Close button, then opens the <strong>UI/Screens</strong> editor so you can arrange it.</li>
+  <li>The inventory opens in-game as a paused, dimmed overlay. Open it from any button using the <strong>Toggle Screen</strong> action.</li>
+</ol>
+  <hr>
+  <h2 id="24-building-an-inventory-screen-the-inventory-grid">24. Building an Inventory Screen (the Inventory Grid)</h2>
+  <div class="tabs-involved">Systems → UI/Screens</div>
+  <p>An inventory in FlourishVNE is just a normal screen that holds one special <strong>Inventory</strong> grid element. The grid automatically lays your items out into slots — you pick how many columns, and it fills the rest. The fastest way to make one is from the <strong>Systems</strong> tab, which builds the screen, drops in the grid, adds a close button, and opens it in the UI editor for you to arrange.</p>
+  <h3>Step 1: Create the inventory screen from Systems</h3>
+  <ol>
+  <li>Open the <strong>Systems</strong> tab and select <strong>Inventory</strong>.</li>
+  <li>To show the items the player owns, click <strong>Create inventory screen</strong>. To show a specific stockpile (a shop, chest, or library), open that item list first and click <strong>Create screen for this list</strong> instead.</li>
+  <li>The new screen is added as a <strong>System</strong>-category screen. It opens paused and dimmed over the scene, comes with an <strong>Inventory</strong> grid element, and includes a top-right <strong>✕ Close</strong> button that returns to the game. You are taken straight to the <strong>UI/Screens</strong> editor to position everything.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Items themselves (names, icons, categories, "usable" flag, starting quantity) and item lists are all managed under <strong>Systems → Inventory</strong>. Build at least one item there first, or the grid will be empty.</div>
+  <h3>Step 2: Choose what the grid shows (Data source)</h3>
+  <p>Click the Inventory grid on the canvas to open its Inspector, then look at the <strong>Data source</strong> group:</p>
+  <ul>
+  <li><strong>Bound list</strong> — leave on <strong>Player inventory (owned items)</strong> to show what the player is carrying, or pick a named item list to show a shop/chest/library's own separate stock.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> A bound list always shows its full stock (an item at 0 reads as sold out). The <strong>Hide unowned items</strong> option only appears for the player's own inventory.</div>
+  <h3>Step 3: Lay out the grid</h3>
+  <p>In the Inspector's layout group:</p>
+  <ul>
+  <li><strong>Columns</strong> — how many slots across (1–10).</li>
+  <li><strong>Rows</strong> — the minimum number of slot rows. Leave this <strong>blank (Auto)</strong> and the grid auto-fills the element's box with empty slots — a clean "backpack" look where the whole grid is always visible. Set a number to pin a fixed grid (it pads with empty slots up to columns × rows).</li>
+  <li><strong>Column spacing</strong> / <strong>Row spacing</strong> — the gap in pixels between slots.</li>
+  <li><strong>Category filter</strong> — choose <strong>All categories</strong>, or limit the grid to one item category.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Because blank Rows fills the element box, just resize the grid element on the canvas to control how many slots appear — make it taller for more rows.</div>
+  <h3>Step 4: Decide what shows in each slot (Display)</h3>
+  <ul>
+  <li><strong>Hide unowned items</strong> (player inventory only) — hides anything the player has none of.</li>
+  <li><strong>Show item names</strong> — the label under each icon.</li>
+  <li><strong>Show quantity badge</strong> — a ×N badge, shown only when the count is above 1.</li>
+  <li><strong>Empty text</strong> — the message shown when there's nothing to display (e.g. "Your bag is empty").</li>
+  <li><strong>Player can rearrange</strong> — when on, players can drag items between slots in-game, and their order is saved per save file.</li>
+</ul>
+  <h3>Step 5: Pick the Slot button mode</h3>
+  <p>The <strong>Slot button</strong> dropdown sets what the little button on each slot does:</p>
+  <ul>
+  <li><strong>None</strong> — no button; items are display-only (or selectable, see Step 6).</li>
+  <li><strong>Use (consume the item)</strong> — appears on items marked usable; consumes one and runs its use-effect.</li>
+  <li><strong>Buy (from this list — a shop)</strong> — turns the grid into a shop; price and currency come from the bound list's shop settings.</li>
+  <li><strong>Sell (player's items → a shop)</strong> — shows the player's items for selling; pick the receiving shop in <strong>Sell to shop</strong>.</li>
+</ul>
+  <p>The button is fully customizable in the Inspector's appearance group: <strong>Button text</strong>, <strong>Button art</strong> and <strong>Hover art</strong>, <strong>BG / Hover / Text</strong> colors, <strong>Corner radius (px)</strong>, and an optional <strong>Button font</strong>.</p>
+  <h3>Step 6: Style the slots</h3>
+  <p>In the appearance group (the <strong>Slot styling</strong> section):</p>
+  <ul>
+  <li><strong>Slot background</strong>, <strong>Border color</strong>, <strong>Border radius (px)</strong> — the look of each slot.</li>
+  <li><strong>Selected ring</strong> — the highlight color around the slot the player has clicked to select (each grid tracks its own selection).</li>
+  <li><strong>Background color</strong> — the color behind the whole grid area.</li>
+  <li><strong>Name font</strong> — when <strong>Show item names</strong> is on, customize the label font here.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Clicking a slot in-game selects it (with the Selected ring highlight); selection is per-grid, so you can pair a grid with commands or actions that act on the selected item.</div>
+  <h3>Step 7: Open the inventory in-game</h3>
+  <p>The screen exists, but the player needs a way to open it:</p>
+  <ul>
+  <li><strong>From a button:</strong> add a button (on your HUD or a menu) and give it a <strong>Toggle Screen</strong> action pointing at the inventory screen. Toggling shows it as a paused, dimmed overlay; toggling again closes it.</li>
+  <li><strong>With a keyboard shortcut:</strong> select the inventory screen, and in its Screen inspector use the <strong>Keyboard shortcut</strong> field — click <strong>Set shortcut</strong> and press a key (e.g. "I"). That key toggles the screen open/closed during play. Built-in keys (Space/Enter, H, Ctrl, Esc) always take priority.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> The auto-created close button uses <strong>Return to Game</strong>. You can restyle or move it like any other button in the UI editor.</div>
+  <hr>
+  <h2 id="25-item-lists--collections-shops-libraries-chests-and-restock">25. Item Lists &amp; Collections (Shops, Libraries, Chests) and Restock</h2>
+  <div class="tabs-involved">Systems → Inventory, UI/Screens, Scenes</div>
+  <p>An item list (collection) is an independent stockpile — a shop, a library, a treasure chest — that holds its OWN per-item quantities, kept completely separate from what the player is carrying. The same item can live in many lists at once, each with its own stock. You can also flag one list as the player's actual inventory so it stays in sync with Give/Buy/Use/Sell. This section covers creating lists, setting per-item starting stock, restock rules, and showing a list in-game.</p>
+  <h3>Step 1: Create an item list</h3>
+  <ol>
+  <li>Open the <strong>Systems</strong> tab and choose <strong>Inventory</strong>.</li>
+  <li>In the lists column, click <strong>New list</strong>.</li>
+  <li>Select the new list to open its editor. Set the <strong>List name</strong> and an optional <strong>Description (optional)</strong> (just a note for yourself).</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Define your items first (also under Systems → Inventory). A list only references items that already exist — you add them from a dropdown, you don't create them inside the list.</div>
+  <h3>Step 2: Add items and set starting stock</h3>
+  <ol>
+  <li>Under <strong>Items in this list</strong>, open the <strong>+ Add item to this list...</strong> dropdown and pick an item. Repeat for each item the list should carry.</li>
+  <li>For each item you'll see a <strong>Start</strong> field — the quantity this list begins a new game with. (This stock is its own count, separate from the player's owned amount.)</li>
+  <li>The <strong>Restock</strong> field next to it sets the refill target (see Step 4). There's also a per-item <strong>Price</strong> (blank = the item's base Shop price) and an <strong>∞</strong> checkbox for stock that never runs out.</li>
+  <li>Use the trash icon to remove an item from the list.</li>
+</ol>
+  <h3>Step 3: (Optional) Make a list the player's inventory</h3>
+  <ol>
+  <li>Tick <strong>This is the player's inventory (tracks owned items, not a separate shop stock)</strong>.</li>
+  <li>When this is on, the list's counts ARE the player's owned counts — it stays in sync with Give, Buy, Use, and Sell. Leave its items empty to show everything the player owns, or add specific items to curate which ones appear.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> You can only toggle "This is the player's inventory" while the list has no items in it. Remove all items first if you need to change it. A player-inventory list hides the Start/Restock/Price columns and the Restock and Shop sections, because its stock is the player's owned counts.</div>
+  <h3>Step 4: (Optional) Add a restock rule</h3>
+  <p>Restock only applies to stockpile lists (not the player-inventory one). Under <strong>Restock</strong>, click <strong>Add a restock rule</strong>, then set:</p>
+  <ul>
+  <li><strong>Amount</strong>:
+  <ul>
+  <li><strong>Reset to restock amount</strong> — each item refills to its <strong>Restock</strong> value.</li>
+  <li><strong>Random (min–max per item)</strong> — each item refills to a random number between its <strong>Min</strong> and <strong>Max</strong> values (the <strong>Restock</strong> column becomes <strong>Max</strong>, and a <strong>Min</strong> field appears per item).</li>
+</ul></li>
+  <li><strong>Trigger</strong>:
+  <ul>
+  <li><strong>Manual (command / button)</strong> — only refills when you run the Restock Item List command or button action (Step 5).</li>
+  <li><strong>Auto when a condition is true</strong> — refills once each time the conditions you set become true (uses the Conditions editor).</li>
+  <li><strong>When a variable changes</strong> — pick a <strong>Watch variable</strong>; the list refills every time that variable's value changes.</li>
+</ul></li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Restock respects each backing count's own min/max bounds, so a refill never pushes a stock above a limit you've set on its variable.</div>
+  <h3>Step 5: Restock on demand (Manual lists)</h3>
+  <p>For a <strong>Manual</strong> restock rule, trigger the refill yourself in two ways:</p>
+  <ul>
+  <li><strong>As a scene command:</strong> in the <strong>Scenes</strong> tab, drag in the <strong>Restock Item List</strong> command (RestockCollection) and choose the list in its <strong>Item list</strong> field. Great for "the shop restocks overnight" between scenes.</li>
+  <li><strong>As a button action:</strong> on a screen in <strong>UI/Screens</strong>, give a button the <strong>Restock Item List</strong> action and point it at the same list.</li>
+</ul>
+  <h3>Step 6: Show a list in-game (bind a grid)</h3>
+  <ol>
+  <li>The fastest way: in the list editor, click <strong>Create screen for this list</strong>. This builds a System-categorized screen with an item grid already bound to this list and opens the UI editor.</li>
+  <li>To bind manually, select an item grid on a screen in <strong>UI/Screens</strong> and, under <strong>Data source</strong>, set the <strong>Bound list</strong> dropdown:
+  <ul>
+  <li><strong>Player inventory (owned items)</strong> — shows what the player owns.</li>
+  <li>Any list name — shows that shop/library/chest's own separate stock.</li>
+</ul></li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> A bound list always shows its full stock (0 means sold out). The <strong>Hide unowned items</strong> option only applies to the player's inventory grid, not to a bound list.</div>
+  <hr>
+  <h2 id="26-making-a-shop-buy-sell-and-currency">26. Making a Shop (Buy, Sell, and Currency)</h2>
+  <div class="tabs-involved">Systems → Variables → UI/Screens → Scenes</div>
+  <p>A shop in FlourishVNE is just an item list with a money variable attached. You build it on a dedicated screen that shows two item grids side by side: the shop's stock (where the player taps to <strong>Buy</strong>) and the player's own inventory (where they tap to <strong>Sell</strong>). Buying spends the currency variable and moves a unit of stock to the player; selling removes it from the player and pays the currency back. Buttons automatically dim and disable when the player can't afford an item, it's out of stock, or they don't own it. Nothing here requires code.</p>
+  <h3>Step 1: Create the money variable</h3>
+  <ol>
+  <li>Open the <strong>Variables</strong> tab.</li>
+  <li>Add a new variable of type <strong>Number</strong> — for example, name it <strong>Gold</strong> and give it a starting value (e.g. 100).</li>
+  <li>This is the player's wallet. Buy will subtract from it; Sell will add to it.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Use a plain, readable name like <em>Gold</em> or <em>Coins</em> — you'll show it to the player later with text interpolation (Step 6).</div>
+  <h3>Step 2: Define your items and base prices</h3>
+  <ol>
+  <li>Open the <strong>Systems</strong> tab and go to <strong>Items</strong>.</li>
+  <li>Create each item you want to sell. For each one set:
+  <ul>
+  <li><strong>Name</strong> and an <strong>Icon</strong> (an image or video asset).</li>
+  <li><strong>Shop price (optional)</strong> — the item's base price in the shop's currency.</li>
+  <li><strong>Starts with</strong> — how many the player begins a new game holding (0 = not in their bag at the start).</li>
+  <li><strong>Unique (owned 0 or 1 — a key item, not stackable)</strong> if it should be a one-of item; shops mark it sold-out once bought.</li>
+</ul></li>
+</ol>
+  <h3>Step 3: Turn an item list into a shop</h3>
+  <ol>
+  <li>Still in <strong>Systems</strong>, go to <strong>Inventory</strong> and create a new item list — for example <strong>General Store</strong>.</li>
+  <li>Add the items you want this shop to carry as entries.</li>
+  <li>Scroll to the <strong>Shop (buy / sell)</strong> section and set:
+  <ul>
+  <li><strong>Currency variable</strong> — choose your <strong>Gold</strong> variable. (Leaving this on <em>None (free / not a shop)</em> means it isn't a shop.)</li>
+  <li><strong>Sell rate (× price)</strong> — the fraction of an item's price the player gets back when selling here. Default is <strong>0.5</strong> (half price).</li>
+  <li><strong>Sold items go back into this shop's stock</strong> — tick this if you want items the player sells to reappear on the shelf; leave it off and sold items simply vanish.</li>
+</ul></li>
+  <li>Per item in the list you can also set a <strong>Price</strong> override (falls back to the item's base Shop price) and an <strong>Infinite stock</strong> toggle so that item never runs out and buying it doesn't decrement the shelf.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> A Sell rate of 1 means the player gets the full price back; anything above 1 means they profit from reselling. Keep it below 1 (the default 0.5 is typical) so trading isn't free money.</div>
+  <h3>Step 4: Build the shop screen with two grids</h3>
+  <p>A shop is a screen with <strong>two item grids</strong>.</p>
+  <ol>
+  <li>Open the <strong>UI/Screens</strong> tab and create a new screen (e.g. <em>Shop</em>).</li>
+  <li>Add an <strong>Item Grid</strong> element for the shop's stock. In its inspector under <strong>Data source</strong>, set <strong>Bound list</strong> to your shop list (<strong>General Store</strong>). Then set <strong>Slot button</strong> to <strong>Buy (from this list — a shop)</strong>. Each slot now shows a Buy button that uses the bound list's currency and prices.</li>
+  <li>Add a second <strong>Item Grid</strong> for the player's inventory. Leave its <strong>Bound list</strong> on <strong>Player inventory (owned items)</strong>. Set its <strong>Slot button</strong> to <strong>Sell (player's items → a shop)</strong>, then set the <strong>Sell to shop</strong> field to your shop list (<strong>General Store</strong>) so sales are credited to the right currency and sell rate.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> The Buy/Sell button on each slot disables itself automatically — greyed out when the player can't afford it, the shelf is out of stock, or they don't own the item. You don't have to script any of that.</div>
+  <h3>Step 5: (Optional) Selected-item or single-item buttons</h3>
+  <p>If you'd rather have one shared button instead of a button on every slot, you have two approaches.</p>
+  <ul>
+  <li><strong>Selected-item buttons:</strong> Add a regular <strong>Button</strong> element and give it the action <strong>Buy Selected Item</strong> or <strong>Sell Selected Item</strong>, pointing it at your shop list. The player taps an item in the grid to select it, then taps the button. (It's a no-op if nothing is selected or the trade is blocked.)</li>
+  <li><strong>Fixed single-item buttons:</strong> Give a Button the action <strong>Buy Item</strong> or <strong>Sell Item</strong> and choose a specific <strong>Item</strong> plus the <strong>Shop list to buy from / sell to</strong>. Good for a "Buy this one special item" button.</li>
+</ul>
+  <p>These same trades also exist as <strong>scene commands</strong> — <strong>Buy Item</strong> and <strong>Sell Item</strong> in the <strong>Items</strong> command category — so an event in the <strong>Scenes</strong> tab can run a purchase or sale during the story (for example, a forced plot purchase).</p>
+  <h3>Step 6: Show the player's money</h3>
+  <ol>
+  <li>On the shop screen, add a <strong>Text</strong> element.</li>
+  <li>Type something like <code>Gold: {Gold}</code> — wrap the variable's exact name in curly braces. FlourishVNE replaces <code>{Gold}</code> with the live value, so the wallet updates as the player buys and sells.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> The name inside the braces must match the variable's name exactly. If you rename the variable later, update the text too — interpolation is matched by name, not by ID.</div>
+  <h3>Step 7: Open the shop and test</h3>
+  <ol>
+  <li>From a scene in the <strong>Scenes</strong> tab, use a command that shows your shop screen so the player can reach it.</li>
+  <li>Press test-play and try buying and selling. Watch the <strong>Gold</strong> text change, the stock counts go down as you buy, and buttons disable when you're broke or out of stock.</li>
+</ol>
+  <hr>
+  <h2 id="27-screen-categories-overlay-behavior--open-hotkeys">27. Screen Categories, Overlay Behavior &amp; Open Hotkeys</h2>
+  <div class="tabs-involved">UI/Screens (Screen Properties inspector) → Scenes / Events (for the Toggle Screen button action)</div>
+  <p>Every screen in FlourishVNE can be tagged with a category for tidy organization, and screens used as in-game overlays (like a HUD, inventory, or stats popup) get extra behavior controls: pause the scene while open, dim or blur what's behind, choose what happens when the overlay closes, and bind a single keyboard key that toggles the screen on and off during play. None of these settings require any code.</p>
+  <h3>Step 1: Pick a Category for the screen</h3>
+  <ol>
+  <li>Open the <strong>UI/Screens</strong> tab and select a screen to open the <strong>Screen Properties</strong> inspector on the right.</li>
+  <li>Find the <strong>Category</strong> field near the top. Open the dropdown and choose one of: <strong>Menu</strong>, <strong>HUD</strong>, <strong>Overlay</strong>, <strong>System</strong>, or <strong>Screen</strong>.</li>
+  <li>Leave it on the <strong>Auto (...)</strong> option to let the editor guess the category from the screen's role — your Title, Pause, Save, Load, and Settings screens are auto-tagged <strong>Menu</strong>, and your Game HUD screen is auto-tagged <strong>HUD</strong>.</li>
+</ol>
+  <p>A small colored dot next to the dropdown shows the category's color: Menu is sky blue, HUD is amber, Overlay is lavender, System is mint green, and Screen is neutral slate. These colors and labels are an editor-only organization aid that color-codes the screen list and filters in the Systems hub.</p>
+  <div class="tip"><strong>Tip:</strong> The category has no effect on the game itself — it only changes how the screen looks in the editor. Tagging a screen as <strong>HUD</strong> or <strong>Overlay</strong> also unlocks the Overlay Behavior section described below.</div>
+  <h3>Step 2: Set up Overlay Behavior (HUD &amp; Overlay screens)</h3>
+  <p>The <strong>Overlay Behavior</strong> section appears in the inspector once a screen's category is <strong>HUD</strong> or <strong>Overlay</strong> (or if it already has any overlay setting saved). Inside it you can configure:</p>
+  <ul>
+  <li><strong>Pass-through clicks</strong> — When on, empty areas let clicks reach the scene beneath, so only your visible buttons capture input. The Game HUD screen defaults to on. (When pass-through is on, a <strong>Show above dialogue &amp; choices</strong> checkbox appears so the overlay can render on top of the dialogue box, letting players open and use it mid-dialogue.)</li>
+  <li><strong>Pause scene while open</strong> — Freezes the scene behind the screen while it's open: no auto-advance, no skip, and no clicking past. The scene stays visible but paused. Ideal for an inventory or stats popup opened during dialogue.</li>
+  <li><strong>Backdrop dim (0–1)</strong> — Draws a dark layer between the scene and your overlay. Enter a value from 0 (none) to 1 (fully black) to "dim the room" behind the popup.</li>
+  <li><strong>Backdrop blur (px)</strong> — Blurs everything behind the overlay by the number of pixels you enter (0 = none).</li>
+</ul>
+  <h3>Step 3: Choose what happens when the overlay closes</h3>
+  <p>Still in <strong>Overlay Behavior</strong>, use the <strong>When this screen closes</strong> dropdown to decide what the game does after the overlay is dismissed (via a Return button, the toggle key, or going back):</p>
+  <ul>
+  <li><strong>Default</strong> — Keeps the existing behavior.</li>
+  <li><strong>Resume (don't advance)</strong> — Returns to the story without moving it forward (best for an inventory you just glance at).</li>
+  <li><strong>Advance the story</strong> — Moves the story forward one step on close.</li>
+  <li><strong>Run actions</strong> — Reveals an <strong>On-close actions</strong> list; the actions you add there run when the overlay closes, then the story resumes.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Pair <strong>Pause scene while open</strong> with a small <strong>Backdrop dim</strong> for a classic "modal popup" feel — the scene freezes and darkens, your overlay stands out, and <strong>Resume (don't advance)</strong> sends the player right back where they were.</div>
+  <h3>Step 4: Add a keyboard shortcut that toggles the screen</h3>
+  <p>This is the per-screen <strong>Keyboard shortcut</strong> mapper near the top of the inspector — perfect for an inventory key:</p>
+  <ol>
+  <li>In the <strong>Keyboard shortcut</strong> field, click <strong>Set shortcut</strong>.</li>
+  <li>The button changes to <strong>Press a key…</strong> — now press the key you want, for example <strong>I</strong> for an inventory.</li>
+  <li>The captured key is shown as <strong>Key: I</strong>. To remove it, click <strong>Clear</strong>. (To cancel while listening, press <strong>Esc</strong>.)</li>
+</ol>
+  <p>In-game, pressing that key toggles the screen open and closed. The match is case-insensitive.</p>
+  <div class="tip"><strong>Tip:</strong> Built-in keys always win: <strong>Space/Enter</strong> (advance), <strong>H</strong> (history/log), <strong>Ctrl</strong> (skip), and <strong>Esc</strong> (pause) take priority, so don't map those. Your shortcut is also ignored while the player is typing in a text field or while another overlay or the history log is open.</div>
+  <h3>Step 5: Open or toggle a screen from a button</h3>
+  <p>To open these screens during play, add a button action — there is no new scene command for this:</p>
+  <ol>
+  <li>On any button (in a screen or HUD), open its actions and add a <strong>Toggle Screen</strong> action, then pick the target screen. This opens the screen if closed and closes it if already open — a great match for a screen that also has a toggle hotkey.</li>
+  <li>To bring a screen up from the story timeline, drag a <strong>Show Screen</strong> command (which already exists) into a scene in the <strong>Scenes</strong> tab.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Give an inventory both a <strong>Toggle Screen</strong> button on the HUD and an <strong>I</strong> keyboard shortcut, so players can open it however they prefer — both routes respect the same Overlay Behavior and on-close settings.</div>
+  <hr>
+  <h2 id="28-customizing-the-in-game-quick-menu">28. Customizing the In-Game Quick Menu</h2>
+  <div class="tabs-involved">UI/Screens → In-Game UI → Quick Menu</div>
+  <p>The quick menu is the little bar of buttons that floats during dialogue, letting the player Skip, Auto-advance, open the Log, jump Back, and Save/Load. You can reposition it, restyle it, hide buttons you don't want, give each button your own artwork, and even add your own extra buttons that run any action. It's all no-code: you edit it visually and the changes show up live.</p>
+  <h3>Step 1: Open the Quick Menu editor</h3>
+  <ol>
+  <li>Go to the <strong>UI/Screens</strong> tab.</li>
+  <li>At the top, switch the mode toggle from <strong>UI Screens</strong> to <strong>In-Game UI</strong>.</li>
+  <li>In the element list, choose <strong>Quick Menu</strong> (described as "Skip, Auto, Log, Back buttons"). The canvas shows a dimmed dialogue box so you can see where the menu sits, and the properties panel on the side fills with Quick Menu settings.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> The canvas preview is a real layout preview. Whatever position, color, or art you set here is exactly what the player sees mid-dialogue.</div>
+  <h3>Step 2: Place the bar with a Position Preset</h3>
+  <ol>
+  <li>Open the <strong>Position Preset</strong> dropdown and pick one:
+  <ul>
+  <li><strong>Above Dialogue</strong> (the default) — sits just above the dialogue box.</li>
+  <li><strong>Top Right</strong> / <strong>Top Left</strong> — pins it to a corner of the screen.</li>
+  <li><strong>Bottom Right (pushes dialogue up)</strong> / <strong>Bottom Left (pushes dialogue up)</strong> — sits at the bottom edge; the dialogue box is nudged up to make room.</li>
+  <li><strong>Hidden</strong> — removes the quick menu entirely.</li>
+</ul></li>
+  <li>To nudge it more precisely, drag the menu on the canvas. Once you've dragged it, a <strong>Reset to Preset Position</strong> button appears — click it to snap back to the clean preset placement.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> If you choose a bottom preset but don't want the dialogue box to move, turn on <strong>Float Over Dialogue</strong> (next step). The menu will then sit on top of the dialogue instead of pushing it up.</div>
+  <h3>Step 3: Style the buttons</h3>
+  <p>In the properties panel:</p>
+  <ol>
+  <li><strong>Button Color</strong> — the background color of the button pills.</li>
+  <li><strong>Opacity</strong> — how see-through the buttons are (default 75).</li>
+  <li><strong>Border Radius</strong> — how rounded the button corners are (default 4).</li>
+  <li><strong>Float Over Dialogue</strong> — when checked, the menu floats over the dialogue box instead of reserving space and pushing it up.</li>
+</ol>
+  <h3>Step 4: Show or hide the built-in buttons</h3>
+  <p>Under the <strong>Buttons</strong> header you'll find the six built-ins, each with its own checkbox: <strong>Back</strong>, <strong>Log</strong>, <strong>Auto</strong>, <strong>Skip</strong>, <strong>Save</strong>, and <strong>Load</strong>.</p>
+  <ol>
+  <li>Uncheck any button you don't want the player to see.</li>
+  <li>The Skip button only appears in-game when skipping is allowed in your game settings, so leaving it on is safe.</li>
+</ol>
+  <h3>Step 5: Give a button custom artwork</h3>
+  <p>For each visible built-in button you can replace the plain pill with your own image:</p>
+  <ol>
+  <li><strong>Image</strong> — pick an uploaded image to use as the button. Leave it on <strong>None (use default style)</strong> to keep the built-in icon look.</li>
+  <li><strong>Hover Image</strong> — pick a second image shown when the player's mouse is over the button.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Button art always keeps its aspect ratio (object-contain), so your images are never stretched or squished. Upload your button art on the <strong>Assets</strong> tab first so it shows up in these dropdowns.</div>
+  <p>You can also override what a built-in button <em>does</em>: under <strong>Custom action</strong> for that button, set an action. This overrides the button's built-in behavior (so, for example, the Save button could open your own custom save screen instead). Leave it as <strong>None</strong> to keep the default behavior.</p>
+  <h3>Step 6: Add your own Custom Buttons</h3>
+  <p>Under the <strong>Custom Buttons</strong> header you can create extra buttons beyond the six built-ins:</p>
+  <ol>
+  <li>Click <strong>+ Add custom button</strong>.</li>
+  <li>Type a <strong>Button label</strong>.</li>
+  <li>Set its <strong>Action</strong> — this is what the button does when clicked (e.g. open a screen, set a variable). A button with no action does nothing.</li>
+  <li>Optionally give it an <strong>Image</strong> and <strong>Hover Image</strong> just like the built-ins.</li>
+  <li>Use the checkbox beside the label to toggle the button <strong>Visible</strong>, or the ✕ to remove it.</li>
+</ol>
+  <p>In the default grouped layout, custom buttons appear inline right after the built-ins.</p>
+  <h3>Step 7: Switch to Independent Button Layout (optional)</h3>
+  <p>By default all buttons render as one tidy bar. If you'd rather place each button on its own:</p>
+  <ol>
+  <li>Check <strong>Independent Button Layout</strong>. The hint reads: "Place each button anywhere on the canvas, independent of the others. When off, the buttons form a single bar."</li>
+  <li>Now each button (built-in and custom) can be dragged and resized individually on the canvas, or given an exact <strong>Width</strong> and <strong>Height</strong> in its panel.</li>
+  <li><strong>Fit clickable area to the art (trim empty space)</strong> — check this on a button to shrink both the visible art and the clickable area down to the fitted image, so there's no oversized invisible hitbox or empty margin around a small icon.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Independent layout is perfect for scattering stylized buttons around a themed HUD. Grouped layout is best when you just want a clean, evenly-spaced toolbar.</div>
+  <hr>
+  <h2 id="29-customizing-choice-buttons">29. Customizing Choice Buttons</h2>
+  <div class="tabs-involved">Scenes (Properties Inspector + Staging Area)</div>
+  <p>The <strong>Choice</strong> command shows the player a set of buttons to pick from. By default those buttons use your global, centered choice style (set under Settings / In-Game UI). But you can override the look of any single Choice command — and even hand-place each button on the stage — right from the <strong>Properties Inspector</strong>, without touching that global style. Anything you leave blank simply falls back to the global look, so you only customize what you want.</p>
+  <h3>Step 1: Select your Choice command</h3>
+  <ol>
+  <li>Open the <strong>Scenes</strong> tab and click the scene that holds your choice.</li>
+  <li>In the command list, click the <strong>Choice</strong> command to select it. Its settings open in the <strong>Properties Inspector</strong> on the right (under the <strong>Content</strong> group).</li>
+  <li>You'll see your list of options, each with its <strong>Option N Text</strong>, <strong>Conditions</strong>, <strong>Actions</strong>, and an <strong>Appearance</strong> section.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> If you haven't added a Choice command yet, drag one in from the command palette first, then add options with <strong>Add Option</strong>.</div>
+  <h3>Step 2: Pick a layout</h3>
+  <p>At the top of the Choice settings, set the <strong>Layout</strong> field. There are three choices:</p>
+  <ul>
+  <li><strong>Vertical</strong> — the classic centered stack of buttons. This is the default; leaving it on Vertical keeps the global centered style untouched.</li>
+  <li><strong>Horizontal</strong> — the buttons sit in a centered row instead of a column.</li>
+  <li><strong>Free</strong> — each button is positioned individually by its own X / Y / Width / Height (you place them anywhere on the stage).</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Only switch to <strong>Free</strong> when you want buttons in unusual spots (for example, hot-spot style choices placed over parts of the artwork). Vertical and Horizontal handle most visual novels.</div>
+  <h3>Step 3: Style each option's appearance</h3>
+  <p>Scroll to the <strong>Appearance</strong> section under any option. Every field here is optional — leave it empty to inherit the global choice style. You can set:</p>
+  <ul>
+  <li><strong>Image</strong> — custom button art (an image asset) for the normal state.</li>
+  <li><strong>Hover Image</strong> — art shown while the player hovers over that button.</li>
+  <li><strong>Background Color</strong>, <strong>Hover Background Color</strong>, <strong>Text Color</strong> — the button's fill, its hover fill, and the label color.</li>
+  <li><strong>Font Size</strong> — the option's text size in pixels.</li>
+  <li><strong>Corner Radius</strong> — how rounded the button corners are, in pixels.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Mixing custom art with a background color works well — the color shows through where the art is transparent, and acts as a fallback if the image is missing.</div>
+  <h3>Step 4: Position buttons in Free layout</h3>
+  <p>When <strong>Layout</strong> is set to <strong>Free</strong>, each option also gets <strong>X (%)</strong>, <strong>Y (%)</strong>, <strong>Width (%)</strong>, and <strong>Height (%)</strong> fields, all measured as a percentage of the stage. You can either type exact numbers here, or arrange the buttons visually:</p>
+  <ol>
+  <li>With the Choice command still selected, look at the <strong>Staging Area</strong> canvas. Each option appears as a draggable, labeled box ("Choice 1", "Choice 2", and so on).</li>
+  <li><strong>Drag</strong> a button to move it anywhere on the stage.</li>
+  <li><strong>Drag a corner/edge handle</strong> to resize it.</li>
+</ol>
+  <p>The canvas and the X / Y / Width / Height fields stay in sync — drag updates the numbers, and editing the numbers moves the button.</p>
+  <div class="tip"><strong>Tip:</strong> Buttons only become draggable on the canvas while their Choice command is the selected command. If you can't grab them, re-select the Choice command in the Scenes command list.</div>
+  <h3>Step 5: Preview and reset</h3>
+  <ul>
+  <li>Use test-play / preview to confirm the buttons look right, including hover art and hover colors.</li>
+  <li>To go back to the global look for a field, just clear it (leave it blank) — that option falls back to your project's In-Game UI choice style again.</li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> Customizations live on each individual Choice command and each individual option, so you can give one scene flashy custom buttons while every other choice in the game keeps the shared default style.</div>
+  <hr>
+  <h2 id="30-layering--parallax-depth">30. Layering &amp; Parallax Depth</h2>
+  <div class="tabs-involved">Scenes · UI/Screens (Inspector → Transform group, plus the scene/screen Parallax settings)</div>
+  <p>FlourishVNE lets you control exactly what draws in front of what — for both scene visuals and UI screen elements — and add a sense of depth so layers drift as the player moves the mouse or as the camera pans. Everything here is optional: leave the controls untouched and your project looks exactly as it always has. There are no new scene commands to learn; the controls live in the Inspector and the scene/screen settings panels.</p>
+  <h3>Step 1: Set a visual's stacking order (Layer)</h3>
+  <p>Every stage visual (background, character, image, text, button, placed video) and every UI screen element has a <strong>Layer (stacking order)</strong> control. Higher numbers draw nearer the viewer; lower numbers sit behind.</p>
+  <ol>
+  <li>In the <strong>Scenes</strong> tab, click a visual command (for example <strong>ShowCharacter</strong> or <strong>ShowImage</strong>) to open its Inspector, then open the <strong>Transform</strong> group. For a UI element, do the same in the <strong>UI/Screens</strong> tab.</li>
+  <li>Find <strong>Layer (stacking order)</strong>. You can type a number directly, or use the buttons:
+  <ul>
+  <li><strong>⤒ Front</strong> — bring this in front of everything else on the same surface.</li>
+  <li><strong>↑</strong> — move forward one step.</li>
+  <li><strong>↓</strong> — move back one step.</li>
+  <li><strong>⤓ Back</strong> — send behind everything else.</li>
+</ul></li>
+</ol>
+  <p>The Front/Back buttons do the math for you against the other items on the same scene or screen, so you never need to memorize z-numbers.</p>
+  <div class="tip"><strong>Tip:</strong> Layer lets a character move in front of an image, or an image slide behind a character — something insertion order alone could never do. If you never touch Layer, items stack in their old default order.</div>
+  <div class="tip"><strong>Tip:</strong> Layer only orders <em>stage content</em> and screen elements. The dialogue box, name box, quick menu and confirm dialogs always stay on top, so you can't accidentally hide the player's controls behind artwork.</div>
+  <h3>Step 2: Build multi-plane parallax backgrounds</h3>
+  <p>A single backdrop can be split into several stacked planes, each drifting at its own speed for a true sense of depth.</p>
+  <p><strong>In a scene (SetBackground command):</strong></p>
+  <ol>
+  <li>In the <strong>Scenes</strong> tab, select your <strong>SetBackground</strong> command and open the <strong>Content</strong> group.</li>
+  <li>Tick <strong>Stack (don't replace)</strong>. Instead of replacing the current background, this adds the image/video as its own backdrop plane.</li>
+  <li>Set its <strong>Layer</strong> with the ↓ / number / ↑ row (default 0 = just above the base background; raise it to sit in front of stage visuals, use a negative number to push it further back).</li>
+  <li>Add several stacked SetBackground commands at different layers and depths to build the scene.</li>
+</ol>
+  <p><strong>On a UI screen (UI/Screens tab → Background section):</strong></p>
+  <ol>
+  <li>The main background has its own <strong>Layer</strong> and <strong>Depth</strong> controls.</li>
+  <li>Under <strong>Additional backgrounds</strong>, click <strong>+ Add</strong> to create extra backdrop planes ("Plane 1", "Plane 2", …). For each plane choose a <strong>Type</strong> (Color / Image / Video), pick the asset, and set its own <strong>Layer</strong> and <strong>Depth</strong>.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Give a distant sky plane a low Depth (it barely moves) and a near foreground plane a higher Depth (it moves more) — the difference between them is what reads as depth.</div>
+  <h3>Step 3: Give each visual a Parallax depth</h3>
+  <p><strong>Parallax depth</strong> decides how much an individual item drifts. It composes independently of Layer, so changing one never affects the other.</p>
+  <ol>
+  <li>Open a visual command or UI element Inspector and go to the <strong>Transform</strong> group.</li>
+  <li>Drag the <strong>Parallax depth</strong> slider: <strong>0</strong> means locked in place (no drift); higher values (up to 2.00) drift more.</li>
+  <li>Placed (overlay) videos also have a Parallax depth in their movie settings — a fullscreen movie has no margin to drift into, so depth is best used on placed videos.</li>
+</ol>
+  <p>Parallax depth only has a visible effect once you turn on a Parallax <strong>Mode</strong> for the scene or screen (Step 4).</p>
+  <h3>Step 4: Turn on Parallax for the scene or screen</h3>
+  <p>Parallax depth does nothing until you pick a driver in the scene's or screen's <strong>Parallax</strong> settings.</p>
+  <p><strong>For a scene:</strong> open the scene configuration panel and find the <strong>Parallax</strong> section. <strong>For a UI screen:</strong> open the <strong>UI/Screens</strong> Inspector and expand the <strong>Parallax</strong> section.</p>
+  <p>Set <strong>Mode</strong> to one of:</p>
+  <ul>
+  <li><strong>Off</strong> — no parallax (the default; identical to old behavior).</li>
+  <li><strong>Follow mouse</strong> — visuals drift toward the pointer's offset from center.</li>
+  <li><strong>Camera (pan/zoom)</strong> — visuals shift as <strong>Pan/Zoom Screen</strong> camera moves play; nearer/higher-depth layers sweep past farther ones.</li>
+  <li><strong>Both</strong> — combines mouse and camera.</li>
+</ul>
+  <p>When a mode other than Off is active, an <strong>Intensity</strong> slider appears (0–3×) as a global multiplier on every item's drift.</p>
+  <div class="tip"><strong>Tip:</strong> Screens have no camera (Pan/Zoom is a scene-only feature), so <strong>Camera</strong> mode has no effect on a UI screen — use <strong>Follow mouse</strong> for title screens and menus that should react to the cursor.</div>
+  <div class="tip"><strong>Tip:</strong> Camera parallax is powered by your existing <strong>Pan/Zoom Screen</strong> commands — depth-0 layers travel with the camera and higher-depth layers move more, so add some pan to the scene to see it in action.</div>
+  <h3>Step 5: Backward compatibility</h3>
+  <p>Layer, Parallax depth, the SetBackground <strong>Stack</strong> option, additional backgrounds, and the scene/screen Parallax <strong>Mode</strong> are all optional additions. Any project made before these existed loads with them unset and looks pixel-identical, and your saves and exports stay fully compatible.</p>
+  <hr>
+  <h2 id="31-keep-character-expressions-in-place">31. Keep Character Expressions in Place</h2>
+  <div class="tabs-involved">Scenes (with Characters for setup)</div>
+  <p>Normally, every Show Character command places the sprite at the position you choose (often the center). That means changing only a character's expression or pose can make them jump back to center even if they were standing off to one side. The new <strong>Keep current position (expression change only)</strong> option fixes this: when the character is already on stage, the next Show Character command swaps the expression while leaving the sprite exactly where it is.</p>
+  <h3>Step 1: Place the character the first time</h3>
+  <ol>
+  <li>Open the <strong>Scenes</strong> tab and select your scene.</li>
+  <li>Drag in a <strong>Show Character</strong> command.</li>
+  <li>Pick the character and an expression, then set the <strong>Position</strong> under the transform group as usual (for example, off to the left or right).</li>
+</ol>
+  <p>This first command is what actually positions the character on stage. Leave <strong>Keep current position</strong> unchecked here.</p>
+  <h3>Step 2: Add a follow-up Show Character to change the expression</h3>
+  <ol>
+  <li>Later in the same scene, drag in another <strong>Show Character</strong> command for the <em>same</em> character.</li>
+  <li>Choose the new expression or pose you want.</li>
+  <li>In the command's transform group, tick the checkbox <strong>Keep current position (expression change only)</strong>.</li>
+</ol>
+  <p>When this box is checked, the <strong>Position</strong> (and slide Start/End position) fields are hidden, because position is no longer used — the sprite simply stays where it already is.</p>
+  <div class="tip"><strong>Tip:</strong> The on-canvas hint confirms it: "The character stays where it already is on stage; only its expression/pose changes." The new expression, pose, scale, and visual effects still apply — only the position is left untouched.</div>
+  <h3>Step 3: Preview it on the Staging Area</h3>
+  <p>You don't have to test-play to check this. The editor's Staging Area canvas previews the same behavior: with <strong>Keep current position</strong> turned on, the character shown in the canvas keeps its existing spot instead of snapping back to center.</p>
+  <div class="tip"><strong>Tip:</strong> If the character is <em>not</em> already on stage when this command runs, Keep current position has nothing to keep, so the sprite appears at the command's normal Position. Use it only for follow-up expression or pose changes on a character that's already visible.</div>
+  <hr>
+  <h2 id="32-variables-conditions--the-live-variable-tracker">32. Variables, Conditions &amp; the Live Variable Tracker</h2>
+  <div class="tabs-involved">Variables → Scenes / UI/Screens</div>
+  <p>Variables are the memory of your story: a number that tracks affection, a yes/no flag for whether a door is unlocked, or a piece of text like the player's name. Once you have variables, you can use plain-language <strong>conditions</strong> to gate dialogue, choices, and button actions, and you can watch every value change in real time with the editor-only <strong>Variable Tracker</strong> while you test-play.</p>
+  <h3>Step 1: Create a variable</h3>
+  <ol>
+  <li>Open the <strong>Variables</strong> tab.</li>
+  <li>Click <strong>Add Variable</strong> at the bottom of the list. A new variable is created (named automatically — for example "Variable 1") as a <strong>Number</strong> with a default of 0.</li>
+  <li>Double-click the new entry (or use the pencil icon) to rename it to something meaningful, like "Affection" or "PlayerName".</li>
+  <li>Each row shows a small <strong>type icon</strong> (<code>#</code> number, <code>Aa</code> string, <code>✓</code> boolean) and a colored <strong>scope</strong> badge so you can scan the list at a glance.</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Keep variable names short and clear. You'll reference them later in conditions and in text using curly braces, like <code>{Affection}</code>.</div>
+  <h3>Step 2: Set its type, default value, and scope</h3>
+  <p>Select the variable to open the inspector on the right, then set:</p>
+  <ul>
+  <li><strong>Type</strong> — choose <strong>Number</strong>, <strong>Text</strong> (string), or <strong>Yes/No</strong> (boolean).</li>
+  <li><strong>Default value</strong> — the starting value when a new game begins. For Number you type a number, for Text you type words, for Yes/No you pick from a dropdown.</li>
+  <li><strong>Scope</strong> — how long the value lives:
+  <ul>
+  <li><strong>Local</strong> — resets every time the scene changes (good for one-scene counters).</li>
+  <li><strong>Global</strong> — persists across scenes within a single playthrough but resets on a new game. This is the default.</li>
+  <li><strong>Persistent</strong> — saved between play sessions and survives a new game (good for CG Gallery unlocks and "have you ever..." flags).</li>
+</ul></li>
+</ul>
+  <div class="tip"><strong>Tip:</strong> For Yes/No variables you can set custom on/off labels (for example "Locked" / "Unlocked" instead of "Yes" / "No"). Those labels show up everywhere the value is displayed, while the stored value stays a true/false.</div>
+  <h3>Step 3: Clamp number variables with Min and Max (optional)</h3>
+  <p>Number variables can have an inclusive <strong>Min</strong> and/or <strong>Max</strong> bound. When set, every write is clamped so the value can never go below the minimum or above the maximum.</p>
+  <ul>
+  <li>Set <strong>Min</strong> to 0 to stop a stat like affection from ever going negative.</li>
+  <li>Set <strong>Max</strong> to cap a meter (for example a relationship value that tops out at 100).</li>
+</ul>
+  <p>You don't have to fill both — set only the one you need, or neither.</p>
+  <h3>Step 4: Gate commands and choices with plain-language conditions</h3>
+  <p>Conditions decide whether something happens. They appear on scene commands, on individual <strong>Choice</strong> options, and on screen elements/button actions in <strong>UI/Screens</strong>.</p>
+  <ol>
+  <li>Find the <strong>Conditions</strong> section on a command, choice option, or screen element (it may be a collapsible panel with a count badge).</li>
+  <li>Click <strong>Add Condition</strong>.</li>
+  <li>Pick the <strong>Variable</strong>, then an <strong>Operator</strong>, then (when needed) a <strong>Value</strong>:
+  <ul>
+  <li><strong>Number</strong> operators read as plain English: <em>is</em>, <em>is not</em>, <em>is greater than</em>, <em>is less than</em>, <em>is at least</em>, <em>is at most</em>.</li>
+  <li><strong>Text</strong> operators: <em>is</em>, <em>is not</em>, <em>contains</em>, <em>starts with</em>.</li>
+  <li><strong>Yes/No</strong> operators: <em>is on</em> / <em>is off</em> — these need no value box, because the operator already says it.</li>
+</ul></li>
+  <li>A small italic preview line under each condition restates it in plain words (for example "Affection is at least 5") so you can confirm it reads correctly.</li>
+  <li>Add more than one condition to combine them. A connector dropdown (<strong>AND</strong> / <strong>OR</strong>) appears between conditions so you can build rules like "Affection is at least 5 AND DoorUnlocked is on."</li>
+</ol>
+  <div class="tip"><strong>Tip:</strong> Item quantities are ordinary Number variables. That means you can write a condition like "Potions is at least 1" to only show a "Drink potion" choice when the player actually has one — and you can show the live count in any dialogue or label by typing <code>{Potions}</code>.</div>
+  <h3>Step 5: Watch values live with the Variable Tracker (test-play only)</h3>
+  <p>While you test-play your project inside the editor, a <strong>Variables</strong> button sits in the top-left corner of the preview.</p>
+  <ol>
+  <li>Click <strong>Variables</strong> to open the tracker panel.</li>
+  <li>Every variable is listed with its <strong>name</strong>, a small <strong>scope dot</strong> (green = Local, blue = Global, amber = Persistent), and its <strong>current live value</strong>.</li>
+  <li>Play through your scene and watch values update in real time as commands run and choices fire — perfect for confirming an affection gain or an item count changed as expected.</li>
+</ol>
+  <p>This tracker is an editor-only helper. It is never shown in your exported or standalone game.</p>
+  <div class="tip"><strong>Tip:</strong> If the tracker says "No variables yet," head back to the <strong>Variables</strong> tab and add one. Note that some auto-managed variables (like a shop's stock count) are hidden from the Variables list to keep it tidy, but they still appear in the live tracker so you can debug them.</div>
+  <h3>A note on hidden (internal) variables</h3>
+  <p>Some variables are created and managed automatically by other systems — for example the per-list stock count behind a shop. These are flagged as internal and are <strong>hidden from the Variables list</strong> so it stays calm. They still work everywhere by name: you can reference them in conditions, show them in text with <code>{name}</code>, and change them with Set Variable. You'll also see them in the live Variable Tracker during test-play.</p>
 </main>
 
 <script>

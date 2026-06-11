@@ -118,7 +118,8 @@ export const useCommandDefaults = (
             }
             case CommandType.GiveItem:
             case CommandType.UseItem:
-            case CommandType.DestroyItem: {
+            case CommandType.DestroyItem:
+            case CommandType.ShowItem: {
                 const c = command as any;
                 if (!c.itemId) {
                     const firstItem = Object.keys(project.items || {})[0];
@@ -246,8 +247,7 @@ const PropertiesInspector: React.FC<{
     selectedVariableId?: VNID | null;
     setSelectedVariableId?: (id: VNID | null) => void;
     isConfigScene?: boolean;
-    onCloseSceneConfig?: () => void;
-}> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, selectedVariableId, setSelectedVariableId, isConfigScene, onCloseSceneConfig }) => {
+}> = ({ activeSceneId, selectedCommandIndex, setSelectedCommandIndex, selectedVariableId, setSelectedVariableId, isConfigScene }) => {
     const { project, dispatch } = useProject();
     const { t } = useTranslation('properties');
     const activeScene = project.scenes[activeSceneId];
@@ -270,7 +270,7 @@ const PropertiesInspector: React.FC<{
 
     // ── Early returns (after all hooks have run) ──
     if (isConfigScene) {
-        return <SceneConfigEditor activeSceneId={activeSceneId} onCloseSceneConfig={onCloseSceneConfig} />;
+        return <SceneConfigEditor activeSceneId={activeSceneId} />;
     }
 
     if (selectedVariableId && setSelectedVariableId) {
@@ -974,24 +974,52 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.Wait: {
                 const cmd = command as WaitCommand;
+                const waitItems = Object.values(project.items || {}) as any[];
+                const seedItems = () => (cmd.targetItemIds && cmd.targetItemIds.length > 0) ? cmd.targetItemIds : (waitItems[0] ? [waitItems[0].id] : []);
                 return <>
-                    <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} disabled={cmd.waitIndefinitelyForInput}/></FormField>
+                    <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 })} disabled={cmd.waitIndefinitelyForInput || cmd.waitForItems}/></FormField>
                     <FormField label={t('wait.waitMode')}>
                         <div className="space-y-2">
                             <label className="flex items-center gap-1">
-                                <input type="checkbox" checked={!cmd.waitIndefinitelyForInput && !cmd.waitForInput} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false })} />
+                                <input type="checkbox" checked={!cmd.waitIndefinitelyForInput && !cmd.waitForInput && !cmd.waitForItems} onChange={() => updateCommand({ waitForInput: false, waitIndefinitelyForInput: false, waitForItems: false })} />
                                 <span className="text-xs text-[var(--text-primary)]">{t('wait.timed')}</span>
                             </label>
                             <label className="flex items-center gap-1">
-                                <input type="checkbox" checked={!!cmd.waitForInput && !cmd.waitIndefinitelyForInput} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false })} />
+                                <input type="checkbox" checked={!!cmd.waitForInput && !cmd.waitIndefinitelyForInput && !cmd.waitForItems} onChange={() => updateCommand({ waitForInput: true, waitIndefinitelyForInput: false, waitForItems: false })} />
                                 <span className="text-xs text-[var(--text-primary)]">{t('wait.allowClick')}</span>
                             </label>
                             <label className="flex items-center gap-1">
-                                <input type="checkbox" checked={!!cmd.waitIndefinitelyForInput} onChange={e => updateCommand({ waitIndefinitelyForInput: e.target.checked, waitForInput: false })} />
+                                <input type="checkbox" checked={!!cmd.waitIndefinitelyForInput && !cmd.waitForItems} onChange={() => updateCommand({ waitIndefinitelyForInput: true, waitForInput: false, waitForItems: false })} />
                                 <span className="text-xs text-[var(--text-primary)]">{t('wait.indefinite')}</span>
+                            </label>
+                            <label className="flex items-center gap-1">
+                                <input type="checkbox" checked={!!cmd.waitForItems} onChange={() => updateCommand({ waitForItems: true, waitForInput: false, waitIndefinitelyForInput: false, targetItemIds: seedItems() })} />
+                                <span className="text-xs text-[var(--text-primary)]">{t('wait.untilItems')}</span>
                             </label>
                         </div>
                     </FormField>
+                    {cmd.waitForItems && (
+                        <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-2">
+                            <FormField label={t('wait.itemsRequire')}>
+                                <Select value={cmd.itemsMode === 'any' ? 'any' : 'all'} onChange={e => updateCommand({ itemsMode: e.target.value as 'all' | 'any' })}>
+                                    <option value="all">{t('wait.requireAll')}</option>
+                                    <option value="any">{t('wait.requireAny')}</option>
+                                </Select>
+                            </FormField>
+                            <div className="space-y-1">
+                                {(cmd.targetItemIds || []).map((id, idx) => (
+                                    <div key={idx} className="flex items-center gap-1">
+                                        <Select value={id} onChange={e => { const next = [...(cmd.targetItemIds || [])]; next[idx] = e.target.value; updateCommand({ targetItemIds: next }); }}>
+                                            {waitItems.length === 0 && <option value="">{t('wait.noItems')}</option>}
+                                            {waitItems.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                                        </Select>
+                                        <button onClick={() => updateCommand({ targetItemIds: (cmd.targetItemIds || []).filter((_, i) => i !== idx) })} className="px-2 py-1 text-xs text-red-400 hover:text-red-300 rounded hover:bg-[var(--bg-tertiary)]" title={t('wait.removeItem')}>✕</button>
+                                    </div>
+                                ))}
+                                <button onClick={() => updateCommand({ targetItemIds: [...(cmd.targetItemIds || []), waitItems[0]?.id || ''] })} className="w-full p-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-xs">{t('wait.addItem')}</button>
+                            </div>
+                        </div>
+                    )}
                 </>;
             }
             case CommandType.ShakeScreen: {
@@ -2433,6 +2461,7 @@ const PropertiesInspector: React.FC<{
                         [CommandType.ShowImage]: { x: 50, y: 50 } as Partial<VNCommand>,
                         [CommandType.ShowText]: { x: 50, y: 50 } as Partial<VNCommand>,
                         [CommandType.ShowButton]: { x: 50, y: 50 } as Partial<VNCommand>,
+                        [CommandType.ShowItem]: { x: 50, y: 50 } as Partial<VNCommand>,
                         [CommandType.ShowCharacter]: { position: 'center' } as Partial<VNCommand>,
                         [CommandType.PlayMovie]: { x: 0, y: 0 } as Partial<VNCommand>,
                     };
