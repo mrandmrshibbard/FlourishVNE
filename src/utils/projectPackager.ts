@@ -8,7 +8,7 @@ import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../features/charact
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
 // FIX: Removed GoToScreenAction as it is not exported from 'scene/types' and is unused.
 import { VNCommand, CommandType, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, PlayMovieCommand, ShowImageCommand, ShowButtonCommand, VNScene } from '../features/scene/types';
-import { UIElementType, UIButtonElement, UIImageElement, UISettingsSliderElement, UISettingsToggleElement, UIAsset, VNUIScreen, VNUIElement, UICharacterPreviewElement } from '../features/ui/types';
+import { UIElementType, UIButtonElement, UIImageElement, UISettingsSliderElement, UISettingsToggleElement, UIMeterElement, UIAsset, VNUIScreen, VNUIElement, UICharacterPreviewElement } from '../features/ui/types';
 import { UIActionType, VNUIAction } from '../types/shared';
 
 import { fileToBase64 } from './file';
@@ -375,6 +375,16 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
                 };
                 enqueueToggleAsset(toggle.checkedImage);
                 enqueueToggleAsset(toggle.uncheckedImage);
+            }
+            if (element.type === UIElementType.Meter) {
+                const meter = element as UIMeterElement;
+                const enqueueMeterAsset = (asset?: UIAsset | null) => {
+                    if (!asset?.id) return;
+                    if (asset.type === 'video') assetsToProcess.videos.add(asset.id);
+                    else assetsToProcess.images.add(asset.id);
+                };
+                enqueueMeterAsset(meter.fillImage);
+                enqueueMeterAsset(meter.backgroundImage);
             }
         }
 

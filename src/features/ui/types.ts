@@ -239,6 +239,7 @@ export enum UIElementType {
     Inventory = 'Inventory',
     HotSpot = 'HotSpot',
     ImageMap = 'ImageMap',
+    Meter = 'Meter',
 }
 
 interface BaseUIElement {
@@ -338,11 +339,32 @@ export interface UIImageElement extends BaseUIElement {
     image: UIAsset | null; // Deprecated, kept for backward compatibility
     objectFit?: 'contain' | 'cover' | 'fill'; // How the image/video should fit in the element
 }
+/**
+ * A single freely-positioned slot rectangle, in screen-percent coordinates
+ * (same coordinate space as a UI element's x/y/width/height). Used by
+ * SaveSlotGrid and CGGallery when slotLayout === 'free'. Index = slot/entry index.
+ */
+export interface UISlotRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 export interface UISaveSlotGridElement extends BaseUIElement {
     type: UIElementType.SaveSlotGrid;
     slotCount: number;
     font: VNFontSettings;
     emptySlotText: string;
+    /**
+     * Slot arrangement. Absent or 'grid' = the classic auto-arranged 2×2 paginated
+     * grid (unchanged). 'free' = each slot is placed individually via slotRects.
+     */
+    slotLayout?: 'grid' | 'free';
+    /**
+     * Per-slot rectangles in screen-percent, index = slot index (0-based).
+     * Only consulted when slotLayout === 'free'. Slots without a rect are not shown.
+     */
+    slotRects?: UISlotRect[];
     slotBackgroundColor?: string;
     slotBorderColor?: string;
     slotHoverBorderColor?: string;
@@ -497,6 +519,19 @@ export interface UICGGalleryElement extends BaseUIElement {
     lockedText?: string;
     /** Filter by category (empty = show all) */
     categoryFilter?: string;
+    /**
+     * Thumbnail arrangement. Absent or 'grid' = the classic auto-flowed column grid
+     * (unchanged). 'free' = each entry is placed individually via slotRects, in entry
+     * order; only entries that have a placed rect are shown.
+     */
+    slotLayout?: 'grid' | 'free';
+    /**
+     * Per-slot rectangles in screen-percent, index = entry index (sorted order).
+     * Only consulted when slotLayout === 'free'.
+     */
+    slotRects?: UISlotRect[];
+    /** Remove the dark container panel behind the thumbnails (lets background art show through). */
+    hideBackgroundPanel?: boolean;
 }
 
 /** Inventory Grid — auto-renders the player's owned items (from project.items) in a CSS grid:
@@ -584,10 +619,41 @@ export interface UIImageMapElement extends BaseUIElement {
     imageMapRegions?: ImageMapRegion[];
 }
 
+/** A progress-bar bound to a number variable (stat vars included): affection meters, HP bars,
+ *  XP… Reads the variable live; min/max default to the variable's own bounds. All fields are
+ *  additive-optional (old projects unaffected; old engines render nothing for unknown types). */
+export interface UIMeterElement extends BaseUIElement {
+    type: UIElementType.Meter;
+    /** The number variable this meter displays. */
+    variableId?: VNID;
+    /** Bounds overrides; undefined → the variable's min/max → 0/100. */
+    minValue?: number;
+    maxValue?: number;
+    /** Fill direction. Default 'ltr'. */
+    direction?: 'ltr' | 'rtl' | 'up';
+    fillColor?: string;
+    /** When set, the fill becomes a gradient from fillColor to this. */
+    fillColorEnd?: string;
+    /** Art-based fill: an image revealed proportionally instead of a solid fill. */
+    fillImage?: UIAsset | null;
+    backgroundColor?: string;
+    backgroundImage?: UIAsset | null;
+    borderColor?: string;
+    borderRadius?: number;
+    /** Optional caption (e.g. the stat/character name) rendered before the bar. */
+    showLabel?: boolean;
+    label?: string;
+    labelFont?: VNFontSettings;
+    /** Optional numeric readout rendered on the bar. */
+    showValue?: boolean;
+    valueFormat?: 'value' | 'valueMax' | 'percent';
+    valueFont?: VNFontSettings;
+}
+
 export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
     | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIInventoryGridElement
-    | UIHotSpotElement | UIImageMapElement;
+    | UIHotSpotElement | UIImageMapElement | UIMeterElement;
 
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
 export interface VNScreenBackgroundLayer {

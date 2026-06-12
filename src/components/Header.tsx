@@ -227,16 +227,16 @@ const Header: React.FC<{
                 </div>
             ) : (
                 <>
-                    <div className="flex items-center gap-2">
-                        <button 
+                    <div className="flex items-center gap-2 min-w-0 flex-shrink">
+                        <button
                             onClick={handleHubClick}
-                            className="bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-pink)] text-[var(--text-secondary)] hover:text-[var(--accent-pink)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
+                            className="flex-shrink-0 bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-pink)] text-[var(--text-secondary)] hover:text-[var(--accent-pink)] font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs group"
                             title={t('returnToHub')}
                         >
                             <HomeIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
                             {t('hub')}
                         </button>
-                        <div className="w-px h-6 bg-[var(--border-subtle)]" />
+                        <div className="w-px h-6 bg-[var(--border-subtle)] flex-shrink-0" />
                         {isEditing ? (
                             <input
                                 type="text"
@@ -244,20 +244,24 @@ const Header: React.FC<{
                                 onChange={(e) => setCurrentTitle(e.target.value)}
                                 onBlur={handleTitleBlur}
                                 onKeyDown={handleTitleKeyDown}
-                                className="font-heading bg-[var(--bg-primary)] text-sm font-semibold text-[var(--accent-cyan)] py-1 px-2 rounded-lg outline-none ring-2 ring-[var(--accent-cyan)]/50"
+                                className="font-heading bg-[var(--bg-primary)] text-sm font-semibold text-[var(--accent-cyan)] py-1 px-2 rounded-lg outline-none ring-2 ring-[var(--accent-cyan)]/50 min-w-0"
                                 autoFocus
                             />
                         ) : (
-                            <h1 
-                                className="font-heading text-sm font-semibold text-[var(--text-primary)] cursor-pointer hover:bg-[var(--bg-primary)] py-1 px-2 rounded-lg transition-colors"
+                            // Truncate the project name so a long title can't push the tab bar off-screen
+                            // on narrower / lower-aspect-ratio windows. Full name on hover via title attr.
+                            <h1
+                                className="font-heading text-sm font-semibold text-[var(--text-primary)] cursor-pointer hover:bg-[var(--bg-primary)] py-1 px-2 rounded-lg transition-colors truncate min-w-0 max-w-[8rem] xl:max-w-[14rem]"
                                 onClick={() => setIsEditing(true)}
-                                title={t('editTitle')}
+                                title={title}
                             >
                                 {title}
                             </h1>
                         )}
                     </div>
-                    <div className="flex-1 min-w-0 flex justify-center">
+                    {/* Left-align the tab bar (was centered) so it sits next to the title and the
+                        rightmost tabs stay clear of the right-hand controls on narrow windows. */}
+                    <div className="flex-1 min-w-0 flex justify-start pl-2">
                         {navigationTabs}
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">

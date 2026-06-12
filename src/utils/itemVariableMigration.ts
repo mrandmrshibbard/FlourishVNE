@@ -1,6 +1,8 @@
 import { VNProject } from '../types/project';
 import { VNID } from '../types';
 import { VNVariable } from '../features/variables/types';
+import { VNStat } from '../features/stats/types';
+import { statVarName } from '../features/stats/state/statReducer';
 
 /**
  * Back-compat migration for item-count variables. Items are sugar over a per-item
@@ -69,4 +71,76 @@ export function migrateItemCountVariableBounds(project: VNProject): VNProject {
     }
 
     return changed ? { ...project, variables } : project;
+}
+
+/**
+ * Self-heal for the stats registry. Stats materialize one number variable per target
+ * (global, or per character). Two idempotent, additive repairs on load:
+ *
+ * 1. **Recreate dangling stat variables** at the same id (mirrors the item count-var
+ *    self-heal above) so a deleted backing variable can't silently break the stat.
+ * 2. **Prune dead characters** from `characterIds`/`variableIds` (and drop their backing
+ *    variables). The rootReducer short-circuits at the first slice that handles an action,
+ *    so the stat reducer never sees DELETE_CHARACTER — this is where that cleanup lives.
+ *
+ * It deliberately does NOT re-sync existing variable NAMES on load. The auto-name
+ * ("Alice — Affection") is just a default applied at creation and when the author renames
+ * the stat (UPDATE_STAT); a manual rename in the Variables manager must stick, not get
+ * clobbered on every reload. (An earlier version re-synced here, which made stat variable
+ * names appear to "change back automatically".) Character renames therefore don't propagate
+ * to stat variable names — that's intentional: variables key off id, and silently renaming
+ * them would break any `{Old Name}` text interpolation. See [[reference_variable_rename_interpolation]].
+ */
+export function migrateStatVariables(project: VNProject): VNProject {
+    if (!project || !project.stats || !project.variables) return project;
+
+    let changed = false;
+    const variables = { ...project.variables };
+    const stats: Record<VNID, VNStat> = { ...project.stats };
+
+    for (const [statId, stat] of Object.entries(stats)) {
+        if (!stat?.variableIds) continue;
+        let statChanged = false;
+        const variableIds: Record<string, VNID> = { ...stat.variableIds };
+        let characterIds = stat.characterIds;
+
+        for (const [target, varId] of Object.entries(stat.variableIds)) {
+            const char = target === 'global' ? undefined : project.characters?.[target];
+            // (2) Dead character → drop the backing variable and the backlink.
+            if (target !== 'global' && !char) {
+                if (variables[varId]) delete variables[varId];
+                delete variableIds[target];
+                if (characterIds) characterIds = characterIds.filter(id => id !== target);
+                statChanged = true;
+                continue;
+            }
+            // (1) Dangling reference → recreate at the same id (value already lost; start at default).
+            //     Existing variables (incl. ones the author manually renamed) are left untouched.
+            if (!variables[varId]) {
+                variables[varId] = {
+                    id: varId,
+                    name: statVarName(stat.name, char?.name),
+                    type: 'number',
+                    defaultValue: stat.defaultValue ?? stat.min ?? 0,
+                    scope: 'global',
+                    min: stat.min,
+                    max: stat.max,
+                } as VNVariable;
+                changed = true;
+            }
+        }
+
+        // Also prune characterIds entries that never got a variable but reference dead characters.
+        if (stat.appliesTo === 'characters' && characterIds) {
+            const alive = characterIds.filter(id => !!project.characters?.[id]);
+            if (alive.length !== characterIds.length) { characterIds = alive; statChanged = true; }
+        }
+
+        if (statChanged) {
+            stats[statId] = { ...stat, variableIds, characterIds };
+            changed = true;
+        }
+    }
+
+    return changed ? { ...project, variables, stats } : project;
 }

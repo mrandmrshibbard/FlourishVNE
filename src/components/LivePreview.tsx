@@ -15,7 +15,7 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, GameSetting, GameToggleSetting, UIElementType,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, GameSetting, GameToggleSetting, UIElementType,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey
 } from '../features/ui/types';
 import { VNItem, VNItemCollection } from '../features/items/types';
@@ -489,8 +489,12 @@ const ButtonOverlayElement: React.FC<{
 
         // If this button requires click to advance, call the advance function
         // BUT: Don't advance if primary action is JumpToScene (it handles its own navigation),
-        // and never advance for quick-menu buttons (they fire actions but don't consume the click).
-        if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene) {
+        // never advance for quick-menu buttons (they fire actions but don't consume the click),
+        // and don't advance when an action called a Common Event — the CE has already switched
+        // execution (its return frame resumes past this button); advancing now would bump the
+        // CE's index from 0 to 1 and skip its first command.
+        const calledCommonEvent = allActions.some(a => a.type === UIActionType.CallCommonEvent);
+        if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene && !calledCommonEvent) {
             onAdvance();
         }
 
@@ -1647,84 +1651,111 @@ const SaveSlotGridComponent: React.FC<{
     const prevLabel = el.prevButtonText ?? '◀ Prev';
     const nextLabel = el.nextButtonText ?? 'Next ▶';
 
+    // Shared slot-card markup — identical between the classic grid and free placement,
+    // so a freely-positioned slot looks and behaves exactly like a grid slot.
+    const renderSlot = (i: number) => {
+        const slotData = gameSaves[i + 1];
+        const action: VNUIAction = isSaveMode
+            ? { type: UIActionType.SaveGame, slotNumber: i + 1 }
+            : { type: UIActionType.LoadGame, slotNumber: i + 1 };
+
+        return (
+            <button
+                key={i}
+                onClick={() => {
+                    if (!isSaveMode && !slotData) return;
+                    onAction(action);
+                }}
+                disabled={!isSaveMode && !slotData}
+                className="rounded-lg border-2 overflow-hidden flex flex-col w-full h-full"
+                style={{
+                    backgroundColor: slotBgColor,
+                    borderColor: slotBorderColor,
+                    transition: 'border-color 0.15s',
+                    cursor: (!isSaveMode && !slotData) ? 'default' : 'pointer',
+                } as React.CSSProperties}
+                onMouseEnter={(e) => {
+                    if (!e.currentTarget.disabled) {
+                        e.currentTarget.style.borderColor = slotHoverBorderColor;
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = slotBorderColor;
+                }}
+            >
+                {/* Screenshot area — flex:1 so it fills remaining height, info area always visible */}
+                <div className="relative w-full overflow-hidden" style={{ flex: '1 1 0', minHeight: 0 }}>
+                    {slotData?.screenshot ? (
+                        <img
+                            src={slotData.screenshot}
+                            alt={`Save slot ${i + 1}`}
+                            className="absolute inset-0 w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '0 8%' }}>
+                            <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                                {el.emptySlotText}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Slot label overlay — positioned on top of screenshot */}
+                    {!el.hideSlotLabel && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '4px',
+                            left: '4px',
+                            color: slotHeaderColor,
+                            fontWeight: 'bold',
+                            fontSize: baseFont.fontSize,
+                            fontFamily: baseFont.fontFamily,
+                            textShadow: '0 2px 4px rgba(0,0,0,0.7)',
+                            zIndex: 10
+                        }}>
+                            Slot {i + 1}
+                        </div>
+                    )}
+                </div>
+
+                {/* Info area — compact metadata display */}
+                {!el.hideInfoBar && slotData && (
+                    <div style={{ flex: '0 0 auto', padding: '2px 4px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <div style={{ color: slotTextColor, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: `calc(0.8 * ${baseFont.fontSize})` }}>{slotData.sceneName}</div>
+                        <div style={{ color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }}>{new Date(slotData.timestamp).toLocaleString()}</div>
+                    </div>
+                )}
+            </button>
+        );
+    };
+
+    // ── Free placement ── each slot positioned individually (screen-percent), no
+    // pagination. The element box is ignored; slots span the full screen so their
+    // coordinates line up with the background art. Slots without a rect are hidden.
+    if (el.slotLayout === 'free' && el.slotRects && el.slotRects.length > 0) {
+        const rects = el.slotRects;
+        return (
+            <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: style.zIndex, opacity: style.opacity as number | undefined, pointerEvents: 'none' }}>
+                {Array.from({ length: totalSlots }, (_, i) => {
+                    const rect = rects[i];
+                    if (!rect) return null;
+                    return (
+                        <div
+                            key={i}
+                            style={{ position: 'absolute', left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: 'auto' }}
+                        >
+                            {renderSlot(i)}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
     return (
         <div style={style} className="flex flex-col h-full">
             {/* 2×2 grid – each slot is a card with screenshot on top, info below */}
             <div className="grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]">
-                {pageSlots.map(i => {
-                    const slotData = gameSaves[i + 1];
-                    const action: VNUIAction = isSaveMode
-                        ? { type: UIActionType.SaveGame, slotNumber: i + 1 }
-                        : { type: UIActionType.LoadGame, slotNumber: i + 1 };
-
-                    return (
-                        <button
-                            key={i}
-                            onClick={() => {
-                                if (!isSaveMode && !slotData) return;
-                                onAction(action);
-                            }}
-                            disabled={!isSaveMode && !slotData}
-                            className="rounded-lg border-2 overflow-hidden flex flex-col"
-                            style={{
-                                backgroundColor: slotBgColor,
-                                borderColor: slotBorderColor,
-                                transition: 'border-color 0.15s',
-                                cursor: (!isSaveMode && !slotData) ? 'default' : 'pointer',
-                            } as React.CSSProperties}
-                            onMouseEnter={(e) => {
-                                if (!e.currentTarget.disabled) {
-                                    e.currentTarget.style.borderColor = slotHoverBorderColor;
-                                }
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.borderColor = slotBorderColor;
-                            }}
-                        >
-                            {/* Screenshot area — flex:1 so it fills remaining height, info area always visible */}
-                            <div className="relative w-full overflow-hidden" style={{ flex: '1 1 0', minHeight: 0 }}>
-                                {slotData?.screenshot ? (
-                                    <img
-                                        src={slotData.screenshot}
-                                        alt={`Save slot ${i + 1}`}
-                                        className="absolute inset-0 w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '0 8%' }}>
-                                        <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-                                            {el.emptySlotText}
-                                        </span>
-                                    </div>
-                                )}
-
-                                {/* Slot label overlay — positioned on top of screenshot */}
-                                {!el.hideSlotLabel && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        top: '4px',
-                                        left: '4px',
-                                        color: slotHeaderColor,
-                                        fontWeight: 'bold',
-                                        fontSize: baseFont.fontSize,
-                                        fontFamily: baseFont.fontFamily,
-                                        textShadow: '0 2px 4px rgba(0,0,0,0.7)',
-                                        zIndex: 10
-                                    }}>
-                                        Slot {i + 1}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Info area — compact metadata display */}
-                            {!el.hideInfoBar && slotData && (
-                                <div style={{ flex: '0 0 auto', padding: '2px 4px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                                    <div style={{ color: slotTextColor, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: `calc(0.8 * ${baseFont.fontSize})` }}>{slotData.sceneName}</div>
-                                    <div style={{ color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }}>{new Date(slotData.timestamp).toLocaleString()}</div>
-                                </div>
-                            )}
-                        </button>
-                    );
-                })}
+                {pageSlots.map(renderSlot)}
             </div>
 
             {/* Pagination controls */}
@@ -2183,7 +2214,7 @@ const CGGalleryGridElement: React.FC<{
         return (
             <div
                 className="absolute inset-0 z-50 flex items-center justify-center"
-                style={{ backgroundColor: element.backgroundColor || 'rgba(0,0,0,0.95)' }}
+                style={{ backgroundColor: element.backgroundColor || 'rgba(0,0,0,0.95)', pointerEvents: 'auto' }}
                 onClick={() => setViewingEntry(null)}
             >
                 {viewUrl && (
@@ -2231,10 +2262,82 @@ const CGGalleryGridElement: React.FC<{
         ? assetResolver(project.cgGallery.lockedPlaceholderAssetId, 'image')
         : null;
 
+    // Shared thumbnail markup. In `free` mode the wrapper sizes the thumb (no fixed
+    // aspect ratio); in grid mode it keeps the 16/9 cell.
+    const renderThumb = (entry: CGGalleryEntry, idx: number, free: boolean) => {
+        const unlocked = isEntryUnlocked(entry);
+        const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
+        const thumbUrl = unlocked ? assetResolver(thumbAssetId, 'image') : lockedPlaceholderUrl;
+
+        return (
+            <div
+                key={entry.id}
+                className="relative overflow-hidden flex items-center justify-center"
+                style={{
+                    ...(free ? { width: '100%', height: '100%' } : { aspectRatio: '16/9' }),
+                    borderRadius: `${element.thumbnailBorderRadius || 8}px`,
+                    border: `2px solid ${element.thumbnailBorderColor || '#4D3273'}`,
+                    backgroundColor: unlocked ? '#334155' : (element.lockedColor || '#1e293b'),
+                    cursor: unlocked ? 'pointer' : 'default',
+                    transition: 'transform 0.15s ease, border-color 0.15s ease',
+                }}
+                onClick={() => handleThumbnailClick(entry, idx)}
+                onMouseEnter={e => {
+                    if (unlocked) {
+                        (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
+                        (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf6';
+                    }
+                }}
+                onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                    (e.currentTarget as HTMLElement).style.borderColor = element.thumbnailBorderColor || '#4D3273';
+                }}
+            >
+                {unlocked && thumbUrl ? (
+                    <img src={thumbUrl} alt={entry.name} className="w-full h-full object-cover" />
+                ) : !unlocked ? (
+                    <span className="text-2xl">{element.lockedText || '🔒'}</span>
+                ) : (
+                    <span className="text-xs text-slate-500">{entry.name}</span>
+                )}
+                {/* Name label */}
+                {element.showNames !== false && unlocked && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1">
+                        {entry.name}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // ── Free placement ── each thumbnail positioned individually (screen-percent).
+    // The element box is ignored; thumbs span the full screen so they line up with
+    // background art. Only entries that have a placed rect are shown. The container is
+    // click-through (pointerEvents:none) so other screen elements behind it stay usable.
+    if (element.slotLayout === 'free' && element.slotRects && element.slotRects.length > 0) {
+        const rects = element.slotRects;
+        return (
+            <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                {entries.map((entry, idx) => {
+                    const rect = rects[idx];
+                    if (!rect) return null;
+                    return (
+                        <div
+                            key={entry.id}
+                            style={{ position: 'absolute', left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: 'auto' }}
+                        >
+                            {renderThumb(entry, idx, true)}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
     return (
         <div
             className="w-full h-full overflow-y-auto p-2 rounded"
-            style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}
+            style={{ backgroundColor: element.hideBackgroundPanel ? 'transparent' : (element.backgroundColor || 'rgba(15, 23, 42, 0.9)') }}
         >
             <div
                 className="grid"
@@ -2243,51 +2346,7 @@ const CGGalleryGridElement: React.FC<{
                     gap: `${element.gap || 8}px`,
                 }}
             >
-                {entries.map((entry, idx) => {
-                    const unlocked = isEntryUnlocked(entry);
-                    const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
-                    const thumbUrl = unlocked ? assetResolver(thumbAssetId, 'image') : lockedPlaceholderUrl;
-
-                    return (
-                        <div
-                            key={entry.id}
-                            className="relative overflow-hidden flex items-center justify-center"
-                            style={{
-                                aspectRatio: '16/9',
-                                borderRadius: `${element.thumbnailBorderRadius || 8}px`,
-                                border: `2px solid ${element.thumbnailBorderColor || '#4D3273'}`,
-                                backgroundColor: unlocked ? '#334155' : (element.lockedColor || '#1e293b'),
-                                cursor: unlocked ? 'pointer' : 'default',
-                                transition: 'transform 0.15s ease, border-color 0.15s ease',
-                            }}
-                            onClick={() => handleThumbnailClick(entry, idx)}
-                            onMouseEnter={e => {
-                                if (unlocked) {
-                                    (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
-                                    (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf6';
-                                }
-                            }}
-                            onMouseLeave={e => {
-                                (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-                                (e.currentTarget as HTMLElement).style.borderColor = element.thumbnailBorderColor || '#4D3273';
-                            }}
-                        >
-                            {unlocked && thumbUrl ? (
-                                <img src={thumbUrl} alt={entry.name} className="w-full h-full object-cover" />
-                            ) : !unlocked ? (
-                                <span className="text-2xl">{element.lockedText || '🔒'}</span>
-                            ) : (
-                                <span className="text-xs text-slate-500">{entry.name}</span>
-                            )}
-                            {/* Name label */}
-                            {element.showNames !== false && unlocked && (
-                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1">
-                                    {entry.name}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+                {entries.map((entry, idx) => renderThumb(entry, idx, false))}
             </div>
         </div>
     );
@@ -3714,8 +3773,15 @@ const UIScreenRenderer: React.FC<{
                 // Sort by order then by name
                 filteredEntries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
 
+                // In free mode the gallery spans the whole screen (so slot rects align with
+                // the background art) and is click-through except on the placed thumbnails.
+                const galleryIsFree = el.slotLayout === 'free' && !!el.slotRects && el.slotRects.length > 0;
+                const galleryWrapperStyle: React.CSSProperties = galleryIsFree
+                    ? { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: (style as React.CSSProperties).zIndex, opacity: (style as React.CSSProperties).opacity, pointerEvents: 'none' }
+                    : style;
+
                 return (
-                    <div key={el.id} style={style}>
+                    <div key={el.id} style={galleryWrapperStyle}>
                         <CGGalleryGridElement
                             element={el}
                             entries={filteredEntries}
@@ -3761,6 +3827,64 @@ const UIScreenRenderer: React.FC<{
                             selectedElementId={selectedElementId}
                             onSelectItem={onSelectItem}
                         />
+                    </div>
+                );
+            }
+            case UIElementType.Meter: {
+                const el = element as UIMeterElement;
+                const boundVar = el.variableId ? project.variables[el.variableId] : undefined;
+                const raw = Number((el.variableId ? variables[el.variableId] : undefined) ?? boundVar?.defaultValue ?? 0);
+                const min = el.minValue ?? (boundVar as any)?.min ?? 0;
+                const max = el.maxValue ?? (boundVar as any)?.max ?? 100;
+                const pct = Math.max(0, Math.min(1, (raw - min) / ((max - min) || 1)));
+                const dir = el.direction || 'ltr';
+                // The fill is a full-size layer revealed by clip-path — works identically for
+                // solid colors, gradients, and art fills, with no divide-by-zero edge cases.
+                const cut = (1 - pct) * 100;
+                const clipPath = dir === 'rtl' ? `inset(0 0 0 ${cut}%)` : dir === 'up' ? `inset(${cut}% 0 0 0)` : `inset(0 ${cut}% 0 0)`;
+                const fillImageUrl = el.fillImage ? getElementAssetUrl(el.fillImage) : null;
+                const bgImageUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+                const fillBackground = fillImageUrl
+                    ? undefined
+                    : (el.fillColorEnd
+                        ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${el.fillColor || '#a78bfa'}, ${el.fillColorEnd})`
+                        : (el.fillColor || '#a78bfa'));
+                const valueText = el.valueFormat === 'percent' ? `${Math.round(pct * 100)}%`
+                    : el.valueFormat === 'valueMax' ? `${raw}/${max}`
+                    : `${raw}`;
+                const radius = el.borderRadius ?? 6;
+                return (
+                    <div key={el.id} style={{ ...style, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {el.showLabel && (
+                            <div style={{ ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }}>
+                                {el.label || boundVar?.name || ''}
+                            </div>
+                        )}
+                        <div style={{
+                            position: 'relative', flex: 1, minHeight: 4, overflow: 'hidden',
+                            borderRadius: radius,
+                            backgroundColor: el.backgroundColor || 'rgba(0,0,0,0.4)',
+                            ...(bgImageUrl ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                            ...(el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}),
+                        }}>
+                            <div style={{
+                                position: 'absolute', inset: 0,
+                                clipPath,
+                                background: fillBackground,
+                                ...(fillImageUrl ? { backgroundImage: `url(${fillImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                                borderRadius: radius,
+                                transition: 'clip-path 0.3s ease',
+                            }} />
+                            {el.showValue && (
+                                <div style={{
+                                    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    ...fontSettingsToStyle(el.valueFont),
+                                    textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                }}>
+                                    {valueText}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 );
             }
@@ -6242,7 +6366,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         }
                     }
                 }
-                if (result.updates) {
+                if (result.updates || result.stagePatch) {
                     const isSceneChange = result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId;
                     updatePlayerState(p => {
                         if (!p) return null;
@@ -6253,6 +6377,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             mergedVariables = { ...mergedVariables, ...localDefaults };
                             runtimeDebugLog('[Variable Scope] Reset local variables on scene change:', Object.keys(localDefaults));
                         }
+                        // Compute the next stage state. `stagePatch` runs against the LATEST `p.stageState`
+                        // (not the handler's stale closure), so stacked/parallel stage commands compose.
+                        let nextStage: typeof p.stageState | undefined =
+                            result.updates?.stageState !== undefined ? { ...p.stageState, ...result.updates.stageState } : undefined;
+                        if (result.stagePatch) {
+                            nextStage = { ...(nextStage ?? p.stageState), ...result.stagePatch(p.stageState) };
+                        }
                         return {
                             ...p,
                             ...(result.updates?.currentSceneId !== undefined ? { currentSceneId: result.updates.currentSceneId } : {}),
@@ -6260,7 +6391,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             ...(result.updates?.currentIndex !== undefined ? { currentIndex: result.updates.currentIndex } : {}),
                             ...(result.updates?.commandStack !== undefined ? { commandStack: result.updates.commandStack } : {}),
                             ...(result.updates?.variables !== undefined || isSceneChange ? { variables: mergedVariables } : {}),
-                            ...(result.updates?.stageState !== undefined ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {}),
+                            ...(nextStage !== undefined ? { stageState: nextStage } : {}),
                             ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
                             ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
                         };
@@ -7174,9 +7305,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // Run every non-inline action through the shared UI-action pipeline (same as buttons), so
         // choices support the full action set (Call Common Event, Go To Screen, Play Sound, toggles,
         // Exit Game, …). SetVariable/Jump/Label/OpenURL were already handled inline above.
+        // CallCommonEvent gets resumeAtCurrent: the state update above ALREADY advanced
+        // currentIndex past the Choice to the next un-run command, so the common event must
+        // return to currentIndex itself — +1 would skip the command right after the choice.
         for (const action of allActions) {
             if (!INLINE_CHOICE_ACTIONS.has(action.type)) {
-                handleUIAction(action);
+                handleUIAction(action, action.type === UIActionType.CallCommonEvent ? { resumeAtCurrent: true } : undefined);
             }
         }
     };
@@ -7300,7 +7434,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         variableStoreRef.current = null;
     }, [project.scenes]);
 
-    const handleUIAction = (action: VNUIAction) => {
+    // opts.resumeAtCurrent (CallCommonEvent only): the caller has ALREADY advanced currentIndex
+    // to the next un-run command (choice selection does this before running its actions), so the
+    // common event must return to currentIndex itself, not currentIndex + 1 — otherwise the
+    // command immediately after the choice is skipped.
+    const handleUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
         runtimeDebugLog('handleUIAction called with:', action.type, action);
 
         // Per-action conditions: skip this action if its conditions aren't currently met.
@@ -7326,11 +7464,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
-        executeUIAction(action);
+        executeUIAction(action, opts);
     };
 
-    const executeUIAction = (action: VNUIAction) => {
-        if (!playerState && action.type === UIActionType.StartNewGame) {
+    const executeUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
+        if (action.type === UIActionType.StartNewGame) {
+            // Always start fresh — `startNewGame` rebuilds playerState and clears every screen/HUD
+            // stack, so it works from the title OR from an in-game menu (a menu opened over a running
+            // game via Go To Screen / Toggle Screen leaves playerState non-null). The old `!playerState`
+            // gate made New Game silently do nothing whenever a game was still running underneath —
+            // and the confirm dialog already guards the "lose progress?" case before we get here.
             startNewGameWithFade();
         } else if (!playerState && action.type === UIActionType.ContinueGame) {
             // Continue from title screen: load auto-save (slot 0), fallback to new game
@@ -7678,10 +7821,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             stopAllSfx();
             if (isStandalone) {
                 // A genuine built/exported game. Desktop (Electron): quit the whole app.
-                // Web: best-effort close the tab (browsers may block it for non-script windows).
                 const electronAPI = (window as any).electronAPI;
                 if (electronAPI?.quitApp) { electronAPI.quitApp(); return; }
-                try { window.close(); } catch { /* ignore — browsers may block window.close() */ }
+                // Web export: browsers BLOCK window.close() for any tab the script didn't itself
+                // open (the overwhelmingly common case for a hosted game on itch.io/web), so it
+                // silently does nothing — players reported "Exit Game does nothing". Try it for the
+                // rare openable case, then fall back to returning to the title screen so the button
+                // is never dead. The fallback fires next tick; if the tab actually closed, it's moot.
+                try { window.close(); } catch { /* blocked */ }
+                window.setTimeout(() => {
+                    if (typeof document !== 'undefined' && !document.hidden) {
+                        executeUIAction({ type: UIActionType.QuitToTitle } as VNUIAction);
+                    }
+                }, 60);
                 return;
             }
             // Editor test-play: ONLY close the preview overlay back to the editor — never quit the
@@ -8215,6 +8367,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             const ce = (project.commonEvents || {})[ccAction.commonEventId];
             if (!ce || !ce.enabled || !ce.commands || ce.commands.length === 0) {
                 runtimeDebugWarn('[CallCommonEvent action] event not found / disabled / empty');
+                // Visible warning: a waiting button suppresses its own advance when it calls a
+                // common event, so a broken/disabled reference would otherwise stall silently.
+                notify('A "Call Common Event" action points to a missing, disabled, or empty event.', 'warning');
                 return;
             }
             if (!playerState || playerState.mode !== 'playing') {
@@ -8239,7 +8394,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const newStack = [...p.commandStack, {
                     sceneId: p.currentSceneId,
                     commands: p.currentCommands,
-                    index: p.currentIndex + 1,
+                    // Return point: normally the command AFTER the current (waiting) one. When the
+                    // caller already advanced the index to the next un-run command (choice flow),
+                    // resume AT it — +1 here would skip the command right after the choice.
+                    index: opts?.resumeAtCurrent ? p.currentIndex : p.currentIndex + 1,
                     commonEventId: ce.id,
                     ...(Object.keys(savedVariables).length > 0 ? { savedVariables } : {}),
                     ...(clearedVariables.length > 0 ? { clearedVariables } : {}),
@@ -10212,8 +10370,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     from current → closing stays mounted (only its isClosing prop flips and the
                     CSS animation switches). Splitting them into two separate JSX blocks used to
                     force React to unmount the old screen and remount it under the "closing"
-                    block, causing a one-frame gap that looked like flicker during crossfades. */}
-                {(() => {
+                    block, causing a one-frame gap that looked like flicker during crossfades.
+
+                    GUARD: never render MENU-stack screens while the game is actively playing.
+                    Menu/title screens belong to the title or a PAUSED game; during 'playing' the
+                    scene + HUD own the view. Without this, a stale `screenStack` entry (e.g. the
+                    title left mounted because a New Game started without the stack re-rendering) can
+                    sit on top of a running scene — the reported "New Game starts but the title never
+                    clears; navigating away and back reveals the scene". This makes the title vanish
+                    the instant the game starts, independent of when `setScreenStack([])` settles. */}
+                {(!playerState || playerState.mode === 'paused') && (() => {
                     const ordered: { id: VNID; isClosing: boolean }[] = [];
                     const topClosingMenu = !!currentScreenId && closingScreens.has(currentScreenId);
                     if (topClosingMenu && screenStack.length >= 2) {

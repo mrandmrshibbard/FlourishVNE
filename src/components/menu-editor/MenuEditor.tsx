@@ -5,7 +5,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
@@ -33,6 +33,88 @@ const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject
         console.error('Error rendering UI element:', element.id, err);
         return <div className="w-full h-full bg-red-500/20 text-red-300 text-xs p-1">{t('menuEditor.renderError')}</div>;
     }
+};
+
+// ── Free-placement slot editing ──────────────────────────────────────────────
+// When a SaveSlotGrid / CGGallery element is in `slotLayout: 'free'`, each slot is
+// positioned individually. We render one ResizableDraggable per slot rect so the
+// author drags/resizes each box exactly like any other element. All slots map to a
+// single parent element; selecting a slot selects that element's inspector.
+
+/** Static preview of a single slot, matching the in-game look (empty save card / CG thumb). */
+const FreeSlotPreview: React.FC<{ element: UISaveSlotGridElement | UICGGalleryElement, index: number, ring: boolean }> = ({ element, index, ring }) => {
+    const ringShadow = ring ? '0 0 0 1px rgba(56,189,248,0.7)' : undefined;
+    if (element.type === UIElementType.SaveSlotGrid) {
+        const el = element as UISaveSlotGridElement;
+        const slotBgColor = el.slotBackgroundColor || '#1e293b';
+        const slotBorderColor = el.slotBorderColor || '#475569';
+        const slotHeaderColor = el.slotHeaderColor || '#7dd3fc';
+        const baseFont = fontSettingsToStyle(el.font);
+        const emptyStyle = el.emptySlotFont
+            ? fontSettingsToStyle(el.emptySlotFont)
+            : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+        return (
+            <div style={{ width: '100%', height: '100%', backgroundColor: slotBgColor, border: `2px solid ${slotBorderColor}`, borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: ringShadow }}>
+                <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
+                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 8%' }}>
+                        <span style={{ ...emptyStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{el.emptySlotText}</span>
+                    </div>
+                    {!el.hideSlotLabel && (
+                        <div style={{ position: 'absolute', top: 4, left: 4, ...baseFont, color: slotHeaderColor, fontWeight: 'bold', textShadow: '0 2px 4px rgba(0,0,0,0.7)' }}>Slot {index + 1}</div>
+                    )}
+                </div>
+                {!el.hideInfoBar && <div style={{ flex: '0 0 auto', padding: '4px 8px 6px', backgroundColor: 'rgba(0,0,0,0.35)' }} />}
+            </div>
+        );
+    }
+    const el = element as UICGGalleryElement;
+    return (
+        <div style={{ width: '100%', height: '100%', border: `2px solid ${el.thumbnailBorderColor || '#4D3273'}`, borderRadius: el.thumbnailBorderRadius ?? 8, backgroundColor: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: ringShadow }}>
+            <span style={{ fontSize: 11, color: '#cbd5e1' }}>CG {index + 1}</span>
+        </div>
+    );
+};
+
+const FreeSlotHandles: React.FC<{
+    element: UISaveSlotGridElement | UICGGalleryElement;
+    parentSize: { width: number; height: number };
+    isElementSelected: boolean;
+    focusedSlot: string | null;
+    onSelectSlot: (index: number, e: React.MouseEvent) => void;
+    onUpdateSlot: (index: number, rect: { x: number; y: number; width: number; height: number }) => void;
+    onContextMenu: (e: React.MouseEvent) => void;
+}> = ({ element, parentSize, isElementSelected, focusedSlot, onSelectSlot, onUpdateSlot, onContextMenu }) => {
+    const isSave = element.type === UIElementType.SaveSlotGrid;
+    const allRects = element.slotRects || [];
+    // Save grids cap visible slots at slotCount (the engine does too); galleries show every placed box.
+    const rects = isSave ? allRects.slice(0, (element as UISaveSlotGridElement).slotCount) : allRects;
+    const layer = (element as { layer?: number }).layer ?? 0;
+    return (
+        <>
+            {rects.map((rect, i) => {
+                if (!rect) return null;
+                const key = `${element.id}:${i}`;
+                const focused = isElementSelected && focusedSlot === key;
+                return (
+                    <ResizableDraggable
+                        key={key}
+                        x={rect.x} y={rect.y} width={rect.width} height={rect.height}
+                        anchorX={0} anchorY={0}
+                        parentSize={parentSize}
+                        isSelected={focused}
+                        onSelect={(e) => onSelectSlot(i, e)}
+                        onUpdate={(u) => onUpdateSlot(i, u)}
+                        onContextMenu={onContextMenu}
+                        zIndex={layer}
+                        snapGrid={1}
+                        label={isSave ? `Slot ${i + 1}` : `CG ${i + 1}`}
+                    >
+                        <FreeSlotPreview element={element} index={i} ring={isElementSelected && !focused} />
+                    </ResizableDraggable>
+                );
+            })}
+        </>
+    );
 };
 
 // Inventory grid preview for the editor canvas. Mirrors the in-game grid: when no fixed row count is set,
@@ -443,6 +525,35 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
             </div>;
         case UIElementType.Inventory:
             return <InventoryPreview inv={element as UIInventoryGridElement} project={project} />;
+        case UIElementType.Meter: {
+            // Editor preview: render with the bound variable's DEFAULT value (live values only exist in test-play).
+            const m = element as UIMeterElement;
+            const boundVar = m.variableId ? project.variables[m.variableId] : undefined;
+            const raw = Number(boundVar?.defaultValue ?? 0);
+            const min = m.minValue ?? (boundVar as any)?.min ?? 0;
+            const max = m.maxValue ?? (boundVar as any)?.max ?? 100;
+            const pct = Math.max(0, Math.min(1, (raw - min) / ((max - min) || 1)));
+            const dir = m.direction || 'ltr';
+            const cut = (1 - pct) * 100;
+            const clipPath = dir === 'rtl' ? `inset(0 0 0 ${cut}%)` : dir === 'up' ? `inset(${cut}% 0 0 0)` : `inset(0 ${cut}% 0 0)`;
+            const fill = m.fillColorEnd
+                ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${m.fillColor || '#a78bfa'}, ${m.fillColorEnd})`
+                : (m.fillColor || '#a78bfa');
+            const radius = m.borderRadius ?? 6;
+            const valueText = m.valueFormat === 'percent' ? `${Math.round(pct * 100)}%` : m.valueFormat === 'valueMax' ? `${raw}/${max}` : `${raw}`;
+            return <div className="w-full h-full flex flex-col gap-0.5">
+                {m.showLabel && <div className="text-[10px] text-white leading-tight truncate">{m.label || boundVar?.name || 'Meter'}</div>}
+                <div className="relative flex-1 overflow-hidden" style={{
+                    minHeight: 4,
+                    borderRadius: radius,
+                    backgroundColor: m.backgroundColor || 'rgba(0,0,0,0.4)',
+                    ...(m.borderColor ? { border: `1px solid ${m.borderColor}` } : {}),
+                }}>
+                    <div className="absolute inset-0" style={{ clipPath, background: fill, borderRadius: radius }} />
+                    {m.showValue && <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{valueText}</div>}
+                </div>
+            </div>;
+        }
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
@@ -480,6 +591,9 @@ const MenuEditor: React.FC<{
     
     // Clipboard for copy/cut/paste (persists across renders via ref)
     const clipboardRef = useRef<{ elements: VNUIElement[]; isCut: boolean }>({ elements: [], isCut: false });
+
+    // Which individual free-placement slot is focused (shows resize handles), as `${elementId}:${index}`.
+    const [freeSlotFocus, setFreeSlotFocus] = useState<string | null>(null);
 
     // Defer rendering elements to give the browser time to settle
     const [isReady, setIsReady] = useState(false);
@@ -627,6 +741,16 @@ const MenuEditor: React.FC<{
 
     const handleUpdateElement = (elementId: VNID, updates: Partial<VNUIElement>) => {
         dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId, updates } });
+    };
+
+    /** Patch a single free-placement slot rect by index, preserving the others. Only one slot
+     *  moves per drag gesture, so reading the current array from the render closure is safe. */
+    const handleUpdateSlotRect = (elementId: VNID, index: number, rect: { x: number; y: number; width: number; height: number }) => {
+        const el = screen?.elements?.[elementId] as UISaveSlotGridElement | UICGGalleryElement | undefined;
+        if (!el) return;
+        const rects = [...(el.slotRects || [])];
+        rects[index] = rect;
+        handleUpdateElement(elementId, { slotRects: rects } as Partial<VNUIElement>);
     };
 
     /** Hot spots / draggable elements / image maps are all `VNUIElement` entries
@@ -878,6 +1002,27 @@ const MenuEditor: React.FC<{
                         interactive-element overlays below, read from `screen.elements`. */}
                     {isReady && stageSize.width > 0 && Object.values(screen.elements).map((element: VNUIElement) => {
                         if (isInteractiveElement(element)) return null;
+                        // Free-placement SaveSlotGrid / CGGallery: render per-slot drag handles
+                        // instead of one box for the whole element.
+                        if ((element.type === UIElementType.SaveSlotGrid || element.type === UIElementType.CGGallery)
+                            && (element as UISaveSlotGridElement | UICGGalleryElement).slotLayout === 'free') {
+                            return (
+                                <FreeSlotHandles
+                                    key={element.id}
+                                    element={element as UISaveSlotGridElement | UICGGalleryElement}
+                                    parentSize={stageSize}
+                                    isElementSelected={selectedElementIds.includes(element.id)}
+                                    focusedSlot={freeSlotFocus}
+                                    onSelectSlot={(idx, e) => {
+                                        e.stopPropagation();
+                                        handleSelectElement(element.id, e);
+                                        setFreeSlotFocus(`${element.id}:${idx}`);
+                                    }}
+                                    onUpdateSlot={(idx, rect) => handleUpdateSlotRect(element.id, idx, rect)}
+                                    onContextMenu={(e) => handleElementContextMenu(element.id, e)}
+                                />
+                            );
+                        }
                         return (
                             <ResizableDraggable
                                 key={element.id}
@@ -968,6 +1113,7 @@ const MenuEditor: React.FC<{
                     <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
                     <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
                     <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
+                    <button onClick={() => handleAddElement(UIElementType.Meter)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Meter</button>
                 </div>
             </div>
             

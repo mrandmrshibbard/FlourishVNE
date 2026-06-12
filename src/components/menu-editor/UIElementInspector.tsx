@@ -168,7 +168,9 @@ const UIElementInspector: React.FC<{
     screenId: VNID;
     elementId: VNID;
     setSelectedElementId: (id: VNID | null) => void;
-}> = ({ screenId, elementId, setSelectedElementId }) => {
+    /** Deep link to the Systems tab (items/lists/stats) — the reverse of "Edit screen". */
+    onOpenSystems?: (sel: { system: 'items' | 'inventory' | 'stats'; id?: VNID }) => void;
+}> = ({ screenId, elementId, setSelectedElementId, onOpenSystems }) => {
     const { t } = useTranslation('ui');
     const { project, dispatch } = useProject();
     const screen = project.uiScreens[screenId];
@@ -189,9 +191,33 @@ const UIElementInspector: React.FC<{
         setSelectedElementId(null);
     };
 
+    // "Manage in Systems" — resolves where this element's data lives: an inventory grid's
+    // bound list (or the player inventory), or the stat behind a meter's variable.
+    const systemsLink = React.useMemo((): { label: string; sel: { system: 'items' | 'inventory' | 'stats'; id?: VNID } } | null => {
+        if (!onOpenSystems) return null;
+        if (element.type === UIElementType.Inventory) {
+            const collectionId = (element as any).collectionId as VNID | undefined;
+            return { label: collectionId ? 'Manage this item list in Systems →' : 'Manage items in Systems →', sel: { system: 'inventory', id: collectionId } };
+        }
+        if (element.type === UIElementType.Meter) {
+            const varId = (element as any).variableId as VNID | undefined;
+            const allStats = Object.values(project.stats || {}) as import('../../features/stats/types').VNStat[];
+            const stat = varId ? allStats.find(s => Object.values(s.variableIds || {}).includes(varId)) : undefined;
+            if (stat) return { label: `Manage "${stat.name}" stat in Systems →`, sel: { system: 'stats', id: stat.id } };
+            return { label: 'Manage stats in Systems →', sel: { system: 'stats' } };
+        }
+        return null;
+    }, [element, onOpenSystems, project.stats]);
+
     return (
         <Panel title={`Properties: ${element.type}`} className="w-96 flex-shrink-0">
             <div className="flex-grow overflow-y-auto pr-1 space-y-2">
+                {systemsLink && (
+                    <button onClick={() => onOpenSystems!(systemsLink.sel)}
+                        className="w-full text-left text-xs px-2.5 py-2 rounded-lg bg-[var(--accent-lavender)]/10 hover:bg-[var(--accent-lavender)]/20 text-[var(--accent-lavender)] border border-[var(--accent-lavender)]/30 transition-colors">
+                        {systemsLink.label}
+                    </button>
+                )}
                 <FormField label={t('elementInspector.elementName')}><TextInput value={element.name} onChange={e => updateElement({ name: e.target.value })} /></FormField>
                 {getElementGroups(element).map(g => (
                     <CollapsibleSection

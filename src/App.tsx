@@ -16,7 +16,10 @@ import { importProject } from './utils/projectPackager';
 // here — before React mounts — ensures the auto-play effect and the Hub-only
 // MusicPlayer never start a second chiptune AudioContext in the child window.
 try {
-    if (new URLSearchParams(window.location.search).has('manager')) {
+    // Primary: the ?manager=<type> query. Fallback: scan the whole href in case
+    // the param lands in the hash (router) or a custom-scheme load reshapes the URL.
+    if (new URLSearchParams(window.location.search).has('manager') ||
+        /[?&#]manager=/.test(window.location.href)) {
         (window as any).__IS_MANAGER_WINDOW__ = true;
     }
 } catch { /* location unavailable */ }
@@ -91,8 +94,14 @@ const App = () => {
                 if (data.project) {
                     setActiveProject(data.project);
                 }
-                // Mark this as a manager window
+                // Mark this as a manager window. This message is the
+                // guaranteed signal (sent on did-finish-load for every popped
+                // window), so even if the synchronous URL check missed the
+                // ?manager= param, stop any hub music that already auto-started
+                // here — chiptune must only play in the project hub.
                 (window as any).__IS_MANAGER_WINDOW__ = true;
+                toggleBackgroundMusic(false);
+                setIsMusicPlaying(false);
             });
         }
     }, []);

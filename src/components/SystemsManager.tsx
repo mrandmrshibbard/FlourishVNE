@@ -9,33 +9,53 @@
 import React, { useMemo, useState } from 'react';
 import { VNProject } from '../types/project';
 import { VNItem, VNItemCollection, RestockAmountMode, RestockTrigger } from '../features/items/types';
+import { VNStat } from '../features/stats/types';
 import { useProject } from '../contexts/ProjectContext';
 import { getScreenCategory } from '../utils/screenCategory';
 import { createUIElement } from '../utils/uiElementFactory';
-import { UIElementType, UIInventoryGridElement } from '../features/ui/types';
+import { UIElementType, UIInventoryGridElement, UIMeterElement } from '../features/ui/types';
+import { findSystemScreenLinks, SystemScreenLink } from '../utils/systemScreenLinks';
+import SystemWizard from './menu-editor/SystemWizard';
+import { applySystemWizardResult } from '../features/systems/applySystem';
 import { UIActionType, VNCondition } from '../types/shared';
 import { VNID } from '../types';
 import { FormField, TextInput, TextArea, Select } from './ui/Form';
 import AssetSelector from './ui/AssetSelector';
 import UIActionsListEditor from './ui/UIActionsListEditor';
 import ConditionsEditor from './ui/ConditionsEditor';
-import { PlusIcon, TrashIcon, SparklesIcon, ArchiveBoxIcon, GridIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon } from './icons';
+import { PlusIcon, TrashIcon, SparklesIcon, ArchiveBoxIcon, GridIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, AdjustmentsIcon } from './icons';
 
-type SystemId = 'inventory' | 'items';
+type SystemId = 'inventory' | 'items' | 'stats';
 
 interface SystemsManagerProps {
     project?: VNProject;
     /** Jump to the UI editor with a screen (and optionally an element) selected. */
     onOpenScreenInEditor?: (screenId: VNID, elementId?: VNID) => void;
+    /** One-shot deep link from the UI editor ("Manage in Systems" on a grid/meter). */
+    initialSelection?: { system: SystemId; id?: VNID } | null;
+    onSelectionConsumed?: () => void;
 }
 
-const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, onOpenScreenInEditor }) => {
+const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, onOpenScreenInEditor, initialSelection, onSelectionConsumed }) => {
     const { project: ctxProject, dispatch } = useProject();
     const project = projectProp || ctxProject;
     const [selectedSystem, setSelectedSystem] = useState<SystemId>('items');
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [selectedListId, setSelectedListId] = useState<VNID | null>(null);
+    const [selectedStatId, setSelectedStatId] = useState<VNID | null>(null);
     const [inventoryExpanded, setInventoryExpanded] = useState(true);
+    const [wizardKind, setWizardKind] = useState<'shop' | 'inventory' | null>(null);
+
+    // Consume a deep link from the UI editor exactly once, then clear it so it
+    // can't fight subsequent user clicks.
+    React.useEffect(() => {
+        if (!initialSelection) return;
+        setSelectedSystem(initialSelection.system);
+        if (initialSelection.system === 'inventory') { setSelectedListId(initialSelection.id || null); setInventoryExpanded(true); }
+        else if (initialSelection.system === 'items') setSelectedItemId(initialSelection.id || null);
+        else if (initialSelection.system === 'stats') setSelectedStatId(initialSelection.id || null);
+        onSelectionConsumed?.();
+    }, [initialSelection]);
 
     const items = useMemo(() => (Object.values(project.items || {}) as VNItem[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [project.items]);
     const selected = selectedItemId ? project.items?.[selectedItemId] : null;
@@ -89,6 +109,53 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
         onOpenScreenInEditor?.(screenId, grid?.id);
     };
 
+    // Drop a Meter for this stat onto the game HUD-style screen: a small overlay screen with one
+    // meter per target (per character, or the single global bar), then jump to the UI editor.
+    const createStatMeterScreen = (stat: VNStat) => {
+        const screenId: VNID = `screen-${Math.random().toString(36).substring(2, 9)}`;
+        dispatch({ type: 'ADD_UI_SCREEN', payload: { id: screenId, name: `${stat.name} Meters` } });
+        dispatch({ type: 'UPDATE_UI_SCREEN', payload: { screenId, updates: { category: 'system', showDialogue: false, pauseSceneWhileOpen: true, backdropOpacity: 0.6 } } });
+        const targets = Object.entries(stat.variableIds);
+        let firstMeterId: VNID | undefined;
+        targets.forEach(([target, varId], i) => {
+            const meter = createUIElement(UIElementType.Meter, project) as UIMeterElement | null;
+            if (!meter) return;
+            meter.variableId = varId;
+            meter.fillColor = stat.color || meter.fillColor;
+            meter.name = target === 'global' ? stat.name : (project.characters[target]?.name || stat.name);
+            meter.x = 35; meter.y = 15 + i * 10; meter.width = 30; meter.height = 6;
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: meter } });
+            if (!firstMeterId) firstMeterId = meter.id;
+        });
+        const closeBtn = createUIElement(UIElementType.Button, project) as any;
+        if (closeBtn) {
+            closeBtn.name = 'Close'; closeBtn.text = '✕';
+            closeBtn.x = 94; closeBtn.y = 6; closeBtn.width = 7; closeBtn.height = 7; closeBtn.anchorX = 0.5; closeBtn.anchorY = 0.5;
+            closeBtn.action = { type: UIActionType.ReturnToGame };
+            closeBtn.actions = [{ type: UIActionType.ReturnToGame }];
+            dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId, element: closeBtn } });
+        }
+        onOpenScreenInEditor?.(screenId, firstMeterId);
+    };
+
+    // "Shown on these screens" — the workflow bridge back to the UI editor.
+    const ConnectedScreens: React.FC<{ links: SystemScreenLink[]; emptyHint: string }> = ({ links, emptyHint }) => (
+        <div className="mt-3">
+            <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Shown on these screens</h4>
+            {links.length === 0
+                ? <p className="text-[11px] text-[var(--text-muted)] italic">{emptyHint}</p>
+                : <div className="space-y-1">
+                    {links.map(l => (
+                        <div key={`${l.screenId}-${l.elementId}`} className="flex items-center gap-2 bg-[var(--bg-secondary)]/40 rounded-lg p-2 border border-transparent hover:border-[var(--border-default)]">
+                            <GridIcon className="w-4 h-4 text-[var(--accent-mint)] flex-shrink-0" />
+                            <span className="text-sm text-white truncate flex-1">{l.screenName}</span>
+                            <button onClick={() => onOpenScreenInEditor?.(l.screenId, l.elementId)} className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"><PencilIcon className="w-3.5 h-3.5" /> Edit screen</button>
+                        </div>
+                    ))}
+                </div>}
+        </div>
+    );
+
     const addItem = () => {
         const id = `item-${Math.random().toString(36).substring(2, 9)}`;
         dispatch({ type: 'ADD_ITEM', payload: { id, name: `Item ${items.length + 1}`, scope: 'global', usable: false } });
@@ -110,6 +177,23 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
         [arr[i], arr[j]] = [arr[j], arr[i]];
         arr.forEach((it, idx) => { if ((it.order ?? -1) !== idx) dispatch({ type: 'UPDATE_ITEM', payload: { itemId: it.id, updates: { order: idx } } }); });
     };
+
+    // ── Stats CRUD ──
+    const stats = useMemo(() => (Object.values(project.stats || {}) as VNStat[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [project.stats]);
+    const selectedStat = selectedStatId ? project.stats?.[selectedStatId] : null;
+    const addStat = () => {
+        const id = `stat-${Math.random().toString(36).substring(2, 9)}`;
+        dispatch({ type: 'ADD_STAT', payload: { id, name: `Stat ${stats.length + 1}`, min: 0, max: 100, defaultValue: 0 } });
+        setSelectedSystem('stats');
+        setSelectedStatId(id);
+    };
+    const updateStat = (statId: VNID, updates: Partial<VNStat>) => dispatch({ type: 'UPDATE_STAT', payload: { statId, updates } });
+    const removeStat = (statId: VNID) => {
+        dispatch({ type: 'DELETE_STAT', payload: { statId, deleteVariables: true } });
+        if (selectedStatId === statId) setSelectedStatId(null);
+    };
+    const setStatCharacters = (statId: VNID, characterIds: VNID[]) => dispatch({ type: 'SET_STAT_CHARACTERS', payload: { statId, characterIds } });
+    const allCharacters = useMemo(() => Object.values(project.characters || {}) as any[], [project.characters]);
 
     const countVar = selected ? project.variables[selected.countVariableId] : null;
     const countVarName = countVar?.name || selected?.name || '';
@@ -174,6 +258,8 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                     </div>
                     {sysBtn('items', <GridIcon className="w-5 h-5" />, 'Items',
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)]">{items.length}</span>)}
+                    {sysBtn('stats', <AdjustmentsIcon className="w-5 h-5" />, 'Stats',
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)]">{stats.length}</span>)}
                 </div>
             </div>
 
@@ -270,6 +356,118 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                 <div className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-secondary)]/40 rounded-lg p-2.5 mt-2">
                                     Quantity is tracked by the number variable <span className="font-mono text-[var(--text-secondary)]">{countVarName}</span>. Use <span className="font-mono">{'{'}{countVarName}{'}'}</span> in any text to show how many the player owns, or check it in conditions.
                                 </div>
+                            </div>
+                        )}
+                    </div>
+                </>
+            ) : selectedSystem === 'stats' ? (
+                <>
+                    {/* ── Pane 2: stat list ── */}
+                    <div className="w-72 flex-shrink-0 bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col">
+                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--border-subtle)]">
+                            <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Stats</span>
+                            <button onClick={addStat} className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1"><PlusIcon className="w-4 h-4" /> Add</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {stats.length === 0 && (
+                                <div className="text-xs text-[var(--text-muted)] px-1 py-2 space-y-1.5">
+                                    <p className="italic">No stats yet.</p>
+                                    <p>Stats track gameplay numbers — affection, health, XP, reputation. Define one once and it works in conditions, choices, and meters.</p>
+                                </div>
+                            )}
+                            {stats.map(st => (
+                                <button key={st.id} onClick={() => setSelectedStatId(st.id)}
+                                    className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors border ${selectedStatId === st.id ? 'bg-sky-500/15 border-sky-500/50' : 'bg-[var(--bg-secondary)]/40 border-transparent hover:bg-[var(--bg-secondary)]'}`}>
+                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: st.color || 'var(--accent-lavender)' }} />
+                                    <span className="text-sm text-white truncate flex-1">{st.name}</span>
+                                    <span className="text-[9px] text-[var(--text-muted)]">{st.appliesTo === 'characters' ? `${(st.characterIds || []).length} char${(st.characterIds || []).length === 1 ? '' : 's'}` : 'global'}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* ── Pane 3: stat details ── */}
+                    <div className="flex-1 overflow-y-auto bg-[var(--bg-primary)]">
+                        {!selectedStat ? (
+                            <div className="h-full flex items-center justify-center text-center p-8">
+                                <div className="max-w-sm">
+                                    <AdjustmentsIcon className="w-14 h-14 text-slate-700 mx-auto mb-3" />
+                                    <h3 className="text-white font-bold mb-1">Select or add a stat</h3>
+                                    <p className="text-sm text-[var(--text-secondary)]">A stat is a tracked number — affection, health, XP. Global, or one value per character ("Alice — Affection"). Change it from choices, check it in conditions, and show it with a Meter.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="max-w-2xl mx-auto p-5 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-xl font-bold text-white">{selectedStat.name}</h3>
+                                    <button onClick={() => removeStat(selectedStat.id)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium"><TrashIcon className="w-4 h-4" /> Delete</button>
+                                </div>
+
+                                <FormField label="Name"><TextInput value={selectedStat.name} onChange={e => updateStat(selectedStat.id, { name: e.target.value })} /></FormField>
+                                <FormField label="Description (optional)"><TextArea value={selectedStat.description || ''} onChange={e => updateStat(selectedStat.id, { description: e.target.value })} placeholder="What this stat means in your story." /></FormField>
+                                <AssetSelector label="Icon (optional)" assetType="images" allowVideo value={selectedStat.icon?.id || null}
+                                    onChange={id => updateStat(selectedStat.id, { icon: id ? { type: 'image', id } : null })} />
+
+                                <div className="grid grid-cols-4 gap-3">
+                                    <FormField label="Minimum"><TextInput type="number" value={selectedStat.min} onChange={e => updateStat(selectedStat.id, { min: parseFloat(e.target.value) || 0 })} /></FormField>
+                                    <FormField label="Maximum"><TextInput type="number" value={selectedStat.max} onChange={e => updateStat(selectedStat.id, { max: parseFloat(e.target.value) || 0 })} /></FormField>
+                                    <FormField label="Starts at"><TextInput type="number" value={selectedStat.defaultValue} onChange={e => updateStat(selectedStat.id, { defaultValue: parseFloat(e.target.value) || 0 })} /></FormField>
+                                    <FormField label="Meter color">
+                                        <input type="color" value={selectedStat.color || '#a78bfa'} onChange={e => updateStat(selectedStat.id, { color: e.target.value })}
+                                            className="w-full h-9 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-subtle)] cursor-pointer" />
+                                    </FormField>
+                                </div>
+
+                                <FormField label="Who has this stat?">
+                                    <Select value={selectedStat.appliesTo} onChange={e => {
+                                        const appliesTo = e.target.value as 'global' | 'characters';
+                                        if (appliesTo === selectedStat.appliesTo) return;
+                                        // Switching modes re-materializes the backing variables: drop the old
+                                        // ones and create the new set (delete+add keeps the reducer simple).
+                                        dispatch({ type: 'DELETE_STAT', payload: { statId: selectedStat.id, deleteVariables: true } });
+                                        dispatch({ type: 'ADD_STAT', payload: { id: selectedStat.id, name: selectedStat.name, description: selectedStat.description, icon: selectedStat.icon, min: selectedStat.min, max: selectedStat.max, defaultValue: selectedStat.defaultValue, color: selectedStat.color, appliesTo, characterIds: appliesTo === 'characters' ? [] : undefined, order: selectedStat.order } });
+                                    }}>
+                                        <option value="global">One shared value (e.g. money, reputation)</option>
+                                        <option value="characters">One value per character (e.g. affection)</option>
+                                    </Select>
+                                </FormField>
+
+                                {selectedStat.appliesTo === 'characters' && (
+                                    <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/40 space-y-1.5">
+                                        <p className="text-xs font-semibold text-[var(--text-secondary)]">Characters with this stat:</p>
+                                        {allCharacters.length === 0 && <p className="text-xs text-[var(--text-muted)] italic">No characters in the project yet — add some in the Characters tab first.</p>}
+                                        {allCharacters.map(ch => {
+                                            const has = (selectedStat.characterIds || []).includes(ch.id);
+                                            return (
+                                                <label key={ch.id} className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" checked={has} onChange={e => {
+                                                        const cur = selectedStat.characterIds || [];
+                                                        setStatCharacters(selectedStat.id, e.target.checked ? [...cur, ch.id] : cur.filter(id => id !== ch.id));
+                                                    }} className="w-4 h-4" />
+                                                    <span className="text-sm text-[var(--text-primary)]">{ch.name}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                <div className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-secondary)]/40 rounded-lg p-2.5 mt-2">
+                                    {selectedStat.appliesTo === 'global' ? (
+                                        <>Tracked by the number variable <span className="font-mono text-[var(--text-secondary)]">{project.variables[selectedStat.variableIds.global]?.name || selectedStat.name}</span>. Use <span className="font-mono">{'{'}{project.variables[selectedStat.variableIds.global]?.name || selectedStat.name}{'}'}</span> in any text, change it with Set Variable, check it in conditions, or show it with a Meter element.</>
+                                    ) : (
+                                        <>Each character gets their own number variable (e.g. <span className="font-mono text-[var(--text-secondary)]">{allCharacters[0]?.name || 'Alice'} — {selectedStat.name}</span>). Use <span className="font-mono">{'{'}{allCharacters[0]?.name || 'Alice'} — {selectedStat.name}{'}'}</span> in text, change them with Set Variable in choices, check them in conditions, or show them with Meter elements.</>
+                                    )}
+                                </div>
+
+                                <button onClick={() => createStatMeterScreen(selectedStat)}
+                                    disabled={Object.keys(selectedStat.variableIds).length === 0}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-mint)]/20 hover:bg-[var(--accent-mint)]/30 text-[var(--accent-mint)] rounded-lg font-medium transition-all border border-[var(--accent-mint)]/40 disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <PlusIcon className="w-4 h-4" /> Create meter screen
+                                </button>
+                                <p className="text-[11px] text-[var(--text-muted)] -mt-2">Creates a screen with one bar per {selectedStat.appliesTo === 'characters' ? 'character' : 'value'} and takes you to the UI editor to style it. You can also add a single <span className="font-mono">Meter</span> element to any existing screen.</p>
+
+                                <ConnectedScreens links={findSystemScreenLinks(project, { kind: 'stat', id: selectedStat.id })}
+                                    emptyHint="Not displayed anywhere yet — create a meter screen above, or add a Meter element to any screen in the UI editor." />
                             </div>
                         )}
                     </div>
@@ -418,6 +616,9 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                             </label>
                         </div>
                         )}
+
+                        <ConnectedScreens links={findSystemScreenLinks(project, { kind: 'collection', id: selectedList.id })}
+                            emptyHint="Not displayed anywhere yet — use the create-screen button above, or bind an existing Inventory grid to this list in the UI editor." />
                     </div>
                 </div>
             ) : (
@@ -445,6 +646,19 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                         </button>
                         <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Creates a System-categorized screen with an item grid (opens paused + dimmed over the scene) and takes you to the UI editor to arrange it. Open it in-game with a button's <span className="font-mono">Toggle Screen</span> action.</p>
 
+                        {/* Guided setup — the wizards walk through items, currency, and layout in 3 steps. */}
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                            <button onClick={() => setWizardKind('inventory')}
+                                className="flex items-center justify-center gap-2 px-3 py-2 bg-[var(--accent-lavender)]/15 hover:bg-[var(--accent-lavender)]/25 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40 text-sm">
+                                <SparklesIcon className="w-4 h-4" /> Inventory wizard
+                            </button>
+                            <button onClick={() => setWizardKind('shop')}
+                                className="flex items-center justify-center gap-2 px-3 py-2 bg-[var(--accent-lavender)]/15 hover:bg-[var(--accent-lavender)]/25 text-[var(--accent-lavender)] rounded-lg font-medium transition-all border border-[var(--accent-lavender)]/40 text-sm">
+                                <SparklesIcon className="w-4 h-4" /> Shop wizard
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-muted)] mt-1">New here? The wizards set up items, currency, and a finished screen in three guided steps — everything they generate is a normal screen you can re-style afterwards.</p>
+
                         {systemScreens.length > 0 && (
                             <div className="mt-4">
                                 <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Inventory screens</h4>
@@ -461,6 +675,22 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* Guided 3-step setup (items → currency/layout → review). Generates ordinary screens +
+                variables, then jumps straight to the UI editor on the fresh screen. */}
+            {wizardKind && (
+                <SystemWizard
+                    isOpen
+                    kind={wizardKind}
+                    project={project}
+                    onClose={() => setWizardKind(null)}
+                    onGenerate={(result) => {
+                        const { screenId } = applySystemWizardResult(result, project, dispatch);
+                        setWizardKind(null);
+                        if (screenId) onOpenScreenInEditor?.(screenId);
+                    }}
+                />
             )}
         </div>
     );

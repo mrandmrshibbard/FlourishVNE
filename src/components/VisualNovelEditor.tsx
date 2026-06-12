@@ -68,6 +68,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
     const [showTour, setShowTour] = useState(() => !localStorage.getItem('flourish:tourCompleted'));
     const [uiEditorMode, setUiEditorMode] = useState<'screens' | 'ingame'>('screens');
+    // One-shot deep link into the Systems tab (set by "Manage in Systems" links in the UI editor).
+    const [systemsSelection, setSystemsSelection] = useState<{ system: 'items' | 'inventory' | 'stats'; id?: VNID } | null>(null);
 
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
@@ -186,6 +188,12 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         // button, etc.) shows immediately — handleSetActiveMenuScreen clears the selection, so set after.
         if (elementId) setSelectedUIElementIds([elementId]);
     };
+    // The reverse jump: UI editor → Systems tab with the right item list / stat selected
+    // (the mirror of handleOpenScreenInUIEditor; sets the tab directly for the same reason).
+    const handleOpenInSystems = (sel: { system: 'items' | 'inventory' | 'stats'; id?: VNID }) => {
+        setSystemsSelection(sel);
+        setActiveTab('systems');
+    };
      const handleSetActiveCharacter = (id: VNID | null) => {
         setActiveCharacterId(id);
         setActiveMenuScreenId(null);
@@ -252,7 +260,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                         );
                     }
                 }
-                return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} />;
+                return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} onOpenSystems={handleOpenInSystems} />;
             }
             return <ScreenInspector screenId={activeMenuScreenId} />;
         }
@@ -636,7 +644,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     ) : activeTab === 'systems' ? (
                         <ErrorBoundary panelName="Systems">
                             <Suspense fallback={<div className="text-slate-300 p-4">Loading systems…</div>}>
-                                <SystemsManager project={project} onOpenScreenInEditor={handleOpenScreenInUIEditor} />
+                                <SystemsManager project={project} onOpenScreenInEditor={handleOpenScreenInUIEditor} initialSelection={systemsSelection} onSelectionConsumed={() => setSystemsSelection(null)} />
                             </Suspense>
                         </ErrorBoundary>
                     ) : null}

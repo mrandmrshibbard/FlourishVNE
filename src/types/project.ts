@@ -8,6 +8,7 @@ import { VNScript } from './scripting';
 import { VNCommonEvent } from './commonEvents';
 import { PluginRegistryEntry, VNPlugin } from './plugins';
 import { VNItem, VNItemCollection } from '../features/items/types';
+import { VNStat } from '../features/stats/types';
 
 export interface VNProjectFont {
     id: VNID;
@@ -81,6 +82,9 @@ export interface VNProject {
      *  backed by their own count variables. Additive-optional; the player's own inventory stays the
      *  global item counts (not a collection). */
     itemCollections?: Record<VNID, VNItemCollection>;
+    /** Gameplay stat registry (affection, health, XP…). Each stat is backed by one number
+     *  variable per target (global, or one per character). Additive-optional. */
+    stats?: Record<VNID, VNStat>;
     /** User-defined scripts */
     scripts?: Record<VNID, VNScript>;
     /** Common Events — reusable command sequences callable from any scene */

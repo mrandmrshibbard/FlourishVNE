@@ -1,7 +1,7 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
@@ -234,6 +234,27 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
                 hideUnowned: true,
                 nameFont: project.ui.dialogueTextFont,
                 emptyText: 'Empty',
+            };
+            return el;
+        }
+        case UIElementType.Meter: {
+            // Prefer a stat's backing variable (the meter's main use), else the first number variable.
+            const firstStat = Object.values(project.stats || {})[0];
+            const statVarId = firstStat ? Object.values(firstStat.variableIds || {})[0] : undefined;
+            const numberVars = Object.values(project.variables).filter(v => v.type === 'number');
+            const el: UIMeterElement = {
+                ...base, name: 'Meter', type,
+                width: 30, height: 5, x: 35, y: 47.5,
+                variableId: statVarId || numberVars[0]?.id,
+                direction: 'ltr',
+                fillColor: firstStat?.color || '#a78bfa',
+                backgroundColor: 'rgba(0,0,0,0.4)',
+                borderRadius: 6,
+                showLabel: true,
+                showValue: true,
+                valueFormat: 'valueMax',
+                labelFont: project.ui.dialogueTextFont,
+                valueFont: project.ui.dialogueTextFont,
             };
             return el;
         }

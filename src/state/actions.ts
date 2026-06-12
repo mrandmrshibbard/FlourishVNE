@@ -8,6 +8,7 @@ import { ScriptAction } from '../features/scripting/state/scriptReducer';
 import { CommonEventAction } from '../features/common-events/state/commonEventReducer';
 import { PluginAction } from '../features/plugins/state/pluginReducer';
 import { ItemAction } from '../features/items/state/itemReducer';
+import { StatAction } from '../features/stats/state/statReducer';
 
 export type ProjectAction =
     | ProjectAction_Project
@@ -19,4 +20,5 @@ export type ProjectAction =
     | ScriptAction
     | CommonEventAction
     | PluginAction
-    | ItemAction;
+    | ItemAction
+    | StatAction;

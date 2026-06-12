@@ -64,12 +64,8 @@ export function handleShowText(
 
   return {
     advance: !hasTransition,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        textOverlays: [...playerState.stageState.textOverlays, overlay],
-      },
-    },
+    // Functional patch so stacked/runAsync Show Text commands compose (append vs latest).
+    stagePatch: (prev) => ({ textOverlays: [...prev.textOverlays, overlay] }),
     delay,
     callback: hasTransition ? context.advance : undefined,
   };
@@ -130,15 +126,10 @@ export function handleHideText(
       },
     };
   } else {
-    // instant remove
+    // instant remove — functional patch so stacked Hide Text commands compose.
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          textOverlays: overlays.filter((o) => o.id !== command.targetCommandId),
-        },
-      },
+      stagePatch: (prev) => ({ textOverlays: prev.textOverlays.filter((o) => o.id !== command.targetCommandId) }),
     };
   }
 }
@@ -192,12 +183,8 @@ export function handleShowImage(
 
   return {
     advance: !hasTransition,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        imageOverlays: [...playerState.stageState.imageOverlays, overlay],
-      },
-    },
+    // Functional patch so stacked/runAsync Show Image commands compose (append vs latest).
+    stagePatch: (prev) => ({ imageOverlays: [...prev.imageOverlays, overlay] }),
     delay,
     callback: hasTransition ? context.advance : undefined,
   };
@@ -259,12 +246,8 @@ export function handleHideImage(
   } else {
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          imageOverlays: overlays.filter((o) => o.id !== command.targetCommandId),
-        },
-      },
+      // Functional patch so stacked Hide Image commands compose.
+      stagePatch: (prev) => ({ imageOverlays: prev.imageOverlays.filter((o) => o.id !== command.targetCommandId) }),
     };
   }
 }
@@ -362,12 +345,11 @@ export function handleShowButton(
 
   return {
     advance: shouldAdvance,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        buttonOverlays: [...playerState.stageState.buttonOverlays, buttonOverlay],
-      },
-    },
+    // Functional patch (appends against the LATEST overlays) so stacked/runAsync Show Button
+    // commands compose instead of clobbering each other — e.g. an Exit Game button + a Quit-to-
+    // Title button stacked together: the snapshot path made the second overwrite the first, so
+    // only one rendered ("two buttons, only one works"; the missing one looked like a dead click).
+    stagePatch: (prev) => ({ buttonOverlays: [...prev.buttonOverlays, buttonOverlay] }),
     delay,
     callback,
   };
@@ -442,12 +424,8 @@ export function handleShowItem(
   const hasTransition = command.transition && command.transition !== 'instant';
   return {
     advance: !hasTransition,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        buttonOverlays: [...playerState.stageState.buttonOverlays, overlay],
-      },
-    },
+    // Functional patch so a stacked Show Item composes with other overlay commands.
+    stagePatch: (prev) => ({ buttonOverlays: [...prev.buttonOverlays, overlay] }),
     delay: hasTransition ? (command.duration ?? 0.3) * 1000 + 100 : 0,
     callback: hasTransition ? context.advance : undefined,
   };
@@ -514,12 +492,8 @@ export function handleHideButton(
   } else {
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          buttonOverlays: overlays.filter((o) => o.id !== command.targetCommandId),
-        },
-      },
+      // Functional patch so stacked Hide Button commands compose.
+      stagePatch: (prev) => ({ buttonOverlays: prev.buttonOverlays.filter((o) => o.id !== command.targetCommandId) }),
     };
   }
 }

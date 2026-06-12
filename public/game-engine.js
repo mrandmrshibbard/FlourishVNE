@@ -16,6 +16,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["Inventory"] = "Inventory";
     UIElementType2["HotSpot"] = "HotSpot";
     UIElementType2["ImageMap"] = "ImageMap";
+    UIElementType2["Meter"] = "Meter";
     return UIElementType2;
   })(UIElementType || {});
   var UIActionType = /* @__PURE__ */ ((UIActionType2) => {
@@ -304,6 +305,130 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     if (!changed) return project;
     return { ...project, scenes, ...commonEvents ? { commonEvents } : {} };
   }
+  const generateId$7 = () => Math.random().toString(36).substring(2, 9);
+  const statVarName = (statName, characterName) => characterName ? `${characterName} — ${statName}` : statName;
+  const makeStatVar = (id, name, stat) => ({
+    id,
+    name,
+    type: "number",
+    defaultValue: stat.defaultValue,
+    scope: "global",
+    min: stat.min,
+    max: stat.max
+  });
+  const statReducer = (state, action) => {
+    var _a, _b, _c;
+    switch (action.type) {
+      case "ADD_STAT": {
+        const p = action.payload;
+        const statId = p.id || `stat-${generateId$7()}`;
+        const stats = state.stats || {};
+        const min = p.min ?? 0;
+        const max = p.max ?? 100;
+        const defaultValue = p.defaultValue ?? min;
+        const appliesTo = p.appliesTo || "global";
+        const characterIds = appliesTo === "characters" ? p.characterIds || [] : void 0;
+        let variables = state.variables;
+        const variableIds = {};
+        const targets2 = appliesTo === "characters" ? characterIds || [] : ["global"];
+        for (const target of targets2) {
+          const charName = target === "global" ? void 0 : (_a = state.characters[target]) == null ? void 0 : _a.name;
+          if (target !== "global" && !charName) continue;
+          const varId = `var-${generateId$7()}`;
+          variables = { ...variables, [varId]: makeStatVar(varId, statVarName(p.name, charName), { min, max, defaultValue }) };
+          variableIds[target] = varId;
+        }
+        const newStat = {
+          id: statId,
+          name: p.name,
+          description: p.description,
+          icon: p.icon ?? null,
+          min,
+          max,
+          defaultValue,
+          color: p.color,
+          appliesTo,
+          characterIds,
+          variableIds,
+          order: p.order ?? Object.keys(stats).length
+        };
+        return { ...state, variables, stats: { ...stats, [statId]: newStat } };
+      }
+      case "UPDATE_STAT": {
+        const { statId, updates } = action.payload;
+        const stats = state.stats || {};
+        const existing = stats[statId];
+        if (!existing) return state;
+        const merged = { ...existing, ...updates };
+        let variables = state.variables;
+        const rangeChanged = updates.min !== void 0 || updates.max !== void 0 || updates.defaultValue !== void 0;
+        if (updates.name || rangeChanged) {
+          const next = { ...variables };
+          for (const [target, varId] of Object.entries(existing.variableIds)) {
+            const v = next[varId];
+            if (!v) continue;
+            const charName = target === "global" ? void 0 : (_b = state.characters[target]) == null ? void 0 : _b.name;
+            next[varId] = {
+              ...v,
+              name: updates.name ? statVarName(merged.name, charName) : v.name,
+              min: merged.min,
+              max: merged.max,
+              defaultValue: rangeChanged ? merged.defaultValue : v.defaultValue
+            };
+          }
+          variables = next;
+        }
+        return { ...state, variables, stats: { ...stats, [statId]: merged } };
+      }
+      case "DELETE_STAT": {
+        const { statId, deleteVariables } = action.payload;
+        const stats = state.stats || {};
+        const existing = stats[statId];
+        if (!existing) return state;
+        const { [statId]: _removed, ...remainingStats } = stats;
+        let variables = state.variables;
+        if (deleteVariables) {
+          const next = { ...variables };
+          for (const varId of Object.values(existing.variableIds)) delete next[varId];
+          variables = next;
+        }
+        return { ...state, variables, stats: remainingStats };
+      }
+      case "SET_STAT_CHARACTERS": {
+        const { statId, characterIds } = action.payload;
+        const stats = state.stats || {};
+        const existing = stats[statId];
+        if (!existing || existing.appliesTo !== "characters") return state;
+        const prev = new Set(existing.characterIds || []);
+        const next = new Set(characterIds);
+        let variables = { ...state.variables };
+        const variableIds = { ...existing.variableIds };
+        for (const charId of prev) {
+          if (!next.has(charId)) {
+            const varId = variableIds[charId];
+            if (varId) delete variables[varId];
+            delete variableIds[charId];
+          }
+        }
+        for (const charId of next) {
+          if (!prev.has(charId)) {
+            const charName = (_c = state.characters[charId]) == null ? void 0 : _c.name;
+            if (!charName) continue;
+            const varId = `var-${generateId$7()}`;
+            variables[varId] = makeStatVar(varId, statVarName(existing.name, charName), existing);
+            variableIds[charId] = varId;
+          }
+        }
+        return {
+          ...state,
+          variables,
+          stats: { ...stats, [statId]: { ...existing, characterIds: [...next], variableIds } }
+        };
+      }
+      default:
+        return state;
+    }
+  };
   function migrateItemCountVariableBounds(project) {
     var _a, _b;
     if (!project || !project.variables) return project;
@@ -342,10 +467,60 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return changed ? { ...project, variables } : project;
   }
+  function migrateStatVariables(project) {
+    var _a;
+    if (!project || !project.stats || !project.variables) return project;
+    let changed = false;
+    const variables = { ...project.variables };
+    const stats = { ...project.stats };
+    for (const [statId, stat] of Object.entries(stats)) {
+      if (!(stat == null ? void 0 : stat.variableIds)) continue;
+      let statChanged = false;
+      const variableIds = { ...stat.variableIds };
+      let characterIds = stat.characterIds;
+      for (const [target, varId] of Object.entries(stat.variableIds)) {
+        const char = target === "global" ? void 0 : (_a = project.characters) == null ? void 0 : _a[target];
+        if (target !== "global" && !char) {
+          if (variables[varId]) delete variables[varId];
+          delete variableIds[target];
+          if (characterIds) characterIds = characterIds.filter((id) => id !== target);
+          statChanged = true;
+          continue;
+        }
+        if (!variables[varId]) {
+          variables[varId] = {
+            id: varId,
+            name: statVarName(stat.name, char == null ? void 0 : char.name),
+            type: "number",
+            defaultValue: stat.defaultValue ?? stat.min ?? 0,
+            scope: "global",
+            min: stat.min,
+            max: stat.max
+          };
+          changed = true;
+        }
+      }
+      if (stat.appliesTo === "characters" && characterIds) {
+        const alive = characterIds.filter((id) => {
+          var _a2;
+          return !!((_a2 = project.characters) == null ? void 0 : _a2[id]);
+        });
+        if (alive.length !== characterIds.length) {
+          characterIds = alive;
+          statChanged = true;
+        }
+      }
+      if (statChanged) {
+        stats[statId] = { ...stat, variableIds, characterIds };
+        changed = true;
+      }
+    }
+    return changed ? { ...project, variables, stats } : project;
+  }
   const projectReducer = (state, action) => {
     switch (action.type) {
       case "SET_PROJECT":
-        return migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)));
+        return migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))));
       case "UPDATE_PROJECT": {
         return {
           ...state,
@@ -1901,7 +2076,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     scriptReducer,
     commonEventReducer,
     pluginReducer,
-    itemReducer
+    itemReducer,
+    statReducer
   ];
   const rootReducer = (state, action) => {
     for (const reducer of reducers) {
@@ -2635,7 +2811,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const toast = useToast();
     const [history, setHistory] = React2.useState(() => ({
       past: [],
-      present: migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject))),
+      present: migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)))),
       future: []
     }));
     const [lastAutoSave, setLastAutoSave] = React2.useState(null);
@@ -5020,17 +5196,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const duration = (command.duration ?? 0.5) * 1e3 + 100;
       return {
         advance: false,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            characters: {
-              ...playerState.stageState.characters,
-              // Old pose ghost (fades out) when changing pose of the same character
-              ...ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {},
-              [command.characterId]: characterState
-            }
+        // Functional patch so stacked/parallel Show Character commands compose (add against latest).
+        stagePatch: (prev) => ({
+          characters: {
+            ...prev.characters,
+            // Old pose ghost (fades out) when changing pose of the same character
+            ...ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {},
+            [command.characterId]: characterState
           }
-        },
+        }),
         delay: duration,
         callback: () => {
           if (ghostKey) {
@@ -5046,15 +5220,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          characters: {
-            ...playerState.stageState.characters,
-            [command.characterId]: characterState
-          }
-        }
-      }
+      stagePatch: (prev) => ({
+        characters: { ...prev.characters, [command.characterId]: characterState }
+      })
     };
   }
   function handleHideCharacter(command, context) {
@@ -5082,15 +5250,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const duration = (command.duration ?? 0.5) * 1e3 + 100;
       return {
         advance: false,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            characters: {
-              ...playerState.stageState.characters,
-              [command.characterId]: characterWithTransition
-            }
-          }
-        },
+        // Functional patch (composes with other stacked/parallel character commands).
+        stagePatch: (prev) => ({
+          characters: { ...prev.characters, [command.characterId]: characterWithTransition }
+        }),
         delay: duration,
         callback: () => {
           setPlayerState((p) => {
@@ -5105,14 +5268,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       };
     } else {
-      const { [command.characterId]: _, ...remaining } = playerState.stageState.characters;
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            characters: remaining
-          }
+        stagePatch: (prev) => {
+          const { [command.characterId]: _, ...remaining } = prev.characters;
+          return { characters: remaining };
         }
       };
     }
@@ -5632,12 +5792,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const delay = hasTransition ? (command.duration ?? 0.5) * 1e3 + 100 : 0;
     return {
       advance: !hasTransition,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          textOverlays: [...playerState.stageState.textOverlays, overlay]
-        }
-      },
+      // Functional patch so stacked/runAsync Show Text commands compose (append vs latest).
+      stagePatch: (prev) => ({ textOverlays: [...prev.textOverlays, overlay] }),
       delay,
       callback: hasTransition ? context.advance : void 0
     };
@@ -5682,12 +5838,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     } else {
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            textOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
-          }
-        }
+        stagePatch: (prev) => ({ textOverlays: prev.textOverlays.filter((o) => o.id !== command.targetCommandId) })
       };
     }
   }
@@ -5728,12 +5879,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const delay = hasTransition ? (command.duration ?? 0.5) * 1e3 + 100 : 0;
     return {
       advance: !hasTransition,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          imageOverlays: [...playerState.stageState.imageOverlays, overlay]
-        }
-      },
+      // Functional patch so stacked/runAsync Show Image commands compose (append vs latest).
+      stagePatch: (prev) => ({ imageOverlays: [...prev.imageOverlays, overlay] }),
       delay,
       callback: hasTransition ? context.advance : void 0
     };
@@ -5778,12 +5925,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     } else {
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            imageOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
-          }
-        }
+        // Functional patch so stacked Hide Image commands compose.
+        stagePatch: (prev) => ({ imageOverlays: prev.imageOverlays.filter((o) => o.id !== command.targetCommandId) })
       };
     }
   }
@@ -5858,12 +6001,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return {
       advance: shouldAdvance,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          buttonOverlays: [...playerState.stageState.buttonOverlays, buttonOverlay]
-        }
-      },
+      // Functional patch (appends against the LATEST overlays) so stacked/runAsync Show Button
+      // commands compose instead of clobbering each other — e.g. an Exit Game button + a Quit-to-
+      // Title button stacked together: the snapshot path made the second overwrite the first, so
+      // only one rendered ("two buttons, only one works"; the missing one looked like a dead click).
+      stagePatch: (prev) => ({ buttonOverlays: [...prev.buttonOverlays, buttonOverlay] }),
       delay,
       callback
     };
@@ -5923,12 +6065,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const hasTransition = command.transition && command.transition !== "instant";
     return {
       advance: !hasTransition,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          buttonOverlays: [...playerState.stageState.buttonOverlays, overlay]
-        }
-      },
+      // Functional patch so a stacked Show Item composes with other overlay commands.
+      stagePatch: (prev) => ({ buttonOverlays: [...prev.buttonOverlays, overlay] }),
       delay: hasTransition ? (command.duration ?? 0.3) * 1e3 + 100 : 0,
       callback: hasTransition ? context.advance : void 0
     };
@@ -5978,12 +6116,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     } else {
       return {
         advance: true,
-        updates: {
-          stageState: {
-            ...playerState.stageState,
-            buttonOverlays: overlays.filter((o) => o.id !== command.targetCommandId)
-          }
-        }
+        // Functional patch so stacked Hide Button commands compose.
+        stagePatch: (prev) => ({ buttonOverlays: prev.buttonOverlays.filter((o) => o.id !== command.targetCommandId) })
       };
     }
   }
@@ -7441,7 +7575,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         onCommitVariables();
       }
       otherActions.forEach((action) => onAction(action));
-      if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene) {
+      const calledCommonEvent = allActions.some((a) => a.type === UIActionType.CallCommonEvent);
+      if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene && !calledCommonEvent) {
         onAdvance();
       }
       if ((overlay.giveItemId || overlay.removeAfterClick || overlay.pickUpOnceId) && onPickup) {
@@ -8330,67 +8465,83 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const pageIndicatorStyle = el.pageIndicatorFont ? { ...fontSettingsToStyle(el.pageIndicatorFont), textAlign: void 0 } : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
     const prevLabel = el.prevButtonText ?? "◀ Prev";
     const nextLabel = el.nextButtonText ?? "Next ▶";
-    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style, className: "flex flex-col h-full", children: [
-      /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]", children: pageSlots.map((i) => {
-        const slotData = gameSaves[i + 1];
-        const action = isSaveMode ? { type: UIActionType.SaveGame, slotNumber: i + 1 } : { type: UIActionType.LoadGame, slotNumber: i + 1 };
-        return /* @__PURE__ */ jsxRuntime2.jsxs(
-          "button",
-          {
-            onClick: () => {
-              if (!isSaveMode && !slotData) return;
-              onAction(action);
-            },
-            disabled: !isSaveMode && !slotData,
-            className: "rounded-lg border-2 overflow-hidden flex flex-col",
-            style: {
-              backgroundColor: slotBgColor,
-              borderColor: slotBorderColor,
-              transition: "border-color 0.15s",
-              cursor: !isSaveMode && !slotData ? "default" : "pointer"
-            },
-            onMouseEnter: (e) => {
-              if (!e.currentTarget.disabled) {
-                e.currentTarget.style.borderColor = slotHoverBorderColor;
-              }
-            },
-            onMouseLeave: (e) => {
-              e.currentTarget.style.borderColor = slotBorderColor;
-            },
-            children: [
-              /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "relative w-full overflow-hidden", style: { flex: "1 1 0", minHeight: 0 }, children: [
-                (slotData == null ? void 0 : slotData.screenshot) ? /* @__PURE__ */ jsxRuntime2.jsx(
-                  "img",
-                  {
-                    src: slotData.screenshot,
-                    alt: `Save slot ${i + 1}`,
-                    className: "absolute inset-0 w-full h-full object-cover"
-                  }
-                ) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 flex flex-col items-center justify-center", style: { backgroundColor: "rgba(0,0,0,0.4)", padding: "0 8%" }, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...emptySlotStyle, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }, children: el.emptySlotText }) }),
-                !el.hideSlotLabel && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
-                  position: "absolute",
-                  top: "4px",
-                  left: "4px",
-                  color: slotHeaderColor,
-                  fontWeight: "bold",
-                  fontSize: baseFont.fontSize,
-                  fontFamily: baseFont.fontFamily,
-                  textShadow: "0 2px 4px rgba(0,0,0,0.7)",
-                  zIndex: 10
-                }, children: [
-                  "Slot ",
-                  i + 1
-                ] })
-              ] }),
-              !el.hideInfoBar && slotData && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: "0 0 auto", padding: "2px 4px", backgroundColor: "rgba(0,0,0,0.5)" }, children: [
-                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { color: slotTextColor, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: `calc(0.8 * ${baseFont.fontSize})` }, children: slotData.sceneName }),
-                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }, children: new Date(slotData.timestamp).toLocaleString() })
+    const renderSlot = (i) => {
+      const slotData = gameSaves[i + 1];
+      const action = isSaveMode ? { type: UIActionType.SaveGame, slotNumber: i + 1 } : { type: UIActionType.LoadGame, slotNumber: i + 1 };
+      return /* @__PURE__ */ jsxRuntime2.jsxs(
+        "button",
+        {
+          onClick: () => {
+            if (!isSaveMode && !slotData) return;
+            onAction(action);
+          },
+          disabled: !isSaveMode && !slotData,
+          className: "rounded-lg border-2 overflow-hidden flex flex-col w-full h-full",
+          style: {
+            backgroundColor: slotBgColor,
+            borderColor: slotBorderColor,
+            transition: "border-color 0.15s",
+            cursor: !isSaveMode && !slotData ? "default" : "pointer"
+          },
+          onMouseEnter: (e) => {
+            if (!e.currentTarget.disabled) {
+              e.currentTarget.style.borderColor = slotHoverBorderColor;
+            }
+          },
+          onMouseLeave: (e) => {
+            e.currentTarget.style.borderColor = slotBorderColor;
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "relative w-full overflow-hidden", style: { flex: "1 1 0", minHeight: 0 }, children: [
+              (slotData == null ? void 0 : slotData.screenshot) ? /* @__PURE__ */ jsxRuntime2.jsx(
+                "img",
+                {
+                  src: slotData.screenshot,
+                  alt: `Save slot ${i + 1}`,
+                  className: "absolute inset-0 w-full h-full object-cover"
+                }
+              ) : /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute inset-0 flex flex-col items-center justify-center", style: { backgroundColor: "rgba(0,0,0,0.4)", padding: "0 8%" }, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...emptySlotStyle, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }, children: el.emptySlotText }) }),
+              !el.hideSlotLabel && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+                position: "absolute",
+                top: "4px",
+                left: "4px",
+                color: slotHeaderColor,
+                fontWeight: "bold",
+                fontSize: baseFont.fontSize,
+                fontFamily: baseFont.fontFamily,
+                textShadow: "0 2px 4px rgba(0,0,0,0.7)",
+                zIndex: 10
+              }, children: [
+                "Slot ",
+                i + 1
               ] })
-            ]
+            ] }),
+            !el.hideInfoBar && slotData && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: "0 0 auto", padding: "2px 4px", backgroundColor: "rgba(0,0,0,0.5)" }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { color: slotTextColor, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: `calc(0.8 * ${baseFont.fontSize})` }, children: slotData.sceneName }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }, children: new Date(slotData.timestamp).toLocaleString() })
+            ] })
+          ]
+        },
+        i
+      );
+    };
+    if (el.slotLayout === "free" && el.slotRects && el.slotRects.length > 0) {
+      const rects = el.slotRects;
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: style.zIndex, opacity: style.opacity, pointerEvents: "none" }, children: Array.from({ length: totalSlots }, (_, i) => {
+        const rect = rects[i];
+        if (!rect) return null;
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            style: { position: "absolute", left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: "auto" },
+            children: renderSlot(i)
           },
           i
         );
-      }) }),
+      }) });
+    }
+    return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style, className: "flex flex-col h-full", children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]", children: pageSlots.map(renderSlot) }),
       totalPages > 1 && /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center justify-center gap-4 py-2 flex-shrink-0", children: [
         /* @__PURE__ */ jsxRuntime2.jsx(
           "button",
@@ -8768,7 +8919,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         "div",
         {
           className: "absolute inset-0 z-50 flex items-center justify-center",
-          style: { backgroundColor: element.backgroundColor || "rgba(0,0,0,0.95)" },
+          style: { backgroundColor: element.backgroundColor || "rgba(0,0,0,0.95)", pointerEvents: "auto" },
           onClick: () => setViewingEntry(null),
           children: [
             viewUrl && /* @__PURE__ */ jsxRuntime2.jsx(
@@ -8818,11 +8969,61 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       );
     }
     const lockedPlaceholderUrl = ((_a = project.cgGallery) == null ? void 0 : _a.lockedPlaceholderAssetId) ? assetResolver(project.cgGallery.lockedPlaceholderAssetId, "image") : null;
+    const renderThumb = (entry, idx, free) => {
+      const unlocked = isEntryUnlocked(entry);
+      const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
+      const thumbUrl = unlocked ? assetResolver(thumbAssetId, "image") : lockedPlaceholderUrl;
+      return /* @__PURE__ */ jsxRuntime2.jsxs(
+        "div",
+        {
+          className: "relative overflow-hidden flex items-center justify-center",
+          style: {
+            ...free ? { width: "100%", height: "100%" } : { aspectRatio: "16/9" },
+            borderRadius: `${element.thumbnailBorderRadius || 8}px`,
+            border: `2px solid ${element.thumbnailBorderColor || "#4D3273"}`,
+            backgroundColor: unlocked ? "#334155" : element.lockedColor || "#1e293b",
+            cursor: unlocked ? "pointer" : "default",
+            transition: "transform 0.15s ease, border-color 0.15s ease"
+          },
+          onClick: () => handleThumbnailClick(entry),
+          onMouseEnter: (e) => {
+            if (unlocked) {
+              e.currentTarget.style.transform = "scale(1.05)";
+              e.currentTarget.style.borderColor = "#8b5cf6";
+            }
+          },
+          onMouseLeave: (e) => {
+            e.currentTarget.style.transform = "scale(1)";
+            e.currentTarget.style.borderColor = element.thumbnailBorderColor || "#4D3273";
+          },
+          children: [
+            unlocked && thumbUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: thumbUrl, alt: entry.name, className: "w-full h-full object-cover" }) : !unlocked ? /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-2xl", children: element.lockedText || "🔒" }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-xs text-slate-500", children: entry.name }),
+            element.showNames !== false && unlocked && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1", children: entry.name })
+          ]
+        },
+        entry.id
+      );
+    };
+    if (element.slotLayout === "free" && element.slotRects && element.slotRects.length > 0) {
+      const rects = element.slotRects;
+      return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", pointerEvents: "none" }, children: entries.map((entry, idx) => {
+        const rect = rects[idx];
+        if (!rect) return null;
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            style: { position: "absolute", left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: "auto" },
+            children: renderThumb(entry, idx, true)
+          },
+          entry.id
+        );
+      }) });
+    }
     return /* @__PURE__ */ jsxRuntime2.jsx(
       "div",
       {
         className: "w-full h-full overflow-y-auto p-2 rounded",
-        style: { backgroundColor: element.backgroundColor || "rgba(15, 23, 42, 0.9)" },
+        style: { backgroundColor: element.hideBackgroundPanel ? "transparent" : element.backgroundColor || "rgba(15, 23, 42, 0.9)" },
         children: /* @__PURE__ */ jsxRuntime2.jsx(
           "div",
           {
@@ -8831,41 +9032,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               gridTemplateColumns: `repeat(${element.columns || 4}, 1fr)`,
               gap: `${element.gap || 8}px`
             },
-            children: entries.map((entry, idx) => {
-              const unlocked = isEntryUnlocked(entry);
-              const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
-              const thumbUrl = unlocked ? assetResolver(thumbAssetId, "image") : lockedPlaceholderUrl;
-              return /* @__PURE__ */ jsxRuntime2.jsxs(
-                "div",
-                {
-                  className: "relative overflow-hidden flex items-center justify-center",
-                  style: {
-                    aspectRatio: "16/9",
-                    borderRadius: `${element.thumbnailBorderRadius || 8}px`,
-                    border: `2px solid ${element.thumbnailBorderColor || "#4D3273"}`,
-                    backgroundColor: unlocked ? "#334155" : element.lockedColor || "#1e293b",
-                    cursor: unlocked ? "pointer" : "default",
-                    transition: "transform 0.15s ease, border-color 0.15s ease"
-                  },
-                  onClick: () => handleThumbnailClick(entry),
-                  onMouseEnter: (e) => {
-                    if (unlocked) {
-                      e.currentTarget.style.transform = "scale(1.05)";
-                      e.currentTarget.style.borderColor = "#8b5cf6";
-                    }
-                  },
-                  onMouseLeave: (e) => {
-                    e.currentTarget.style.transform = "scale(1)";
-                    e.currentTarget.style.borderColor = element.thumbnailBorderColor || "#4D3273";
-                  },
-                  children: [
-                    unlocked && thumbUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: thumbUrl, alt: entry.name, className: "w-full h-full object-cover" }) : !unlocked ? /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-2xl", children: element.lockedText || "🔒" }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-xs text-slate-500", children: entry.name }),
-                    element.showNames !== false && unlocked && /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1", children: entry.name })
-                  ]
-                },
-                entry.id
-              );
-            })
+            children: entries.map((entry, idx) => renderThumb(entry, idx, false))
           }
         )
       }
@@ -10124,7 +10291,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const galleryEntries = Object.values(((_v = project2.cgGallery) == null ? void 0 : _v.entries) || {});
           const filteredEntries = el.categoryFilter ? galleryEntries.filter((e) => e.category === el.categoryFilter) : galleryEntries;
           filteredEntries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
-          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style, children: /* @__PURE__ */ jsxRuntime2.jsx(
+          const galleryIsFree = el.slotLayout === "free" && !!el.slotRects && el.slotRects.length > 0;
+          const galleryWrapperStyle = galleryIsFree ? { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: style.zIndex, opacity: style.opacity, pointerEvents: "none" } : style;
+          return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: galleryWrapperStyle, children: /* @__PURE__ */ jsxRuntime2.jsx(
             CGGalleryGridElement,
             {
               element: el,
@@ -10163,6 +10332,54 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               onSelectItem
             }
           ) }, el.id);
+        }
+        case UIElementType.Meter: {
+          const el = element;
+          const boundVar = el.variableId ? project2.variables[el.variableId] : void 0;
+          const raw = Number((el.variableId ? variables2[el.variableId] : void 0) ?? (boundVar == null ? void 0 : boundVar.defaultValue) ?? 0);
+          const min = el.minValue ?? (boundVar == null ? void 0 : boundVar.min) ?? 0;
+          const max = el.maxValue ?? (boundVar == null ? void 0 : boundVar.max) ?? 100;
+          const pct = Math.max(0, Math.min(1, (raw - min) / (max - min || 1)));
+          const dir = el.direction || "ltr";
+          const cut = (1 - pct) * 100;
+          const clipPath = dir === "rtl" ? `inset(0 0 0 ${cut}%)` : dir === "up" ? `inset(${cut}% 0 0 0)` : `inset(0 ${cut}% 0 0)`;
+          const fillImageUrl = el.fillImage ? getElementAssetUrl(el.fillImage) : null;
+          const bgImageUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+          const fillBackground = fillImageUrl ? void 0 : el.fillColorEnd ? `linear-gradient(${dir === "up" ? "0deg" : "90deg"}, ${el.fillColor || "#a78bfa"}, ${el.fillColorEnd})` : el.fillColor || "#a78bfa";
+          const valueText = el.valueFormat === "percent" ? `${Math.round(pct * 100)}%` : el.valueFormat === "valueMax" ? `${raw}/${max}` : `${raw}`;
+          const radius = el.borderRadius ?? 6;
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { ...style, display: "flex", flexDirection: "column", gap: 2 }, children: [
+            el.showLabel && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }, children: el.label || (boundVar == null ? void 0 : boundVar.name) || "" }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+              position: "relative",
+              flex: 1,
+              minHeight: 4,
+              overflow: "hidden",
+              borderRadius: radius,
+              backgroundColor: el.backgroundColor || "rgba(0,0,0,0.4)",
+              ...bgImageUrl ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+              ...el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}
+            }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                position: "absolute",
+                inset: 0,
+                clipPath,
+                background: fillBackground,
+                ...fillImageUrl ? { backgroundImage: `url(${fillImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+                borderRadius: radius,
+                transition: "clip-path 0.3s ease"
+              } }),
+              el.showValue && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                ...fontSettingsToStyle(el.valueFont),
+                textShadow: "0 1px 2px rgba(0,0,0,0.6)"
+              }, children: valueText })
+            ] })
+          ] }, el.id);
         }
         default:
           return null;
@@ -12364,7 +12581,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 }
               }
             }
-            if (result.updates) {
+            if (result.updates || result.stagePatch) {
               const isSceneChange = ((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
                 var _a5, _b3, _c3, _d3, _e, _f, _g, _h, _i, _j;
@@ -12375,14 +12592,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   mergedVariables = { ...mergedVariables, ...localDefaults };
                   runtimeDebugLog("[Variable Scope] Reset local variables on scene change:", Object.keys(localDefaults));
                 }
+                let nextStage = ((_c3 = result.updates) == null ? void 0 : _c3.stageState) !== void 0 ? { ...p.stageState, ...result.updates.stageState } : void 0;
+                if (result.stagePatch) {
+                  nextStage = { ...nextStage ?? p.stageState, ...result.stagePatch(p.stageState) };
+                }
                 return {
                   ...p,
-                  ...((_c3 = result.updates) == null ? void 0 : _c3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                  ...((_d3 = result.updates) == null ? void 0 : _d3.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
-                  ...((_e = result.updates) == null ? void 0 : _e.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
-                  ...((_f = result.updates) == null ? void 0 : _f.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
-                  ...((_g = result.updates) == null ? void 0 : _g.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
-                  ...((_h = result.updates) == null ? void 0 : _h.stageState) !== void 0 ? { stageState: { ...p.stageState, ...result.updates.stageState } } : {},
+                  ...((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
+                  ...((_e = result.updates) == null ? void 0 : _e.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                  ...((_f = result.updates) == null ? void 0 : _f.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
+                  ...((_g = result.updates) == null ? void 0 : _g.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
+                  ...((_h = result.updates) == null ? void 0 : _h.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
+                  ...nextStage !== void 0 ? { stageState: nextStage } : {},
                   ...((_i = result.updates) == null ? void 0 : _i.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
                   ...((_j = result.updates) == null ? void 0 : _j.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
@@ -13189,7 +13410,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       });
       for (const action of allActions) {
         if (!INLINE_CHOICE_ACTIONS.has(action.type)) {
-          handleUIAction(action);
+          handleUIAction(action, action.type === UIActionType.CallCommonEvent ? { resumeAtCurrent: true } : void 0);
         }
       }
     };
@@ -13277,7 +13498,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       commandSchedulerRef.current.reset();
       variableStoreRef.current = null;
     }, [project.scenes]);
-    const handleUIAction = (action) => {
+    const handleUIAction = (action, opts) => {
       runtimeDebugLog("handleUIAction called with:", action.type, action);
       if (action.conditions && action.conditions.length > 0) {
         const vars = playerState ? mergeDirtyUiVariables(playerState.variables) : menuVariables;
@@ -13294,11 +13515,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         setConfirmDialog({ type: "newGame", pendingAction: action });
         return;
       }
-      executeUIAction(action);
+      executeUIAction(action, opts);
     };
-    const executeUIAction = (action) => {
+    const executeUIAction = (action, opts) => {
       var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l;
-      if (!playerState && action.type === UIActionType.StartNewGame) {
+      if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
         const doLoad = async () => {
@@ -13612,6 +13833,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             window.close();
           } catch {
           }
+          window.setTimeout(() => {
+            if (typeof document !== "undefined" && !document.hidden) {
+              executeUIAction({ type: UIActionType.QuitToTitle });
+            }
+          }, 60);
           return;
         }
         onClose();
@@ -14072,6 +14298,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const ce = (project.commonEvents || {})[ccAction.commonEventId];
         if (!ce || !ce.enabled || !ce.commands || ce.commands.length === 0) {
           runtimeDebugWarn("[CallCommonEvent action] event not found / disabled / empty");
+          notify('A "Call Common Event" action points to a missing, disabled, or empty event.', "warning");
           return;
         }
         if (!playerState || playerState.mode !== "playing") {
@@ -14096,7 +14323,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const newStack = [...p.commandStack, {
             sceneId: p.currentSceneId,
             commands: p.currentCommands,
-            index: p.currentIndex + 1,
+            // Return point: normally the command AFTER the current (waiting) one. When the
+            // caller already advanced the index to the next un-run command (choice flow),
+            // resume AT it — +1 here would skip the command right after the choice.
+            index: (opts == null ? void 0 : opts.resumeAtCurrent) ? p.currentIndex : p.currentIndex + 1,
             commonEventId: ce.id,
             ...Object.keys(savedVariables).length > 0 ? { savedVariables } : {},
             ...clearedVariables.length > 0 ? { clearedVariables } : {}
@@ -15758,7 +15988,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             ` }),
       /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { aspectRatio: `${((_b = project.gameResolution) == null ? void 0 : _b.width) || 16} / ${((_c = project.gameResolution) == null ? void 0 : _c.height) || 9}`, maxWidth: "100%", maxHeight: "100%", width: "100%", "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_d = project.gameResolution) == null ? void 0 : _d.width) || 1920) : 1 }, children: [
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
-        (() => {
+        (!playerState || playerState.mode === "paused") && (() => {
           const ordered = [];
           const topClosingMenu = !!currentScreenId && closingScreens.has(currentScreenId);
           if (topClosingMenu && screenStack.length >= 2) {

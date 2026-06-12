@@ -1037,6 +1037,18 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
           if (video) addAsset(video.videoUrl, 'ui');
         }
       }
+      // Meter art (fill + track)
+      (['fillImage', 'backgroundImage'] as const).forEach(key => {
+        const asset = (element as any)[key];
+        if (!asset?.id) return;
+        if (asset.type === 'image') {
+          const img = project.backgrounds?.[asset.id] || project.images?.[asset.id];
+          if (img) addAsset(img.imageUrl || img.videoUrl, 'ui');
+        } else if (asset.type === 'video') {
+          const video = project.videos?.[asset.id];
+          if (video) addAsset(video.videoUrl, 'ui');
+        }
+      });
     });
 
     // Legacy hot zone asset collection — post-Phase-3 these fields are migrated

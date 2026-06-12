@@ -16,8 +16,8 @@ import { VNTextAlign } from '../../types/shared';
 import {
     VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement,
-    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, DropdownOption,
-    GameSetting, GameToggleSetting,
+    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, DropdownOption,
+    GameSetting, GameToggleSetting, UISlotRect,
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
@@ -34,6 +34,37 @@ import { LayerControl, ParallaxDepthControl } from './LayerControl';
 
 export type UpdateElement = (updates: Partial<VNUIElement>) => void;
 
+/** Seed `count` slot rects (screen-percent, top-left anchored) laid out as a grid inside the
+ *  element's current box. Used when switching a SaveSlotGrid/CGGallery to free placement, and by
+ *  "Re-arrange as grid", so slots start in a sensible spot before the author drags them. */
+function gridSeedRects(
+    box: { x: number; y: number; width: number; height: number; anchorX?: number; anchorY?: number },
+    count: number,
+    cols: number,
+): UISlotRect[] {
+    const safeCount = Math.max(1, count);
+    const safeCols = Math.max(1, cols);
+    const left = box.x - (box.anchorX ?? 0) * box.width;
+    const top = box.y - (box.anchorY ?? 0) * box.height;
+    const gap = 2; // percent between cells
+    const rows = Math.max(1, Math.ceil(safeCount / safeCols));
+    const cellW = (box.width - gap * (safeCols - 1)) / safeCols;
+    const cellH = (box.height - gap * (rows - 1)) / rows;
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const rects: UISlotRect[] = [];
+    for (let i = 0; i < safeCount; i++) {
+        const r = Math.floor(i / safeCols);
+        const c = i % safeCols;
+        rects.push({
+            x: round(left + c * (cellW + gap)),
+            y: round(top + r * (cellH + gap)),
+            width: round(cellW),
+            height: round(cellH),
+        });
+    }
+    return rects;
+}
+
 /** Canonical-ordered groups that apply to a given element. Common groups always
  *  apply; media/audio/logic depend on the element type (and, for settings*, on
  *  whether it's in variable mode — only then are there per-toggle actions). */
@@ -46,6 +77,7 @@ export function getElementGroups(element: VNUIElement): InspectorGroupId[] {
         case UIElementType.SettingsToggle: set.add('media'); if (a.variableId) set.add('logic'); break;
         case UIElementType.Dropdown:
         case UIElementType.Checkbox: set.add('logic'); break;
+        case UIElementType.Meter: set.add('media'); break;
         default: break;
     }
     return GROUP_ORDER.filter(g => set.has(g));
@@ -59,6 +91,9 @@ export function summarizeElementGroup(element: VNUIElement, groupId: InspectorGr
             if (element.type === UIElementType.Button || element.type === UIElementType.Text) {
                 const txt = (a.text || '').trim();
                 return txt ? `"${txt.substring(0, 24)}"` : undefined;
+            }
+            if (element.type === UIElementType.Meter) {
+                return a.variableId ? (project.variables[a.variableId]?.name || 'missing variable') : 'no variable';
             }
             return undefined;
         }
@@ -310,6 +345,23 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 return {
                     content: <>
                         <FormField label={t('elementInspector.slotCount')}><TextInput type="number" value={el.slotCount} onChange={e => updateElement({ slotCount: parseInt(e.target.value) || 1 })} /></FormField>
+                        <FormField label="Slot layout">
+                            <Select value={el.slotLayout || 'grid'} onChange={e => {
+                                if (e.target.value === 'free') {
+                                    const rects = (el.slotRects && el.slotRects.length) ? el.slotRects : gridSeedRects(el, el.slotCount, 2);
+                                    updateElement({ slotLayout: 'free', slotRects: rects });
+                                } else {
+                                    updateElement({ slotLayout: 'grid' });
+                                }
+                            }}>
+                                <option value="grid">Grid (auto, paginated)</option>
+                                <option value="free">Free placement</option>
+                            </Select>
+                        </FormField>
+                        {el.slotLayout === 'free' && <>
+                            <p className="text-[10px] text-slate-400 -mt-1 mb-1">Drag each slot box on the canvas to position and size it. Slots without a box are hidden, and pagination is off.</p>
+                            <button onClick={() => updateElement({ slotRects: gridSeedRects(el, el.slotCount, 2) })} className="text-xs px-2 py-1 mb-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">Re-arrange as grid</button>
+                        </>}
                         <FormField label={t('elementInspector.emptySlotText')}><TextInput value={el.emptySlotText} onChange={e => updateElement({ emptySlotText: e.target.value })} /></FormField>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.infoBar')}</h4>
                         <div className="flex items-center gap-4 my-1">
@@ -593,8 +645,33 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 return {
                     content: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">{t('elementInspector.galleryLayout')}</h4>
-                        <FormField label={t('elementInspector.columns')}><TextInput type="number" min="2" max="8" value={String(el.columns || 4)} onChange={e => updateElement({ columns: parseInt(e.target.value, 10) || 4 })} /></FormField>
-                        <FormField label={t('elementInspector.gapPx')}><TextInput type="number" min="0" max="32" value={String(el.gap || 8)} onChange={e => updateElement({ gap: parseInt(e.target.value, 10) || 8 })} /></FormField>
+                        <FormField label="Slot layout">
+                            <Select value={el.slotLayout || 'grid'} onChange={e => {
+                                if (e.target.value === 'free') {
+                                    const cols = el.columns || 4;
+                                    const seedCount = Math.max(galleryEntries.length || 0, cols);
+                                    const rects = (el.slotRects && el.slotRects.length) ? el.slotRects : gridSeedRects(el, seedCount, cols);
+                                    updateElement({ slotLayout: 'free', slotRects: rects });
+                                } else {
+                                    updateElement({ slotLayout: 'grid' });
+                                }
+                            }}>
+                                <option value="grid">Grid (auto)</option>
+                                <option value="free">Free placement</option>
+                            </Select>
+                        </FormField>
+                        {el.slotLayout === 'free' ? <>
+                            <p className="text-[10px] text-slate-400 -mt-1 mb-1">Drag each box on the canvas to position it. Entries fill the boxes in order — add one box per CG you want to show. Extra entries (beyond the boxes) are hidden.</p>
+                            <div className="flex items-center gap-2 mb-1">
+                                <button onClick={() => { const rects = [...(el.slotRects || [])]; const last = rects[rects.length - 1]; rects.push(last ? { ...last, x: Math.min(90, last.x + 4), y: Math.min(90, last.y + 4) } : { x: 40, y: 40, width: 16, height: 16 }); updateElement({ slotRects: rects }); }} className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">+ Add box</button>
+                                <button onClick={() => { const rects = [...(el.slotRects || [])]; rects.pop(); updateElement({ slotRects: rects }); }} disabled={!el.slotRects || el.slotRects.length === 0} className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-40">− Remove last</button>
+                                <span className="text-[10px] text-slate-500">{el.slotRects?.length || 0} boxes</span>
+                            </div>
+                            <button onClick={() => { const cols = el.columns || 4; updateElement({ slotRects: gridSeedRects(el, el.slotRects?.length || Math.max(galleryEntries.length, cols), cols) }); }} className="text-xs px-2 py-1 mb-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">Re-arrange as grid</button>
+                        </> : <>
+                            <FormField label={t('elementInspector.columns')}><TextInput type="number" min="2" max="8" value={String(el.columns || 4)} onChange={e => updateElement({ columns: parseInt(e.target.value, 10) || 4 })} /></FormField>
+                            <FormField label={t('elementInspector.gapPx')}><TextInput type="number" min="0" max="32" value={String(el.gap || 8)} onChange={e => updateElement({ gap: parseInt(e.target.value, 10) || 8 })} /></FormField>
+                        </>}
                         <FormField label={t('elementInspector.categoryFilter')}>
                             <Select value={el.categoryFilter || ''} onChange={e => updateElement({ categoryFilter: e.target.value || undefined })}>
                                 <option value="">{t('elementInspector.allCategories')}</option>
@@ -613,7 +690,11 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         <h4 className="font-bold my-1 text-slate-400 text-xs">{t('elementInspector.thumbnailStyling')}</h4>
                         <FormField label={t('elementInspector.borderColor')}><input type="color" className="w-full" value={el.thumbnailBorderColor || '#4D3273'} onChange={e => updateElement({ thumbnailBorderColor: e.target.value })} /></FormField>
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.thumbnailBorderRadius || 8)} onChange={e => updateElement({ thumbnailBorderRadius: parseInt(e.target.value, 10) || 8 })} /></FormField>
-                        <FormField label={t('elementInspector.backgroundColor')}><input type="color" className="w-full" value={el.backgroundColor || '#0f172a'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.backgroundColor')}><input type="color" className="w-full" value={el.backgroundColor || '#0f172a'} onChange={e => updateElement({ backgroundColor: e.target.value })} disabled={el.hideBackgroundPanel === true} /></FormField>
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer my-1">
+                            <input type="checkbox" checked={el.hideBackgroundPanel === true} onChange={e => updateElement({ hideBackgroundPanel: e.target.checked })} className="accent-purple-500" />
+                            Hide background panel (show thumbnails over your own art)
+                        </label>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.lockedEntries')}</h4>
                         <FormField label={t('elementInspector.lockedBackground')}><input type="color" className="w-full" value={el.lockedColor || '#1e293b'} onChange={e => updateElement({ lockedColor: e.target.value })} /></FormField>
                         <FormField label={t('elementInspector.lockedText')}><TextInput value={el.lockedText || '🔒'} onChange={e => updateElement({ lockedText: e.target.value })} placeholder="🔒" /></FormField>
@@ -724,6 +805,87 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </>
                             );
                         })()}
+                    </>,
+                };
+            }
+            case UIElementType.Meter: {
+                const el = element as UIMeterElement;
+                const numberVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'number');
+                const boundVar = el.variableId ? project.variables[el.variableId] : undefined;
+                // If the bound variable backs a stat, surface that stat's color as a one-click suggestion.
+                const allStats = Object.values(project.stats || {}) as import('../../features/stats/types').VNStat[];
+                const boundStat = el.variableId ? allStats.find(s => Object.values(s.variableIds || {}).includes(el.variableId!)) : undefined;
+                return {
+                    content: <>
+                        <FormField label="Variable to display">
+                            <Select value={el.variableId || ''} onChange={e => updateElement({ variableId: e.target.value || undefined })}>
+                                {numberVariables.length === 0 && <option value="">No number variables yet</option>}
+                                {numberVariables.length > 0 && !el.variableId && <option value="">Select a variable…</option>}
+                                {numberVariables.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                            </Select>
+                        </FormField>
+                        <p className="text-[9px] text-slate-500 -mt-1">Stats (Systems tab) appear here by name — e.g. "Alice — Affection". The bar tracks the value live.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <FormField label="Minimum"><TextInput type="number" value={el.minValue ?? ''} placeholder={String((boundVar as any)?.min ?? 0)} onChange={e => updateElement({ minValue: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} /></FormField>
+                            <FormField label="Maximum"><TextInput type="number" value={el.maxValue ?? ''} placeholder={String((boundVar as any)?.max ?? 100)} onChange={e => updateElement({ maxValue: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} /></FormField>
+                        </div>
+                        <p className="text-[9px] text-slate-500 -mt-1">Blank = use the variable's own range.</p>
+                        <FormField label="Fill direction">
+                            <Select value={el.direction || 'ltr'} onChange={e => updateElement({ direction: e.target.value as 'ltr' | 'rtl' | 'up' })}>
+                                <option value="ltr">Left → right</option>
+                                <option value="rtl">Right → left</option>
+                                <option value="up">Bottom → top</option>
+                            </Select>
+                        </FormField>
+                        <FormField label="Show label"><input type="checkbox" checked={el.showLabel !== false} onChange={e => updateElement({ showLabel: e.target.checked })} /></FormField>
+                        {el.showLabel !== false && (
+                            <FormField label="Label text"><TextInput value={el.label || ''} onChange={e => updateElement({ label: e.target.value || undefined })} placeholder={boundVar?.name || 'Variable name'} /></FormField>
+                        )}
+                        <FormField label="Show value"><input type="checkbox" checked={el.showValue !== false} onChange={e => updateElement({ showValue: e.target.checked })} /></FormField>
+                        {el.showValue !== false && (
+                            <FormField label="Value style">
+                                <Select value={el.valueFormat || 'valueMax'} onChange={e => updateElement({ valueFormat: e.target.value as 'value' | 'valueMax' | 'percent' })}>
+                                    <option value="valueMax">47/100</option>
+                                    <option value="value">47</option>
+                                    <option value="percent">47%</option>
+                                </Select>
+                            </FormField>
+                        )}
+                    </>,
+                    appearance: <>
+                        <FormField label="Fill color"><input type="color" className="w-full" value={el.fillColor || '#a78bfa'} onChange={e => updateElement({ fillColor: e.target.value })} /></FormField>
+                        {boundStat?.color && boundStat.color !== el.fillColor && (
+                            <button onClick={() => updateElement({ fillColor: boundStat.color })} className="text-xs text-sky-400 hover:text-sky-300 -mt-1 flex items-center gap-1.5">
+                                <span className="w-3 h-3 rounded-full inline-block" style={{ background: boundStat.color }} /> Use "{boundStat.name}" stat color
+                            </button>
+                        )}
+                        <FormField label="Gradient end (optional)">
+                            <div className="flex items-center gap-2">
+                                <input type="color" className="flex-1" value={el.fillColorEnd || '#f472b6'} onChange={e => updateElement({ fillColorEnd: e.target.value })} />
+                                {el.fillColorEnd && <button onClick={() => updateElement({ fillColorEnd: undefined })} className="text-xs text-red-400 hover:text-red-300">Clear</button>}
+                            </div>
+                        </FormField>
+                        <FormField label="Track color"><input type="color" className="w-full" value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#1e293b'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.borderColor')}>
+                            <div className="flex items-center gap-2">
+                                <input type="color" className="flex-1" value={el.borderColor || '#4D3273'} onChange={e => updateElement({ borderColor: e.target.value })} />
+                                {el.borderColor && <button onClick={() => updateElement({ borderColor: undefined })} className="text-xs text-red-400 hover:text-red-300">Clear</button>}
+                            </div>
+                        </FormField>
+                        <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.borderRadius ?? 6)} onChange={e => updateElement({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        {el.showLabel !== false && el.labelFont && (
+                            <><h4 className="font-bold my-2 text-slate-400 text-xs">Label font</h4>
+                            <FontEditor font={el.labelFont} onFontChange={(prop, value) => updateElement({ labelFont: { ...el.labelFont!, [prop]: value } })} /></>
+                        )}
+                        {el.showValue !== false && el.valueFont && (
+                            <><h4 className="font-bold my-2 text-slate-400 text-xs">Value font</h4>
+                            <FontEditor font={el.valueFont} onFontChange={(prop, value) => updateElement({ valueFont: { ...el.valueFont!, [prop]: value } })} /></>
+                        )}
+                    </>,
+                    media: <>
+                        <AssetSelector label="Fill art (optional)" assetType="images" allowVideo value={el.fillImage?.id || null} onChange={id => updateElement({ fillImage: id ? { type: 'image', id } : null })} />
+                        <p className="text-[9px] text-slate-500 -mt-1">An image revealed left-to-right as the bar fills (replaces the fill color).</p>
+                        <AssetSelector label="Track art (optional)" assetType="images" allowVideo value={el.backgroundImage?.id || null} onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })} />
                     </>,
                 };
             }

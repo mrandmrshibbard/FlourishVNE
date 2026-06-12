@@ -66,6 +66,12 @@ export interface CommandResult {
         currentCommands?: any[];
         commandStack?: any[];
     };
+    /** A FUNCTIONAL stage-state delta applied against the LATEST state (not the handler's
+     *  closure snapshot). Use this for add/remove on stage collections (characters, overlays)
+     *  so that stacked/`runAsync` commands compose instead of clobbering each other: e.g. four
+     *  Hide Character commands fired in parallel each removing a different character. The plain
+     *  `updates.stageState` path replaces whole collections from a stale snapshot and races. */
+    stagePatch?: (prev: StageState) => Partial<StageState>;
     /** Delay in milliseconds before advancing */
     delay?: number;
     /** Callback to execute after delay */

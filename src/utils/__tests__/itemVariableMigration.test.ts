@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { migrateItemCountVariableBounds } from '../itemVariableMigration';
+import { migrateItemCountVariableBounds, migrateStatVariables } from '../itemVariableMigration';
 import { VNProject } from '../../types/project';
 
 // Minimal project containing only what the migration touches.
@@ -84,5 +84,64 @@ describe('migrateItemCountVariableBounds', () => {
         expect(stock.isInternal).toBe(true);
         // The item's own count var is also recreated (public, not internal).
         expect((out.variables['apple-owned'] as any).isInternal).toBeUndefined();
+    });
+});
+
+describe('migrateStatVariables', () => {
+    const makeStatProject = (over: Partial<VNProject>): VNProject => ({
+        variables: {},
+        characters: { alice: { id: 'alice', name: 'Alice' } },
+        stats: {},
+        ...over,
+    } as unknown as VNProject);
+
+    it('recreates a dangling stat variable at the same id with the stat range', () => {
+        const project = makeStatProject({
+            stats: { s1: { id: 's1', name: 'Affection', min: 0, max: 100, defaultValue: 5, appliesTo: 'characters', characterIds: ['alice'], variableIds: { alice: 'var-a' } } as any },
+        });
+        const out = migrateStatVariables(project);
+        const v = out.variables['var-a'] as any;
+        expect(v).toBeDefined();
+        expect(v.name).toBe('Alice — Affection');
+        expect(v.min).toBe(0);
+        expect(v.max).toBe(100);
+        expect(v.defaultValue).toBe(5);
+    });
+
+    it('prunes dead characters: drops the backlink, characterIds entry, and backing variable', () => {
+        const project = makeStatProject({
+            variables: { 'var-ghost': { id: 'var-ghost', name: 'Ghost — Affection', type: 'number', defaultValue: 0 } as any },
+            stats: { s1: { id: 's1', name: 'Affection', min: 0, max: 100, defaultValue: 0, appliesTo: 'characters', characterIds: ['alice', 'ghost'], variableIds: { alice: 'var-a', ghost: 'var-ghost' } } as any },
+        });
+        const out = migrateStatVariables(project);
+        const stat = out.stats!.s1 as any;
+        expect(stat.variableIds.ghost).toBeUndefined();
+        expect(stat.characterIds).toEqual(['alice']);
+        expect(out.variables['var-ghost']).toBeUndefined();
+    });
+
+    it('does NOT clobber a manually-renamed stat variable on load (the auto-name is creation-only)', () => {
+        const project = makeStatProject({
+            // Author renamed the backing variable in the Variables manager; it must persist across loads.
+            variables: { 'var-a': { id: 'var-a', name: 'akari_affection', type: 'number', defaultValue: 0, min: 0, max: 100 } as any },
+            stats: { s1: { id: 's1', name: 'Affection', min: 0, max: 100, defaultValue: 0, appliesTo: 'characters', characterIds: ['alice'], variableIds: { alice: 'var-a' } } as any },
+        });
+        const out = migrateStatVariables(project);
+        // No re-sync to "Alice — Affection"; the manual name stays, and nothing changed → same ref.
+        expect((out.variables['var-a'] as any).name).toBe('akari_affection');
+        expect(out).toBe(project);
+    });
+
+    it('is idempotent: returns the same reference when nothing needs healing', () => {
+        const project = makeStatProject({
+            variables: { 'var-a': { id: 'var-a', name: 'Alice — Affection', type: 'number', defaultValue: 0, min: 0, max: 100 } as any },
+            stats: { s1: { id: 's1', name: 'Affection', min: 0, max: 100, defaultValue: 0, appliesTo: 'characters', characterIds: ['alice'], variableIds: { alice: 'var-a' } } as any },
+        });
+        expect(migrateStatVariables(project)).toBe(project);
+    });
+
+    it('no-ops on projects without stats', () => {
+        const project = makeStatProject({ stats: undefined });
+        expect(migrateStatVariables(project)).toBe(project);
     });
 });

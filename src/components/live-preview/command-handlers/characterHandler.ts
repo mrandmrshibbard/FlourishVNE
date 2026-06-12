@@ -231,17 +231,15 @@ export function handleShowCharacter(
 
     return {
       advance: false,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          characters: {
-            ...playerState.stageState.characters,
-            // Old pose ghost (fades out) when changing pose of the same character
-            ...(ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {}),
-            [command.characterId]: characterState,
-          },
+      // Functional patch so stacked/parallel Show Character commands compose (add against latest).
+      stagePatch: (prev) => ({
+        characters: {
+          ...prev.characters,
+          // Old pose ghost (fades out) when changing pose of the same character
+          ...(ghostEntry && ghostKey ? { [ghostKey]: ghostEntry } : {}),
+          [command.characterId]: characterState,
         },
-      },
+      }),
       delay: duration,
       callback: () => {
         // Remove the fade-out ghost once the crossfade completes
@@ -257,18 +255,12 @@ export function handleShowCharacter(
     };
   }
 
-  // Instant show - no transition
+  // Instant show - no transition. Functional patch so stacked Show Character commands compose.
   return {
     advance: true,
-    updates: {
-      stageState: {
-        ...playerState.stageState,
-        characters: {
-          ...playerState.stageState.characters,
-          [command.characterId]: characterState,
-        },
-      },
-    },
+    stagePatch: (prev) => ({
+      characters: { ...prev.characters, [command.characterId]: characterState },
+    }),
   };
 }
 
@@ -312,15 +304,10 @@ export function handleHideCharacter(
 
     return {
       advance: false,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          characters: {
-            ...playerState.stageState.characters,
-            [command.characterId]: characterWithTransition,
-          },
-        },
-      },
+      // Functional patch (composes with other stacked/parallel character commands).
+      stagePatch: (prev) => ({
+        characters: { ...prev.characters, [command.characterId]: characterWithTransition },
+      }),
       delay: duration,
       callback: () => {
         // Remove character after transition
@@ -338,16 +325,15 @@ export function handleHideCharacter(
       },
     };
   } else {
-    // Instant hide - remove immediately
-    const { [command.characterId]: _, ...remaining } =
-      playerState.stageState.characters;
+    // Instant hide - remove immediately. Functional patch so four stacked Hide Character
+    // commands (runAsync) each remove their OWN character against the latest stage instead
+    // of overwriting the whole `characters` map from a stale snapshot (the "only 2-3 of 4
+    // disappear" race).
     return {
       advance: true,
-      updates: {
-        stageState: {
-          ...playerState.stageState,
-          characters: remaining,
-        },
+      stagePatch: (prev) => {
+        const { [command.characterId]: _, ...remaining } = prev.characters;
+        return { characters: remaining };
       },
     };
   }

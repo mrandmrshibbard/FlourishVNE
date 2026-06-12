@@ -222,7 +222,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
 
     return (
         <div
-            className="flex items-center gap-1 2xl:gap-2 p-1.5 2xl:p-2 rounded-2xl relative overflow-x-auto overflow-y-hidden min-w-0 max-w-full no-scrollbar"
+            className="flex items-center gap-0.5 xl:gap-1 2xl:gap-2 p-1 xl:p-1.5 2xl:p-2 rounded-2xl relative overflow-x-auto overflow-y-hidden min-w-0 max-w-full no-scrollbar"
             style={{
                 background: `linear-gradient(135deg, 
                     color-mix(in srgb, var(--bg-secondary) 90%, var(--accent-pink) 10%) 0%,
@@ -264,7 +264,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         <button
                             onClick={() => onTabChange(tab.id)}
                             onContextMenu={(e) => handleRightClick(tab.id, e)}
-                            className={`relative flex items-center gap-1.5 2xl:gap-2.5 px-2.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                            className={`relative flex items-center gap-1 xl:gap-1.5 2xl:gap-2.5 px-2 xl:px-2.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl text-[11px] xl:text-xs font-semibold transition-all duration-300 ${
                                 isActive
                                     ? 'text-white scale-[1.02]'
                                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:scale-[1.02]'
@@ -305,9 +305,11 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                                 {tab.icon}
                             </span>
                             
-                            {/* Label */}
-                            <span className="relative z-10">{label}</span>
-                            
+                            {/* Label — to fit all tabs on narrow / lower-aspect-ratio windows, only
+                                the ACTIVE tab keeps its label below 2xl; inactive tabs go icon-only
+                                (their name is still in the hover tooltip). At 2xl+ every tab is labeled. */}
+                            <span className={`relative z-10 ${isActive ? 'inline' : 'hidden 2xl:inline'}`}>{label}</span>
+
                             {/* Count badge with fun styling */}
                             {tab.count > 0 && (
                                 <span

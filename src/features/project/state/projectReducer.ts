@@ -1,7 +1,7 @@
 import { VNProject } from '../../../types/project';
 import { migrateProjectToUnifiedScreens } from '../../../utils/unifiedScreenMigration';
 import { migrateProjectRemoveLegacyCommands } from '../../../utils/legacyCommandMigration';
-import { migrateItemCountVariableBounds } from '../../../utils/itemVariableMigration';
+import { migrateItemCountVariableBounds, migrateStatVariables } from '../../../utils/itemVariableMigration';
 
 export type ProjectAction_Project =
   | { type: 'SET_PROJECT'; payload: VNProject }
@@ -13,8 +13,9 @@ export const projectReducer = (state: VNProject, action: ProjectAction_Project):
     case 'SET_PROJECT':
       // Every project that enters the store is run through the load migrations:
       // unified-screens schema + removal of retired scene commands + item-count
-      // min:0 backfill. All idempotent, so already-migrated projects pass through cheaply.
-      return migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)));
+      // min:0 backfill + stat-variable self-heal. All idempotent, so already-migrated
+      // projects pass through cheaply.
+      return migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))));
 
     case 'UPDATE_PROJECT': {
         return {
