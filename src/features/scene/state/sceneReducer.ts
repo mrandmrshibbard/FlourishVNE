@@ -77,8 +77,9 @@ export const sceneReducer = (state: VNProject, action: SceneAction): VNProject =
                       // Handle new action-based format
                       if (opt.actions) {
                           const newActions = opt.actions.map(action => {
-                              // FIX: Changed targetSceneId to targetScreenId to match the type definition. But the type definition is wrong. The correct fix is in types/shared.ts, but to fix the error I'll make this change here too. The real fix makes this change unnecessary, but it's good defensive coding. Let's fix the type instead.
-                              if (action.type === UIActionType.JumpToScene && action.targetSceneId === sceneId) {
+                              // BaseUIAction is in the action union (its `type` is the whole enum), so the
+                              // discriminant check doesn't narrow — cast to read the JumpToScene field.
+                              if (action.type === UIActionType.JumpToScene && (action as any).targetSceneId === sceneId) {
                                   return { ...action, targetSceneId: newStartSceneId };
                               }
                               return action;

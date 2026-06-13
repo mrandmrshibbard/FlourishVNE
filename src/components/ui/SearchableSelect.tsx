@@ -274,7 +274,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                 {Object.entries(groupedOptions.groups).map(([groupName, groupOpts]) => (
                                     <div key={groupName} className="searchable-select__group">
                                         <div className="searchable-select__group-label">{groupName}</div>
-                                        {groupOpts.map((opt) => {
+                                        {(groupOpts as SearchableSelectOption[]).map((opt) => {
                                             const globalIndex = filteredOptions.indexOf(opt);
                                             return (
                                                 <button

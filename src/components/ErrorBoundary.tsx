@@ -13,6 +13,13 @@ interface State {
 }
 
 class ErrorBoundary extends Component<Props, State> {
+    // This project has no React type declarations installed (no @types/react; React 19 ships none),
+    // so `react` is implicitly `any` and TS can't see Component's inherited members on this class.
+    // Declare the ones we use (type-only — no runtime effect). The real fix is installing
+    // @types/react@19, but that would surface many new errors across the loosely-typed codebase.
+    declare props: Props;
+    declare setState: (state: Partial<State> | null) => void;
+
     public state: State = {
         hasError: false,
         error: null,

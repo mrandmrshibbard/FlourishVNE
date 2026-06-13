@@ -87,6 +87,8 @@ export enum CommandType {
     RestockCollection = 'RestockCollection', // Refill an item list/collection's stock
     BuyItem = 'BuyItem',       // Buy an item from a shop list (spends currency)
     SellItem = 'SellItem',     // Sell an item to a shop list (gains currency)
+    Lightning = 'Lightning',   // One-shot lightning flash(es), optionally synced with a thunder SFX
+    Flashlight = 'Flashlight', // Darken the screen except a soft circle of light that follows the mouse
 }
 
 /**
@@ -154,6 +156,9 @@ export interface DialogueCommand extends BaseCommand {
     voiceAudioId?: VNID | null;
     /** Per-line text effect override (if not set, uses character default) */
     textEffect?: VNDialogueTextEffect;
+    /** Per-line textbox theme override (project.textboxThemes). Overrides the speaker's default
+     *  textbox/theme for this line only. Unset = use the character's textbox/theme. */
+    textboxThemeId?: VNID | null;
     /** If true, keeps this dialogue box open when the next command is a Choice command */
     keepOpenDuringChoices?: boolean;
 }
@@ -410,6 +415,43 @@ export interface FlashScreenCommand extends BaseCommand {
     type: CommandType.FlashScreen;
     color: string;
     duration: number; // in seconds
+}
+
+export interface LightningCommand extends BaseCommand {
+    type: CommandType.Lightning;
+    color?: string;        // flash color (default near-white #EAF2FF)
+    intensity?: number;    // 0..1 peak brightness (default 0.9)
+    duration?: number;     // total flicker duration in seconds (default 0.7)
+    flashes?: 1 | 2 | 3;   // flicker pattern (default 2)
+    thunderSfxId?: VNID | null; // optional thunder audio asset
+    thunderDelay?: number; // seconds after the flash before thunder plays (default 0.6)
+    thunderVolume?: number; // 0..1 (default uses sfx volume)
+    /** When false, the flash sits BEHIND the dialogue box so it isn't lit (default true = flashes everything). */
+    affectsDialogue?: boolean;
+}
+
+export interface FlashlightCommand extends BaseCommand {
+    type: CommandType.Flashlight;
+    /** Turn the flashlight on or off. */
+    enabled: boolean;
+    /** Light circle radius as % of the smaller screen dimension (default 22). */
+    radius?: number;
+    /** Edge softness/feather, 0..1 (default 0.6 = soft falloff). */
+    softness?: number;
+    /** How dark the rest of the screen gets, 0..1 (default 0.85). */
+    darkness?: number;
+    /** Darkness/vignette color (default black). */
+    color?: string;
+    /** Optional key the player can press to toggle the flashlight on/off (e.g. "f"). */
+    toggleKey?: string;
+    /** Optional SFX played when the flashlight turns on (e.g. a click). */
+    sfxId?: VNID | null;
+    /** When false, the dialogue box stays fully lit above the darkness (default true = it dims too). */
+    affectsDialogue?: boolean;
+    /** When true, switching the flashlight OFF (toggle key) keeps the screen pitch-black instead of
+     *  revealing it — for dark rooms. The darkness only ends via a Flashlight → Turn off command.
+     *  Default false (off reveals the scene). */
+    darkWhenOff?: boolean;
 }
 
 export interface SetScreenOverlayEffectCommand extends BaseCommand {
@@ -892,7 +934,7 @@ export type VNCommand =
     | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
-    | FlashScreenCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
+    | FlashScreenCommand | LightningCommand | FlashlightCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | ShowItemCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand

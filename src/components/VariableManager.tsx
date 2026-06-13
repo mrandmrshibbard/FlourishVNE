@@ -152,18 +152,22 @@ function checkUIElementsForVariableUsage(
             });
         }
         
-        // Check text content for variable references
-        if (element.content && (element.content.includes(`{${variableName}}`) || element.content.includes(`{${variableId}}`))) {
+        // Check text content for variable references.
+        // NOTE: `content`/`children` are not fields on any current VNUIElement (element text lives in
+        // `.text`), so these checks are effectively no-ops today — preserved as-is to avoid a
+        // behavior change. (Latent bug: text-reference detection on elements doesn't actually fire.)
+        const anyEl = element as any;
+        if (anyEl.content && (anyEl.content.includes(`{${variableName}}`) || anyEl.content.includes(`{${variableId}}`))) {
             usages.push({
                 location: locationPrefix,
                 type: 'text-reference',
                 detail: i18n.t('variables:usage.elTextRef', { name: element.name || element.type })
             });
         }
-        
+
         // Recursively check children
-        if (element.children && Array.isArray(element.children)) {
-            checkUIElementsForVariableUsage(element.children, variableId, variableName, locationPrefix, usages);
+        if (anyEl.children && Array.isArray(anyEl.children)) {
+            checkUIElementsForVariableUsage(anyEl.children, variableId, variableName, locationPrefix, usages);
         }
     });
 }

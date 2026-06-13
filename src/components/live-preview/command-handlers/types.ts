@@ -29,6 +29,9 @@ export interface CommandContext {
     musicAudioRef: React.RefObject<HTMLAudioElement>;
     fadeAudio: (audio: HTMLAudioElement, targetVolume: number, duration?: number, onComplete?: () => void) => void;
     playSound: (soundId: VNID | null, volume?: number, loop?: boolean) => HTMLAudioElement | null | void;
+    /** Play a dialogue VOICE clip: only one at a time (no overlap), volume follows the Voice slider
+     *  independently of SFX. Falls back to playSound if absent (older callers). */
+    playVoice?: (soundId: VNID | null, volume?: number) => HTMLAudioElement | null | void;
     stopAllSfx: () => void;
     /** Stop sound effects: all when audioId is omitted/null, else just that sound; optional fade-out (seconds). */
     stopSfx: (audioId?: VNID | null, fadeDuration?: number) => void;
@@ -36,6 +39,7 @@ export interface CommandContext {
         textSpeed: number;
         musicVolume: number;
         sfxVolume: number;
+        voiceVolume?: number;
         enableSkip: boolean;
     };
     // Additional utilities for complex handlers

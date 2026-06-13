@@ -68,7 +68,7 @@ export const variableReducer = (state: VNProject, action: VariableAction): VNPro
                             // FIX: Rewrote filter to be more explicit and type-safe.
                             const filteredActions = opt.actions.filter(action => {
                                 if (action.type === UIActionType.SetVariable) {
-                                    return action.variableId !== variableId;
+                                    return (action as any).variableId !== variableId;
                                 }
                                 return true;
                             });

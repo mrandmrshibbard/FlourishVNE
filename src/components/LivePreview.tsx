@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
-import { flushSync } from 'react-dom';
+import { flushSync, createPortal } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
@@ -15,7 +15,7 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, GameSetting, GameToggleSetting, UIElementType,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey
 } from '../features/ui/types';
 import { VNItem, VNItemCollection } from '../features/items/types';
@@ -23,7 +23,7 @@ import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
-    FlashScreenCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
+    FlashScreenCommand, LightningCommand, FlashlightCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
     ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
@@ -1021,10 +1021,137 @@ function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: numb
 const scalePx = (n: number) => `calc(var(--font-scale,1) * ${n}px)`;
 
 // --- Player UI Components ---
-const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject }> = ({ dialogue, settings, projectUI, onFinished, variables, project }) => {
+// Crossfades an <img> when its `src` changes — used for appearance-state image swaps so a reactive
+// picture change eases instead of snapping. transitionMs falsy → instant. The new image is layered
+// on top and fades in; older layers are dropped once the fade completes. The host container must be
+// positioned (the element wrapper is position:absolute), so the absolute layers fill it.
+const CrossfadeImage: React.FC<{ src: string; alt?: string; style: React.CSSProperties; transitionMs?: number }> = ({ src, alt, style, transitionMs }) => {
+    const keyRef = useRef(0);
+    const prev = useRef(src);
+    const [layers, setLayers] = useState<{ src: string; k: number }[]>([{ src, k: 0 }]);
+    useEffect(() => {
+        if (src === prev.current) return;
+        prev.current = src;
+        keyRef.current += 1;
+        const k = keyRef.current;
+        if (!transitionMs) { setLayers([{ src, k }]); return; }
+        setLayers(ls => [...ls, { src, k }]);
+        const t = window.setTimeout(() => setLayers([{ src, k }]), transitionMs + 60);
+        return () => window.clearTimeout(t);
+    }, [src, transitionMs]);
+    return (
+        <>
+            {layers.map((layer, i) => (
+                <img
+                    key={layer.k}
+                    src={layer.src}
+                    alt={alt}
+                    style={{
+                        ...style,
+                        ...(i === 0 ? {} : { position: 'absolute', inset: 0 }),
+                        ...(i > 0 && transitionMs ? { animation: `vnImgCrossfade ${transitionMs}ms ease forwards` } : {}),
+                    }}
+                />
+            ))}
+        </>
+    );
+};
+
+// Resolve a speaker's effective textbox appearance. Precedence: a per-line theme override (from the
+// Dialogue command) wins outright; otherwise the character's assigned theme is the base with the
+// character's inline custom `textbox` layered on top. Missing/deleted theme ids fall back safely.
+const resolveEffectiveTextbox = (
+    project: VNProject,
+    character: { textbox?: Record<string, unknown>; textboxThemeId?: VNID } | null | undefined,
+    lineThemeId?: VNID | null,
+): Record<string, unknown> | undefined => {
+    const themes = project.textboxThemes as Record<string, any> | undefined;
+    if (lineThemeId && themes?.[lineThemeId]) return themes[lineThemeId];
+    const base = character?.textboxThemeId ? themes?.[character.textboxThemeId] : undefined;
+    const inline = character?.textbox;
+    if (base || inline) return { ...(base || {}), ...(inline || {}) };
+    return undefined;
+};
+
+// ── Appearance states (variable-reactive element styling) ──
+// The FIRST state whose conditions all match wins; a state with no conditions never auto-activates.
+const pickActiveAppearanceState = (
+    element: VNUIElement,
+    variables: Record<VNID, string | number | boolean>,
+    evalConditions: (conditions: any, variables: any) => boolean,
+): UIAppearanceState | null => {
+    const states = (element as { appearanceStates?: UIAppearanceState[] }).appearanceStates;
+    if (!states || states.length === 0) return null;
+    for (const st of states) {
+        if (st.conditions && st.conditions.length > 0 && evalConditions(st.conditions, variables)) return st;
+    }
+    return null;
+};
+
+// Returns a shallow clone with the state's primaryColor/image mapped onto the element's typed
+// "main" fields (Meter fill, Text colour, Button bg, Image/Button picture). Universal overrides
+// (opacity/scale/rotation/glow) are applied to the wrapper style by the caller, not here.
+const mergeAppearanceStatePrimary = (element: VNUIElement, state: UIAppearanceState): VNUIElement => {
+    if (!state.primaryColor && !state.image) return element;
+    const el = { ...element } as Record<string, unknown> & { type: UIElementType };
+    if (state.primaryColor) {
+        if (el.type === UIElementType.Meter) { el.fillColor = state.primaryColor; el.fillColorEnd = undefined; }
+        else if (el.type === UIElementType.Text) { el.font = { ...(el.font as object || {}), color: state.primaryColor }; }
+        else if (el.type === UIElementType.Button) { el.backgroundColor = state.primaryColor; }
+    }
+    if (state.image) {
+        if (el.type === UIElementType.Image) { el.background = { type: 'image', assetId: state.image.id }; el.image = state.image; }
+        else if (el.type === UIElementType.Button) { el.image = state.image; }
+    }
+    return el as unknown as VNUIElement;
+};
+
+// Flashlight overlay background: a radial hole (transparent center → dark edges) centered at the
+// cursor. `mx/my` are px within the overlay; softness widens the feathered falloff.
+const flashlightBg = (mx: number, my: number, radiusPx: number, softness: number, darkRgba: string): string => {
+    const inner = Math.round(Math.max(0, Math.min(1, 1 - softness)) * 100); // solid-clear inner %
+    return `radial-gradient(circle ${Math.max(20, radiusPx)}px at ${mx}px ${my}px, transparent 0%, transparent ${inner}%, ${darkRgba} 100%)`;
+};
+
+// First built-in dialogue reactive state whose conditions match (empty-conditions states never auto-fire).
+const pickReactiveTextboxState = (
+    states: any[] | undefined,
+    variables: Record<VNID, string | number | boolean>,
+    evalConditions: (conditions: any, variables: any) => boolean,
+): any | null => {
+    if (!states || states.length === 0) return null;
+    for (const st of states) {
+        if (st.conditions && st.conditions.length > 0 && evalConditions(st.conditions, variables)) return st;
+    }
+    return null;
+};
+
+const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState }) => {
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
     const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, settings.textSpeed);
+
+    // Per-character textbox overrides (appearance only). Resolves a per-line theme override > the
+    // character's assigned theme (+ inline custom on top). Any field left undefined falls back to
+    // the project-global dialogue UI below via `charTb?.X ?? projectUI.X`.
+    const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
+    let charTb = resolveEffectiveTextbox(project, character, dialogue.textboxThemeId) as any;
+
+    // Variable-reactive dialogue state: layer its DEFINED textbox fields on top of the resolved
+    // character/theme look. `reactiveTransition` tweens the change (both into and out of the state,
+    // since the duration is the max across all states, not just the active one).
+    if (reactiveState) {
+        const merged = { ...(charTb || {}) };
+        for (const [k, v] of Object.entries(reactiveState)) {
+            if (v !== undefined && k !== 'id' && k !== 'name' && k !== 'conditions' && k !== 'hideNamebox' && k !== 'transitionMs') merged[k] = v;
+        }
+        charTb = merged;
+    }
+    const reactiveMs = (projectUI.dialogueReactiveStates || []).reduce(
+        (m: number, s: any) => (s.transitionMs ? Math.max(m, s.transitionMs) : m), 0);
+    const reactiveTransition = reactiveMs > 0
+        ? `background-color ${reactiveMs}ms ease, background ${reactiveMs}ms ease, opacity ${reactiveMs}ms ease, border-radius ${reactiveMs}ms ease`
+        : undefined;
     
     const handleClick = () => {
         if (hasFinished) {
@@ -1034,20 +1161,22 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
         }
     }
 
-    // Resolve dialogue box image/video URL
-    const dialogueBoxUrl = projectUI.dialogueBoxImage 
-        ? (projectUI.dialogueBoxImage.type === 'video' 
-            ? project.videos[projectUI.dialogueBoxImage.id]?.videoUrl 
-            : (project.images[projectUI.dialogueBoxImage.id]?.imageUrl || project.backgrounds[projectUI.dialogueBoxImage.id]?.imageUrl)
+    // Resolve dialogue box image/video URL (character override, else global)
+    const boxImage = charTb?.dialogueBoxImage ?? projectUI.dialogueBoxImage;
+    const dialogueBoxUrl = boxImage
+        ? (boxImage.type === 'video'
+            ? project.videos[boxImage.id]?.videoUrl
+            : (project.images[boxImage.id]?.imageUrl || project.backgrounds[boxImage.id]?.imageUrl)
           )
         : null;
-    const isDialogueBoxVideo = projectUI.dialogueBoxImage?.type === 'video';
+    const isDialogueBoxVideo = boxImage?.type === 'video';
 
-    // Resolve dialogue box border image URL
-    const dialogueBorderUrl = projectUI.dialogueBoxBorderImage
-        ? (project.images[projectUI.dialogueBoxBorderImage.id]?.imageUrl || project.backgrounds[projectUI.dialogueBoxBorderImage.id]?.imageUrl)
+    // Resolve dialogue box border image URL (character override, else global)
+    const borderImage = charTb?.dialogueBoxBorderImage ?? projectUI.dialogueBoxBorderImage;
+    const dialogueBorderUrl = borderImage
+        ? (project.images[borderImage.id]?.imageUrl || project.backgrounds[borderImage.id]?.imageUrl)
         : null;
-    const dialogueBorderPadding = projectUI.dialogueBorderPadding ?? 12;
+    const dialogueBorderPadding = charTb?.dialogueBorderPadding ?? projectUI.dialogueBorderPadding ?? 12;
 
     // Dialogue box layout settings
     const dialogueBoxWidth = projectUI.dialogueBoxWidth ?? 100;
@@ -1055,35 +1184,35 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     const dialogueBoxBottomMargin = projectUI.dialogueBoxBottomMargin ?? 20;
     const dialogueBoxPadding = projectUI.dialogueBoxPadding ?? 20;
 
-    // New appearance settings
-    const dialogueSizeMode = projectUI.dialogueBoxSizeMode ?? 'stretch';
-    const dialogueSlice = projectUI.dialogueBoxSlice ?? 30;
-    const dialogueColor = projectUI.dialogueBoxColor ?? '#0f172a';
-    const dialogueOpacity = projectUI.dialogueBoxOpacity ?? 90;
-    const dialogueBorderRadius = projectUI.dialogueBoxBorderRadius ?? 8;
+    // New appearance settings (character override, else global)
+    const dialogueSizeMode = charTb?.dialogueBoxSizeMode ?? projectUI.dialogueBoxSizeMode ?? 'stretch';
+    const dialogueSlice = charTb?.dialogueBoxSlice ?? projectUI.dialogueBoxSlice ?? 30;
+    const dialogueColor = charTb?.dialogueBoxColor ?? projectUI.dialogueBoxColor ?? '#0f172a';
+    const dialogueOpacity = charTb?.dialogueBoxOpacity ?? projectUI.dialogueBoxOpacity ?? 90;
+    const dialogueBorderRadius = charTb?.dialogueBoxBorderRadius ?? projectUI.dialogueBoxBorderRadius ?? 8;
 
-    // Namebox settings
-    const nameboxImageUrl = projectUI.nameboxImage
-        ? (project.images[projectUI.nameboxImage.id]?.imageUrl || project.backgrounds[projectUI.nameboxImage.id]?.imageUrl)
+    // Namebox settings (character override, else global)
+    const nameboxImage = charTb?.nameboxImage ?? projectUI.nameboxImage;
+    const nameboxImageUrl = nameboxImage
+        ? (project.images[nameboxImage.id]?.imageUrl || project.backgrounds[nameboxImage.id]?.imageUrl)
         : null;
-    const nameboxColor = projectUI.nameboxColor ?? '#0f172a';
-    const nameboxOpacity = projectUI.nameboxOpacity ?? 92;
-    const nameboxPadding = projectUI.nameboxPadding ?? 8;
-    const nameboxHPadding = projectUI.nameboxHorizontalPadding ?? 14;
-    const nameboxBorderRadius = projectUI.nameboxBorderRadius ?? 6;
+    const nameboxColor = charTb?.nameboxColor ?? projectUI.nameboxColor ?? '#0f172a';
+    const nameboxOpacity = charTb?.nameboxOpacity ?? projectUI.nameboxOpacity ?? 92;
+    const nameboxPadding = charTb?.nameboxPadding ?? projectUI.nameboxPadding ?? 8;
+    const nameboxHPadding = charTb?.nameboxHorizontalPadding ?? projectUI.nameboxHorizontalPadding ?? 14;
+    const nameboxBorderRadius = charTb?.nameboxBorderRadius ?? projectUI.nameboxBorderRadius ?? 6;
     const nameboxOffsetX = projectUI.nameboxOffsetX ?? 20;
     const nameboxOffsetY = projectUI.nameboxOffsetY ?? 0;
-    const nameboxSizeMode = projectUI.nameboxSizeMode ?? 'stretch';
+    const nameboxSizeMode = charTb?.nameboxSizeMode ?? projectUI.nameboxSizeMode ?? 'stretch';
 
     // Get character-specific font if available
-    const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
     const characterFont = character?.fontFamily;
     const characterFontSize = character?.fontSize;
     const characterFontWeight = character?.fontWeight;
     const characterFontItalic = character?.fontItalic;
     
     const dialogueTextStyle = {
-        ...fontSettingsToStyle(projectUI.dialogueTextFont),
+        ...fontSettingsToStyle(charTb?.dialogueTextFont ?? projectUI.dialogueTextFont),
         ...(characterFont ? { fontFamily: characterFont } : {}),
         ...(characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {}),
         ...(characterFontWeight ? { fontWeight: characterFontWeight } : {}),
@@ -1091,18 +1220,19 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     };
 
     const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
-    const showNamebox = dialogue.characterName !== 'Narrator';
+    const showNamebox = dialogue.characterName !== 'Narrator' && !reactiveState?.hideNamebox;
 
-    // Namebox style: uses name font with character colour override
+    // Namebox style: uses name font (character override, else global) with character colour override
+    const nameFont = charTb?.dialogueNameFont ?? projectUI.dialogueNameFont;
     const nameStyle: React.CSSProperties = {
-        ...fontSettingsToStyle(projectUI.dialogueNameFont),
+        ...fontSettingsToStyle(nameFont),
         ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
     };
 
     // Build namebox background style
     const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
-        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: scalePx(nameboxBorderRadius) }
-        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: scalePx(nameboxBorderRadius) };
+        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition }
+        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition };
 
     // Build dialogue box background color (used when no image, or behind transparent images)
     const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
@@ -1161,7 +1291,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         height: '100%',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: projectUI.dialogueNameFont?.align === 'center' ? 'center' : projectUI.dialogueNameFont?.align === 'right' ? 'flex-end' : 'flex-start',
+                        justifyContent: nameFont?.align === 'center' ? 'center' : nameFont?.align === 'right' ? 'flex-end' : 'flex-start',
                         ...nameboxBgStyle,
                         padding: `${scalePx(nameboxPadding)} ${scalePx(nameboxHPadding)}`,
                         ...(hasCustomImage || nameboxImageUrl ? {} : {
@@ -1171,7 +1301,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                         }),
                     }}>
                         <span style={{...nameStyle, lineHeight: 1.3}}>
-                            <span style={extractTextGradientStyle(projectUI.dialogueNameFont) || undefined}>{dialogue.characterName}</span>
+                            <span style={extractTextGradientStyle(nameFont) || undefined}>{dialogue.characterName}</span>
                         </span>
                     </div>
                 </div>
@@ -1191,13 +1321,14 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
                 }}
                 onClick={handleClick}
             >
-                <div 
+                <div
                     className="relative"
                     style={{
                         borderRadius: scalePx(dialogueBorderRadius),
                         overflow: 'hidden',
                         width: '100%',
                         height: '100%',
+                        transition: reactiveTransition,
                         ...(hasCustomImage ? {} : {
                             backgroundColor: dialogueBgColor,
                             border: '1px solid rgba(148,163,184,0.25)',
@@ -2183,7 +2314,11 @@ const CGGalleryGridElement: React.FC<{
     variables: Record<VNID, string | number | boolean>;
     project: VNProject;
     assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
-}> = ({ element, entries, variables, project, assetResolver }) => {
+    /** The screen-root node to portal the fullscreen viewer into, so it overlays ALL screen
+     *  elements (e.g. a Back button) regardless of their layer instead of being trapped in this
+     *  element's stacking context. */
+    viewerPortalRef?: React.RefObject<HTMLElement>;
+}> = ({ element, entries, variables, project, assetResolver, viewerPortalRef }) => {
     const [viewingEntry, setViewingEntry] = useState<CGGalleryEntry | null>(null);
     const [viewerIndex, setViewerIndex] = useState(0);
 
@@ -2208,12 +2343,14 @@ const CGGalleryGridElement: React.FC<{
         setViewingEntry(unlockedEntries[newIndex]);
     };
 
-    // Fullscreen viewer overlay
+    // Fullscreen viewer overlay. Portaled to the screen root at a very high z-index so it ALWAYS
+    // sits above other screen elements (Back buttons, etc.) and fills the whole screen — never
+    // trapped inside this gallery element's box/stacking context.
     if (viewingEntry) {
         const viewUrl = assetResolver(viewingEntry.assetId, 'image');
-        return (
+        const viewer = (
             <div
-                className="absolute inset-0 z-50 flex items-center justify-center"
+                className="absolute inset-0 z-[9999] flex items-center justify-center"
                 style={{ backgroundColor: element.backgroundColor || 'rgba(0,0,0,0.95)', pointerEvents: 'auto' }}
                 onClick={() => setViewingEntry(null)}
             >
@@ -2225,6 +2362,16 @@ const CGGalleryGridElement: React.FC<{
                         onClick={e => e.stopPropagation()}
                     />
                 )}
+                {/* Close (X) button — explicit, always-visible affordance. Inset DOWN from the very
+                    corner so it doesn't collide with the editor test-play's own close-✕ that sits in
+                    the top-right corner; still reads as a top-right close in exported games. */}
+                <button
+                    aria-label="Close"
+                    className="absolute top-16 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-black/55 hover:bg-black/85 text-white text-xl leading-none"
+                    onClick={e => { e.stopPropagation(); setViewingEntry(null); }}
+                >
+                    ✕
+                </button>
                 {/* Navigation arrows */}
                 {unlockedEntries.length > 1 && (
                     <>
@@ -2247,14 +2394,16 @@ const CGGalleryGridElement: React.FC<{
                     {element.showNames !== false && (
                         <div className="text-white text-sm mb-1">{viewingEntry.name}</div>
                     )}
-                    <div className="text-white/40 text-xs">Click anywhere to close</div>
+                    <div className="text-white/40 text-xs">Click anywhere (or ✕) to close</div>
                 </div>
-                {/* Counter */}
-                <div className="absolute top-4 right-4 text-white/50 text-sm">
+                {/* Counter — inset down to clear the editor test-play top-left chrome. */}
+                <div className="absolute top-16 left-4 text-white/50 text-sm">
                     {viewerIndex + 1} / {unlockedEntries.length}
                 </div>
             </div>
         );
+        const portalTarget = viewerPortalRef?.current;
+        return portalTarget ? createPortal(viewer, portalTarget) : viewer;
     }
 
     // Thumbnail grid
@@ -3213,7 +3362,27 @@ const UIScreenRenderer: React.FC<{
                 return null;
             }
         }
-        
+
+        // Variable-reactive appearance state: the active state merges its "main" colour/image into
+        // the element's typed fields (below), and its universal overrides (opacity/scale/rotation/
+        // glow) fold into the wrapper `style`. `transitionMs` tweens the change.
+        const activeState = pickActiveAppearanceState(element, variables, evaluateConditions);
+        if (activeState) element = mergeAppearanceStatePrimary(element, activeState);
+        let stateExtraTransform = '';
+        let stateFilter: string | undefined;
+        let stateOpacityMul = 1;
+        let stateTransition: string | undefined;
+        if (activeState) {
+            if (activeState.scale != null && activeState.scale !== 1) stateExtraTransform += ` scale(${activeState.scale})`;
+            if (activeState.rotation) stateExtraTransform += ` rotate(${activeState.rotation}deg)`;
+            // No typed primary target (not Meter/Text/Button) → primaryColor acts as the glow colour.
+            const noTypedPrimary = element.type !== UIElementType.Meter && element.type !== UIElementType.Text && element.type !== UIElementType.Button;
+            const glow = activeState.glowColor || (activeState.primaryColor && noTypedPrimary ? activeState.primaryColor : undefined);
+            if (glow) stateFilter = `drop-shadow(0 0 ${activeState.glowSize ?? 8}px ${glow})`;
+            if (activeState.opacity != null) stateOpacityMul = activeState.opacity;
+            if (activeState.transitionMs) stateTransition = `transform ${activeState.transitionMs}ms ease, opacity ${activeState.transitionMs}ms ease, filter ${activeState.transitionMs}ms ease`;
+        }
+
         const transitionStyle = getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay);
 
         // "Disabled When" gating: when disabledConditions are met, the element is shown
@@ -3222,6 +3391,7 @@ const UIScreenRenderer: React.FC<{
         const isDisabled = !!(element.disabledConditions && element.disabledConditions.length > 0
             && evaluateConditions(element.disabledConditions, variables));
 
+        const combinedFilter = [isDisabled ? 'grayscale(0.6)' : '', stateFilter || ''].filter(Boolean).join(' ') || undefined;
         const style: React.CSSProperties = {
             position: 'absolute',
             left: `${element.x}%`, top: `${element.y}%`,
@@ -3230,15 +3400,18 @@ const UIScreenRenderer: React.FC<{
             // background is ALWAYS GPU-composited and (once it has a parallax/scale transform)
             // will paint over non-composited siblings at the same z-index — which made buttons
             // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
-            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)`,
+            // `stateExtraTransform` (appearance-state scale/rotation) composes on top.
+            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)${stateExtraTransform}`,
             overflow: 'hidden', // Prevent content overflow when using cover
             // Author-controlled stacking. Default 0 → insertion order (back-compat).
             zIndex: element.layer ?? 0,
-            opacity: (element.opacity ?? 1) * (isDisabled ? 0.45 : 1),
+            opacity: (element.opacity ?? 1) * (isDisabled ? 0.45 : 1) * stateOpacityMul,
             // On a pass-through screen the wrapper is pointer-events:none, so each visible
             // element must opt back in to remain clickable.
             ...(isPassThrough && !isDisabled ? { pointerEvents: 'auto' as const } : {}),
-            ...(isDisabled ? { pointerEvents: 'none' as const, filter: 'grayscale(0.6)', cursor: 'not-allowed' } : {}),
+            ...(isDisabled ? { pointerEvents: 'none' as const, cursor: 'not-allowed' } : {}),
+            ...(combinedFilter ? { filter: combinedFilter } : {}),
+            ...(stateTransition ? { transition: stateTransition } : {}),
             ...transitionStyle,
         };
 
@@ -3261,6 +3434,7 @@ const UIScreenRenderer: React.FC<{
 
                 const textStyle: React.CSSProperties = {
                     ...fontSettingsToStyle(el.font),
+                    ...(activeState?.transitionMs ? { transition: `color ${activeState.transitionMs}ms ease` } : {}),
                 };
 
                 return <div key={el.id}
@@ -3348,13 +3522,14 @@ const UIScreenRenderer: React.FC<{
                         </div>
                     );
                 } else {
+                    // Crossfade duration for reactive image swaps = the longest transitionMs among this
+                    // element's appearance states that swap the image (0 = no crossfade → instant). Using
+                    // the element's states (not just the active one) keeps the swap-out animated too.
+                    const imageCrossfadeMs = (el.appearanceStates || []).reduce(
+                        (m, s) => (s.image && s.transitionMs ? Math.max(m, s.transitionMs) : m), 0);
                     return (
                         <div key={el.id} style={containerStyle}>
-                            <img 
-                                src={url} 
-                                alt={el.name} 
-                                style={mediaStyle}
-                            />
+                            <CrossfadeImage src={url} alt={el.name} style={mediaStyle} transitionMs={imageCrossfadeMs || undefined} />
                         </div>
                     );
                 }
@@ -3788,6 +3963,7 @@ const UIScreenRenderer: React.FC<{
                             variables={variables}
                             project={project}
                             assetResolver={assetResolver}
+                            viewerPortalRef={screenRootRef}
                         />
                     </div>
                 );
@@ -3873,7 +4049,9 @@ const UIScreenRenderer: React.FC<{
                                 background: fillBackground,
                                 ...(fillImageUrl ? { backgroundImage: `url(${fillImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
                                 borderRadius: radius,
-                                transition: 'clip-path 0.3s ease',
+                                // Tween the fill colour too when an appearance state with a transition is active
+                                // (e.g. HP bar eases green→red). Solid fills animate via background-color.
+                                transition: `clip-path 0.3s ease${activeState?.transitionMs ? `, background-color ${activeState.transitionMs}ms ease, background ${activeState.transitionMs}ms ease` : ''}`,
                             }} />
                             {el.showValue && (
                                 <div style={{
@@ -4431,6 +4609,46 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
     const [flashTrigger, setFlashTrigger] = useState(0);
     const [shakeTrigger, setShakeTrigger] = useState(0);
+    // Lightning (one-shot flash sequence) — mirrors the flash ref/trigger pattern.
+    // The single currently-playing dialogue voice clip — kept separate from the SFX pool so a new
+    // line (or advancing) can stop it (no overlap) and so its volume follows the Voice slider, not SFX.
+    const currentVoiceRef = useRef<HTMLAudioElement | null>(null);
+    const activeLightningRef = useRef<{ color: string; intensity: number; duration: number; flashes: number; affectsDialogue: boolean; key: number } | null>(null);
+    const [lightningTrigger, setLightningTrigger] = useState(0);
+    // Flashlight (persistent mouse-following dark overlay). `on` is the live toggle state.
+    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean } | null>(null);
+    const flashlightOverlayRef = useRef<HTMLDivElement | null>(null);
+
+    // Flashlight: let the player toggle it on/off with the author-chosen key.
+    useEffect(() => {
+        const key = flashlight?.toggleKey;
+        if (!key) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === key.toLowerCase()) {
+                e.preventDefault();
+                setFlashlight(f => f ? { ...f, on: !f.on } : f);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [flashlight?.toggleKey]);
+
+    // Flashlight: move the light hole to follow the cursor (updates the overlay's gradient directly,
+    // no React re-render per mouse move).
+    useEffect(() => {
+        if (!flashlight?.on) return;
+        const onMove = (e: MouseEvent) => {
+            const el = flashlightOverlayRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const radiusPx = (flashlight.radius / 100) * Math.min(rect.width, rect.height);
+            el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100));
+        };
+        window.addEventListener('mousemove', onMove);
+        return () => window.removeEventListener('mousemove', onMove);
+    }, [flashlight?.on, flashlight?.radius, flashlight?.softness, flashlight?.darkness, flashlight?.color]);
     const [activeCreditRoll, setActiveCreditRoll] = useState<CreditRollCommand | null>(null);
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
@@ -5590,6 +5808,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     }, [playerState?.musicState?.audioId, playerState?.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
 
     const stopAllSfx = useCallback(() => {
+        // Stop the current dialogue voice too (scene change / quit / load / skip-backward).
+        if (currentVoiceRef.current) {
+            try { currentVoiceRef.current.pause(); currentVoiceRef.current.currentTime = 0; currentVoiceRef.current.src = ''; } catch (e) {}
+            currentVoiceRef.current = null;
+        }
         // Stop any WebAudio buffer sources
         try {
             sfxSourceNodesRef.current.forEach(src => {
@@ -5699,6 +5922,38 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return null;
         }
     }, [assetResolver, settings.sfxVolume]);
+
+    /** Stop the current dialogue voice clip (called when advancing past a voiced line). */
+    const stopVoice = useCallback(() => {
+        const a = currentVoiceRef.current;
+        if (a) { try { a.pause(); a.currentTime = 0; a.src = ''; } catch (e) {} }
+        currentVoiceRef.current = null;
+    }, []);
+
+    /**
+     * Play a dialogue VOICE clip. Unlike playSound: (1) only one voice plays at a time — a new voice
+     * (or advancing) stops the previous one, so lines never overlap; (2) its volume follows the Voice
+     * slider INDEPENDENTLY of the SFX volume (own audio category).
+     */
+    const playVoice = useCallback((soundId: VNID | null, voiceVol?: number): HTMLAudioElement | null => {
+        stopVoice();
+        if (!soundId) return null;
+        try {
+            const url = assetResolver(soundId, 'audio');
+            if (!url) return null;
+            const audio = new Audio(url);
+            audio.volume = typeof voiceVol === 'number' ? Math.max(0, Math.min(1, voiceVol)) : 1.0;
+            currentVoiceRef.current = audio;
+            audio.play().catch(e => console.error('[Voice] playback failed:', e));
+            audio.addEventListener('ended', () => {
+                if (currentVoiceRef.current === audio) currentVoiceRef.current = null;
+            }, { once: true });
+            return audio;
+        } catch (e) {
+            console.error('[Voice] error:', e);
+            return null;
+        }
+    }, [assetResolver, stopVoice]);
 
     // Keep master gain in sync with settings
     useEffect(() => {
@@ -5854,6 +6109,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 musicAudioRef,
                 fadeAudio,
                 playSound,
+                playVoice,
                 stopAllSfx,
                 stopSfx,
                 settings,
@@ -5959,7 +6215,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         const interval = window.setInterval(tick, 120);
         return () => window.clearInterval(interval);
-    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions, notify]);
+    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, playVoice, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions, notify]);
 
     // ── Plugin runtime bridge ─────────────────────────────────────────────────
     // While LivePreview is mounted, plugins' api.getVariable/setVariable read & write the
@@ -6331,6 +6587,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             musicAudioRef,
             fadeAudio,
             playSound,
+            playVoice,
             stopAllSfx,
             stopSfx,
             settings,
@@ -6410,6 +6667,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // Clear active visual effects
                         activeFlashRef.current = null;
                         setFlashTrigger(0);
+                        activeLightningRef.current = null;
+                        setFlashlight(null);
                         activeShakeRef.current = null;
                         scheduler.reset();
                         variableStoreRef.current = null;
@@ -6840,12 +7099,51 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.FlashScreen: {
                     const cmd = command as FlashScreenCommand;
-                    
+
                     // Set flash in ref with unique key and trigger re-render
                     activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
                     setFlashTrigger(prev => prev + 1);
-                    
+
                     // Let the normal advance() function handle index progression
+                    break;
+                }
+                case CommandType.Lightning: {
+                    const cmd = command as LightningCommand;
+                    activeLightningRef.current = {
+                        color: cmd.color || '#EAF2FF',
+                        intensity: cmd.intensity ?? 0.9,
+                        duration: cmd.duration ?? 0.7,
+                        flashes: cmd.flashes ?? 2,
+                        affectsDialogue: cmd.affectsDialogue !== false,
+                        key: Date.now(),
+                    };
+                    setLightningTrigger(prev => prev + 1);
+                    // Sync thunder: play the SFX after the configured delay (light travels faster than sound).
+                    if (cmd.thunderSfxId) {
+                        const tid = window.setTimeout(() => {
+                            playSound(cmd.thunderSfxId!, cmd.thunderVolume);
+                        }, Math.max(0, (cmd.thunderDelay ?? 0.6) * 1000));
+                        activeEffectTimeoutsRef.current.push(tid);
+                    }
+                    break;
+                }
+                case CommandType.Flashlight: {
+                    const cmd = command as FlashlightCommand;
+                    if (cmd.enabled) {
+                        setFlashlight({
+                            radius: cmd.radius ?? 22,
+                            softness: cmd.softness ?? 0.6,
+                            darkness: cmd.darkness ?? 0.85,
+                            color: cmd.color || '#000000',
+                            toggleKey: cmd.toggleKey,
+                            affectsDialogue: cmd.affectsDialogue !== false,
+                            darkWhenOff: cmd.darkWhenOff === true,
+                            on: true,
+                        });
+                        if (cmd.sfxId) playSound(cmd.sfxId);
+                    } else {
+                        setFlashlight(null);
+                    }
                     break;
                 }
                 case CommandType.SetScreenOverlayEffect: {
@@ -6861,6 +7159,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     intensity: cmd.intensity,
                                     variant: cmd.variant,
                                     color: (cmd as any).color,
+                                    params: (cmd as any).params,
                                 }),
                             }
                         }
@@ -7085,15 +7384,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 advance();
             }
         })();
-    }, [playerState, project, assetResolver, playSound, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
+    }, [playerState, project, assetResolver, playSound, playVoice, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
 
     // --- Input & Action Handlers ---
     const handleDialogueAdvance = () => {
         // Frozen behind a pausing overlay — ignore all advance attempts (click/key/auto/skip).
         if (scenePaused) return;
+        // Advancing past a line cuts off its voice clip so it doesn't bleed into the next line.
+        stopVoice();
         updatePlayerState(p => {
             if (!p || !p.uiState.dialogue) return p;
-            
+
             // Check if the current dialogue has keepOpenDuringChoices flag
             // and the next command is a Choice command
             const scene = project.scenes[p.currentSceneId];
@@ -7884,8 +8185,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 // Clear active visual effects
                 activeFlashRef.current = null;
                 setFlashTrigger(0);
+                activeLightningRef.current = null;
+                setFlashlight(null);
                 activeShakeRef.current = null;
-                
+
                 // Reset scheduler and variable cache before executing the new scene
                 commandSchedulerRef.current.reset();
                 variableStoreRef.current = null;
@@ -8705,15 +9008,31 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [playerState, project.ui.pauseScreenId, project.uiScreens, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
 
-    // Auto-advance effect
+    // Auto-advance effect. On a VOICED line, Auto mode waits for the voice clip to finish (plus a
+    // short grace) instead of the fixed timer, so spoken lines aren't cut off or left hanging.
+    // Unvoiced lines (or a voice that already ended) use the normal autoAdvanceDelay.
     useEffect(() => {
         if (!settings.autoAdvance || !playerState || playerState.mode !== 'playing' || scenePaused) return;
         if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
-        
-        const timer = setTimeout(() => {
+
+        const voice = currentVoiceRef.current;
+        if (voice && !voice.ended) {
+            let advanced = false;
+            let graceTimer = 0;
+            const doAdvance = () => { if (advanced) return; advanced = true; handleDialogueAdvance(); };
+            // ~0.4s grace after the voice ends feels natural before moving on.
+            const onEnded = () => { graceTimer = window.setTimeout(doAdvance, 400); };
+            voice.addEventListener('ended', onEnded, { once: true });
+            // Safety fallback: if the clip errors / never fires 'ended', don't hang auto-advance.
+            const fallbackMs = ((Number.isFinite(voice.duration) && voice.duration > 0) ? voice.duration : settings.autoAdvanceDelay) * 1000 + 2000;
+            const fallback = window.setTimeout(doAdvance, fallbackMs);
+            return () => { voice.removeEventListener('ended', onEnded); clearTimeout(fallback); if (graceTimer) clearTimeout(graceTimer); };
+        }
+
+        const timer = window.setTimeout(() => {
             handleDialogueAdvance();
         }, settings.autoAdvanceDelay * 1000);
-        
+
         return () => clearTimeout(timer);
     }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, scenePaused, handleDialogueAdvance]);
 
@@ -8947,6 +9266,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             const arranged = project.autoArrangeCharacters
                                 ? computeArrangedPositions(allChars.filter(c => !c.charId.startsWith('__ghost')).map(c => ({ id: c.charId, position: c.position })))
                                 : null;
+                            // Speaker emphasis: while a character is speaking, brighten them + nudge
+                            // forward and dim the others. Off by default; only when a line has a speaker.
+                            const emphasisOn = !!project.ui.speakerEmphasisEnabled;
+                            const emphasisSpeakerId = emphasisOn ? (playerState.uiState.dialogue?.characterId ?? null) : null;
+                            const emphasisDim = project.ui.speakerEmphasisDim ?? 0.5;
+                            const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
                             return allChars.map((char: StageCharacterState) => {
                             let transitionClass = '';
                             let animationDuration = '1s';
@@ -9194,7 +9519,26 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     </div>
                                 );
                             }
-                            
+
+                            // Speaker emphasis layer: dim non-speakers + slightly enlarge the speaker,
+                            // tweened so it eases as the speaker changes. Only when the feature is on.
+                            if (emphasisOn) {
+                                const isSpeaker = !!emphasisSpeakerId && char.charId === emphasisSpeakerId;
+                                const active = !!emphasisSpeakerId;
+                                const brightness = active ? (isSpeaker ? 1 : emphasisDim) : 1;
+                                const eScale = active && isSpeaker ? emphasisScale : 1;
+                                wrappedContent = (
+                                    <div className="w-full h-full relative" style={{
+                                        filter: brightness !== 1 ? `brightness(${brightness})` : undefined,
+                                        transform: eScale !== 1 ? `scale(${eScale})` : undefined,
+                                        transformOrigin: 'center bottom',
+                                        transition: 'filter 250ms ease, transform 250ms ease',
+                                    }}>
+                                        {wrappedContent}
+                                    </div>
+                                );
+                            }
+
                             // Apply tween scale and opacity to character container
                             const charScale = charTween?.scale ?? (char as any).scale ?? 1;
                             const charOpacity = charTween?.opacity;
@@ -9817,8 +10161,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         // Don't render the quick menu while a full-screen overlay (the text history/log) is
                         // open — otherwise its buttons paint on top of that overlay.
                         if (uiState.showHistory) return null;
-                        const qmColor = project.ui.quickMenuColor ?? '#0f172a';
-                        const qmOpacity = project.ui.quickMenuOpacity ?? 75;
+                        // Variable-reactive Quick Menu bar (whole-bar): first matching state can hide the
+                        // bar or override its color/opacity, tweened by qmReactiveMs.
+                        const qmReactive = pickReactiveTextboxState(project.ui.quickMenuReactiveStates, playerState.variables, evaluateConditions);
+                        if (qmReactive?.hide) return null;
+                        const qmReactiveMs = (project.ui.quickMenuReactiveStates || []).reduce(
+                            (m: number, s: any) => (s.transitionMs ? Math.max(m, s.transitionMs) : m), 0);
+                        const qmColor = qmReactive?.color ?? project.ui.quickMenuColor ?? '#0f172a';
+                        const qmOpacity = qmReactive?.opacity ?? project.ui.quickMenuOpacity ?? 75;
                         const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
                         const qmBg = hexToRgba(qmColor, qmOpacity);
                         const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
@@ -9865,6 +10215,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             padding: `${scalePx(4)} ${scalePx(10)}`,
                             fontSize: scalePx(12),
                             backdropFilter: 'blur(4px)',
+                            ...(qmReactiveMs > 0 ? { transition: `background ${qmReactiveMs}ms ease, background-color ${qmReactiveMs}ms ease, border-color ${qmReactiveMs}ms ease` } : {}),
                         };
                         const hasHistory = playerState.history.length > 0;
                         const qmButtonCfgs = project.ui.quickMenuButtons || {};
@@ -10027,7 +10378,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             </div>
                         );
                     })()}
-                    <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} />
+                    <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} reactiveState={pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions)} />
                 </>
             )}
             {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout} />}
@@ -10044,6 +10395,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     }
                 }}
             ></div>}
+            {/* Lightning — outer div scales the peak by intensity; inner flickers via keyframes.
+                z above the dialogue box (20) when it should flash it too, else below it. */}
+            {activeLightningRef.current && (
+                <div key={activeLightningRef.current.key} className="absolute inset-0 pointer-events-none" style={{ opacity: activeLightningRef.current.intensity, zIndex: activeLightningRef.current.affectsDialogue ? 50 : 15 }}>
+                    <div
+                        className="absolute inset-0"
+                        style={{ backgroundColor: activeLightningRef.current.color, animation: `vn-lightning-${activeLightningRef.current.flashes} ${activeLightningRef.current.duration}s ease-out` }}
+                        onAnimationEnd={(e) => {
+                            if (e.target === e.currentTarget) {
+                                activeLightningRef.current = null;
+                                setLightningTrigger(prev => prev + 1);
+                            }
+                        }}
+                    />
+                </div>
+            )}
+            {/* Flashlight — dark overlay with a soft hole that follows the cursor (updated imperatively).
+                z above the dialogue box (20) so it dims too, unless "don't affect dialogue box".
+                When toggled OFF with `darkWhenOff`, render SOLID darkness (no light hole) for dark rooms. */}
+            {flashlight && (flashlight.on || flashlight.darkWhenOff) && (
+                <div
+                    ref={flashlightOverlayRef}
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                        zIndex: flashlight.affectsDialogue ? 45 : 15,
+                        background: flashlight.on
+                            ? flashlightBg((typeof window !== 'undefined' ? window.innerWidth : 1280) / 2, (typeof window !== 'undefined' ? window.innerHeight : 720) / 2, (flashlight.radius / 100) * (typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720), flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100))
+                            : hexToRgba(flashlight.color, flashlight.darkness * 100),
+                    }}
+                />
+            )}
         </>
     };
 
@@ -10066,6 +10448,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         ...(activeHudScreen?.effects ?? []),
         ...(activeMenuScreen?.effects ?? []),
     ]);
+
+    // Fog/haze/smoke render BEHIND character sprites by default (atmospheric depth) unless the
+    // author ticked "in front of characters". Every other effect (rain, snow, …) stays in the
+    // normal overlay layer above the stage.
+    const FOG_LAYER_TYPES = new Set(['fog', 'haze', 'smoke']);
+    const belowCharEffects = activeOverlayEffects.filter(e => FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters);
+    const aboveCharEffects = activeOverlayEffects.filter(e => !(FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters));
 
     // Use fallback dimensions if stageSize hasn't been measured yet (width/height are 0)
     const overlayWidth = (stageSize?.width && stageSize.width > 0) ? stageSize.width : 1280;
@@ -10192,7 +10581,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
                     to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
                 }
-                
+                /* Appearance-state image swap crossfade (new image fades in over the old) */
+                @keyframes vnImgCrossfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
                 /* Screen IN transitions */
                 @keyframes screenTransitionfade {
                     from { opacity: 0; }
@@ -10263,6 +10657,37 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 @keyframes flash-anim {
                     0%, 100% { opacity: 0; }
                     50% { opacity: 0.9; }
+                }
+                /* Lightning flicker patterns (1 = single strike, 2 = double, 3 = stormy triple). */
+                @keyframes vn-lightning-1 {
+                    0% { opacity: 0; }
+                    6% { opacity: 1; }
+                    16% { opacity: 0.15; }
+                    24% { opacity: 0.6; }
+                    45% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+                @keyframes vn-lightning-2 {
+                    0% { opacity: 0; }
+                    4% { opacity: 1; }
+                    10% { opacity: 0.1; }
+                    16% { opacity: 0.85; }
+                    24% { opacity: 0.2; }
+                    34% { opacity: 0.5; }
+                    50% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+                @keyframes vn-lightning-3 {
+                    0% { opacity: 0; }
+                    3% { opacity: 0.9; }
+                    8% { opacity: 0.1; }
+                    13% { opacity: 1; }
+                    19% { opacity: 0.15; }
+                    26% { opacity: 0.7; }
+                    33% { opacity: 0.2; }
+                    42% { opacity: 0.55; }
+                    60% { opacity: 0; }
+                    100% { opacity: 0; }
                 }
 
                 .vnfx-canvas {
@@ -10494,9 +10919,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     />
                 )}
 
-                {activeOverlayEffects.length > 0 && (
+                {belowCharEffects.length > 0 && (
                     <ScreenOverlayEffects
-                        effects={activeOverlayEffects}
+                        effects={belowCharEffects}
+                        width={overlayWidth}
+                        height={overlayHeight}
+                        className="absolute inset-0 pointer-events-none z-[4]"
+                    />
+                )}
+                {aboveCharEffects.length > 0 && (
+                    <ScreenOverlayEffects
+                        effects={aboveCharEffects}
                         width={overlayWidth}
                         height={overlayHeight}
                         className="absolute inset-0 pointer-events-none z-40"

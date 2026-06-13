@@ -7,7 +7,7 @@ import { UIActionType } from './types/shared';
 
 const generateId = (prefix: string) => `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
 
-export const createDefaultUIScreens = (): { screens: Record<VNID, VNUIScreen>, specialIds: Omit<VNProjectUI, 'gameHudScreenId' | 'dialogueBoxImage' | 'choiceButtonImage' | 'dialogueNameFont' | 'dialogueTextFont' | 'choiceTextFont'> } => {
+export const createDefaultUIScreens = (): { screens: Record<VNID, VNUIScreen>, specialIds: Pick<VNProjectUI, 'titleScreenId' | 'saveScreenId' | 'loadScreenId' | 'settingsScreenId' | 'pauseScreenId'> } => {
     const titleScreenId = generateId('screen');
     const saveScreenId = generateId('screen');
     const loadScreenId = generateId('screen');
@@ -138,7 +138,9 @@ export const createInitialProject = (): VNProject => {
             ...specialIds,
             gameHudScreenId: null,
             dialogueBoxImage: null,
+            dialogueBoxBorderImage: null,
             choiceButtonImage: null,
+            choiceButtonBorderImage: null,
             dialogueNameFont: { family: 'Poppins, sans-serif', size: 22, color: '#FFFFFF', weight: 'bold', italic: false },
             dialogueTextFont: { family: 'Poppins, sans-serif', size: 20, color: '#FFFFFF', weight: 'normal', italic: false },
             choiceTextFont: { family: 'Poppins, sans-serif', size: 18, color: '#FFFFFF', weight: 'normal', italic: false },

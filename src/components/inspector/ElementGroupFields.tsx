@@ -17,7 +17,7 @@ import {
     VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement,
     UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, DropdownOption,
-    GameSetting, GameToggleSetting, UISlotRect,
+    GameSetting, GameToggleSetting, UISlotRect, UIAppearanceState,
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
@@ -114,7 +114,11 @@ export function summarizeElementGroup(element: VNUIElement, groupId: InspectorGr
         case 'logic': { const n = (a.action && a.action.type && a.action.type !== 'None' ? 1 : 0) + (a.actions?.length || 0); return n ? `${n} action${n === 1 ? '' : 's'}` : 'none'; }
         case 'conditions': {
             const n = (element.conditions?.length || 0) + (element.disabledConditions?.length || 0);
-            return n ? `${n} rule${n === 1 ? '' : 's'}` : 'none';
+            const states = (element as { appearanceStates?: unknown[] }).appearanceStates?.length || 0;
+            const parts: string[] = [];
+            if (n) parts.push(`${n} rule${n === 1 ? '' : 's'}`);
+            if (states) parts.push(`${states} state${states === 1 ? '' : 's'}`);
+            return parts.length ? parts.join(', ') : 'none';
         }
         default: return undefined;
     }
@@ -198,8 +202,72 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                 conditions={element.conditions} project={project} onChange={(cs) => updateElement({ conditions: cs })} />
             <ConditionsEditor collapsible title={t('elementInspector.disabledConditions')} hint={t('elementInspector.disabledNote')}
                 conditions={element.disabledConditions} project={project} onChange={(cs) => updateElement({ disabledConditions: cs })} />
+            {renderAppearanceStates()}
         </div>
     );
+
+    // Appearance states — variable-reactive look. First matching state wins; the "main color"
+    // maps to this element's primary colour (Meter fill / Text colour / Button bg, else glow).
+    const renderAppearanceStates = () => {
+        const states = (element as { appearanceStates?: UIAppearanceState[] }).appearanceStates;
+        const setStates = (next: UIAppearanceState[]) => updateElement({ appearanceStates: next.length ? next : undefined } as Partial<VNUIElement>);
+        const patchState = (i: number, patch: Partial<UIAppearanceState>) => {
+            const next = [...(states || [])];
+            next[i] = { ...next[i], ...patch };
+            setStates(next);
+        };
+        const toUIAsset = (id: VNID | null) => {
+            if (!id) return null;
+            const a = (project.videos as Record<string, { isVideo?: boolean; videoUrl?: string }> | undefined)?.[id]
+                || (project.images as Record<string, { isVideo?: boolean; videoUrl?: string }> | undefined)?.[id]
+                || (project.backgrounds as Record<string, { isVideo?: boolean; videoUrl?: string }> | undefined)?.[id];
+            const isVid = !!((project.videos as Record<string, unknown> | undefined)?.[id] || a?.isVideo || a?.videoUrl);
+            return { type: isVid ? 'video' as const : 'image' as const, id };
+        };
+        const mainColorLabel = element.type === UIElementType.Meter ? 'Fill color'
+            : element.type === UIElementType.Text ? 'Text color'
+            : element.type === UIElementType.Button ? 'Background color'
+            : 'Glow color';
+        const supportsImage = element.type === UIElementType.Image || element.type === UIElementType.Button;
+        const hasTypedPrimary = element.type === UIElementType.Meter || element.type === UIElementType.Text || element.type === UIElementType.Button;
+        return (
+            <div className="rounded border border-slate-700/50 p-2">
+                <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-xs font-bold text-slate-300">Appearance States</h4>
+                    <button
+                        onClick={() => setStates([...(states || []), { id: `state-${Math.random().toString(36).slice(2, 9)}`, name: `State ${(states?.length || 0) + 1}`, conditions: [] }])}
+                        className="text-xs px-2 py-0.5 rounded bg-purple-600/80 hover:bg-purple-600 text-white"
+                    >+ Add state</button>
+                </div>
+                <p className="text-[10px] text-slate-400 mb-2">When a state's conditions match, the element changes its look (first matching state wins). A state with no conditions never activates.</p>
+                {(states || []).map((st, i) => (
+                    <div key={st.id} className="rounded bg-slate-800/40 border border-slate-700/40 p-2 mb-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                            <TextInput value={st.name || ''} onChange={e => patchState(i, { name: e.target.value })} placeholder={`State ${i + 1}`} className="flex-1 text-xs" />
+                            <button onClick={() => setStates((states || []).filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300 px-1" title="Delete state">×</button>
+                        </div>
+                        <ConditionsEditor collapsible title="When (conditions)" conditions={st.conditions} project={project} onChange={cs => patchState(i, { conditions: cs })} />
+                        <FormField label={mainColorLabel}><ColorInput value={st.primaryColor ?? ''} onChange={c => patchState(i, { primaryColor: c || undefined })} /></FormField>
+                        {supportsImage && (
+                            <AssetSelector label="Swap image" assetType="images" allowVideo value={st.image?.id ?? null} onChange={id => patchState(i, { image: toUIAsset(id) })} />
+                        )}
+                        <div className="grid grid-cols-3 gap-2">
+                            <FormField label="Opacity %"><TextInput type="number" value={st.opacity != null ? Math.round(st.opacity * 100) : ''} onChange={e => patchState(i, { opacity: e.target.value === '' ? undefined : (parseInt(e.target.value, 10) || 0) / 100 })} placeholder="100" /></FormField>
+                            <FormField label="Scale ×"><TextInput type="number" step="0.05" value={st.scale ?? ''} onChange={e => patchState(i, { scale: e.target.value === '' ? undefined : parseFloat(e.target.value) })} placeholder="1" /></FormField>
+                            <FormField label="Rotate °"><TextInput type="number" value={st.rotation ?? ''} onChange={e => patchState(i, { rotation: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="0" /></FormField>
+                        </div>
+                        {hasTypedPrimary && (
+                            <div className="grid grid-cols-2 gap-2">
+                                <FormField label="Glow color"><ColorInput value={st.glowColor ?? ''} onChange={c => patchState(i, { glowColor: c || undefined })} /></FormField>
+                                <FormField label="Glow size px"><TextInput type="number" value={st.glowSize ?? ''} onChange={e => patchState(i, { glowSize: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="8" /></FormField>
+                            </div>
+                        )}
+                        <FormField label="Transition (ms)"><TextInput type="number" value={st.transitionMs ?? ''} onChange={e => patchState(i, { transitionMs: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} placeholder="0 = instant" /></FormField>
+                    </div>
+                ))}
+            </div>
+        );
+    };
 
     // Shared "additional actions" list editor (Button / Dropdown / Checkbox / Settings*).
     const renderActionsList = (actions: any[] | undefined): React.ReactNode => (

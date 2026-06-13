@@ -2,6 +2,7 @@ import { VNID } from '../../../types';
 import { VNProject } from '../../../types/project';
 // FIX: GoToScreenAction and UIActionType are exported from shared types.
 import { VNFontSettings, VNProjectUI, VNUIScreen, VNUIElement, UIElementType, UIButtonElement } from '../types';
+import { VNTextboxTheme } from '../../character/types';
 import { GoToScreenAction, UIActionType } from '../../../types/shared';
 import { createDefaultUIScreens } from '../../../constants';
 
@@ -22,7 +23,11 @@ export type UIAction =
     | { type: 'ADD_UI_ELEMENT', payload: { screenId: VNID, element: VNUIElement } }
     | { type: 'UPDATE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID, updates: Partial<VNUIElement> } }
     | { type: 'DELETE_UI_ELEMENT', payload: { screenId: VNID, elementId: VNID } }
-    | { type: 'RESTORE_DEFAULT_UI_SCREENS' };
+    | { type: 'RESTORE_DEFAULT_UI_SCREENS' }
+    // ── Reusable dialogue textbox themes ── //
+    | { type: 'ADD_TEXTBOX_THEME', payload: { id?: VNID; name: string } }
+    | { type: 'UPDATE_TEXTBOX_THEME', payload: { themeId: VNID; updates: Partial<VNTextboxTheme> } }
+    | { type: 'DELETE_TEXTBOX_THEME', payload: { themeId: VNID } };
 
 
 export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
@@ -79,6 +84,28 @@ export const uiReducer = (state: VNProject, action: UIAction): VNProject => {
                 pauseScreenId: specialIds.pauseScreenId,
             },
         };
+    }
+
+    case 'ADD_TEXTBOX_THEME': {
+        const id = action.payload.id || `tbtheme-${generateId()}`;
+        const theme: VNTextboxTheme = { id, name: action.payload.name };
+        return { ...state, textboxThemes: { ...(state.textboxThemes || {}), [id]: theme } };
+    }
+
+    case 'UPDATE_TEXTBOX_THEME': {
+        const { themeId, updates } = action.payload;
+        const existing = state.textboxThemes?.[themeId];
+        if (!existing) return state;
+        return { ...state, textboxThemes: { ...state.textboxThemes, [themeId]: { ...existing, ...updates, id: themeId } } };
+    }
+
+    case 'DELETE_TEXTBOX_THEME': {
+        if (!state.textboxThemes?.[action.payload.themeId]) return state;
+        const next = { ...state.textboxThemes };
+        delete next[action.payload.themeId];
+        // Dangling references (character.textboxThemeId / dialogue lines) resolve to the global look,
+        // so we don't need to scrub them — keeping this action cheap and side-effect free.
+        return { ...state, textboxThemes: next };
     }
 
     case 'ADD_UI_SCREEN': {

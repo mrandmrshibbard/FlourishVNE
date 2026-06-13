@@ -128,6 +128,8 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.PanZoomScreen:
         case CommandType.ResetScreenEffects:
         case CommandType.FlashScreen:
+        case CommandType.Lightning:
+        case CommandType.Flashlight:
         case CommandType.SetScreenOverlayEffect:
         case CommandType.ShowScreen:
         case CommandType.Label:

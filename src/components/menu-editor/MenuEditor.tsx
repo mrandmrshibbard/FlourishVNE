@@ -7,6 +7,7 @@ import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
+import { UIActionType } from '../../types/shared';
 import ResizableDraggable from './ResizableDraggable';
 import { createUIElement } from '../../utils/uiElementFactory';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
@@ -498,7 +499,7 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
         case UIElementType.CGGallery:
             const gallery = element as UICGGalleryElement;
             const cols = gallery.columns || 4;
-            const cgGalleryEntries = Object.values(project.cgGallery?.entries || {});
+            const cgGalleryEntries = Object.values(project.cgGallery?.entries || {}) as any[];
             const filteredEntries = gallery.categoryFilter
                 ? cgGalleryEntries.filter(e => e.category === gallery.categoryFilter)
                 : cgGalleryEntries;
@@ -873,7 +874,7 @@ const MenuEditor: React.FC<{
             buttonElement.y = 85;
             buttonElement.width = 35;
             buttonElement.height = 8;
-            buttonElement.actions = [{ type: 'CloseScreen' }];
+            buttonElement.actions = [{ type: UIActionType.ReturnToPreviousScreen }];
             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
         }
     };
@@ -907,7 +908,7 @@ const MenuEditor: React.FC<{
             buttonElement.y = 90;
             buttonElement.width = 30;
             buttonElement.height = 7;
-            buttonElement.actions = [{ type: 'CloseScreen' }];
+            buttonElement.actions = [{ type: UIActionType.ReturnToPreviousScreen }];
             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: buttonElement } });
         }
     };

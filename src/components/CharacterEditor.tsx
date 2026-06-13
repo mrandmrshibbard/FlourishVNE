@@ -11,10 +11,11 @@ import { useInlineRename } from '../hooks/useInlineRename';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { VNID } from '../types';
-import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset } from '../features/character/types';
+import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
 import { fileToBase64 } from '../utils/file';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
-import { FormField, TextInput, Select, ColorInput } from './ui/Form';
+import { FormField, TextInput, Select } from './ui/Form';
+import TextboxStyleFields from './ui/TextboxStyleFields';
 import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
 
@@ -250,8 +251,14 @@ const CharacterEditor: React.FC<{
 
     /* ── Handlers ── */
 
-    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop'>>) => {
+    const updateCharacter = (updates: Partial<Pick<VNCharacter, 'name' | 'color' | 'fontFamily' | 'fontUrl' | 'fontSize' | 'fontWeight' | 'fontItalic' | 'baseImageUrl' | 'baseVideoUrl' | 'isBaseVideo' | 'baseVideoLoop' | 'textbox' | 'textboxThemeId' | 'defaultVoiceId' | 'textEffect'>>) => {
         dispatch({ type: 'UPDATE_CHARACTER', payload: { characterId: activeCharacterId, updates } });
+    };
+
+    /** Patch one per-character textbox override field (merges into the existing textbox).
+     *  Passing undefined clears that field so it falls back to the project-global look. */
+    const updateTextbox = (patch: Partial<VNCharacterTextbox>) => {
+        updateCharacter({ textbox: { ...character.textbox, ...patch } });
     };
 
     const handleBaseImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -712,6 +719,39 @@ const CharacterEditor: React.FC<{
                         />
                         {t('editor.italic')}
                     </label>
+                </div>
+
+                <hr style={{ borderColor: 'var(--border-subtle)' }} />
+
+                {/* Dialogue Textbox (per-character override) */}
+                <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
+                        Dialogue Textbox
+                    </h3>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
+                        Pick a reusable theme and/or set a custom look. Anything left blank uses your project's default dialogue UI.
+                    </p>
+                    <FormField label="Textbox theme">
+                        <Select value={character.textboxThemeId || ''} onChange={e => updateCharacter({ textboxThemeId: e.target.value || undefined })}>
+                            <option value="">None (use project default)</option>
+                            {Object.values(project.textboxThemes || {}).map((th: any) => (
+                                <option key={th.id} value={th.id}>{th.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-muted)' }}>
+                        Create and edit themes in the In-Game UI Editor → Textbox Themes.
+                    </p>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer mb-2" style={{ color: 'var(--text-secondary)' }}>
+                        <input
+                            type="checkbox"
+                            checked={!!character.textbox}
+                            onChange={e => updateCharacter({ textbox: e.target.checked ? (character.textbox ?? {}) : undefined })}
+                            className="accent-[var(--accent-cyan)]"
+                        />
+                        Custom override for this character {character.textboxThemeId ? '(layers on top of the theme)' : ''}
+                    </label>
+                    {character.textbox && <TextboxStyleFields value={character.textbox} onChange={updateTextbox} />}
                 </div>
 
                 <hr style={{ borderColor: 'var(--border-subtle)' }} />

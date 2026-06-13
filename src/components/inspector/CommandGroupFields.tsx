@@ -172,7 +172,8 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
         return <ChoiceGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
     }
     if (command.type === CommandType.ShakeScreen || command.type === CommandType.TintScreen || command.type === CommandType.PanZoomScreen
-        || command.type === CommandType.ResetScreenEffects || command.type === CommandType.FlashScreen || command.type === CommandType.SetScreenOverlayEffect
+        || command.type === CommandType.ResetScreenEffects || command.type === CommandType.FlashScreen || command.type === CommandType.Lightning
+        || command.type === CommandType.Flashlight || command.type === CommandType.SetScreenOverlayEffect
         || command.type === CommandType.ShowScreen || command.type === CommandType.Label || command.type === CommandType.JumpToLabel) {
         return <ScreenMiscGroup groupId={groupId} command={command} updateCommand={updateCommand} project={project} t={t} />;
     }
@@ -287,12 +288,23 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
             { value: '', label: t('shared.none') },
             ...Object.values(project.audio).map((a: any) => ({ value: a.id, label: a.name })),
         ];
+        const themeOptions = [
+            { value: '', label: 'Speaker default' },
+            ...Object.values(project.textboxThemes || {}).map((th: any) => ({ value: th.id, label: th.name })),
+        ];
         return <>
             <FormField label={t('shared.character')}>
                 <SearchableSelect options={characterOptions} value={cmd.characterId || ''} onChange={(v) => updateCommand({ characterId: v || null } as any)} placeholder={t('shared.selectCharacter')} />
             </FormField>
             <FormField label={t('dialogue.text')}>
                 <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
+            </FormField>
+            <FormField label="Textbox theme (this line)">
+                {Object.keys(project.textboxThemes || {}).length > 0 ? (
+                    <SearchableSelect options={themeOptions} value={cmd.textboxThemeId || ''} onChange={(v) => updateCommand({ textboxThemeId: v || null } as any)} placeholder="Speaker default" />
+                ) : (
+                    <p className="text-[10px] text-[var(--text-muted)]">No textbox themes yet — create them in UI / Screens → In-Game UI → Textbox Themes.</p>
+                )}
             </FormField>
             <FormField label={t('dialogue.voiceClip')}>
                 <SearchableSelect options={audioOptions} value={cmd.voiceAudioId || ''} onChange={(v) => updateCommand({ voiceAudioId: v || null } as any)} placeholder={t('dialogue.selectVoiceClip')} />
@@ -942,11 +954,64 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 <FormField label={t('screen.flashColor')}><TextInput type="text" value={cmd.color} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
             </>;
+        case CommandType.Lightning: {
+            const audioOpts = Object.values(project.audio || {}) as any[];
+            return <>
+                <FormField label="Flash color"><TextInput type="text" value={cmd.color ?? '#EAF2FF'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
+                <FormField label={`Brightness ${Math.round((cmd.intensity ?? 0.9) * 100)}%`}>
+                    <input type="range" min="0.1" max="1" step="0.05" value={cmd.intensity ?? 0.9} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                </FormField>
+                <FormField label="Duration (s)"><TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} /></FormField>
+                <FormField label="Flashes">
+                    <Select value={String(cmd.flashes ?? 2)} onChange={e => updateCommand({ flashes: parseInt(e.target.value, 10) } as any)}>
+                        <option value="1">Single strike</option>
+                        <option value="2">Double flicker</option>
+                        <option value="3">Stormy (triple)</option>
+                    </Select>
+                </FormField>
+                <FormField label="Thunder SFX">
+                    <Select value={cmd.thunderSfxId || ''} onChange={e => updateCommand({ thunderSfxId: e.target.value || null } as any)}>
+                        <option value="">None</option>
+                        {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                    </Select>
+                </FormField>
+                <FormField label="Thunder delay (s)"><TextInput type="number" min="0" step="0.1" value={cmd.thunderDelay ?? 0.6} onChange={e => updateCommand({ thunderDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Flash the dialogue box too</span></label>
+                <p className="text-xs text-[var(--text-secondary)]">Light first, then a short delay, then thunder — increase the delay for a more distant storm.</p>
+            </>;
+        }
+        case CommandType.Flashlight: {
+            const audioOpts = Object.values(project.audio || {}) as any[];
+            return <>
+                <FormField label="Flashlight">
+                    <Select value={cmd.enabled ? 'on' : 'off'} onChange={e => updateCommand({ enabled: e.target.value === 'on' } as any)}>
+                        <option value="on">Turn on</option>
+                        <option value="off">Turn off</option>
+                    </Select>
+                </FormField>
+                {cmd.enabled && <>
+                    <FormField label={`Light radius ${cmd.radius ?? 22}%`}><input type="range" min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={`Edge softness ${Math.round((cmd.softness ?? 0.6) * 100)}%`}><input type="range" min="0" max="1" step="0.05" value={cmd.softness ?? 0.6} onChange={e => updateCommand({ softness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={`Darkness ${Math.round((cmd.darkness ?? 0.85) * 100)}%`}><input type="range" min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label="Dark color"><TextInput type="text" value={cmd.color ?? '#000000'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
+                    <FormField label="Player toggle key (optional)"><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
+                    <FormField label="Sound on toggle (optional)">
+                        <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
+                            <option value="">None</option>
+                            {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </Select>
+                    </FormField>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Dim the dialogue box too</span></label>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.darkWhenOff === true} onChange={e => updateCommand({ darkWhenOff: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Keep the screen dark when switched off (dark room)</span></label>
+                    <p className="text-xs text-[var(--text-secondary)]">The lit circle follows the cursor. Untick "Dim the dialogue box" to keep it readable above the dark. With "Keep the screen dark when off", pressing the toggle key plunges the room into black instead of revealing it — end it with a "Flashlight → Turn off" command (it also clears on scene change).</p>
+                </>}
+            </>;
+        }
         case CommandType.SetScreenOverlayEffect: {
             const effectType = cmd.effectType as string;
             const intensity = typeof cmd.intensity === 'number' ? cmd.intensity : 0;
-            const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh'].includes(effectType) || !!pluginManager.getEffect(effectType);
-            const defaultColors: Record<string, string> = { sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF' };
+            const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke'].includes(effectType) || !!pluginManager.getEffect(effectType);
+            const defaultColors: Record<string, string> = { sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF', fog: '#CDD2D8', haze: '#E1DED2', smoke: '#46484C' };
             const effectColor = cmd.color || defaultColors[effectType] || '#FFFFFF';
             const overlayDuration = typeof cmd.duration === 'number' ? cmd.duration : 0;
             const isPersistent = overlayDuration === 0;
@@ -959,6 +1024,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         <option value="shimmer">{t('screen.effects.shimmer')}</option>
                         <option value="rain">{t('screen.effects.rain')}</option>
                         <option value="snowAsh">{t('screen.effects.snowAsh')}</option>
+                        <option value="fog">Fog</option>
+                        <option value="haze">Haze</option>
+                        <option value="smoke">Smoke</option>
                         {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
                             <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
                         ))}
@@ -983,6 +1051,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                             <option value="ash">{t('screen.ash')}</option>
                         </Select>
                     </FormField>
+                )}
+                {['fog', 'haze', 'smoke'].includes(effectType) && (
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={!!cmd.params?.aboveCharacters} onChange={e => updateCommand({ params: { ...cmd.params, aboveCharacters: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-primary)]">Render in front of characters</span></label>
                 )}
                 <FormField label={t('screen.duration')}>
                     <label className="flex items-center gap-2 mb-2"><input type="checkbox" checked={isPersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 5 } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShort')}</span></label>
@@ -1981,6 +2052,8 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
             case CommandType.PanZoomScreen: return `${c.zoom}x @ ${c.panX},${c.panY}`;
             case CommandType.ResetScreenEffects: return `${c.duration}s`;
             case CommandType.FlashScreen: return c.color || '';
+            case CommandType.Lightning: return `${c.flashes ?? 2}× flash${c.thunderSfxId ? ' + thunder' : ''}`;
+            case CommandType.Flashlight: return c.enabled ? `on · r${c.radius ?? 22}%` : 'off';
             case CommandType.SetScreenOverlayEffect: return c.effectType || '';
             case CommandType.ShowScreen: return project.uiScreens[c.screenId]?.name || '—';
             case CommandType.Label:

@@ -1,6 +1,6 @@
 import { VNID } from './';
 import { VNBackground, VNImage, VNAudio, VNVideo } from '../features/assets/types';
-import { VNCharacter } from '../features/character/types';
+import { VNCharacter, VNTextboxTheme } from '../features/character/types';
 import { VNScene } from '../features/scene/types';
 import { VNProjectUI, VNUIScreen } from '../features/ui/types';
 import { VNVariable } from '../features/variables/types';
@@ -85,6 +85,9 @@ export interface VNProject {
     /** Gameplay stat registry (affection, health, XP…). Each stat is backed by one number
      *  variable per target (global, or one per character). Additive-optional. */
     stats?: Record<VNID, VNStat>;
+    /** Reusable dialogue textbox themes (project-global). Characters/dialogue lines reference one
+     *  by id; missing/deleted ids safely fall back to the global dialogue UI. Additive-optional. */
+    textboxThemes?: Record<VNID, VNTextboxTheme>;
     /** User-defined scripts */
     scripts?: Record<VNID, VNScript>;
     /** Common Events — reusable command sequences callable from any scene */

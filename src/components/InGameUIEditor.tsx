@@ -17,6 +17,9 @@ import { useTranslation } from 'react-i18next';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
 import { GradientText } from './ui/GradientText';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
+import TextboxThemeManager from './ui/TextboxThemeManager';
+import DialogueReactiveStatesEditor from './ui/DialogueReactiveStatesEditor';
+import QuickMenuReactiveStatesEditor from './ui/QuickMenuReactiveStatesEditor';
 import ActionEditor from './menu-editor/ActionEditor';
 import { UIActionType, VNUIAction } from '../types/shared';
 import {
@@ -34,7 +37,8 @@ export type InGameUIElement =
     | 'choiceButtons'
     | 'inputBox'
     | 'quickMenu'
-    | 'confirmDialogs';
+    | 'confirmDialogs'
+    | 'textboxThemes';
 
 interface ElementConfig {
     id: InGameUIElement;
@@ -50,6 +54,7 @@ const ELEMENTS: ElementConfig[] = [
     { id: 'inputBox',      label: 'Text Input',      icon: <PencilIcon className="w-4 h-4" />,           description: 'Player text input prompt box' },
     { id: 'quickMenu',     label: 'Quick Menu',      icon: <ChevronDownIcon className="w-4 h-4" />,      description: 'Skip, Auto, Log, Back buttons' },
     { id: 'confirmDialogs', label: 'Confirm Dialogs', icon: <QuestionMarkIcon className="w-4 h-4" />, description: 'Quit & New Game confirmation popups' },
+    { id: 'textboxThemes', label: 'Textbox Themes', icon: <BookmarkSquareIcon className="w-4 h-4" />, description: 'Reusable per-character dialogue box designs' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -758,6 +763,25 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     font={(ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ dialogueTextFont: { ...((ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
+
+                <div className="border-t border-[var(--border-subtle)] pt-2">
+                    <h4 className="text-sm font-bold text-white mb-1">Speaker Emphasis</h4>
+                    <p className="text-[10px] text-[var(--text-muted)] mb-2">While a character is speaking, brighten + slightly enlarge them and dim the others — a "who's talking" cue that needs no mouth art.</p>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                        <input type="checkbox" checked={ui.speakerEmphasisEnabled ?? false} onChange={e => onUpdate({ speakerEmphasisEnabled: e.target.checked })} className="cursor-pointer" />
+                        Enable speaker emphasis
+                    </label>
+                    {ui.speakerEmphasisEnabled && (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                            <NumInput label="Non-speaker brightness %" value={ui.speakerEmphasisDim != null ? Math.round(ui.speakerEmphasisDim * 100) : undefined} fallback={50} min={10} max={100} onChange={v => onUpdate({ speakerEmphasisDim: Math.max(0.1, Math.min(1, v / 100)) })} />
+                            <NumInput label="Speaker zoom %" value={ui.speakerEmphasisScale != null ? Math.round(ui.speakerEmphasisScale * 100) : undefined} fallback={104} min={100} max={120} onChange={v => onUpdate({ speakerEmphasisScale: Math.max(1, Math.min(1.3, v / 100)) })} />
+                        </div>
+                    )}
+                </div>
+
+                <div className="border-t border-[var(--border-subtle)] pt-2">
+                    <DialogueReactiveStatesEditor states={ui.dialogueReactiveStates} project={project} onChange={s => onUpdate({ dialogueReactiveStates: s })} />
+                </div>
             </div>
         );
     }
@@ -806,6 +830,9 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     font={(ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings}
                     onFontChange={(prop, value) => onUpdate({ dialogueNameFont: { ...((ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
                 />
+                <p className="text-[10px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2">
+                    Want the nameplate to change with a variable? Set up <strong>Reactive States</strong> in the Dialogue Box section — they cover the box <em>and</em> the nameplate.
+                </p>
             </div>
         );
     }
@@ -1019,6 +1046,10 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     />
                     <span className="text-xs text-[var(--text-secondary)] ml-2">{t('inGameUi.independentHint')}</span>
                 </Field>
+
+                <div className="border-t border-[var(--border-subtle)] pt-2">
+                    <QuickMenuReactiveStatesEditor states={ui.quickMenuReactiveStates} project={project} onChange={s => onUpdate({ quickMenuReactiveStates: s })} />
+                </div>
 
                 <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-3">{t('inGameUi.buttonsHeader')}</h4>
                 <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.buttonsHint')}{ui.quickMenuIndependentLayout ? t('inGameUi.buttonsHintDrag') : ''}</p>
@@ -1411,6 +1442,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     const { t } = useTranslation('ui');
     const { dispatch } = useProject();
     const [selectedElement, setSelectedElement] = useState<InGameUIElement | null>('dialogueBox');
+    const [selectedThemeId, setSelectedThemeId] = useState<VNID | null>(null);
     const [showSnapGuides, setShowSnapGuides] = useState(false);
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -1520,6 +1552,17 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
     const activeEl = selectedElement && !isHidden(selectedElement) ? elementRects[selectedElement] ?? null : null;
 
+    // Live preview for the Textbox Themes section: the global dialogue UI with the selected theme's
+    // DEFINED fields applied on top (blank theme fields keep the project default).
+    const themedUi = useMemo<VNProjectUI>(() => {
+        if (selectedElement !== 'textboxThemes' || !selectedThemeId) return ui;
+        const th = project.textboxThemes?.[selectedThemeId];
+        if (!th) return ui;
+        const merged = { ...ui } as Record<string, unknown>;
+        Object.entries(th).forEach(([k, v]) => { if (k !== 'id' && k !== 'name' && v !== undefined) merged[k] = v; });
+        return merged as unknown as VNProjectUI;
+    }, [selectedElement, selectedThemeId, project.textboxThemes, ui]);
+
     return (
         <div className="flex h-full">
             {/* Element list sidebar */}
@@ -1545,8 +1588,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         >
                             <span className="flex-shrink-0">{el.icon}</span>
                             <div className="min-w-0">
-                                <span className="block text-sm font-medium truncate">{t('inGameUi.'+el.id)}</span>
-                                <span className="block text-[10px] text-[var(--text-muted)] truncate">{t('inGameUi.'+el.id+'Desc')}</span>
+                                <span className="block text-sm font-medium truncate">{el.id === 'textboxThemes' ? el.label : t('inGameUi.'+el.id)}</span>
+                                <span className="block text-[10px] text-[var(--text-muted)] truncate">{el.id === 'textboxThemes' ? el.description : t('inGameUi.'+el.id+'Desc')}</span>
                             </div>
                         </button>
                     ))}
@@ -1630,7 +1673,25 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         <ConfirmDialogPreview ui={ui} project={project} />
                     )}
 
-                    {!activeEl && selectedElement !== 'confirmDialogs' && (
+                    {/* Textbox theme preview – shows the selected theme's box + nameplate (not draggable). */}
+                    {selectedElement === 'textboxThemes' && (
+                        selectedThemeId ? (
+                            <>
+                                <div className="absolute pointer-events-none" style={{ left: `${nameboxRect.x}%`, top: `${nameboxRect.y}%`, width: `${nameboxRect.width}%`, height: `${nameboxRect.height}%` }}>
+                                    <NameBoxPreview ui={themedUi} project={project} />
+                                </div>
+                                <div className="absolute pointer-events-none" style={{ left: `${dialogueRect.x}%`, top: `${dialogueRect.y}%`, width: `${dialogueRect.width}%`, height: `${dialogueRect.height}%` }}>
+                                    <DialogueBoxPreview ui={themedUi} project={project} />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <p className="text-sm text-white/30">Select or create a theme in the panel →</p>
+                            </div>
+                        )
+                    )}
+
+                    {!activeEl && selectedElement !== 'confirmDialogs' && selectedElement !== 'textboxThemes' && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <p className="text-sm text-white/30">{t('inGameUi.selectFromSidebar')}</p>
                         </div>
@@ -1640,7 +1701,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
             {/* Properties panel (right side) */}
             <div className="w-72 flex-shrink-0 border-l border-[var(--border-subtle)] bg-[var(--bg-primary)] overflow-y-auto">
-                {selectedElement ? (
+                {selectedElement === 'textboxThemes' ? (
+                    <TextboxThemeManager project={project} selectedThemeId={selectedThemeId} onSelect={setSelectedThemeId} />
+                ) : selectedElement ? (
                     <InGameUIPropsEditor ui={ui} element={selectedElement} project={project} onUpdate={updateUI} />
                 ) : (
                     <div className="p-4 text-center text-[var(--text-secondary)] text-sm">

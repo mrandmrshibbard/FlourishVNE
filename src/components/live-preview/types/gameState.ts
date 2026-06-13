@@ -335,6 +335,8 @@ export interface PlayerState {
             voiceAudioId?: VNID | null;
             /** Text effect for this dialogue line */
             textEffect?: VNDialogueTextEffect;
+            /** Per-line textbox theme override id (from the Dialogue command); resolved at render. */
+            textboxThemeId?: VNID | null;
         } | null;
         choices: ChoiceOption[] | null;
         /** Layout for the active choice menu (from the Choice command). undefined = vertical stack. */

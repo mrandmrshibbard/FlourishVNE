@@ -3,6 +3,34 @@ import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign, VNParallaxSettings } from '../../types/shared';
 
 import { VNTextShadow, VNTextGradient, VNTextBorder, ImageMapRegion } from '../scene/types';
+import type { VNCharacterTextbox } from '../character/types';
+
+/**
+ * A variable-reactive appearance state for the BUILT-IN dialogue box + nameplate (not a placeable
+ * screen element). When its conditions all match, its defined textbox fields layer on top of the
+ * current per-character/theme look, tweened by `transitionMs`. First matching state wins.
+ * Additive-optional. Authored in the In-Game UI Editor → Dialogue Box → Reactive States.
+ */
+export interface VNReactiveTextboxState extends VNCharacterTextbox {
+    id: VNID;
+    name?: string;
+    conditions: VNCondition[];
+    /** Hide the nameplate entirely while this state is active. */
+    hideNamebox?: boolean;
+    /** Tween duration (ms) for the change; 0/undefined = instant. */
+    transitionMs?: number;
+}
+
+/** A variable-reactive appearance state for the built-in Quick Menu BAR (whole-bar, not per-button). */
+export interface VNReactiveQuickMenuState {
+    id: VNID;
+    name?: string;
+    conditions: VNCondition[];
+    color?: string;
+    opacity?: number; // 0-100
+    hide?: boolean;   // hide the whole bar while active
+    transitionMs?: number;
+}
 
 export interface VNFontSettings {
     family: string;
@@ -88,6 +116,17 @@ export interface VNProjectUI {
     nameboxOffsetX?: number; // px horizontal offset from dialogue box left (default 20)
     nameboxOffsetY?: number; // px gap above dialogue box, 0 = flush (default 0)
     nameboxSizeMode?: 'stretch' | 'contain' | 'cover' | 'nine-slice'; // how the namebox image fits (default 'stretch')
+    /** Variable-reactive states for the built-in dialogue box + nameplate (first match wins). */
+    dialogueReactiveStates?: VNReactiveTextboxState[];
+    /** Variable-reactive states for the built-in Quick Menu bar (whole-bar; first match wins). */
+    quickMenuReactiveStates?: VNReactiveQuickMenuState[];
+    /** Speaker emphasis: while a character is speaking, brighten + slightly enlarge them and dim the
+     *  others (a mouth-art-free "who's talking" cue). Off by default. */
+    speakerEmphasisEnabled?: boolean;
+    /** Brightness (0-1) applied to NON-speaking characters when speaker emphasis is on (default 0.5). */
+    speakerEmphasisDim?: number;
+    /** Scale multiplier applied to the speaking character (default 1.04). */
+    speakerEmphasisScale?: number;
     choiceButtonImage: UIAsset | null;
     choiceButtonBorderImage: UIAsset | null;
     choiceBorderPadding?: number; // px of border visible around the background (default 8)
@@ -242,6 +281,31 @@ export enum UIElementType {
     Meter = 'Meter',
 }
 
+/**
+ * A variable-reactive appearance override for a UI element. When its `conditions` are all met,
+ * the element renders with these style overrides applied; the FIRST matching state in the list
+ * wins, otherwise the element uses its own base styling. All override fields are optional.
+ *
+ * `primaryColor` maps to the element's "main" colour per type (Meter fill, Text colour, Button
+ * background); on elements with no obvious main colour it is used as the glow colour. `image`
+ * swaps the picture on Image/Button elements. The universal fields (opacity/scale/rotation/glow)
+ * apply to any element. `transitionMs` tweens the change instead of snapping it.
+ * Additive-optional: elements without `appearanceStates` render exactly as before.
+ */
+export interface UIAppearanceState {
+    id: VNID;
+    name?: string;
+    conditions: VNCondition[];
+    primaryColor?: string;
+    image?: UIAsset | null;
+    opacity?: number;   // 0-1
+    scale?: number;     // multiplier, 1 = normal
+    rotation?: number;  // degrees
+    glowColor?: string;
+    glowSize?: number;  // px blur radius
+    transitionMs?: number; // tween duration for the change (default 0 = instant)
+}
+
 interface BaseUIElement {
     id: VNID;
     name: string;
@@ -262,6 +326,8 @@ interface BaseUIElement {
     fitToContent?: boolean;
     conditions?: VNCondition[];
     disabledConditions?: VNCondition[];
+    /** Variable-reactive appearance overrides; first state whose conditions match wins. */
+    appearanceStates?: UIAppearanceState[];
     // Element-level transitions
     transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale';
     transitionDuration?: number; // Duration in milliseconds (default 300)

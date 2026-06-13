@@ -103,6 +103,79 @@ const PluginEffectCanvas: React.FC<{
   return <canvas ref={canvasRef} className="vnfx-canvas" aria-hidden />;
 };
 
+/**
+ * Shared drifting-cloud simulation used by the fog / haze / smoke overlay effects. Renders N soft
+ * radial-gradient blobs that drift + gently swirl, wrapping at the edges. Each effect passes its own
+ * config (blob count/size, drift, opacity, vertical bias) so they read distinctly: fog = thick low
+ * horizontal banks, haze = a faint slow veil, smoke = darker rising wisps. Returns a cancel fn.
+ */
+function runCloudSim(
+  canvas: HTMLCanvasElement,
+  w: number,
+  h: number,
+  o: {
+    intensity: number;
+    color: { r: number; g: number; b: number };
+    blobCount: number;
+    sizeMin: number;
+    sizeMax: number;
+    vx: number;
+    vy: number;
+    vRand: number;
+    baseOpacity: number;
+    swirl: number;
+    speedMul: number;
+  }
+): () => void {
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return () => {};
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const count = Math.max(4, Math.floor(o.blobCount * (0.5 + o.intensity)));
+  const blobs = Array.from({ length: count }).map(() => ({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    r: o.sizeMin + Math.random() * (o.sizeMax - o.sizeMin),
+    vx: (o.vx + (Math.random() * 2 - 1) * o.vRand) * o.speedMul,
+    vy: (o.vy + (Math.random() * 2 - 1) * o.vRand * 0.6) * o.speedMul,
+    phase: Math.random() * Math.PI * 2,
+    phaseSpeed: 0.15 + Math.random() * 0.35,
+    op: o.baseOpacity * (0.55 + Math.random() * 0.45),
+  }));
+
+  let raf = 0;
+  let last = performance.now();
+  const draw = (now: number) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    ctx.clearRect(0, 0, w, h);
+    for (const b of blobs) {
+      b.phase += dt * b.phaseSpeed;
+      b.x += (b.vx + Math.sin(b.phase) * o.swirl) * dt;
+      b.y += (b.vy + Math.cos(b.phase * 0.7) * o.swirl * 0.5) * dt;
+      if (b.x - b.r > w) b.x = -b.r;
+      if (b.x + b.r < 0) b.x = w + b.r;
+      if (b.y - b.r > h) b.y = -b.r;
+      if (b.y + b.r < 0) b.y = h + b.r;
+      const a = b.op * o.intensity;
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      g.addColorStop(0, `rgba(${o.color.r}, ${o.color.g}, ${o.color.b}, ${a})`);
+      g.addColorStop(0.6, `rgba(${o.color.r}, ${o.color.g}, ${o.color.b}, ${a * 0.5})`);
+      g.addColorStop(1, `rgba(${o.color.r}, ${o.color.g}, ${o.color.b}, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    raf = requestAnimationFrame(draw);
+  };
+  raf = requestAnimationFrame(draw);
+  return () => cancelAnimationFrame(raf);
+}
+
 export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   effects,
   width,
@@ -121,6 +194,9 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const shimmer = getEffect(normalized, 'shimmer');
   const rain = getEffect(normalized, 'rain');
   const snowAsh = getEffect(normalized, 'snowAsh');
+  const fog = getEffect(normalized, 'fog');
+  const haze = getEffect(normalized, 'haze');
+  const smoke = getEffect(normalized, 'smoke');
 
   // Plugin-registered custom effects: any active effect whose type isn't a built-in and whose
   // plugin provides a `render` callback. These render through PluginEffectCanvas.
@@ -137,6 +213,49 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const snowCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const sunbeamsCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const shimmerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hazeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const smokeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const minDim = Math.min(safeWidth, safeHeight);
+
+  // Fog — thick, low, slow horizontal banks (light grey).
+  useEffect(() => {
+    const intensity = clamp01(fog?.intensity ?? 0);
+    const c = fogCanvasRef.current;
+    if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
+    const color = parseColor(fog?.color, { r: 205, g: 210, b: 216 });
+    const speed = 0.3 + ep(fog?.params, 'speed') * 1.4;
+    return runCloudSim(c, safeWidth, safeHeight, {
+      intensity, color, blobCount: 16, sizeMin: minDim * 0.28, sizeMax: minDim * 0.55,
+      vx: 16, vy: 0, vRand: 10, baseOpacity: 0.5, swirl: 6, speedMul: speed,
+    });
+  }, [fog?.intensity, fog?.color, fog?.params?.speed, safeWidth, safeHeight, minDim]);
+
+  // Haze — a faint, slow, near-uniform veil (warm/neutral tint).
+  useEffect(() => {
+    const intensity = clamp01(haze?.intensity ?? 0);
+    const c = hazeCanvasRef.current;
+    if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
+    const color = parseColor(haze?.color, { r: 225, g: 222, b: 210 });
+    const speed = 0.3 + ep(haze?.params, 'speed') * 1.4;
+    return runCloudSim(c, safeWidth, safeHeight, {
+      intensity, color, blobCount: 10, sizeMin: minDim * 0.45, sizeMax: minDim * 0.8,
+      vx: 7, vy: 0, vRand: 4, baseOpacity: 0.22, swirl: 3, speedMul: speed,
+    });
+  }, [haze?.intensity, haze?.color, haze?.params?.speed, safeWidth, safeHeight, minDim]);
+
+  // Smoke — darker, rising, swirling wisps.
+  useEffect(() => {
+    const intensity = clamp01(smoke?.intensity ?? 0);
+    const c = smokeCanvasRef.current;
+    if (!c || intensity <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
+    const color = parseColor(smoke?.color, { r: 70, g: 72, b: 76 });
+    const speed = 0.3 + ep(smoke?.params, 'speed') * 1.4;
+    return runCloudSim(c, safeWidth, safeHeight, {
+      intensity, color, blobCount: 14, sizeMin: minDim * 0.18, sizeMax: minDim * 0.42,
+      vx: 6, vy: -26, vRand: 14, baseOpacity: 0.42, swirl: 16, speedMul: speed,
+    });
+  }, [smoke?.intensity, smoke?.color, smoke?.params?.speed, safeWidth, safeHeight, minDim]);
 
   // Rain effect
   useEffect(() => {
@@ -639,6 +758,21 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
           className="vnfx-canvas"
           aria-hidden
         />
+      )}
+
+      {/* Haze (drawn under fog/smoke as a faint veil) */}
+      {haze && clamp01(haze.intensity) > 0 && (
+        <canvas ref={hazeCanvasRef} className="vnfx-canvas" aria-hidden />
+      )}
+
+      {/* Fog */}
+      {fog && clamp01(fog.intensity) > 0 && (
+        <canvas ref={fogCanvasRef} className="vnfx-canvas" aria-hidden />
+      )}
+
+      {/* Smoke */}
+      {smoke && clamp01(smoke.intensity) > 0 && (
+        <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
       )}
 
       {/* Plugin-registered custom effects (visual pipeline) */}

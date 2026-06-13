@@ -1112,6 +1112,9 @@ const PropertiesInspector: React.FC<{
                             <option value="shimmer">{t('screen.effects.shimmer')}</option>
                             <option value="rain">{t('screen.effects.rain')}</option>
                             <option value="snowAsh">{t('screen.effects.snowAsh')}</option>
+                            <option value="fog">Fog</option>
+                            <option value="haze">Haze</option>
+                            <option value="smoke">Smoke</option>
                             {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
                                 <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
                             ))}

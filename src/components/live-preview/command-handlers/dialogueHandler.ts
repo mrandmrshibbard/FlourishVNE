@@ -23,9 +23,12 @@ export const handleDialogue = (
     // Resolve text effect: per-line override > character default
     const textEffect = command.textEffect || char?.textEffect || undefined;
 
-    // Play voice audio if specified
+    // Play voice audio if specified. Use playVoice so only one voice plays at a time (no overlap with
+    // the previous line) and its volume follows the Voice slider independently of SFX.
     if (voiceAudioId) {
-        context.playSound(voiceAudioId, context.settings.voiceVolume ?? context.settings.sfxVolume);
+        const voiceVol = context.settings.voiceVolume ?? 1;
+        if (context.playVoice) context.playVoice(voiceAudioId, voiceVol);
+        else context.playSound(voiceAudioId, voiceVol);
     }
 
     return {
@@ -40,6 +43,7 @@ export const handleDialogue = (
                     characterId: command.characterId || null,
                     voiceAudioId: voiceAudioId,
                     textEffect: textEffect,
+                    textboxThemeId: command.textboxThemeId ?? null,
                 }
             }
         }

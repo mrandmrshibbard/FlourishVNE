@@ -1,7 +1,7 @@
 {
   "name": "flourish-visual-novel-engine",
   "private": true,
-  "version": "2.9.0",
+  "version": "2.9.2",
   "description": "Flourish Visual Novel Engine",
   "author": "Memento_Morii",
   "type": "module",

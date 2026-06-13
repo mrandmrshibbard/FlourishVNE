@@ -142,6 +142,14 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             const command = { type, color: '#FFFFFF', duration: 0.5 };
             return command;
         }
+        case CommandType.Lightning: {
+            const command = { type, color: '#EAF2FF', intensity: 0.9, duration: 0.7, flashes: 2 as const, thunderSfxId: null, thunderDelay: 0.6 };
+            return command;
+        }
+        case CommandType.Flashlight: {
+            const command = { type, enabled: true, radius: 22, softness: 0.6, darkness: 0.85, color: '#000000', toggleKey: 'f', sfxId: null };
+            return command;
+        }
         case CommandType.SetScreenOverlayEffect: {
             const command = { type, effectType: 'crtScanlines' as const, intensity: 0.5, duration: 0 };
             return command;
@@ -310,7 +318,7 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             return command;
         }
         case CommandType.SpawnParticles: {
-            return {
+            const command = {
                 type,
                 // Empty by default so the runtime derives a unique tag per command
                 // (`particles_<id>`). A hardcoded shared tag made multiple emitters
@@ -341,13 +349,15 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
                 },
                 duration: 0,
             };
+            return command;
         }
         case CommandType.StopParticles: {
-            return {
+            const command = {
                 type,
                 particleTag: '',
                 fadeDuration: 1,
             };
+            return command;
         }
         case CommandType.ShowHotSpot: {
             return {

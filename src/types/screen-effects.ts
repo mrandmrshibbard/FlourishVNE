@@ -1,13 +1,16 @@
 import { VNID } from './index';
 
-/** The six built-in screen-overlay effects. */
+/** The built-in screen-overlay effects. */
 export type VNKnownScreenOverlayEffectType =
   | 'crtScanlines'
   | 'chromaticGlitch'
   | 'sunbeams'
   | 'shimmer'
   | 'rain'
-  | 'snowAsh';
+  | 'snowAsh'
+  | 'fog'
+  | 'haze'
+  | 'smoke';
 
 /** Effect type: a built-in name OR a plugin-registered effect id (e.g. "myPlugin.glow").
  *  Widened to `string` (additive) so plugin custom effects are valid effect types. */
@@ -15,7 +18,7 @@ export type VNScreenOverlayEffectType = VNKnownScreenOverlayEffectType | (string
 
 /** The set of built-in effect type names (used to separate built-ins from plugin effects). */
 export const BUILTIN_OVERLAY_EFFECT_TYPES: readonly VNKnownScreenOverlayEffectType[] = [
-  'crtScanlines', 'chromaticGlitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh',
+  'crtScanlines', 'chromaticGlitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke',
 ];
 
 export type VNSnowAshVariant = 'snow' | 'ash';
@@ -55,6 +58,10 @@ export interface VNEffectParams {
   // --- Chromatic Glitch ---
   /** Colour-channel offset amount (0 = subtle, 1 = extreme). Default ≈ 0.5 */
   chromaticSpread?: number;
+  // --- Fog / Haze / Smoke ---
+  /** Render this atmospheric layer IN FRONT OF character sprites (foreground). Default (false) =
+   *  behind characters, so they stand within the fog. Only meaningful for fog/haze/smoke. */
+  aboveCharacters?: boolean;
 }
 
 export interface VNScreenOverlayEffect {
