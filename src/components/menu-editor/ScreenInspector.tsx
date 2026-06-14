@@ -479,6 +479,9 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     { type: 'smoke' as const, label: 'Smoke', supportsColor: true, defaultColor: '#46484C',
                       extraParams: ['speed'] as const,
                       paramLabels: { speed: 'Rise Speed' } },
+                    { type: 'fireworks' as const, label: 'Fireworks (looping show)', supportsColor: true, defaultColor: '#FFD23B',
+                      extraParams: ['speed'] as const,
+                      paramLabels: { speed: 'Launch Speed' } },
                 ] as const).map(({ type, supportsColor, defaultColor, extraParams, supportsBlend }: { type: any; supportsColor?: boolean; defaultColor?: string; extraParams: readonly (keyof VNEffectParams)[]; supportsBlend?: boolean }) => {
                     const intensity = getIntensity(type);
                     const enabled = intensity > 0;

@@ -9,7 +9,7 @@ import {
     PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand, WaitCommand, ShakeScreenCommand, PlayMovieCommand,
     TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand, FlashScreenCommand, ShowScreenCommand,
     HideTextCommand, HideImageCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, HideButtonCommand,
-    LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground, CreditMedia,
+    LabelCommand, JumpToLabelCommand, BranchStartCommand, BranchElseIfCommand, BranchEndCommand, CreditRollCommand, CreditEntry, CreditBackground, CreditMedia,
     GroupCommand, RunScriptCommand, CallCommonEventCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     ShowHotSpotCommand, HideHotSpotCommand,
@@ -337,6 +337,30 @@ const PropertiesInspector: React.FC<{
                             onChange={(cs) => updateCommand({ conditions: cs })}
                         />
                     </FormField>
+                </>;
+            }
+            case CommandType.BranchElseIf: {
+                const cmd = command as BranchElseIfCommand;
+                return <>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">
+                        This <strong className="text-[var(--accent-cyan)]">Otherwise if</strong> segment runs only when its conditions are met
+                        and none of the segments above it matched.
+                    </p>
+                    <FormField label="Conditions">
+                        <ConditionsEditor
+                            conditions={cmd.conditions}
+                            project={project}
+                            onChange={(cs) => updateCommand({ conditions: cs })}
+                        />
+                    </FormField>
+                </>;
+            }
+            case CommandType.BranchElse: {
+                return <>
+                    <p className="text-[var(--text-secondary)] mb-2">
+                        This <strong className="text-[var(--accent-cyan)]">Otherwise</strong> segment runs when none of the
+                        conditions above it matched. It has no conditions of its own.
+                    </p>
                 </>;
             }
             case CommandType.BranchEnd: {
@@ -1115,6 +1139,7 @@ const PropertiesInspector: React.FC<{
                             <option value="fog">Fog</option>
                             <option value="haze">Haze</option>
                             <option value="smoke">Smoke</option>
+                            <option value="fireworks">Fireworks (looping show)</option>
                             {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
                                 <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
                             ))}

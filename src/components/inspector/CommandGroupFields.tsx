@@ -173,7 +173,8 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     }
     if (command.type === CommandType.ShakeScreen || command.type === CommandType.TintScreen || command.type === CommandType.PanZoomScreen
         || command.type === CommandType.ResetScreenEffects || command.type === CommandType.FlashScreen || command.type === CommandType.Lightning
-        || command.type === CommandType.Flashlight || command.type === CommandType.SetScreenOverlayEffect
+        || command.type === CommandType.Flashlight || command.type === CommandType.Fireworks || command.type === CommandType.SetScreenOverlayEffect
+        || command.type === CommandType.PlaceLights || command.type === CommandType.ClearLights
         || command.type === CommandType.ShowScreen || command.type === CommandType.Label || command.type === CommandType.JumpToLabel) {
         return <ScreenMiscGroup groupId={groupId} command={command} updateCommand={updateCommand} project={project} t={t} />;
     }
@@ -980,6 +981,104 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                 <p className="text-xs text-[var(--text-secondary)]">Light first, then a short delay, then thunder — increase the delay for a more distant storm.</p>
             </>;
         }
+        case CommandType.Fireworks: {
+            const audioOpts = Object.values(project.audio || {}) as any[];
+            const fwColors: string[] = (cmd.colors && cmd.colors.length) ? cmd.colors : [];
+            const setColors = (arr: string[]) => updateCommand({ colors: arr } as any);
+            const fwPresets: Record<string, string[]> = {
+                Festive: ['#ff3b3b', '#ffd23b', '#3bff6b', '#3b9bff', '#ff7bef'],
+                Warm: ['#ff5e3b', '#ffae3b', '#ffd23b', '#fff1a8'],
+                Cool: ['#3b9bff', '#6b5bff', '#3bffd2', '#b0e0ff'],
+                Gold: ['#ffd23b', '#ffae3b', '#fff1a8'],
+                'Red & Green': ['#ff3b3b', '#3bff6b'],
+            };
+            const fwBtn = "px-2 py-0.5 rounded text-[10px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/50";
+            return <>
+                <FormField label="Burst colors">
+                    <div className="space-y-1.5">
+                        <div className="flex flex-wrap gap-1">
+                            {Object.keys(fwPresets).map(name => <button key={name} onClick={() => setColors(fwPresets[name])} className={fwBtn}>{name}</button>)}
+                            <button onClick={() => setColors([])} className={fwBtn} title="Random festive colors">Festive mix</button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                            {fwColors.map((c, i) => (
+                                <div key={i} className="relative">
+                                    <ColorInput value={c} onChange={(val: string) => setColors(fwColors.map((x, idx) => idx === i ? val : x))} className="w-8 h-8 p-0.5" />
+                                    <button onClick={() => setColors(fwColors.filter((_, idx) => idx !== i))} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center" title="Remove color">×</button>
+                                </div>
+                            ))}
+                            <button onClick={() => setColors([...fwColors, '#ffd23b'])} className={fwBtn}>+ Color</button>
+                        </div>
+                        {fwColors.length === 0 && <p className="text-[11px] text-[var(--text-secondary)]">Using a random festive mix. Pick a preset above, or add your own colors.</p>}
+                    </div>
+                </FormField>
+                <FormField label="Bursts"><TextInput type="number" min="1" max="20" value={cmd.bursts ?? 3} onChange={e => updateCommand({ bursts: Math.max(1, parseInt(e.target.value, 10) || 3) } as any)} /></FormField>
+                <FormField label={`Burst height ${Math.round((cmd.burstHeight ?? 0.7) * 100)}%`}><input type="range" min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label="Duration (s)"><TextInput type="number" min="0.5" step="0.1" value={cmd.duration ?? 2.5} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 2.5 } as any)} /></FormField>
+                <FormField label={`Brightness ${Math.round((cmd.intensity ?? 1) * 100)}%`}><input type="range" min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label="Boom SFX">
+                    <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
+                        <option value="">None</option>
+                        {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                    </Select>
+                </FormField>
+                <FormField label="Boom delay (s)"><TextInput type="number" min="0" step="0.1" value={cmd.sfxDelay ?? 0.3} onChange={e => updateCommand({ sfxDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.sfxPerBurst === true} onChange={e => updateCommand({ sfxPerBurst: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Play the boom on every burst</span></label>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Show over the dialogue box</span></label>
+                <p className="text-xs text-[var(--text-secondary)]">A one-shot burst of fireworks. Stack or sequence several for a longer show. For ambient looping fireworks, use Screen Overlay Effect → Fireworks instead.</p>
+            </>;
+        }
+        case CommandType.PlaceLights: {
+            const lights: any[] = cmd.lights || [];
+            const addLight = (lType: 'candle' | 'star' | 'christmas') => {
+                const n = lights.length;
+                const nl: any = {
+                    id: `light-${Math.random().toString(36).slice(2, 9)}`,
+                    type: lType,
+                    x: 25 + (n * 9) % 50,
+                    y: 30 + (n * 7) % 35,
+                    size: 1, brightness: 1, twinkleSpeed: 1,
+                };
+                if (lType === 'christmas') { nl.color = '#ff3b3b'; nl.twinkle = 'fade'; }
+                if (lType === 'star') { nl.color = '#ffffff'; }
+                updateCommand({ lights: [...lights, nl] } as any);
+            };
+            const updateLight = (i: number, patch: any) => updateCommand({ lights: lights.map((l, idx) => idx === i ? { ...l, ...patch } : l) } as any);
+            const removeLight = (i: number) => updateCommand({ lights: lights.filter((_, idx) => idx !== i) } as any);
+            const btnCls = "px-2 py-1 rounded text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/50";
+            return <>
+                <div className="flex gap-1 flex-wrap mb-1">
+                    <button onClick={() => addLight('candle')} className={btnCls}>+ Candle</button>
+                    <button onClick={() => addLight('star')} className={btnCls}>+ Star</button>
+                    <button onClick={() => addLight('christmas')} className={btnCls}>+ Christmas</button>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">Drag each light into place on the scene preview, or set its position below. Scatter bulbs for a tree, or line them up for a string.</p>
+                {lights.length === 0 && <p className="text-xs text-[var(--text-secondary)] italic mt-1">No lights yet — add one above.</p>}
+                {lights.map((l, i) => (
+                    <div key={l.id} className="border border-[var(--border-subtle)] rounded p-2 my-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold capitalize text-[var(--text-primary)]">{l.type} #{i + 1}</span>
+                            <button onClick={() => removeLight(i)} className="text-red-400 text-[11px] hover:underline">Remove</button>
+                        </div>
+                        {l.type !== 'candle' && <FormField label="Color"><TextInput type="text" value={l.color || (l.type === 'star' ? '#ffffff' : '#ff3b3b')} onChange={e => updateLight(i, { color: e.target.value })} /></FormField>}
+                        {l.type === 'christmas' && <FormField label="Twinkle"><Select value={l.twinkle || 'fade'} onChange={e => updateLight(i, { twinkle: e.target.value })}><option value="steady">Steady</option><option value="fade">Fade</option><option value="blink">Blink</option><option value="chase">Chase</option></Select></FormField>}
+                        <FormField label={`Size ${(l.size ?? 1).toFixed(1)}×`}><input type="range" min="0.4" max="3" step="0.1" value={l.size ?? 1} onChange={e => updateLight(i, { size: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={`Twinkle speed ${(l.twinkleSpeed ?? 1).toFixed(1)}×`}><input type="range" min="0.2" max="3" step="0.1" value={l.twinkleSpeed ?? 1} onChange={e => updateLight(i, { twinkleSpeed: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={`Brightness ${Math.round((l.brightness ?? 1) * 100)}%`}><input type="range" min="0.2" max="1" step="0.05" value={l.brightness ?? 1} onChange={e => updateLight(i, { brightness: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label="Position (x%, y%)">
+                            <div className="flex gap-1">
+                                <TextInput type="number" value={Math.round(l.x ?? 0)} onChange={e => updateLight(i, { x: parseFloat(e.target.value) || 0 })} />
+                                <TextInput type="number" value={Math.round(l.y ?? 0)} onChange={e => updateLight(i, { y: parseFloat(e.target.value) || 0 })} />
+                            </div>
+                        </FormField>
+                    </div>
+                ))}
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.aboveCharacters === true} onChange={e => updateCommand({ aboveCharacters: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Show in front of characters</span></label>
+            </>;
+        }
+        case CommandType.ClearLights: {
+            return <p className="text-xs text-[var(--text-secondary)]">Removes all placed lights from the scene.</p>;
+        }
         case CommandType.Flashlight: {
             const audioOpts = Object.values(project.audio || {}) as any[];
             return <>
@@ -1010,8 +1109,8 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
         case CommandType.SetScreenOverlayEffect: {
             const effectType = cmd.effectType as string;
             const intensity = typeof cmd.intensity === 'number' ? cmd.intensity : 0;
-            const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke'].includes(effectType) || !!pluginManager.getEffect(effectType);
-            const defaultColors: Record<string, string> = { sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF', fog: '#CDD2D8', haze: '#E1DED2', smoke: '#46484C' };
+            const supportsColor = ['sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke', 'fireworks'].includes(effectType) || !!pluginManager.getEffect(effectType);
+            const defaultColors: Record<string, string> = { sunbeams: '#FFDC8C', shimmer: '#FFFFFF', rain: '#B4D2FF', snowAsh: '#FFFFFF', fog: '#CDD2D8', haze: '#E1DED2', smoke: '#46484C', fireworks: '#FFD23B' };
             const effectColor = cmd.color || defaultColors[effectType] || '#FFFFFF';
             const overlayDuration = typeof cmd.duration === 'number' ? cmd.duration : 0;
             const isPersistent = overlayDuration === 0;
@@ -1027,6 +1126,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         <option value="fog">Fog</option>
                         <option value="haze">Haze</option>
                         <option value="smoke">Smoke</option>
+                        <option value="fireworks">Fireworks (looping show)</option>
                         {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
                             <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
                         ))}
@@ -2053,6 +2153,9 @@ export function summarizeGroup(groupId: InspectorGroupId, command: VNCommand, pr
             case CommandType.ResetScreenEffects: return `${c.duration}s`;
             case CommandType.FlashScreen: return c.color || '';
             case CommandType.Lightning: return `${c.flashes ?? 2}× flash${c.thunderSfxId ? ' + thunder' : ''}`;
+            case CommandType.Fireworks: return `${c.bursts ?? 3} burst${(c.bursts ?? 3) === 1 ? '' : 's'}${c.sfxId ? ' + boom' : ''}`;
+            case CommandType.PlaceLights: return `${(c.lights || []).length} light${(c.lights || []).length === 1 ? '' : 's'}`;
+            case CommandType.ClearLights: return 'clear lights';
             case CommandType.Flashlight: return c.enabled ? `on · r${c.radius ?? 22}%` : 'off';
             case CommandType.SetScreenOverlayEffect: return c.effectType || '';
             case CommandType.ShowScreen: return project.uiScreens[c.screenId]?.name || '—';

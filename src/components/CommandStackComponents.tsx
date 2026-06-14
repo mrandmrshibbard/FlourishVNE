@@ -14,11 +14,13 @@ interface CommandStackItemProps {
     command: VNCommand;
     project: VNProject;
     isSelected: boolean;
+    isInMultiSelection?: boolean;
     isStacked: boolean;
     isFirstInStack?: boolean;
     isLastInStack?: boolean;
     stackSize?: number;
-    onSelect: () => void;
+    onSelect: (e: React.MouseEvent) => void;
+    onDoubleClickSelect?: () => void;
     onUnstack?: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
 }
@@ -27,11 +29,13 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
     command,
     project,
     isSelected,
+    isInMultiSelection,
     isStacked,
     isFirstInStack,
     isLastInStack,
     stackSize = 1,
     onSelect,
+    onDoubleClickSelect,
     onUnstack,
     onContextMenu,
 }) => {
@@ -136,10 +140,11 @@ export const CommandStackItem: React.FC<CommandStackItemProps> = ({
         <div className="relative group" data-command-id={command.id}>
             <div
                 onClick={onSelect}
+                onDoubleClick={onDoubleClickSelect}
                 onContextMenu={onContextMenu}
                 className={`
                     relative flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all
-                    ${isSelected ? 'bg-sky-500/20 ring-2 ring-sky-500' : 'bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]'}
+                    ${isSelected ? 'bg-sky-500/30 ring-2 ring-sky-300 shadow-[0_0_14px_rgba(125,211,252,0.75)] brightness-110 z-10' : isInMultiSelection ? 'bg-sky-500/20 ring-2 ring-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.55)] z-10' : 'bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]'}
                     ${isStacked ? 'border-2 border-purple-500' : 'border border-[var(--border-default)]'}
                     ${isFirstInStack && !isLastInStack ? 'rounded-r-none border-r-0' : ''}
                     ${isLastInStack && !isFirstInStack ? 'rounded-l-none border-l-0' : ''}
@@ -211,9 +216,11 @@ interface CommandStackRowProps {
     commands: VNCommand[];
     project: VNProject;
     selectedCommandIndex: number | null;
+    selectedCommands?: Set<string>;
     startIndex: number;
     allCommands?: VNCommand[]; // Full command array for proper index calculation
-    onSelectCommand: (index: number) => void;
+    onSelectCommand: (index: number, e: React.MouseEvent) => void;
+    onSelectStack?: (anchorCommandId: string) => void;
     onUnstackCommand: (commandId: string) => void;
     onCommandContextMenu?: (index: number, e: React.MouseEvent) => void;
 }
@@ -222,9 +229,11 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
     commands,
     project,
     selectedCommandIndex,
+    selectedCommands,
     startIndex,
     allCommands,
     onSelectCommand,
+    onSelectStack,
     onUnstackCommand,
     onCommandContextMenu,
 }) => {
@@ -233,14 +242,15 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
     if (commands.length === 1) {
         const command = commands[0];
         const globalIndex = startIndex;
-        
+
         return (
             <CommandStackItem
                 command={command}
                 project={project}
                 isSelected={selectedCommandIndex === globalIndex}
+                isInMultiSelection={selectedCommands?.has(command.id)}
                 isStacked={false}
-                onSelect={() => onSelectCommand(globalIndex)}
+                onSelect={(e) => onSelectCommand(globalIndex, e)}
                 onContextMenu={onCommandContextMenu ? (e) => onCommandContextMenu(globalIndex, e) : undefined}
             />
         );
@@ -250,21 +260,23 @@ export const CommandStackRow: React.FC<CommandStackRowProps> = ({
         <div className="flex gap-0">
             {commands.map((command, localIndex) => {
                 // Calculate the real index from the full command array if available
-                const globalIndex = allCommands 
+                const globalIndex = allCommands
                     ? allCommands.findIndex(c => c.id === command.id)
                     : startIndex + localIndex;
-                
+
                 return (
                     <div key={command.id} className="flex-1 min-w-0">
                         <CommandStackItem
                             command={command}
                             project={project}
                             isSelected={selectedCommandIndex === globalIndex}
+                            isInMultiSelection={selectedCommands?.has(command.id)}
                             isStacked={isStacked}
                             isFirstInStack={localIndex === 0}
                             isLastInStack={localIndex === commands.length - 1}
                             stackSize={commands.length}
-                            onSelect={() => onSelectCommand(globalIndex)}
+                            onSelect={(e) => onSelectCommand(globalIndex, e)}
+                            onDoubleClickSelect={onSelectStack ? () => onSelectStack(command.id) : undefined}
                             onUnstack={() => onUnstackCommand(command.id)}
                             onContextMenu={onCommandContextMenu ? (e) => onCommandContextMenu(globalIndex, e) : undefined}
                         />

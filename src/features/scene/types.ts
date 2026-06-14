@@ -24,6 +24,8 @@ export const BLOCKING_COMMAND_TYPES = [
     'Choice',
     'TextInput',
     'BranchStart',
+    'BranchElseIf',
+    'BranchElse',
     'BranchEnd',
     'Jump',
     'JumpToLabel',
@@ -45,6 +47,8 @@ export enum CommandType {
     HideCharacter = 'HideCharacter',
     Choice = 'Choice',
     BranchStart = 'BranchStart',
+    BranchElseIf = 'BranchElseIf',
+    BranchElse = 'BranchElse',
     BranchEnd = 'BranchEnd',
     SetVariable = 'SetVariable',
     TextInput = 'TextInput',
@@ -89,6 +93,9 @@ export enum CommandType {
     SellItem = 'SellItem',     // Sell an item to a shop list (gains currency)
     Lightning = 'Lightning',   // One-shot lightning flash(es), optionally synced with a thunder SFX
     Flashlight = 'Flashlight', // Darken the screen except a soft circle of light that follows the mouse
+    Fireworks = 'Fireworks',   // One-shot fireworks burst/volley, optionally synced with a boom SFX
+    PlaceLights = 'PlaceLights', // Place individually-positioned twinkling lights (candle/star/christmas)
+    ClearLights = 'ClearLights', // Remove all placed lights
 }
 
 /**
@@ -279,6 +286,20 @@ export interface BranchStartCommand extends BaseCommand {
     isCollapsed?: boolean;
 }
 
+// "Otherwise if" — an additional condition segment in the same branch (shares branchId).
+// Conditions come from BaseCommand. Additive/optional: branches without these behave exactly
+// as a plain if-block, so projects saved before this load and run unchanged.
+export interface BranchElseIfCommand extends BaseCommand {
+    type: CommandType.BranchElseIf;
+    branchId: VNID;
+}
+
+// "Otherwise" — the fallback segment that runs when no prior condition matched (shares branchId).
+export interface BranchElseCommand extends BaseCommand {
+    type: CommandType.BranchElse;
+    branchId: VNID;
+}
+
 export interface BranchEndCommand extends BaseCommand {
     type: CommandType.BranchEnd;
     branchId: VNID;
@@ -428,6 +449,49 @@ export interface LightningCommand extends BaseCommand {
     thunderVolume?: number; // 0..1 (default uses sfx volume)
     /** When false, the flash sits BEHIND the dialogue box so it isn't lit (default true = flashes everything). */
     affectsDialogue?: boolean;
+}
+
+export interface FireworksCommand extends BaseCommand {
+    type: CommandType.Fireworks;
+    colors?: string[];      // burst colors, chosen at random per burst (default festive palette)
+    bursts?: number;        // rockets in this volley (default 3)
+    duration?: number;      // total seconds the volley runs (default 2.5)
+    intensity?: number;     // 0..1 overall brightness/opacity (default 1)
+    burstHeight?: number;   // 0..1 how high the bursts explode (0 = low, 1 = near top; default 0.7)
+    sfxId?: VNID | null;    // optional boom SFX
+    sfxDelay?: number;      // seconds before the first boom (default 0.3)
+    sfxVolume?: number;     // 0..1
+    sfxPerBurst?: boolean;  // play the boom on every burst instead of once (default false)
+    /** When false, fireworks sit BEHIND the dialogue box (default true). */
+    affectsDialogue?: boolean;
+}
+
+export type VNLightType = 'candle' | 'star' | 'christmas';
+/** Twinkle styles (mainly for christmas bulbs; candle = warm flicker, star = gentle sparkle). */
+export type VNLightTwinkle = 'steady' | 'fade' | 'blink' | 'chase';
+
+/** A single placed, twinkling light. Position is a percentage of the stage (0..100). */
+export interface VNLight {
+    id: VNID;
+    type: VNLightType;
+    x: number;
+    y: number;
+    size?: number;        // relative size multiplier (~0.5..3, default 1)
+    color?: string;       // bulb/star color (candle ignores this — always warm)
+    twinkle?: VNLightTwinkle; // christmas blink style (default 'fade')
+    twinkleSpeed?: number;    // speed multiplier (default 1)
+    brightness?: number;      // 0..1 (default 1)
+}
+
+export interface PlaceLightsCommand extends BaseCommand {
+    type: CommandType.PlaceLights;
+    lights: VNLight[];
+    /** Render the lights in FRONT of characters (default false = behind characters, on the scene). */
+    aboveCharacters?: boolean;
+}
+
+export interface ClearLightsCommand extends BaseCommand {
+    type: CommandType.ClearLights;
 }
 
 export interface FlashlightCommand extends BaseCommand {
@@ -931,10 +995,10 @@ export interface TweenElementCommand extends BaseCommand {
 
 export type VNCommand =
   | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
-    | ChoiceCommand | BranchStartCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
+    | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand
-    | FlashScreenCommand | LightningCommand | FlashlightCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
+    | FlashScreenCommand | LightningCommand | FlashlightCommand | FireworksCommand | PlaceLightsCommand | ClearLightsCommand | SetScreenOverlayEffectCommand | ShowScreenCommand | ShowTextCommand | ShowImageCommand
   | HideTextCommand | HideImageCommand | ShowButtonCommand | HideButtonCommand | ShowItemCommand | CreditRollCommand | GroupCommand | RunScriptCommand
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand

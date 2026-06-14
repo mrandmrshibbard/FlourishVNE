@@ -66,6 +66,16 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             const command = { type, name: 'New Branch', color: '#38bdf8', branchId, isCollapsed: false };
             return command;
         }
+        case CommandType.BranchElseIf: {
+            const branchId = options.branchId || generateBranchId();
+            const command = { type, branchId };
+            return command;
+        }
+        case CommandType.BranchElse: {
+            const branchId = options.branchId || generateBranchId();
+            const command = { type, branchId };
+            return command;
+        }
         case CommandType.BranchEnd: {
             const branchId = options.branchId || generateBranchId();
             const command = { type, branchId };
@@ -144,6 +154,18 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
         }
         case CommandType.Lightning: {
             const command = { type, color: '#EAF2FF', intensity: 0.9, duration: 0.7, flashes: 2 as const, thunderSfxId: null, thunderDelay: 0.6 };
+            return command;
+        }
+        case CommandType.Fireworks: {
+            const command = { type, colors: [] as string[], bursts: 3, duration: 2.5, intensity: 1, burstHeight: 0.7, sfxId: null, sfxDelay: 0.3, sfxPerBurst: false };
+            return command;
+        }
+        case CommandType.PlaceLights: {
+            const command = { type, lights: [] as any[], aboveCharacters: false };
+            return command;
+        }
+        case CommandType.ClearLights: {
+            const command = { type };
             return command;
         }
         case CommandType.Flashlight: {

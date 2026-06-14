@@ -23,8 +23,8 @@ import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
-    FlashScreenCommand, LightningCommand, FlashlightCommand, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
-    ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
+    FlashScreenCommand, LightningCommand, FlashlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
+    ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
     CallCommonEventCommand,
@@ -35,7 +35,7 @@ import {
 import { VNCondition } from '../types/shared';
 import { VNCharacter, VNCharacterLayer } from '../features/character/types';
 import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
-import { ScreenOverlayEffects } from './live-preview/ScreenOverlayEffects';
+import { ScreenOverlayEffects, runFireworksSim } from './live-preview/ScreenOverlayEffects';
 import { ParticleSystem } from './live-preview/ParticleSystem';
 import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
 import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
@@ -62,6 +62,80 @@ function getHueFromHex(hex: string): number {
     }
     return Math.round(h * 360);
 }
+
+/** One-shot fireworks volley canvas. Mounts on a Fireworks command, runs the shared sim for the
+ *  configured number of bursts, then calls onDone to unmount. onExplode fires per burst (per-burst SFX). */
+const FireworksBurst: React.FC<{
+    colors: string[]; intensity: number; bursts: number; duration: number; heightFrac: number;
+    width: number; height: number; onExplode?: () => void; onDone: () => void;
+}> = ({ colors, intensity, bursts, duration, heightFrac, width, height, onExplode, onDone }) => {
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const doneRef = useRef(onDone); doneRef.current = onDone;
+    const explodeRef = useRef(onExplode); explodeRef.current = onExplode;
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        // Wait for a measured stage size (the command can fire before the stage is laid out, e.g.
+        // as the first command in a scene); the effect re-runs when width/height become valid.
+        if (!canvas || width <= 0 || height <= 0) return;
+        const speedMul = Math.max(0.25, (430 * bursts) / (Math.max(0.5, duration) * 1000));
+        const stop = runFireworksSim(canvas, width, height, {
+            colors, intensity, speedMul, continuous: false, maxBursts: bursts, heightFrac,
+            onExplode: () => explodeRef.current?.(),
+            onIdle: () => doneRef.current(),
+        });
+        // Safety net so a never-idle sim can't leave the canvas mounted forever.
+        const safety = window.setTimeout(() => doneRef.current(), duration * 1000 + 4500);
+        return () => { stop(); clearTimeout(safety); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
+    return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ mixBlendMode: 'screen' }} aria-hidden />;
+};
+
+const hexToRgbStr = (hex: string): string => {
+    const m = (hex || '').match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!m) return '255, 255, 255';
+    return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
+};
+
+/** Renders the placed twinkling lights (candle flicker / star sparkle / christmas bulb blink styles). */
+const LightsLayer: React.FC<{ lights: VNLight[]; stageW: number; stageH: number }> = ({ lights, stageW, stageH }) => {
+    const base = Math.min(stageW || 800, stageH || 600);
+    return <>{lights.map((l, i) => {
+        const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
+        const bright = Math.max(0, Math.min(1, l.brightness ?? 1));
+        const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
+        // Every light is a pure point of light: a tight bright center that drops off through one
+        // continuous radial gradient to FULLY transparent at the edge — no boxShadow (its spread
+        // left a visible halo ring/boundary) and a box large enough to hold the whole soft glow.
+        let background = '';
+        let animation: string | undefined;
+        let delay = `${(i % 7) * 0.13}s`;
+        const wPx = sizePx * 1.8;
+        const hPx = sizePx * 1.8;
+        if (l.type === 'candle') {
+            background = `radial-gradient(circle at 50% 45%, rgba(255,250,220,${0.97 * bright}) 0%, rgba(255,185,75,${0.8 * bright}) 9%, rgba(255,135,45,${0.4 * bright}) 24%, rgba(255,105,25,${0.14 * bright}) 46%, rgba(255,95,15,${0.04 * bright}) 70%, rgba(255,95,15,0) 100%)`;
+            animation = `vnfx-candle ${(1.1 / spd).toFixed(2)}s ease-in-out infinite`;
+        } else if (l.type === 'star') {
+            const rgb = hexToRgbStr(l.color || '#ffffff');
+            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.85 * bright}) 8%, rgba(${rgb},${0.4 * bright}) 22%, rgba(${rgb},${0.14 * bright}) 44%, rgba(${rgb},${0.04 * bright}) 68%, rgba(${rgb},0) 100%)`;
+            animation = `vnfx-star ${(2.2 / spd).toFixed(2)}s ease-in-out infinite`;
+        } else {
+            const rgb = hexToRgbStr(l.color || '#ff3b3b');
+            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.95 * bright}) 5%, rgba(${rgb},${0.5 * bright}) 13%, rgba(${rgb},${0.26 * bright}) 26%, rgba(${rgb},${0.1 * bright}) 44%, rgba(${rgb},${0.03 * bright}) 66%, rgba(${rgb},0) 100%)`;
+            const tw = l.twinkle ?? 'fade';
+            if (tw === 'fade') animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
+            else if (tw === 'blink') animation = `vnfx-bulb-blink ${(1.0 / spd).toFixed(2)}s steps(1, end) infinite`;
+            else if (tw === 'chase') { animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`; delay = `${(i % 5) * (0.32 / spd)}s`; }
+            // 'steady' → no animation
+        }
+        return <div key={l.id} data-vnlight={l.type} className="absolute pointer-events-none" style={{
+            left: `${l.x}%`, top: `${l.y}%`, width: wPx, height: hPx,
+            transform: 'translate(-50%, -50%)', borderRadius: '50%', background,
+            animation, animationDelay: animation ? delay : undefined,
+            mixBlendMode: 'screen',
+        }} />;
+    })}</>;
+};
 
 function isRuntimeDebugEnabled(): boolean {
     try {
@@ -170,6 +244,8 @@ import {
     handleJumpToLabel,
     handleLabel,
     handleBranchStart,
+    handleBranchElseIf,
+    handleBranchElse,
     handleBranchEnd,
     handleGroup,
     handleShakeScreen,
@@ -4615,6 +4691,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const currentVoiceRef = useRef<HTMLAudioElement | null>(null);
     const activeLightningRef = useRef<{ color: string; intensity: number; duration: number; flashes: number; affectsDialogue: boolean; key: number } | null>(null);
     const [lightningTrigger, setLightningTrigger] = useState(0);
+    const activeFireworksRef = useRef<{ colors: string[]; intensity: number; bursts: number; duration: number; burstHeight: number; affectsDialogue: boolean; sfxId: VNID | null; sfxVolume?: number; sfxPerBurst: boolean; key: number } | null>(null);
+    const [fireworksTrigger, setFireworksTrigger] = useState(0);
     // Flashlight (persistent mouse-following dark overlay). `on` is the live toggle state.
     const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean } | null>(null);
     const flashlightOverlayRef = useRef<HTMLDivElement | null>(null);
@@ -5033,6 +5111,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
             setScreenStack([]);
             setHudStack([]);
+            setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
             setIsJustLoaded(true);
             // Plugin hook: a save has just been loaded (state applied).
             try { pluginManager.invokeHook('onLoadAfterSave', saveData); } catch { /* isolated */ }
@@ -5130,6 +5209,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
         setScreenStack([]);
         setHudStack([]);
+        setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
     }, [project, stopAndResetMusic, menuVariables]);
 
     // Start a new game with a fade: title fades to black (≈400ms), the scene loads behind the
@@ -6432,30 +6512,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             index: commandSignature.index,
         });
 
-        // Special handling for BranchStart - check conditions and skip branch if not met
+        // Special handling for BranchStart — walk the If / Otherwise-if / Otherwise chain and
+        // land on the FIRST segment whose conditions match (or just past BranchEnd if none do).
+        // A plain branch (no else markers) collapses to the original "run body or skip" behavior,
+        // so projects saved before else/else-if existed run identically.
         if (command.type === CommandType.BranchStart) {
-            const branchCmd = command as BranchStartCommand;
-            const conditionsMet = evaluateConditions(branchCmd.conditions, getRuntimeVariables());
-            
-            if (!conditionsMet) {
-                // Skip to matching BranchEnd
-                const branchEndIndex = playerState.currentCommands.findIndex((cmd, idx) =>
-                    idx > playerState.currentIndex &&
-                    cmd.type === CommandType.BranchEnd &&
-                    (cmd as BranchEndCommand).branchId === branchCmd.branchId
-                );
-                
-                if (branchEndIndex !== -1) {
-                    // Jump to just after the BranchEnd
-                    updatePlayerState(p => p ? { ...p, currentIndex: branchEndIndex + 1 } : null);
-                } else {
-                    // No matching BranchEnd found, just advance
-                    updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
-                }
-                return;
+            const cmds = playerState.currentCommands;
+            const startIdx = playerState.currentIndex;
+            const branchId = (command as BranchStartCommand).branchId;
+            const vars = getRuntimeVariables();
+            const endIdx = cmds.findIndex((c, i) =>
+                i > startIdx && c.type === CommandType.BranchEnd && (c as BranchEndCommand).branchId === branchId
+            );
+            // Next segment boundary (else-if / else / end) for THIS branch, after `from`.
+            // Filtering by branchId naturally skips any nested branch's markers (unique ids).
+            const nextMarker = (from: number) => cmds.findIndex((c, i) =>
+                i > from &&
+                (c as { branchId?: string }).branchId === branchId &&
+                (c.type === CommandType.BranchElseIf || c.type === CommandType.BranchElse || c.type === CommandType.BranchEnd)
+            );
+            let segIdx = startIdx;
+            let target: number;
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                const seg = cmds[segIdx];
+                const segMet = seg.type === CommandType.BranchElse
+                    ? true
+                    : evaluateConditions((seg as { conditions?: VNCondition[] }).conditions, vars);
+                if (segMet) { target = segIdx + 1; break; }       // enter this segment's body
+                const nm = nextMarker(segIdx);
+                if (nm === -1) { target = endIdx !== -1 ? endIdx + 1 : startIdx + 1; break; }
+                if (cmds[nm].type === CommandType.BranchEnd) { target = nm + 1; break; }
+                segIdx = nm;                                       // evaluate the next Otherwise-if / Otherwise
             }
-            // If conditions met, continue to execute BranchStart normally (which does nothing)
-            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            updatePlayerState(p => p ? { ...p, currentIndex: target } : null);
             return;
         }
 
@@ -6668,6 +6758,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         activeFlashRef.current = null;
                         setFlashTrigger(0);
                         activeLightningRef.current = null;
+                        activeFireworksRef.current = null;
                         setFlashlight(null);
                         activeShakeRef.current = null;
                         scheduler.reset();
@@ -6745,6 +6836,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.BranchStart: {
                     const result = handleBranchStart();
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.BranchElseIf: {
+                    const result = handleBranchElseIf(command as BranchElseIfCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.BranchElse: {
+                    const result = handleBranchElse(command as BranchElseCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -7125,6 +7226,40 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         }, Math.max(0, (cmd.thunderDelay ?? 0.6) * 1000));
                         activeEffectTimeoutsRef.current.push(tid);
                     }
+                    break;
+                }
+                case CommandType.Fireworks: {
+                    const cmd = command as FireworksCommand;
+                    activeFireworksRef.current = {
+                        colors: (cmd.colors && cmd.colors.length) ? cmd.colors : [],
+                        intensity: cmd.intensity ?? 1,
+                        bursts: Math.max(1, cmd.bursts ?? 3),
+                        duration: cmd.duration ?? 2.5,
+                        burstHeight: cmd.burstHeight ?? 0.7,
+                        affectsDialogue: cmd.affectsDialogue !== false,
+                        sfxId: cmd.sfxId ?? null,
+                        sfxVolume: cmd.sfxVolume,
+                        sfxPerBurst: !!cmd.sfxPerBurst,
+                        key: Date.now(),
+                    };
+                    setFireworksTrigger(prev => prev + 1);
+                    // One synced boom at the configured delay (unless playing a boom per burst, which the
+                    // burst canvas handles via onExplode).
+                    if (cmd.sfxId && !cmd.sfxPerBurst) {
+                        const tid = window.setTimeout(() => {
+                            playSound(cmd.sfxId!, cmd.sfxVolume);
+                        }, Math.max(0, (cmd.sfxDelay ?? 0.3) * 1000));
+                        activeEffectTimeoutsRef.current.push(tid);
+                    }
+                    break;
+                }
+                case CommandType.PlaceLights: {
+                    const cmd = command as PlaceLightsCommand;
+                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) });
+                    break;
+                }
+                case CommandType.ClearLights: {
+                    applyResult({ advance: true, stagePatch: () => ({ lights: [] }) });
                     break;
                 }
                 case CommandType.Flashlight: {
@@ -8087,6 +8222,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
                 uiDirtyVariableIdsRef.current.clear();
                 if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+                // Clear any lingering "closing" (fade-out) flags. Quit is usually triggered FROM
+                // the pause menu, which marks the pause screen as closing for its exit animation —
+                // if that flag survived, the pause screen would render mid-fade-out (→ blank/black)
+                // the next time it's opened in a new game / loaded save.
+                setClosingScreens(new Set());
             };
 
             // Mark topmost screen(s) as closing so the transitionOut plays before the quit
@@ -8186,6 +8326,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 activeFlashRef.current = null;
                 setFlashTrigger(0);
                 activeLightningRef.current = null;
+                activeFireworksRef.current = null;
                 setFlashlight(null);
                 activeShakeRef.current = null;
 
@@ -9560,7 +9701,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
                             return (
                                 <div
-                                    key={`${char.charId}-${char.expressionId}-${char.imageUrls.join(',')}-${char.transition?.action ?? 'none'}`}
+                                    // With a transition, the key includes the pose/action so React remounts and
+                                    // replays the entrance/crossfade animation. With NO transition (instant/none)
+                                    // the key is stable (just charId) so the SAME element persists and only swaps
+                                    // its image — remounting on every instant change caused a blank-frame flash.
+                                    key={char.transition
+                                        ? `${char.charId}-${char.expressionId}-${char.imageUrls.join(',')}-${char.transition.action}`
+                                        : char.charId}
                                     className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
                                     style={{
                                         ...positionStyle, animationDuration, ...slideStyle, zIndex: 5 + (char.layer ?? 0) * 100,
@@ -9591,6 +9738,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                             return null;
                         })()}
+                        {/* Placed twinkling lights (PlaceLights) — behind characters by default, or in front if set. */}
+                        {state.lights && state.lights.length > 0 && (
+                            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: state.lightsAbove ? 40 : 4 }}>
+                                <LightsLayer lights={state.lights} stageW={stageSize.width} stageH={stageSize.height} />
+                            </div>
+                        )}
                         {state.textOverlays.filter((o: TextOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: TextOverlay) => {
                             // Live text re-interpolates its {variable} tokens against current
                             // variables each render, so values shown in the text update live.
@@ -10411,6 +10564,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     />
                 </div>
             )}
+            {/* Fireworks (one-shot volley) — canvas burst; z above the dialogue box unless told otherwise. */}
+            {activeFireworksRef.current && (
+                <div className="absolute inset-0 pointer-events-none" style={{ zIndex: activeFireworksRef.current.affectsDialogue ? 50 : 15 }}>
+                    <FireworksBurst
+                        key={activeFireworksRef.current.key}
+                        colors={activeFireworksRef.current.colors}
+                        intensity={activeFireworksRef.current.intensity}
+                        bursts={activeFireworksRef.current.bursts}
+                        duration={activeFireworksRef.current.duration}
+                        heightFrac={activeFireworksRef.current.burstHeight}
+                        width={stageSize.width}
+                        height={stageSize.height}
+                        onExplode={activeFireworksRef.current.sfxPerBurst && activeFireworksRef.current.sfxId
+                            ? () => playSound(activeFireworksRef.current!.sfxId!, activeFireworksRef.current!.sfxVolume)
+                            : undefined}
+                        onDone={() => { activeFireworksRef.current = null; setFireworksTrigger(prev => prev + 1); }}
+                    />
+                </div>
+            )}
             {/* Flashlight — dark overlay with a soft hole that follows the cursor (updated imperatively).
                 z above the dialogue box (20) so it dims too, unless "don't affect dialogue box".
                 When toggled OFF with `darkWhenOff`, render SOLID darkness (no light hole) for dark rooms. */}
@@ -10696,6 +10868,29 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     width: 100%;
                     height: 100%;
                     pointer-events: none;
+                }
+
+                /* Twinkling lights (PlaceLights) */
+                @keyframes vnfx-candle {
+                    0%   { opacity: 0.85; transform: translate(-50%, -50%) scale(0.96); }
+                    25%  { opacity: 1;    transform: translate(-50%, -51%) scale(1.04); }
+                    45%  { opacity: 0.8;  transform: translate(-50%, -50%) scale(0.98); }
+                    65%  { opacity: 0.95; transform: translate(-51%, -49%) scale(1.02); }
+                    100% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.96); }
+                }
+                @keyframes vnfx-star {
+                    0%   { opacity: 0.45; transform: translate(-50%, -50%) scale(0.85); }
+                    50%  { opacity: 1;    transform: translate(-50%, -50%) scale(1.12); }
+                    100% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.85); }
+                }
+                @keyframes vnfx-bulb-fade {
+                    0%   { opacity: 0.25; }
+                    50%  { opacity: 1; }
+                    100% { opacity: 0.25; }
+                }
+                @keyframes vnfx-bulb-blink {
+                    0%, 49%   { opacity: 1; }
+                    50%, 100% { opacity: 0.12; }
                 }
 
                 .vnfx-scanlines {

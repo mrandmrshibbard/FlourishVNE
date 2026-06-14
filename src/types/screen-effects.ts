@@ -10,7 +10,8 @@ export type VNKnownScreenOverlayEffectType =
   | 'snowAsh'
   | 'fog'
   | 'haze'
-  | 'smoke';
+  | 'smoke'
+  | 'fireworks';
 
 /** Effect type: a built-in name OR a plugin-registered effect id (e.g. "myPlugin.glow").
  *  Widened to `string` (additive) so plugin custom effects are valid effect types. */
@@ -18,7 +19,7 @@ export type VNScreenOverlayEffectType = VNKnownScreenOverlayEffectType | (string
 
 /** The set of built-in effect type names (used to separate built-ins from plugin effects). */
 export const BUILTIN_OVERLAY_EFFECT_TYPES: readonly VNKnownScreenOverlayEffectType[] = [
-  'crtScanlines', 'chromaticGlitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke',
+  'crtScanlines', 'chromaticGlitch', 'sunbeams', 'shimmer', 'rain', 'snowAsh', 'fog', 'haze', 'smoke', 'fireworks',
 ];
 
 export type VNSnowAshVariant = 'snow' | 'ash';

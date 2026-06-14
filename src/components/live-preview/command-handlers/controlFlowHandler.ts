@@ -1,4 +1,4 @@
-import { JumpCommand, JumpToLabelCommand, LabelCommand } from '../../../features/scene/types';
+import { JumpCommand, JumpToLabelCommand, LabelCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand } from '../../../features/scene/types';
 import { CommandType } from '../../../features/scene/types';
 import { CommandContext, CommandResult } from './types';
 
@@ -109,6 +109,38 @@ export function handleBranchStart(): CommandResult {
 export function handleBranchEnd(): CommandResult {
   // BranchEnd is just a marker, no action needed
   return { advance: true };
+}
+
+// Jump to just past the matching BranchEnd. Used when an Otherwise-if / Otherwise marker is
+// reached by normal flow — that only happens after a previous segment's body ran, so the rest
+// of the branch must be skipped.
+function jumpPastBranchEnd(branchId: string, context: CommandContext): CommandResult {
+  const { playerState } = context;
+  const endIdx = playerState.currentCommands.findIndex((c, i) =>
+    i > playerState.currentIndex &&
+    c.type === CommandType.BranchEnd &&
+    (c as BranchEndCommand).branchId === branchId
+  );
+  if (endIdx === -1) {
+    return { advance: true };
+  }
+  return { advance: false, updates: { currentIndex: endIdx + 1 } };
+}
+
+/**
+ * "Otherwise if" marker. Reached by fall-through only after a prior segment ran → skip to End.
+ * (When a prior condition was false, the decision logic at BranchStart evaluates this segment
+ * without ever landing the runtime on the marker itself.)
+ */
+export function handleBranchElseIf(command: BranchElseIfCommand, context: CommandContext): CommandResult {
+  return jumpPastBranchEnd(command.branchId, context);
+}
+
+/**
+ * "Otherwise" marker. Reached by fall-through only after a prior segment ran → skip to End.
+ */
+export function handleBranchElse(command: BranchElseCommand, context: CommandContext): CommandResult {
+  return jumpPastBranchEnd(command.branchId, context);
 }
 
 /**

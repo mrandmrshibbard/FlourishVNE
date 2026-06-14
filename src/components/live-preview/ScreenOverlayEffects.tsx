@@ -176,6 +176,123 @@ function runCloudSim(
   return () => cancelAnimationFrame(raf);
 }
 
+/**
+ * Fireworks simulation (canvas). Rockets rise from the bottom and explode into a fading, gravity-
+ * pulled spray of glowing particles (additive blend). Used by BOTH the one-shot Fireworks command
+ * (continuous:false, maxBursts, onIdle to self-clear, onExplode to sync a boom SFX) and the
+ * continuous 'fireworks' overlay effect (continuous:true). Returns a cancel fn.
+ */
+export function runFireworksSim(
+  canvas: HTMLCanvasElement,
+  w: number,
+  h: number,
+  o: {
+    colors: string[];
+    intensity: number;
+    speedMul?: number;
+    continuous: boolean;
+    maxBursts?: number;
+    heightFrac?: number; // 0 = bursts low, 1 = near the top (default 0.7)
+    onExplode?: () => void;
+    onIdle?: () => void;
+  }
+): () => void {
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return () => {};
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const palette = (o.colors && o.colors.length ? o.colors : ['#ff3b3b', '#ffd23b', '#3bff6b', '#3b9bff', '#ff7bef', '#ffffff'])
+    .map(c => parseColor(c, { r: 255, g: 255, b: 255 }));
+  const pick = () => palette[Math.floor(Math.random() * palette.length)];
+  const intensity = clamp01(o.intensity ?? 1);
+  const speedMul = o.speedMul ?? 1;
+  const maxBursts = o.maxBursts ?? 3;
+
+  type Rocket = { x: number; y: number; vy: number; targetY: number; color: { r: number; g: number; b: number } };
+  type Part = { x: number; y: number; vx: number; vy: number; life: number; decay: number; size: number; color: { r: number; g: number; b: number } };
+  let rockets: Rocket[] = [];
+  let parts: Part[] = [];
+  let launched = 0;
+  let acc = 0;
+  let nextLaunch = 0;
+  const launchGap = () => ((o.continuous ? 520 : 300) + Math.random() * 260) / speedMul;
+
+  const hf = clamp01(o.heightFrac ?? 0.7);
+  const launch = () => {
+    const tx = w * (0.12 + Math.random() * 0.76);
+    // hf 0 → bursts near the bottom (~0.85h); hf 1 → near the top (~0.13h).
+    const ty = Math.max(h * 0.06, h * (0.85 - hf * 0.72) + (Math.random() - 0.5) * h * 0.1);
+    // Give higher targets more upward speed so the rocket actually reaches them before its apex.
+    const vy = -(h * (0.7 + hf * 0.5 + Math.random() * 0.15));
+    rockets.push({ x: tx, y: h + 4, vy, targetY: ty, color: pick() });
+    launched++;
+  };
+  const explode = (x: number, y: number, color: { r: number; g: number; b: number }) => {
+    const n = 46 + Math.floor(Math.random() * 42);
+    const base = Math.min(w, h);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = (0.18 + Math.random() * 0.55) * base;
+      parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, decay: 0.45 + Math.random() * 0.55, size: 1.2 + Math.random() * 1.8, color });
+    }
+    o.onExplode?.();
+  };
+
+  let raf = 0;
+  let stopped = false;
+  let idleCalled = false;
+  let last = performance.now();
+  const draw = (now: number) => {
+    if (stopped) return;
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    acc += dt * 1000;
+    if (acc >= nextLaunch && (o.continuous || launched < maxBursts)) {
+      launch();
+      nextLaunch = acc + launchGap();
+    }
+    ctx.clearRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    // Rockets
+    rockets = rockets.filter(r => {
+      r.vy += h * 0.45 * dt; // gravity decelerates the climb
+      r.y += r.vy * dt;
+      ctx.fillStyle = `rgba(${r.color.r}, ${r.color.g}, ${r.color.b}, ${0.85 * intensity})`;
+      ctx.fillRect(r.x - 1, r.y, 2, 7);
+      if (r.y <= r.targetY || r.vy >= 0) { explode(r.x, r.y, r.color); return false; }
+      return true;
+    });
+    // Particles
+    parts = parts.filter(p => {
+      p.vy += h * 0.32 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= p.decay * dt;
+      if (p.life <= 0) return false;
+      const a = clamp01(p.life) * intensity;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 2.2);
+      g.addColorStop(0, `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, ${a})`);
+      g.addColorStop(1, `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      return true;
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    if (!o.continuous && launched >= maxBursts && rockets.length === 0 && parts.length === 0) {
+      if (!idleCalled) { idleCalled = true; o.onIdle?.(); }
+      return; // one-shot volley finished
+    }
+    raf = requestAnimationFrame(draw);
+  };
+  raf = requestAnimationFrame(draw);
+  return () => { stopped = true; cancelAnimationFrame(raf); };
+}
+
 export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   effects,
   width,
@@ -197,6 +314,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const fog = getEffect(normalized, 'fog');
   const haze = getEffect(normalized, 'haze');
   const smoke = getEffect(normalized, 'smoke');
+  const fireworks = getEffect(normalized, 'fireworks');
 
   // Plugin-registered custom effects: any active effect whose type isn't a built-in and whose
   // plugin provides a `render` callback. These render through PluginEffectCanvas.
@@ -216,6 +334,7 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const hazeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const smokeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fireworksCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const minDim = Math.min(safeWidth, safeHeight);
 
   // Fog — thick, low, slow horizontal banks (light grey).
@@ -681,6 +800,18 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
     return () => cancelAnimationFrame(raf);
   }, [shimmer?.intensity, shimmer?.color, shimmer?.params?.speed, shimmer?.params?.particleDensity, shimmer?.params?.shimmerSide, shimmer?.params?.shimmerDirection, shimmer?.params?.shimmerParticlesOnly, safeWidth, safeHeight]);
 
+  // Continuous fireworks show (the persistent overlay variant; the one-shot burst is its own command).
+  useEffect(() => {
+    const canvas = fireworksCanvasRef.current;
+    if (!canvas || !fireworks || clamp01(fireworks.intensity) <= 0 || safeWidth <= 0 || safeHeight <= 0) return;
+    return runFireworksSim(canvas, safeWidth, safeHeight, {
+      colors: fireworks.color ? [fireworks.color] : [],
+      intensity: clamp01(fireworks.intensity),
+      speedMul: 0.5 + ep(fireworks.params, 'speed', 0.5) * 1.6,
+      continuous: true,
+    });
+  }, [fireworks?.intensity, fireworks?.color, fireworks?.params?.speed, safeWidth, safeHeight]);
+
   const scanlinesOpacity = clamp01(scanlines?.intensity ?? 0) * 0.65;
   const chromaOpacity = clamp01(chroma?.intensity ?? 0);
 
@@ -773,6 +904,11 @@ export const ScreenOverlayEffects: React.FC<ScreenOverlayEffectsProps> = ({
       {/* Smoke */}
       {smoke && clamp01(smoke.intensity) > 0 && (
         <canvas ref={smokeCanvasRef} className="vnfx-canvas" aria-hidden />
+      )}
+
+      {/* Fireworks (continuous show) — additive glow */}
+      {fireworks && clamp01(fireworks.intensity) > 0 && (
+        <canvas ref={fireworksCanvasRef} className="vnfx-canvas" style={{ mixBlendMode: 'screen' }} aria-hidden />
       )}
 
       {/* Plugin-registered custom effects (visual pipeline) */}

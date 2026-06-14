@@ -19,6 +19,7 @@ export type SceneAction =
     | { type: 'DELETE_COMMAND'; payload: { sceneId: VNID; commandIndex: number } }
     | { type: 'MOVE_COMMAND'; payload: { sceneId: VNID; fromIndex: number; toIndex: number } }
     | { type: 'TOGGLE_GROUP_COLLAPSE'; payload: { sceneId: VNID; groupId: VNID } }
+    | { type: 'TOGGLE_BRANCH_COLLAPSE'; payload: { sceneId: VNID; branchId: VNID } }
     | { type: 'ADD_COMMAND_TO_GROUP'; payload: { sceneId: VNID; groupId: VNID; commandId: VNID } }
     | { type: 'REMOVE_COMMAND_FROM_GROUP'; payload: { sceneId: VNID; groupId: VNID; commandId: VNID } }
     | { type: 'RENAME_GROUP'; payload: { sceneId: VNID; groupId: VNID; name: string } }
@@ -107,11 +108,22 @@ export const sceneReducer = (state: VNProject, action: SceneAction): VNProject =
       if (!originalScene) return state;
 
       const newId = `scene-${generateId()}`;
+      // Remap branchIds so the copy's branches are independent of the original's — sharing a
+      // branchId would collide collapse state and (if ids ever overlap) break end-marker matching.
+      const branchIdRemap = new Map<string, string>();
       const duplicatedScene: VNScene = {
         ...originalScene,
         id: newId,
         name: `${originalScene.name} (Copy)`,
-        commands: originalScene.commands.map(cmd => ({ ...cmd, id: `cmd-${generateId()}` }))
+        commands: originalScene.commands.map(cmd => {
+          const copy = { ...cmd, id: `cmd-${generateId()}` } as VNCommand & { branchId?: VNID };
+          if (copy.branchId) {
+            let mapped = branchIdRemap.get(copy.branchId);
+            if (!mapped) { mapped = `branch-${generateId()}`; branchIdRemap.set(copy.branchId, mapped); }
+            copy.branchId = mapped;
+          }
+          return copy;
+        })
       };
 
       return {
@@ -181,26 +193,21 @@ export const sceneReducer = (state: VNProject, action: SceneAction): VNProject =
         const scene = state.scenes[sceneId];
         const commandToDelete = scene.commands[commandIndex];
         
-        // If deleting a BranchStart, also delete its BranchEnd
+        // If deleting a BranchStart, remove ALL of this branch's markers (start, any
+        // otherwise-if / otherwise, and end) while keeping the command bodies in place.
         if (commandToDelete?.type === CommandType.BranchStart) {
-            const branchCmd = commandToDelete as BranchStartCommand;
-            const branchEndIndex = scene.commands.findIndex((cmd, i) => 
-                i > commandIndex && 
-                cmd.type === CommandType.BranchEnd && 
-                (cmd as BranchEndCommand).branchId === branchCmd.branchId
-            );
-            
-            if (branchEndIndex !== -1) {
-                // Delete both BranchStart and BranchEnd (and implicitly all commands between)
-                // Actually, we want to keep the commands between, just remove the branch markers
-                const newCommands = scene.commands.filter((_, i) => 
-                    i !== commandIndex && i !== branchEndIndex
-                );
-                return {
-                    ...state,
-                    scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } },
-                };
-            }
+            const branchId = (commandToDelete as BranchStartCommand).branchId;
+            const isBranchMarker = (cmd: VNCommand) =>
+                (cmd.type === CommandType.BranchStart ||
+                 cmd.type === CommandType.BranchElseIf ||
+                 cmd.type === CommandType.BranchElse ||
+                 cmd.type === CommandType.BranchEnd) &&
+                (cmd as { branchId?: VNID }).branchId === branchId;
+            const newCommands = scene.commands.filter(cmd => !isBranchMarker(cmd));
+            return {
+                ...state,
+                scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } },
+            };
         }
         
         // If trying to delete a BranchEnd, don't allow it (must delete BranchStart instead)
@@ -280,6 +287,20 @@ export const sceneReducer = (state: VNProject, action: SceneAction): VNProject =
             }
             return cmd;
         });
+        return {
+            ...state,
+            scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } },
+        };
+    }
+
+    case 'TOGGLE_BRANCH_COLLAPSE': {
+        const { sceneId, branchId } = action.payload;
+        const scene = state.scenes[sceneId];
+        const newCommands = scene.commands.map(cmd =>
+            cmd.type === CommandType.BranchStart && (cmd as BranchStartCommand).branchId === branchId
+                ? { ...cmd, isCollapsed: !(cmd as BranchStartCommand).isCollapsed }
+                : cmd
+        );
         return {
             ...state,
             scenes: { ...state.scenes, [sceneId]: { ...scene, commands: newCommands } },

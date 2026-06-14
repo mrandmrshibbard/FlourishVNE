@@ -1,4 +1,36 @@
-import { VNCondition } from '../types/shared';
+import { VNCondition, VNConditionOperator } from '../types/shared';
+
+const OP_TEXT: Record<VNConditionOperator, string> = {
+    '==': 'is',
+    '!=': 'is not',
+    '>': '>',
+    '<': '<',
+    '>=': '≥',
+    '<=': '≤',
+    'is true': 'is on',
+    'is false': 'is off',
+    'contains': 'contains',
+    'startsWith': 'starts with',
+};
+
+/**
+ * Render a condition list as a short, plain-language phrase for non-coders, e.g.
+ * "Affection ≥ 50" or "HasKey is on and Gold > 0". Empty/undefined → '' (always true).
+ * Pass `project.variables` (or any id→{name} map) so variable ids become readable names.
+ */
+export function describeConditions(
+    conditions: VNCondition[] | undefined,
+    variables: Record<string, { name?: string } | undefined>
+): string {
+    if (!conditions || conditions.length === 0) return '';
+    return conditions.map((c, i) => {
+        const name = variables[c.variableId]?.name || 'a variable';
+        const body = (c.operator === 'is true' || c.operator === 'is false')
+            ? `${name} ${OP_TEXT[c.operator]}`
+            : `${name} ${OP_TEXT[c.operator]} ${c.value ?? ''}`.trim();
+        return i === 0 ? body : `${c.connector ?? 'and'} ${body}`;
+    }).join(' ');
+}
 
 /**
  * Combine a list of conditions using their per-row `connector` (AND/OR),

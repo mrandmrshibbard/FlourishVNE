@@ -142,7 +142,7 @@ const sanitizeFilename = (name: string, fallback: string): string => {
     return name.replace(/[^a-z0-9_.\-]/gi, '_').replace(/_{2,}/g, '_').toLowerCase();
 };
 
-export const exportProject = async (project: VNProject): Promise<{ saved: boolean; filePath?: string }> => {
+export const exportProject = async (project: VNProject, options?: { overwritePath?: string }): Promise<{ saved: boolean; filePath?: string }> => {
     if (!project) {
         throw new Error('A valid project object must be provided for export.');
     }
@@ -897,7 +897,9 @@ export const exportProject = async (project: VNProject): Promise<{ saved: boolea
 
     const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
     if (electronAPI?.saveProjectExport) {
-        const result = await electronAPI.saveProjectExport(archiveData, filename);
+        // `overwritePath` (set when re-saving an unchanged-name project) writes straight to that
+        // file — no save dialog, no overwrite prompt. Without it, the save dialog is shown.
+        const result = await electronAPI.saveProjectExport(archiveData, filename, options?.overwritePath);
 
         if (!result?.success) {
             if (result?.canceled) {

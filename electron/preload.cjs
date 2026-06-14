@@ -43,8 +43,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelQuit: () =>
     ipcRenderer.send('cancel-quit'),
 
-  saveProjectExport: (data, filename) =>
-    ipcRenderer.invoke('save-project-export', { data, filename }),
+  saveProjectExport: (data, filename, filePath) =>
+    ipcRenderer.invoke('save-project-export', { data, filename, filePath }),
 
   setHubActive: (isActive) =>
     ipcRenderer.send('set-hub-active', isActive),

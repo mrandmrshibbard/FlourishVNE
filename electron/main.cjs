@@ -1279,8 +1279,19 @@ ipcMain.on('sync-project-state', (event, projectData) => {
   });
 });
 
-ipcMain.handle('save-project-export', async (event, { data, filename }) => {
+ipcMain.handle('save-project-export', async (event, { data, filename, filePath }) => {
   try {
+    // Silent re-save: when the renderer passes the project's existing file path (name unchanged),
+    // write straight to it — no dialog, no overwrite prompt. Any failure falls through to the dialog.
+    if (filePath) {
+      try {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, Buffer.from(data));
+        return { success: true, filePath };
+      } catch (silentErr) {
+        console.warn('Silent project save failed, falling back to dialog:', silentErr);
+      }
+    }
     const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
     // Ensure default filename uses .flourish extension
     const defaultName = filename.replace(/\.zip$/i, '').replace(/\.flourish$/i, '') + '.flourish';

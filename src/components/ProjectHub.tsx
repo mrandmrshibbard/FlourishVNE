@@ -59,6 +59,12 @@ export function saveRecentProject(project: VNProject, filePath?: string): void {
     }
 }
 
+// The title + on-disk file path this project was last saved to / opened from (if known).
+export function getRecentProjectInfo(projectId: string): { title: string; filePath?: string } | undefined {
+    const r = loadRecentProjects().find(rp => rp.id === projectId);
+    return r ? { title: r.title, filePath: r.filePath } : undefined;
+}
+
 // Helper to load recent projects
 function loadRecentProjects(): RecentProject[] {
     try {

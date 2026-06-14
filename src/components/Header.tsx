@@ -5,7 +5,7 @@ import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, 
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { exportProject } from '../utils/projectPackager';
-import { saveRecentProject } from './ProjectHub';
+import { saveRecentProject, getRecentProjectInfo } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
 import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
 import InfoModal from './ui/InfoModal';
@@ -103,10 +103,19 @@ const Header: React.FC<{
         }
     };
 
+    // If this project was already saved/opened from a file AND its name (title) is unchanged since
+    // then, return that file's path so Save writes straight to it (no dialog, no overwrite prompt).
+    // A renamed project or a never-saved one returns undefined → the normal save dialog is shown.
+    const resolveOverwritePath = (): string | undefined => {
+        const saved = getRecentProjectInfo(project.id);
+        return (saved?.filePath && saved.title === project.title) ? saved.filePath : undefined;
+    };
+
     const handleExport = async () => {
         setIsExportingQuick(true);
         try {
-            const result = await exportProject(project);
+            const overwritePath = resolveOverwritePath();
+            const result = await exportProject(project, overwritePath ? { overwritePath } : undefined);
             if (result.saved) {
                 // Save to recent projects now that we have a saved file
                 saveRecentProject(project, result.filePath);
@@ -137,7 +146,8 @@ const Header: React.FC<{
         const mode = exitMode;
         setIsExporting(true);
         try {
-            const result = await exportProject(project);
+            const overwritePath = resolveOverwritePath();
+            const result = await exportProject(project, overwritePath ? { overwritePath } : undefined);
 
             if (!result.saved) {
                 setIsExporting(false);

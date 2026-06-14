@@ -7,7 +7,7 @@ import { VNID, VNPosition, VNTransition } from '../../../types';
 import { VNCommand } from '../../../features/scene/types';
 import { ChoiceOption } from '../../../features/scene/types';
 import type { VNScreenOverlayEffect } from '../../../types';
-import type { VNCharacterVisualEffect, VNDialogueTextEffect, VNParticleConfig } from '../../../features/scene/types';
+import type { VNCharacterVisualEffect, VNDialogueTextEffect, VNParticleConfig, VNLight } from '../../../features/scene/types';
 
 export type StageSize = { width: number; height: number };
 
@@ -238,6 +238,10 @@ export interface StageState {
     textOverlays: TextOverlay[];
     imageOverlays: ImageOverlay[];
     buttonOverlays: ButtonOverlay[];
+    /** Placed twinkling lights (PlaceLights). Optional/additive — old saves have none. */
+    lights?: VNLight[];
+    /** Whether the placed lights render in front of characters (from the PlaceLights command). */
+    lightsAbove?: boolean;
     /** Interactive scene hot spots (ShowHotSpot). Optional for back-compat with older saves. */
     hotSpotOverlays?: HotSpotOverlay[];
     /** Persistent movie overlays (transparent, looping) that play behind characters */

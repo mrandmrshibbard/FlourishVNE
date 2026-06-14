@@ -6,10 +6,38 @@ import { VNProject } from '../types/project';
 import {
     CommandType, ShowCharacterCommand, DialogueCommand, FlashScreenCommand, ChoiceOption,
     ChoiceCommand, SetBackgroundCommand, ShowTextCommand, ShowImageCommand, VNScene, ShowButtonCommand,
-    PlayMovieCommand, VNCommand, TextInputCommand, ShowItemCommand
+    PlayMovieCommand, VNCommand, TextInputCommand, ShowItemCommand, PlaceLightsCommand, VNLight
 } from '../features/scene/types';
 import { useProject } from '../contexts/ProjectContext';
 import ResizableDraggable from './menu-editor/ResizableDraggable';
+
+/** Drag-only marker for positioning a placed light on the scene preview (editor only). */
+const LightMarker: React.FC<{ light: VNLight; index: number; onMove: (x: number, y: number) => void }> = ({ light, index, onMove }) => {
+    const onPointerDown = (e: React.PointerEvent) => {
+        e.stopPropagation(); e.preventDefault();
+        const parent = (e.currentTarget as HTMLElement).parentElement;
+        if (!parent) return;
+        const rect = parent.getBoundingClientRect();
+        const move = (ev: PointerEvent) => {
+            const x = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
+            const y = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
+            onMove(Math.round(x * 10) / 10, Math.round(y * 10) / 10);
+        };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+    };
+    const color = light.type === 'candle' ? '#ffb13b' : (light.color || (light.type === 'star' ? '#ffffff' : '#ff3b3b'));
+    return (
+        <div
+            onPointerDown={onPointerDown}
+            title={`${light.type} #${index + 1} — drag to position`}
+            style={{ position: 'absolute', left: `${light.x}%`, top: `${light.y}%`, transform: 'translate(-50%, -50%)', cursor: 'grab', pointerEvents: 'auto', zIndex: 41 }}
+        >
+            <div style={{ width: 18, height: 18, borderRadius: '50%', background: color, boxShadow: `0 0 10px 3px ${color}`, border: '2px solid rgba(255,255,255,0.95)' }} />
+        </div>
+    );
+};
 // FIX: VNCondition is not exported from scene/types, but from shared types.
 import { VNCondition } from '../types/shared';
 import { combineConditions } from '../utils/conditionLogic';
@@ -1128,6 +1156,25 @@ const StagingArea: React.FC<{
         );
     };
 
+    // Draggable markers for positioning the lights of a selected PlaceLights command on the scene.
+    const renderLightMarkers = () => {
+        const scene = project.scenes[activeSceneId];
+        const cmd = (selectedCommandIndex != null && (scene?.commands[selectedCommandIndex] as any)?.type === CommandType.PlaceLights)
+            ? (scene!.commands[selectedCommandIndex] as PlaceLightsCommand) : null;
+        if (!cmd) return null;
+        const lights = cmd.lights || [];
+        if (lights.length === 0) return null;
+        const moveLight = (i: number, x: number, y: number) => {
+            const newLights = lights.map((l, idx) => idx === i ? { ...l, x, y } : l);
+            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex!, command: { ...cmd, lights: newLights } } });
+        };
+        return (
+            <div className="absolute inset-0 z-40" style={{ pointerEvents: 'none' }}>
+                {lights.map((l, i) => <LightMarker key={l.id} light={l} index={i} onMove={(x, y) => moveLight(i, x, y)} />)}
+            </div>
+        );
+    };
+
     const renderInputBox = (ti: NonNullable<StageState['textInput']>) => {
         const promptStyle: React.CSSProperties = project.ui.inputPromptFont
             ? { ...fontSettingsToStyle(project.ui.inputPromptFont), textAlign: project.ui.inputPromptFont.align || 'center' }
@@ -1654,6 +1701,7 @@ const StagingArea: React.FC<{
                 {currentDialogue && renderQuickMenu()}
                 {currentChoices && renderChoiceMenu(currentChoices)}
                 {stageState.textInput && renderInputBox(stageState.textInput)}
+                {renderLightMarkers()}
 
                  {stageState.flash && (
                     <div className="absolute inset-0 z-50" style={{ backgroundColor: stageState.flash.color, opacity: 0.7 }}></div>

@@ -130,6 +130,9 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.FlashScreen:
         case CommandType.Lightning:
         case CommandType.Flashlight:
+        case CommandType.Fireworks:
+        case CommandType.PlaceLights:
+        case CommandType.ClearLights:
         case CommandType.SetScreenOverlayEffect:
         case CommandType.ShowScreen:
         case CommandType.Label:
