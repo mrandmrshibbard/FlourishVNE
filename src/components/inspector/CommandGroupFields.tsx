@@ -300,11 +300,11 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
             <FormField label={t('dialogue.text')}>
                 <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
             </FormField>
-            <FormField label="Textbox theme (this line)">
+            <FormField label={t('dialogue.textboxTheme')}>
                 {Object.keys(project.textboxThemes || {}).length > 0 ? (
-                    <SearchableSelect options={themeOptions} value={cmd.textboxThemeId || ''} onChange={(v) => updateCommand({ textboxThemeId: v || null } as any)} placeholder="Speaker default" />
+                    <SearchableSelect options={themeOptions} value={cmd.textboxThemeId || ''} onChange={(v) => updateCommand({ textboxThemeId: v || null } as any)} placeholder={t('dialogue.speakerDefault')} />
                 ) : (
-                    <p className="text-[10px] text-[var(--text-muted)]">No textbox themes yet — create them in UI / Screens → In-Game UI → Textbox Themes.</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">{t('dialogue.noTextboxThemes')}</p>
                 )}
             </FormField>
             <FormField label={t('dialogue.voiceClip')}>
@@ -381,14 +381,14 @@ const ShowButtonGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowButtonComm
                     </FormField>
                 </div>
                 <div className="grid grid-cols-2 gap-1">
-                    <FormField label="Text Align">
+                    <FormField label={t('button.textAlign')}>
                         <Select value={cmd.textAlign || 'center'} onChange={e => updateCommand({ textAlign: e.target.value as 'left' | 'center' | 'right' } as any)}>
-                            <option value="left">{t('elementInspector.left', 'Left')}</option>
-                            <option value="center">{t('elementInspector.center', 'Center')}</option>
-                            <option value="right">{t('elementInspector.right', 'Right')}</option>
+                            <option value="left">{t('button.alignLeft')}</option>
+                            <option value="center">{t('button.alignCenter')}</option>
+                            <option value="right">{t('button.alignRight')}</option>
                         </Select>
                     </FormField>
-                    <FormField label="Text Padding (%)"><TextInput type="number" min={0} max={50} value={cmd.paddingX ?? 0} onChange={e => updateCommand({ paddingX: Math.max(0, parseFloat(e.target.value) || 0) } as any)} /></FormField>
+                    <FormField label={t('button.textPadding')}><TextInput type="number" min={0} max={50} value={cmd.paddingX ?? 0} onChange={e => updateCommand({ paddingX: Math.max(0, parseFloat(e.target.value) || 0) } as any)} /></FormField>
                 </div>
                 <FormField label={t('button.borderRadius')}><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 } as any)} /></FormField>
                 <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
@@ -791,24 +791,24 @@ const SetBackgroundGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; update
             <label className="flex items-start gap-2 mt-2 cursor-pointer">
                 <input type="checkbox" checked={!!cmd.stack} onChange={e => updateCommand({ stack: e.target.checked || undefined } as any)} className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span className="text-xs text-[var(--text-secondary)]">
-                    <span className="font-bold text-[var(--text-primary)]">Stack (don't replace)</span><br />
-                    Add this as its own backdrop plane instead of replacing the current background — stack several at different layers/depths to build a parallax-scrolling scene.
+                    <span className="font-bold text-[var(--text-primary)]">{t('bg.stack')}</span><br />
+                    {t('bg.stackHint')}
                 </span>
             </label>
             {cmd.stack && (
-                <FormField label={`Layer: ${cmd.layer ?? 0}`}>
+                <FormField label={t('bg.layerN', { n: cmd.layer ?? 0 })}>
                     <div className="flex items-center gap-1">
-                        <button type="button" title="Send this plane back a layer"
+                        <button type="button" title={t('bg.sendPlaneBack')}
                             onClick={() => updateCommand({ layer: (cmd.layer ?? 0) - 1 || undefined } as any)}
                             className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↓</button>
                         <TextInput type="number" step="1" value={cmd.layer ?? 0}
                             onChange={e => { const v = parseInt(e.target.value, 10); updateCommand({ layer: Number.isNaN(v) ? undefined : (v || undefined) } as any); }}
                             style={{ width: '64px', textAlign: 'center' }} />
-                        <button type="button" title="Bring this plane forward a layer"
+                        <button type="button" title={t('bg.bringPlaneForward')}
                             onClick={() => updateCommand({ layer: (cmd.layer ?? 0) + 1 || undefined } as any)}
                             className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↑</button>
                     </div>
-                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Stacking order of this plane (default 0 = just above the base background). Stage visuals sit at higher bands (text ≈1, movies ≈2, characters ≈5) — raise this to put the plane in front of them, lower (negative) to push it further back.</p>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">{t('bg.stackOrderHint')}</p>
                 </FormField>
             )}
         </>;
@@ -958,74 +958,74 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
         case CommandType.Lightning: {
             const audioOpts = Object.values(project.audio || {}) as any[];
             return <>
-                <FormField label="Flash color"><TextInput type="text" value={cmd.color ?? '#EAF2FF'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
-                <FormField label={`Brightness ${Math.round((cmd.intensity ?? 0.9) * 100)}%`}>
+                <FormField label={t('fx.flashColor')}><TextInput type="text" value={cmd.color ?? '#EAF2FF'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
+                <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 0.9) * 100) })}>
                     <input type="range" min="0.1" max="1" step="0.05" value={cmd.intensity ?? 0.9} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
                 </FormField>
-                <FormField label="Duration (s)"><TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} /></FormField>
-                <FormField label="Flashes">
+                <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} /></FormField>
+                <FormField label={t('fx.flashes')}>
                     <Select value={String(cmd.flashes ?? 2)} onChange={e => updateCommand({ flashes: parseInt(e.target.value, 10) } as any)}>
-                        <option value="1">Single strike</option>
-                        <option value="2">Double flicker</option>
-                        <option value="3">Stormy (triple)</option>
+                        <option value="1">{t('fx.flashSingle')}</option>
+                        <option value="2">{t('fx.flashDouble')}</option>
+                        <option value="3">{t('fx.flashStormy')}</option>
                     </Select>
                 </FormField>
-                <FormField label="Thunder SFX">
+                <FormField label={t('fx.thunderSfx')}>
                     <Select value={cmd.thunderSfxId || ''} onChange={e => updateCommand({ thunderSfxId: e.target.value || null } as any)}>
-                        <option value="">None</option>
+                        <option value="">{t('fx.none')}</option>
                         {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                     </Select>
                 </FormField>
-                <FormField label="Thunder delay (s)"><TextInput type="number" min="0" step="0.1" value={cmd.thunderDelay ?? 0.6} onChange={e => updateCommand({ thunderDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
-                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Flash the dialogue box too</span></label>
-                <p className="text-xs text-[var(--text-secondary)]">Light first, then a short delay, then thunder — increase the delay for a more distant storm.</p>
+                <FormField label={t('fx.thunderDelaySec')}><TextInput type="number" min="0" step="0.1" value={cmd.thunderDelay ?? 0.6} onChange={e => updateCommand({ thunderDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.flashDialogueToo')}</span></label>
+                <p className="text-xs text-[var(--text-secondary)]">{t('fx.lightningHint')}</p>
             </>;
         }
         case CommandType.Fireworks: {
             const audioOpts = Object.values(project.audio || {}) as any[];
             const fwColors: string[] = (cmd.colors && cmd.colors.length) ? cmd.colors : [];
             const setColors = (arr: string[]) => updateCommand({ colors: arr } as any);
-            const fwPresets: Record<string, string[]> = {
-                Festive: ['#ff3b3b', '#ffd23b', '#3bff6b', '#3b9bff', '#ff7bef'],
-                Warm: ['#ff5e3b', '#ffae3b', '#ffd23b', '#fff1a8'],
-                Cool: ['#3b9bff', '#6b5bff', '#3bffd2', '#b0e0ff'],
-                Gold: ['#ffd23b', '#ffae3b', '#fff1a8'],
-                'Red & Green': ['#ff3b3b', '#3bff6b'],
-            };
+            const fwPresets: { label: string; colors: string[] }[] = [
+                { label: t('fx.presetFestive'), colors: ['#ff3b3b', '#ffd23b', '#3bff6b', '#3b9bff', '#ff7bef'] },
+                { label: t('fx.presetWarm'), colors: ['#ff5e3b', '#ffae3b', '#ffd23b', '#fff1a8'] },
+                { label: t('fx.presetCool'), colors: ['#3b9bff', '#6b5bff', '#3bffd2', '#b0e0ff'] },
+                { label: t('fx.presetGold'), colors: ['#ffd23b', '#ffae3b', '#fff1a8'] },
+                { label: t('fx.presetRedGreen'), colors: ['#ff3b3b', '#3bff6b'] },
+            ];
             const fwBtn = "px-2 py-0.5 rounded text-[10px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/50";
             return <>
-                <FormField label="Burst colors">
+                <FormField label={t('fx.burstColors')}>
                     <div className="space-y-1.5">
                         <div className="flex flex-wrap gap-1">
-                            {Object.keys(fwPresets).map(name => <button key={name} onClick={() => setColors(fwPresets[name])} className={fwBtn}>{name}</button>)}
-                            <button onClick={() => setColors([])} className={fwBtn} title="Random festive colors">Festive mix</button>
+                            {fwPresets.map(p => <button key={p.label} onClick={() => setColors(p.colors)} className={fwBtn}>{p.label}</button>)}
+                            <button onClick={() => setColors([])} className={fwBtn} title={t('fx.festiveMixTitle')}>{t('fx.festiveMix')}</button>
                         </div>
                         <div className="flex flex-wrap gap-1.5 items-center">
                             {fwColors.map((c, i) => (
                                 <div key={i} className="relative">
                                     <ColorInput value={c} onChange={(val: string) => setColors(fwColors.map((x, idx) => idx === i ? val : x))} className="w-8 h-8 p-0.5" />
-                                    <button onClick={() => setColors(fwColors.filter((_, idx) => idx !== i))} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center" title="Remove color">×</button>
+                                    <button onClick={() => setColors(fwColors.filter((_, idx) => idx !== i))} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center" title={t('fx.removeColor')}>×</button>
                                 </div>
                             ))}
-                            <button onClick={() => setColors([...fwColors, '#ffd23b'])} className={fwBtn}>+ Color</button>
+                            <button onClick={() => setColors([...fwColors, '#ffd23b'])} className={fwBtn}>{t('fx.addColor')}</button>
                         </div>
-                        {fwColors.length === 0 && <p className="text-[11px] text-[var(--text-secondary)]">Using a random festive mix. Pick a preset above, or add your own colors.</p>}
+                        {fwColors.length === 0 && <p className="text-[11px] text-[var(--text-secondary)]">{t('fx.festiveMixNote')}</p>}
                     </div>
                 </FormField>
-                <FormField label="Bursts"><TextInput type="number" min="1" max="20" value={cmd.bursts ?? 3} onChange={e => updateCommand({ bursts: Math.max(1, parseInt(e.target.value, 10) || 3) } as any)} /></FormField>
-                <FormField label={`Burst height ${Math.round((cmd.burstHeight ?? 0.7) * 100)}%`}><input type="range" min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                <FormField label="Duration (s)"><TextInput type="number" min="0.5" step="0.1" value={cmd.duration ?? 2.5} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 2.5 } as any)} /></FormField>
-                <FormField label={`Brightness ${Math.round((cmd.intensity ?? 1) * 100)}%`}><input type="range" min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                <FormField label="Boom SFX">
+                <FormField label={t('fx.bursts')}><TextInput type="number" min="1" max="20" value={cmd.bursts ?? 3} onChange={e => updateCommand({ bursts: Math.max(1, parseInt(e.target.value, 10) || 3) } as any)} /></FormField>
+                <FormField label={t('fx.burstHeightPct', { value: Math.round((cmd.burstHeight ?? 0.7) * 100) })}><input type="range" min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.5" step="0.1" value={cmd.duration ?? 2.5} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 2.5 } as any)} /></FormField>
+                <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 1) * 100) })}><input type="range" min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('fx.boomSfx')}>
                     <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
-                        <option value="">None</option>
+                        <option value="">{t('fx.none')}</option>
                         {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                     </Select>
                 </FormField>
-                <FormField label="Boom delay (s)"><TextInput type="number" min="0" step="0.1" value={cmd.sfxDelay ?? 0.3} onChange={e => updateCommand({ sfxDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
-                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.sfxPerBurst === true} onChange={e => updateCommand({ sfxPerBurst: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Play the boom on every burst</span></label>
-                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Show over the dialogue box</span></label>
-                <p className="text-xs text-[var(--text-secondary)]">A one-shot burst of fireworks. Stack or sequence several for a longer show. For ambient looping fireworks, use Screen Overlay Effect → Fireworks instead.</p>
+                <FormField label={t('fx.boomDelaySec')}><TextInput type="number" min="0" step="0.1" value={cmd.sfxDelay ?? 0.3} onChange={e => updateCommand({ sfxDelay: parseFloat(e.target.value) || 0 } as any)} /></FormField>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.sfxPerBurst === true} onChange={e => updateCommand({ sfxPerBurst: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.boomEveryBurst')}</span></label>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.showOverDialogue')}</span></label>
+                <p className="text-xs text-[var(--text-secondary)]">{t('fx.fireworksHint')}</p>
             </>;
         }
         case CommandType.PlaceLights: {
@@ -1048,24 +1048,24 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             const btnCls = "px-2 py-1 rounded text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/50";
             return <>
                 <div className="flex gap-1 flex-wrap mb-1">
-                    <button onClick={() => addLight('candle')} className={btnCls}>+ Candle</button>
-                    <button onClick={() => addLight('star')} className={btnCls}>+ Star</button>
-                    <button onClick={() => addLight('christmas')} className={btnCls}>+ Christmas</button>
+                    <button onClick={() => addLight('candle')} className={btnCls}>{t('lights.addCandle')}</button>
+                    <button onClick={() => addLight('star')} className={btnCls}>{t('lights.addStar')}</button>
+                    <button onClick={() => addLight('christmas')} className={btnCls}>{t('lights.addChristmas')}</button>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)]">Drag each light into place on the scene preview, or set its position below. Scatter bulbs for a tree, or line them up for a string.</p>
-                {lights.length === 0 && <p className="text-xs text-[var(--text-secondary)] italic mt-1">No lights yet — add one above.</p>}
+                <p className="text-xs text-[var(--text-secondary)]">{t('lights.placeHint')}</p>
+                {lights.length === 0 && <p className="text-xs text-[var(--text-secondary)] italic mt-1">{t('lights.none')}</p>}
                 {lights.map((l, i) => (
                     <div key={l.id} className="border border-[var(--border-subtle)] rounded p-2 my-1 space-y-1">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold capitalize text-[var(--text-primary)]">{l.type} #{i + 1}</span>
-                            <button onClick={() => removeLight(i)} className="text-red-400 text-[11px] hover:underline">Remove</button>
+                            <span className="text-xs font-bold capitalize text-[var(--text-primary)]">{t('lights.itemLabel', { type: t('lights.type' + l.type.charAt(0).toUpperCase() + l.type.slice(1)), n: i + 1 })}</span>
+                            <button onClick={() => removeLight(i)} className="text-red-400 text-[11px] hover:underline">{t('lights.remove')}</button>
                         </div>
-                        {l.type !== 'candle' && <FormField label="Color"><TextInput type="text" value={l.color || (l.type === 'star' ? '#ffffff' : '#ff3b3b')} onChange={e => updateLight(i, { color: e.target.value })} /></FormField>}
-                        {l.type === 'christmas' && <FormField label="Twinkle"><Select value={l.twinkle || 'fade'} onChange={e => updateLight(i, { twinkle: e.target.value })}><option value="steady">Steady</option><option value="fade">Fade</option><option value="blink">Blink</option><option value="chase">Chase</option></Select></FormField>}
-                        <FormField label={`Size ${(l.size ?? 1).toFixed(1)}×`}><input type="range" min="0.4" max="3" step="0.1" value={l.size ?? 1} onChange={e => updateLight(i, { size: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                        <FormField label={`Twinkle speed ${(l.twinkleSpeed ?? 1).toFixed(1)}×`}><input type="range" min="0.2" max="3" step="0.1" value={l.twinkleSpeed ?? 1} onChange={e => updateLight(i, { twinkleSpeed: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                        <FormField label={`Brightness ${Math.round((l.brightness ?? 1) * 100)}%`}><input type="range" min="0.2" max="1" step="0.05" value={l.brightness ?? 1} onChange={e => updateLight(i, { brightness: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                        <FormField label="Position (x%, y%)">
+                        {l.type !== 'candle' && <FormField label={t('lights.color')}><TextInput type="text" value={l.color || (l.type === 'star' ? '#ffffff' : '#ff3b3b')} onChange={e => updateLight(i, { color: e.target.value })} /></FormField>}
+                        {l.type === 'christmas' && <FormField label={t('lights.twinkle')}><Select value={l.twinkle || 'fade'} onChange={e => updateLight(i, { twinkle: e.target.value })}><option value="steady">{t('lights.twinkleSteady')}</option><option value="fade">{t('lights.twinkleFade')}</option><option value="blink">{t('lights.twinkleBlink')}</option><option value="chase">{t('lights.twinkleChase')}</option></Select></FormField>}
+                        <FormField label={t('lights.sizeX', { value: (l.size ?? 1).toFixed(1) })}><input type="range" min="0.4" max="3" step="0.1" value={l.size ?? 1} onChange={e => updateLight(i, { size: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={t('lights.twinkleSpeedX', { value: (l.twinkleSpeed ?? 1).toFixed(1) })}><input type="range" min="0.2" max="3" step="0.1" value={l.twinkleSpeed ?? 1} onChange={e => updateLight(i, { twinkleSpeed: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={t('fx.brightnessPct', { value: Math.round((l.brightness ?? 1) * 100) })}><input type="range" min="0.2" max="1" step="0.05" value={l.brightness ?? 1} onChange={e => updateLight(i, { brightness: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={t('lights.position')}>
                             <div className="flex gap-1">
                                 <TextInput type="number" value={Math.round(l.x ?? 0)} onChange={e => updateLight(i, { x: parseFloat(e.target.value) || 0 })} />
                                 <TextInput type="number" value={Math.round(l.y ?? 0)} onChange={e => updateLight(i, { y: parseFloat(e.target.value) || 0 })} />
@@ -1073,36 +1073,36 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         </FormField>
                     </div>
                 ))}
-                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.aboveCharacters === true} onChange={e => updateCommand({ aboveCharacters: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Show in front of characters</span></label>
+                <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.aboveCharacters === true} onChange={e => updateCommand({ aboveCharacters: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('lights.showInFront')}</span></label>
             </>;
         }
         case CommandType.ClearLights: {
-            return <p className="text-xs text-[var(--text-secondary)]">Removes all placed lights from the scene.</p>;
+            return <p className="text-xs text-[var(--text-secondary)]">{t('lights.clearHint')}</p>;
         }
         case CommandType.Flashlight: {
             const audioOpts = Object.values(project.audio || {}) as any[];
             return <>
-                <FormField label="Flashlight">
+                <FormField label={t('fx.flashlight')}>
                     <Select value={cmd.enabled ? 'on' : 'off'} onChange={e => updateCommand({ enabled: e.target.value === 'on' } as any)}>
-                        <option value="on">Turn on</option>
-                        <option value="off">Turn off</option>
+                        <option value="on">{t('fx.turnOn')}</option>
+                        <option value="off">{t('fx.turnOff')}</option>
                     </Select>
                 </FormField>
                 {cmd.enabled && <>
-                    <FormField label={`Light radius ${cmd.radius ?? 22}%`}><input type="range" min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                    <FormField label={`Edge softness ${Math.round((cmd.softness ?? 0.6) * 100)}%`}><input type="range" min="0" max="1" step="0.05" value={cmd.softness ?? 0.6} onChange={e => updateCommand({ softness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                    <FormField label={`Darkness ${Math.round((cmd.darkness ?? 0.85) * 100)}%`}><input type="range" min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                    <FormField label="Dark color"><TextInput type="text" value={cmd.color ?? '#000000'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
-                    <FormField label="Player toggle key (optional)"><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
-                    <FormField label="Sound on toggle (optional)">
+                    <FormField label={t('fx.lightRadiusPct', { value: cmd.radius ?? 22 })}><input type="range" min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.edgeSoftnessPct', { value: Math.round((cmd.softness ?? 0.6) * 100) })}><input type="range" min="0" max="1" step="0.05" value={cmd.softness ?? 0.6} onChange={e => updateCommand({ softness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.darknessPct', { value: Math.round((cmd.darkness ?? 0.85) * 100) })}><input type="range" min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.darkColor')}><TextInput type="text" value={cmd.color ?? '#000000'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
+                    <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
+                    <FormField label={t('fx.soundOnToggle')}>
                         <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
-                            <option value="">None</option>
+                            <option value="">{t('fx.none')}</option>
                             {audioOpts.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
                         </Select>
                     </FormField>
-                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Dim the dialogue box too</span></label>
-                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.darkWhenOff === true} onChange={e => updateCommand({ darkWhenOff: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">Keep the screen dark when switched off (dark room)</span></label>
-                    <p className="text-xs text-[var(--text-secondary)]">The lit circle follows the cursor. Untick "Dim the dialogue box" to keep it readable above the dark. With "Keep the screen dark when off", pressing the toggle key plunges the room into black instead of revealing it — end it with a "Flashlight → Turn off" command (it also clears on scene change).</p>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.affectsDialogue !== false} onChange={e => updateCommand({ affectsDialogue: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.dimDialogueToo')}</span></label>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={cmd.darkWhenOff === true} onChange={e => updateCommand({ darkWhenOff: e.target.checked } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.keepDarkWhenOff')}</span></label>
+                    <p className="text-xs text-[var(--text-secondary)]">{t('fx.flashlightHint')}</p>
                 </>}
             </>;
         }
@@ -1123,10 +1123,10 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         <option value="shimmer">{t('screen.effects.shimmer')}</option>
                         <option value="rain">{t('screen.effects.rain')}</option>
                         <option value="snowAsh">{t('screen.effects.snowAsh')}</option>
-                        <option value="fog">Fog</option>
-                        <option value="haze">Haze</option>
-                        <option value="smoke">Smoke</option>
-                        <option value="fireworks">Fireworks (looping show)</option>
+                        <option value="fog">{t('fx.effectFog')}</option>
+                        <option value="haze">{t('fx.effectHaze')}</option>
+                        <option value="smoke">{t('fx.effectSmoke')}</option>
+                        <option value="fireworks">{t('fx.effectFireworks')}</option>
                         {pluginManager.getRegisteredEffects().filter(e => typeof e.render === 'function').map(e => (
                             <option key={e.type} value={e.type}>🧩 {e.displayName}</option>
                         ))}
@@ -1153,7 +1153,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     </FormField>
                 )}
                 {['fog', 'haze', 'smoke'].includes(effectType) && (
-                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={!!cmd.params?.aboveCharacters} onChange={e => updateCommand({ params: { ...cmd.params, aboveCharacters: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-primary)]">Render in front of characters</span></label>
+                    <label className="flex items-center gap-2 my-1"><input type="checkbox" checked={!!cmd.params?.aboveCharacters} onChange={e => updateCommand({ params: { ...cmd.params, aboveCharacters: e.target.checked } } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('fx.renderInFront')}</span></label>
                 )}
                 <FormField label={t('screen.duration')}>
                     <label className="flex items-center gap-2 mb-2"><input type="checkbox" checked={isPersistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 5 } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShort')}</span></label>
@@ -1225,31 +1225,31 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
     switch (groupId) {
         case 'content':
             return <>
-                <FormField label="Name"><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value } as any)} /></FormField>
+                <FormField label={t('hotspot.name')}><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value } as any)} /></FormField>
                 <div className="grid grid-cols-2 gap-1">
-                    <FormField label="Shape">
+                    <FormField label={t('hotspot.shape')}>
                         <Select value={cmd.shape} onChange={e => updateCommand({ shape: e.target.value } as any)}>
-                            <option value="rect">Rectangle</option>
-                            <option value="circle">Circle</option>
+                            <option value="rect">{t('hotspot.rect')}</option>
+                            <option value="circle">{t('hotspot.circle')}</option>
                         </Select>
                     </FormField>
-                    <FormField label="Trigger">
+                    <FormField label={t('hotspot.trigger')}>
                         <Select value={cmd.trigger} onChange={e => updateCommand({ trigger: e.target.value } as any)}>
-                            <option value="click">Click</option>
-                            <option value="hover">Hover</option>
-                            <option value="drag-drop">Drop target</option>
+                            <option value="click">{t('hotspot.triggerClick')}</option>
+                            <option value="hover">{t('hotspot.triggerHover')}</option>
+                            <option value="drag-drop">{t('hotspot.triggerDrop')}</option>
                         </Select>
                     </FormField>
                 </div>
                 {cmd.trigger === 'drag-drop' && (
-                    <FormField label="Accept tag (optional)">
-                        <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value } as any)} placeholder="e.g. key — leave empty to accept any" />
+                    <FormField label={t('hotspot.acceptTag')}>
+                        <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value } as any)} placeholder={t('hotspot.acceptTagPlaceholder')} />
                     </FormField>
                 )}
                 {cmd.trigger === 'click' && (
                     <label className="flex items-center gap-1 mt-1">
                         <input type="checkbox" checked={cmd.advanceOnTrigger || false} onChange={e => updateCommand({ advanceOnTrigger: e.target.checked } as any)} className="w-4 h-4" />
-                        <span className="text-xs text-[var(--text-secondary)]">Advance dialogue on click</span>
+                        <span className="text-xs text-[var(--text-secondary)]">{t('hotspot.advanceOnClick')}</span>
                     </label>
                 )}
             </>;
@@ -1264,7 +1264,7 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
             return <>
                 <label className="flex items-center gap-1">
                     <input type="checkbox" checked={cmd.visible || false} onChange={e => updateCommand({ visible: e.target.checked } as any)} className="w-4 h-4" />
-                    <span className="text-xs text-[var(--text-secondary)]">Draw the spot during play</span>
+                    <span className="text-xs text-[var(--text-secondary)]">{t('hotspot.drawDuringPlay')}</span>
                 </label>
                 {cmd.visible && (
                     <FormField label={t('shared.color')}><ColorInput value={cmd.highlightColor || 'rgba(99,102,241,0.35)'} onChange={val => updateCommand({ highlightColor: val } as any)} /></FormField>
@@ -1272,7 +1272,7 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
             </>;
         case 'logic':
             return <>
-                <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Actions</h4>
+                <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('hotspot.actions')}</h4>
                 <div className="space-y-1.5">
                     {acts.map((action: any, idx: number) => (
                         <ActionCard key={idx} action={action} index={idx}
@@ -1762,22 +1762,22 @@ const PlayMovieGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateComm
                 {!cmd.loop && (
                     <div className="flex items-center gap-1 mt-2">
                         <input id="grp-movie-hold" type="checkbox" checked={cmd.holdLastFrame ?? false} onChange={e => updateCommand({ holdLastFrame: e.target.checked } as any)} className="h-4 w-4" />
-                        <label htmlFor="grp-movie-hold" className="text-sm">Hold last frame when finished</label>
+                        <label htmlFor="grp-movie-hold" className="text-sm">{t('movie.holdLastFrame')}</label>
                     </div>
                 )}
                 <div className="grid grid-cols-2 gap-1 mt-2">
-                    <FormField label="Transition">
+                    <FormField label={t('movie.transition')}>
                         <Select value={cmd.transition || 'instant'} onChange={e => updateCommand({ transition: e.target.value === 'instant' ? undefined : e.target.value } as any)}>
-                            <option value="instant">None</option>
-                            <option value="fade">Fade</option>
-                            <option value="dissolve">Dissolve</option>
-                            <option value="slide">Slide</option>
-                            <option value="iris-in">Iris</option>
-                            <option value="wipe-right">Wipe</option>
+                            <option value="instant">{t('movie.transNone')}</option>
+                            <option value="fade">{t('movie.transFade')}</option>
+                            <option value="dissolve">{t('movie.transDissolve')}</option>
+                            <option value="slide">{t('movie.transSlide')}</option>
+                            <option value="iris-in">{t('movie.transIris')}</option>
+                            <option value="wipe-right">{t('movie.transWipe')}</option>
                         </Select>
                     </FormField>
                     {cmd.transition && cmd.transition !== 'instant' && (
-                        <FormField label="Duration (s)">
+                        <FormField label={t('shared.durationSec')}>
                             <TextInput type="number" min="0" step="0.1" value={cmd.transitionDuration ?? 0.5} onChange={e => updateCommand({ transitionDuration: parseFloat(e.target.value) || undefined } as any)} />
                         </FormField>
                     )}
@@ -1897,8 +1897,8 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
     switch (command.type) {
         case CommandType.BranchStart:
             return <>
-                <FormField label="Branch Name"><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value } as any)} /></FormField>
-                <FormField label="Branch Color">
+                <FormField label={t('branch.name')}><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value } as any)} /></FormField>
+                <FormField label={t('branch.color')}>
                     <div className="flex gap-1 items-center">
                         <ColorInput value={cmd.color} onChange={val => updateCommand({ color: val } as any)} className="w-12 h-10" />
                         <TextInput value={cmd.color} onChange={e => updateCommand({ color: e.target.value } as any)} placeholder="#38bdf8" className="flex-grow" />
@@ -1908,7 +1908,7 @@ const NicheCommandGroup: React.FC<{ groupId: InspectorGroupId; command: VNComman
         case CommandType.BranchEnd: {
             const cmds = ctx ? (project.scenes[ctx.sceneId]?.commands || []) : [];
             const matchingStart = cmds.find(c => c.type === CommandType.BranchStart && (c as any).branchId === cmd.branchId) as any;
-            return <p className="text-xs text-[var(--text-secondary)]">This marks the end of the branch: <strong className="text-[var(--accent-cyan)]">{matchingStart?.name || 'Unknown Branch'}</strong></p>;
+            return <p className="text-xs text-[var(--text-secondary)]">{t('branch.endInfo', { name: matchingStart?.name || t('branch.unknownBranch') })}</p>;
         }
         case CommandType.Group:
             return <>

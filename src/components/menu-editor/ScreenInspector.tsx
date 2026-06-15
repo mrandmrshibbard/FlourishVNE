@@ -179,25 +179,25 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-2">
                             <input type="checkbox" checked={screen.background.loop ?? true}
                                 onChange={e => updateScreen({ background: { ...(screen.background as any), loop: e.target.checked } })} />
-                            Loop video <span className="text-[10px] text-slate-500">(off = play once, hold last frame)</span>
+                            {t('screenInspector.loopVideo')} <span className="text-[10px] text-slate-500">{t('screenInspector.loopVideoHint')}</span>
                         </label>
                     )}
                     {/* Background entry transition (fade/crossfade/dissolve/slide/iris/wipe) */}
                     <div className="grid grid-cols-2 gap-2 mt-2">
-                        <FormField label="Transition">
+                        <FormField label={t('screenInspector.bgTransition')}>
                             <Select value={screen.backgroundTransition || 'none'}
                                 onChange={e => updateScreen({ backgroundTransition: (e.target.value as any) === 'none' ? undefined : e.target.value as any })}>
-                                <option value="none">None</option>
-                                <option value="fade">Fade</option>
-                                <option value="crossfade">Crossfade</option>
-                                <option value="dissolve">Dissolve</option>
-                                <option value="slide">Slide</option>
-                                <option value="iris">Iris</option>
-                                <option value="wipe">Wipe</option>
+                                <option value="none">{t('screenInspector.bgTransNone')}</option>
+                                <option value="fade">{t('screenInspector.bgTransFade')}</option>
+                                <option value="crossfade">{t('screenInspector.bgTransCrossfade')}</option>
+                                <option value="dissolve">{t('screenInspector.bgTransDissolve')}</option>
+                                <option value="slide">{t('screenInspector.bgTransSlide')}</option>
+                                <option value="iris">{t('screenInspector.bgTransIris')}</option>
+                                <option value="wipe">{t('screenInspector.bgTransWipe')}</option>
                             </Select>
                         </FormField>
                         {screen.backgroundTransition && screen.backgroundTransition !== 'none' && (
-                            <FormField label="Duration (ms)">
+                            <FormField label={t('screenInspector.bgTransDuration')}>
                                 <TextInput type="number" min="0" step="50" value={screen.backgroundTransitionDuration ?? 400}
                                     onChange={e => updateScreen({ backgroundTransitionDuration: parseInt(e.target.value, 10) || undefined })} />
                             </FormField>
@@ -205,33 +205,33 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     </div>
                     {/* Main background layer + parallax depth */}
                     <div className="grid grid-cols-2 gap-2 mt-2">
-                        <FormField label={`Layer: ${screen.backgroundLayer ?? 0}`}>
+                        <FormField label={t('screenInspector.layerN', { n: screen.backgroundLayer ?? 0 })}>
                             <div className="flex items-center gap-1">
-                                <button type="button" title="Send background back a layer" onClick={() => updateScreen({ backgroundLayer: (screen.backgroundLayer ?? 0) - 1 || undefined })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↓</button>
+                                <button type="button" title={t('screenInspector.sendBackLayer')} onClick={() => updateScreen({ backgroundLayer: (screen.backgroundLayer ?? 0) - 1 || undefined })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↓</button>
                                 <input type="number" step="1" value={screen.backgroundLayer ?? 0} onChange={e => { const v = parseInt(e.target.value, 10); updateScreen({ backgroundLayer: Number.isNaN(v) ? undefined : (v || undefined) }); }} className="w-14 text-center bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded px-1 py-0.5 text-xs" />
-                                <button type="button" title="Bring background forward a layer" onClick={() => updateScreen({ backgroundLayer: (screen.backgroundLayer ?? 0) + 1 || undefined })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↑</button>
+                                <button type="button" title={t('screenInspector.bringForwardLayer')} onClick={() => updateScreen({ backgroundLayer: (screen.backgroundLayer ?? 0) + 1 || undefined })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↑</button>
                             </div>
                         </FormField>
-                        <FormField label={`Depth: ${(screen.backgroundParallaxDepth ?? 0).toFixed(2)}`}>
+                        <FormField label={t('screenInspector.depthN', { n: (screen.backgroundParallaxDepth ?? 0).toFixed(2) })}>
                             <input type="range" min="0" max="2" step="0.05" value={screen.backgroundParallaxDepth ?? 0} onChange={e => updateScreen({ backgroundParallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
                         </FormField>
                     </div>
-                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Layer orders the backdrop vs. elements; Depth drives parallax (set a Parallax mode below).</p>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">{t('screenInspector.layerDepthHint')}</p>
 
                     {/* Additional background planes for multi-plane parallax */}
                     <div className="mt-3 border-t border-slate-700/40 pt-2">
                         <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-slate-300">Additional backgrounds</span>
-                            <button type="button" onClick={addAddlBg} className="text-xs px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-200">+ Add</button>
+                            <span className="text-xs font-semibold text-slate-300">{t('screenInspector.additionalBgs')}</span>
+                            <button type="button" onClick={addAddlBg} className="text-xs px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-200">{t('screenInspector.addBtn')}</button>
                         </div>
-                        <p className="text-[10px] text-[var(--text-muted)] mb-2">Extra backdrop planes layered with the main background — give each its own layer + depth for parallax scrolling.</p>
-                        {addlBgs.length === 0 && <p className="text-[10px] text-slate-500 italic">No additional backgrounds yet.</p>}
+                        <p className="text-[10px] text-[var(--text-muted)] mb-2">{t('screenInspector.additionalBgsHint')}</p>
+                        {addlBgs.length === 0 && <p className="text-[10px] text-slate-500 italic">{t('screenInspector.noAdditionalBgs')}</p>}
                         <div className="space-y-2">
                             {addlBgs.map((b, i) => (
                                 <div key={b.id} className="rounded border border-slate-700/60 p-2">
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className="text-[11px] font-semibold text-slate-400">Plane {i + 1}</span>
-                                        <button type="button" onClick={() => removeAddlBg(b.id)} className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 hover:bg-red-600/50 text-red-200">Remove</button>
+                                        <span className="text-[11px] font-semibold text-slate-400">{t('screenInspector.planeN', { n: i + 1 })}</span>
+                                        <button type="button" onClick={() => removeAddlBg(b.id)} className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 hover:bg-red-600/50 text-red-200">{t('screenInspector.remove')}</button>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <FormField label={t('screenInspector.type')}>
@@ -257,31 +257,31 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-1">
                                             <input type="checkbox" checked={b.background.loop ?? true}
                                                 onChange={e => updateAddlBg(b.id, { background: { ...(b.background as any), loop: e.target.checked } })} />
-                                            Loop video
+                                            {t('screenInspector.loopVideo')}
                                         </label>
                                     )}
                                     <div className="grid grid-cols-2 gap-2 mt-1">
-                                        <FormField label={`Layer: ${b.layer ?? 0}`}>
+                                        <FormField label={t('screenInspector.layerN', { n: b.layer ?? 0 })}>
                                             <div className="flex items-center gap-1">
                                                 <button type="button" onClick={() => updateAddlBg(b.id, { layer: (b.layer ?? 0) - 1 })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↓</button>
                                                 <input type="number" step="1" value={b.layer ?? 0} onChange={e => { const v = parseInt(e.target.value, 10); updateAddlBg(b.id, { layer: Number.isNaN(v) ? 0 : v }); }} className="w-14 text-center bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded px-1 py-0.5 text-xs" />
                                                 <button type="button" onClick={() => updateAddlBg(b.id, { layer: (b.layer ?? 0) + 1 })} className="px-2 py-0.5 text-xs rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)]">↑</button>
                                             </div>
                                         </FormField>
-                                        <FormField label={`Depth: ${(b.parallaxDepth ?? 0).toFixed(2)}`}>
+                                        <FormField label={t('screenInspector.depthN', { n: (b.parallaxDepth ?? 0).toFixed(2) })}>
                                             <input type="range" min="0" max="2" step="0.05" value={b.parallaxDepth ?? 0} onChange={e => updateAddlBg(b.id, { parallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
                                         </FormField>
                                     </div>
-                                    <FormField label="Transition">
+                                    <FormField label={t('screenInspector.bgTransition')}>
                                         <Select value={b.transition || 'none'}
                                             onChange={e => updateAddlBg(b.id, { transition: (e.target.value as any) === 'none' ? undefined : e.target.value as any })}>
-                                            <option value="none">None</option>
-                                            <option value="fade">Fade</option>
-                                            <option value="crossfade">Crossfade</option>
-                                            <option value="dissolve">Dissolve</option>
-                                            <option value="slide">Slide</option>
-                                            <option value="iris">Iris</option>
-                                            <option value="wipe">Wipe</option>
+                                            <option value="none">{t('screenInspector.bgTransNone')}</option>
+                                            <option value="fade">{t('screenInspector.bgTransFade')}</option>
+                                            <option value="crossfade">{t('screenInspector.bgTransCrossfade')}</option>
+                                            <option value="dissolve">{t('screenInspector.bgTransDissolve')}</option>
+                                            <option value="slide">{t('screenInspector.bgTransSlide')}</option>
+                                            <option value="iris">{t('screenInspector.bgTransIris')}</option>
+                                            <option value="wipe">{t('screenInspector.bgTransWipe')}</option>
                                         </Select>
                                     </FormField>
                                 </div>
@@ -377,14 +377,14 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     </FormField>
                     <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.passThroughHint')}</p>
                     {(screen.passThrough ?? (screenId === project.ui.gameHudScreenId)) && (
-                        <FormField label="Show above dialogue & choices">
+                        <FormField label={t('screenInspector.hudAboveDialogue')}>
                             <input
                                 type="checkbox"
                                 checked={screen.hudAboveDialogue ?? false}
                                 onChange={e => updateScreen({ hudAboveDialogue: e.target.checked || undefined })}
                                 className="w-5 h-5"
                             />
-                            <p className="text-[10px] text-slate-500 mt-0.5">Renders this HUD overlay on top of the dialogue box and choices so players can open and interact with it mid-dialogue. Empty areas still pass clicks through to advance.</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{t('screenInspector.hudAboveDialogueHint')}</p>
                         </FormField>
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
@@ -419,8 +419,8 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                 </CollapsibleSection>
                 )}
 
-                <CollapsibleSection title="Parallax">
-                    <FormField label="Mode">
+                <CollapsibleSection title={t('screenInspector.parallax')}>
+                    <FormField label={t('screenInspector.parallaxMode')}>
                         <Select
                             value={screen.parallax?.mode || 'off'}
                             onChange={e => {
@@ -428,22 +428,22 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                 updateScreen({ parallax: mode === 'off' ? undefined : { ...screen.parallax, mode } });
                             }}
                         >
-                            <option value="off">Off</option>
-                            <option value="mouse">Follow mouse</option>
-                            <option value="camera">Camera (pan/zoom)</option>
-                            <option value="both">Both</option>
+                            <option value="off">{t('screenInspector.parallaxOff')}</option>
+                            <option value="mouse">{t('screenInspector.parallaxMouse')}</option>
+                            <option value="camera">{t('screenInspector.parallaxCamera')}</option>
+                            <option value="both">{t('screenInspector.parallaxBoth')}</option>
                         </Select>
                     </FormField>
                     {screen.parallax?.mode && screen.parallax.mode !== 'off' && (
-                        <FormField label={`Intensity: ${(screen.parallax.intensity ?? 1).toFixed(2)}×`}>
+                        <FormField label={t('screenInspector.parallaxIntensity', { n: (screen.parallax.intensity ?? 1).toFixed(2) })}>
                             <input type="range" min="0" max="3" step="0.05" value={screen.parallax.intensity ?? 1}
                                 onChange={e => updateScreen({ parallax: { ...screen.parallax, intensity: parseFloat(e.target.value) || 0 } })}
                                 className="w-full accent-purple-500" />
                         </FormField>
                     )}
-                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Shifts the background + elements by their Depth for a sense of depth. Set per-element depth in the element's Transform group.</p>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">{t('screenInspector.parallaxHint')}</p>
                     {screen.parallax?.mode === 'camera' && (
-                        <p className="text-[10px] text-amber-400/80 mt-1">Screens have no camera (Pan/Zoom is a scene feature), so Camera mode has no effect here — use Follow mouse.</p>
+                        <p className="text-[10px] text-amber-400/80 mt-1">{t('screenInspector.parallaxCameraNote')}</p>
                     )}
                 </CollapsibleSection>
 
@@ -470,18 +470,18 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     { type: 'snowAsh' as const, label: 'Snow / Ash', supportsColor: true, defaultColor: '#FFFFFF',
                       extraParams: ['particleSize', 'windStrength', 'speed'] as const,
                       paramLabels: { particleSize: 'Particle Size', windStrength: 'Wind Strength', speed: 'Fall Speed' } },
-                    { type: 'fog' as const, label: 'Fog', supportsColor: true, defaultColor: '#CDD2D8',
+                    { type: 'fog' as const, label: t('screenFx.fog'), supportsColor: true, defaultColor: '#CDD2D8',
                       extraParams: ['speed'] as const,
-                      paramLabels: { speed: 'Drift Speed' } },
-                    { type: 'haze' as const, label: 'Haze', supportsColor: true, defaultColor: '#E1DED2',
+                      paramLabels: { speed: t('screenFx.driftSpeed') } },
+                    { type: 'haze' as const, label: t('screenFx.haze'), supportsColor: true, defaultColor: '#E1DED2',
                       extraParams: ['speed'] as const,
-                      paramLabels: { speed: 'Drift Speed' } },
-                    { type: 'smoke' as const, label: 'Smoke', supportsColor: true, defaultColor: '#46484C',
+                      paramLabels: { speed: t('screenFx.driftSpeed') } },
+                    { type: 'smoke' as const, label: t('screenFx.smoke'), supportsColor: true, defaultColor: '#46484C',
                       extraParams: ['speed'] as const,
-                      paramLabels: { speed: 'Rise Speed' } },
-                    { type: 'fireworks' as const, label: 'Fireworks (looping show)', supportsColor: true, defaultColor: '#FFD23B',
+                      paramLabels: { speed: t('screenFx.riseSpeed') } },
+                    { type: 'fireworks' as const, label: t('screenFx.fireworks'), supportsColor: true, defaultColor: '#FFD23B',
                       extraParams: ['speed'] as const,
-                      paramLabels: { speed: 'Launch Speed' } },
+                      paramLabels: { speed: t('screenFx.launchSpeed') } },
                 ] as const).map(({ type, supportsColor, defaultColor, extraParams, supportsBlend }: { type: any; supportsColor?: boolean; defaultColor?: string; extraParams: readonly (keyof VNEffectParams)[]; supportsBlend?: boolean }) => {
                     const intensity = getIntensity(type);
                     const enabled = intensity > 0;
@@ -700,7 +700,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
 
                 {/* Win Condition — available on any screen. The targetable list is the screen's
                     interactive elements (draggables / image maps), read from `screen.elements`. */}
-                <CollapsibleSection title="Win Condition">
+                <CollapsibleSection title={t('screenInspector.winCondition')}>
                     <WinConditionEditor
                         winCondition={screen.winCondition}
                         project={project}

@@ -309,31 +309,31 @@ const PropertiesInspector: React.FC<{
             case CommandType.BranchStart: {
                 const cmd = command as BranchStartCommand;
                 return <>
-                    <FormField label="Branch Name">
+                    <FormField label={t('branch.name')}>
                         <TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value })} />
                     </FormField>
-                    <FormField label="Branch Color">
+                    <FormField label={t('branch.color')}>
                         <div className="flex gap-1 items-center">
-                            <ColorInput 
-                                value={cmd.color} 
+                            <ColorInput
+                                value={cmd.color}
                                 onChange={val => updateCommand({ color: val })}
                                 className="w-12 h-10"
                             />
-                            <TextInput 
-                                value={cmd.color} 
+                            <TextInput
+                                value={cmd.color}
                                 onChange={e => updateCommand({ color: e.target.value })}
                                 placeholder="#38bdf8"
                                 className="flex-grow"
                             />
                         </div>
                     </FormField>
-                    <FormField label="Conditions">
+                    <FormField label={t('branch.conditions')}>
                         <p className="text-xs text-[var(--text-secondary)] mb-2">
-                            Commands inside this branch will only execute if all conditions are met.
+                            {t('branch.conditionsHint')}
                         </p>
-                        <ConditionsEditor 
-                            conditions={cmd.conditions} 
-                            project={project} 
+                        <ConditionsEditor
+                            conditions={cmd.conditions}
+                            project={project}
                             onChange={(cs) => updateCommand({ conditions: cs })}
                         />
                     </FormField>
@@ -342,11 +342,8 @@ const PropertiesInspector: React.FC<{
             case CommandType.BranchElseIf: {
                 const cmd = command as BranchElseIfCommand;
                 return <>
-                    <p className="text-xs text-[var(--text-secondary)] mb-2">
-                        This <strong className="text-[var(--accent-cyan)]">Otherwise if</strong> segment runs only when its conditions are met
-                        and none of the segments above it matched.
-                    </p>
-                    <FormField label="Conditions">
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">{t('branch.elseIfInfo')}</p>
+                    <FormField label={t('branch.conditions')}>
                         <ConditionsEditor
                             conditions={cmd.conditions}
                             project={project}
@@ -357,10 +354,7 @@ const PropertiesInspector: React.FC<{
             }
             case CommandType.BranchElse: {
                 return <>
-                    <p className="text-[var(--text-secondary)] mb-2">
-                        This <strong className="text-[var(--accent-cyan)]">Otherwise</strong> segment runs when none of the
-                        conditions above it matched. It has no conditions of its own.
-                    </p>
+                    <p className="text-[var(--text-secondary)] mb-2">{t('branch.elseInfo')}</p>
                 </>;
             }
             case CommandType.BranchEnd: {
@@ -369,15 +363,10 @@ const PropertiesInspector: React.FC<{
                 const matchingStart = activeScene.commands.find(
                     c => c.type === CommandType.BranchStart && (c as BranchStartCommand).branchId === cmd.branchId
                 ) as BranchStartCommand | undefined;
-                
+
                 return <>
-                    <p className="text-[var(--text-secondary)] mb-2">
-                        This marks the end of the branch: <strong className="text-[var(--accent-cyan)]">{matchingStart?.name || 'Unknown Branch'}</strong>
-                    </p>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                        Branch End markers are automatically paired with Branch Start commands. 
-                        Deleting this will only remove the end marker - delete the Branch Start to remove the entire branch structure.
-                    </p>
+                    <p className="text-[var(--text-secondary)] mb-2">{t('branch.endInfo', { name: matchingStart?.name || t('branch.unknownBranch') })}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">{t('branch.endNote')}</p>
                 </>;
             }
             case CommandType.Dialogue: {
@@ -805,8 +794,8 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                     <p className="text-xs text-[var(--text-secondary)] mt-1 mb-2">
                         {isOverlay
-                            ? 'Movie plays as a transparent layer behind characters. Use for effects like falling petals, rain, etc.'
-                            : 'Movie fills the screen with a black background. Use for cutscenes and cinematics.'}
+                            ? t('movie.overlayDesc')
+                            : t('movie.fullscreenDesc')}
                     </p>
                     <div className="flex items-center gap-1 mt-2">
                         <input id="movie-loop" type="checkbox" checked={cmd.loop ?? false} onChange={e => updateCommand({ loop: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" />
@@ -815,7 +804,7 @@ const PropertiesInspector: React.FC<{
                     {!cmd.loop && (
                         <div className="flex items-center gap-1 mt-2">
                             <input id="movie-hold" type="checkbox" checked={cmd.holdLastFrame ?? false} onChange={e => updateCommand({ holdLastFrame: e.target.checked })} className="h-4 w-4 rounded bg-[var(--bg-secondary)] border-[var(--border-default)] focus:ring-[var(--accent-lavender)]" />
-                            <label htmlFor="movie-hold" className="text-sm">Hold last frame when finished</label>
+                            <label htmlFor="movie-hold" className="text-sm">{t('movie.holdLastFrame')}</label>
                         </div>
                     )}
                     {!isOverlay && (
@@ -924,19 +913,19 @@ const PropertiesInspector: React.FC<{
                 const itemArr = Object.values(project.items || {}) as any[];
                 const showQty = command.type !== CommandType.UseItem && !c.all;
                 return <>
-                    <FormField label="Item">
+                    <FormField label={t('item.item')}>
                         <Select value={c.itemId || ''} onChange={e => updateCommand({ itemId: e.target.value } as any)}>
-                            {itemArr.length === 0 && <option value="">No items defined (Systems → Items)</option>}
+                            {itemArr.length === 0 && <option value="">{t('item.noItems')}</option>}
                             {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
                         </Select>
                     </FormField>
                     {command.type === CommandType.DestroyItem && (
                         <label className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-                            <input type="checkbox" checked={!!c.all} onChange={e => updateCommand({ all: e.target.checked || undefined } as any)} /> Destroy all
+                            <input type="checkbox" checked={!!c.all} onChange={e => updateCommand({ all: e.target.checked || undefined } as any)} /> {t('item.destroyAll')}
                         </label>
                     )}
                     {showQty && (
-                        <FormField label="Quantity"><TextInput type="number" min="1" value={String(c.quantity ?? 1)} onChange={e => updateCommand({ quantity: Math.max(1, parseInt(e.target.value, 10) || 1) } as any)} /></FormField>
+                        <FormField label={t('item.quantity')}><TextInput type="number" min="1" value={String(c.quantity ?? 1)} onChange={e => updateCommand({ quantity: Math.max(1, parseInt(e.target.value, 10) || 1) } as any)} /></FormField>
                     )}
                 </>;
             }
@@ -944,13 +933,13 @@ const PropertiesInspector: React.FC<{
                 const c = command as any;
                 const collArr = Object.values(project.itemCollections || {}) as any[];
                 return <>
-                    <FormField label="Item list">
+                    <FormField label={t('item.itemList')}>
                         <Select value={c.collectionId || ''} onChange={e => updateCommand({ collectionId: e.target.value } as any)}>
-                            {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                            {collArr.length === 0 && <option value="">{t('item.noItemLists')}</option>}
                             {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
                         </Select>
                     </FormField>
-                    <p className="text-[11px] text-[var(--text-muted)]">Refills this list's stock to its restock amounts (set per list in Systems → Inventory).</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{t('item.restockHint')}</p>
                 </>;
             }
             case CommandType.BuyItem:
@@ -958,21 +947,20 @@ const PropertiesInspector: React.FC<{
                 const c = command as any;
                 const collArr = Object.values(project.itemCollections || {}) as any[];
                 const itemArr = Object.values(project.items || {}) as any[];
-                const verb = command.type === CommandType.BuyItem ? 'buy from' : 'sell to';
                 return <>
-                    <FormField label="Item">
+                    <FormField label={t('item.item')}>
                         <Select value={c.itemId || ''} onChange={e => updateCommand({ itemId: e.target.value } as any)}>
-                            {itemArr.length === 0 && <option value="">No items defined (Systems → Items)</option>}
+                            {itemArr.length === 0 && <option value="">{t('item.noItems')}</option>}
                             {itemArr.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
                         </Select>
                     </FormField>
-                    <FormField label={`Shop list to ${verb}`}>
+                    <FormField label={command.type === CommandType.BuyItem ? t('item.shopListBuy') : t('item.shopListSell')}>
                         <Select value={c.collectionId || ''} onChange={e => updateCommand({ collectionId: e.target.value } as any)}>
-                            {collArr.length === 0 && <option value="">No item lists defined (Systems → Inventory)</option>}
+                            {collArr.length === 0 && <option value="">{t('item.noItemLists')}</option>}
                             {collArr.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
                         </Select>
                     </FormField>
-                    <p className="text-[11px] text-[var(--text-muted)]">Uses the list's currency + the item's price. No-op if the player can't afford it / it's out of stock / they don't own it.</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{t('item.buySellHint')}</p>
                 </>;
             }
             case CommandType.TextInput: {
@@ -1589,7 +1577,7 @@ const PropertiesInspector: React.FC<{
                 const cmd = command as ShowHotSpotCommand;
                 const acts = cmd.actions || [];
                 return <>
-                    <FormField label="Name"><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value })} /></FormField>
+                    <FormField label={t('hotspot.name')}><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value })} /></FormField>
                     <div className="grid grid-cols-2 gap-1">
                         <FormField label={t('shared.xPosition')}><TextInput type="number" value={cmd.x} onChange={e => updateCommand({ x: parseFloat(e.target.value) || 0 })} /></FormField>
                         <FormField label={t('shared.yPosition')}><TextInput type="number" value={cmd.y} onChange={e => updateCommand({ y: parseFloat(e.target.value) || 0 })} /></FormField>
@@ -1597,44 +1585,44 @@ const PropertiesInspector: React.FC<{
                         <FormField label={t('shared.heightPercent')}><TextInput type="number" value={cmd.height} onChange={e => updateCommand({ height: parseFloat(e.target.value) || 0 })} /></FormField>
                     </div>
                     <div className="grid grid-cols-2 gap-1">
-                        <FormField label="Shape">
+                        <FormField label={t('hotspot.shape')}>
                             <Select value={cmd.shape} onChange={e => updateCommand({ shape: e.target.value as 'rect' | 'circle' })}>
-                                <option value="rect">Rectangle</option>
-                                <option value="circle">Circle</option>
+                                <option value="rect">{t('hotspot.rect')}</option>
+                                <option value="circle">{t('hotspot.circle')}</option>
                             </Select>
                         </FormField>
-                        <FormField label="Trigger">
+                        <FormField label={t('hotspot.trigger')}>
                             <Select value={cmd.trigger} onChange={e => updateCommand({ trigger: e.target.value as 'click' | 'hover' | 'drag-drop' })}>
-                                <option value="click">Click</option>
-                                <option value="hover">Hover</option>
-                                <option value="drag-drop">Drop target</option>
+                                <option value="click">{t('hotspot.triggerClick')}</option>
+                                <option value="hover">{t('hotspot.triggerHover')}</option>
+                                <option value="drag-drop">{t('hotspot.triggerDrop')}</option>
                             </Select>
                         </FormField>
                     </div>
                     {cmd.trigger === 'drag-drop' && (
-                        <FormField label="Accept tag (optional)">
-                            <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value })} placeholder="e.g. key — leave empty to accept any" />
+                        <FormField label={t('hotspot.acceptTag')}>
+                            <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value })} placeholder={t('hotspot.acceptTagPlaceholder')} />
                         </FormField>
                     )}
                     {cmd.trigger === 'click' && (
-                        <FormField label="Advance dialogue on click">
+                        <FormField label={t('hotspot.advanceOnClick')}>
                             <div className="flex items-center gap-1">
                                 <input type="checkbox" checked={cmd.advanceOnTrigger || false} onChange={e => updateCommand({ advanceOnTrigger: e.target.checked })} className="w-4 h-4" />
-                                <span className="text-xs text-[var(--text-secondary)]">Otherwise the click is consumed</span>
+                                <span className="text-xs text-[var(--text-secondary)]">{t('hotspot.advanceOnClickHint')}</span>
                             </div>
                         </FormField>
                     )}
-                    <FormField label="Visible outline">
+                    <FormField label={t('hotspot.visibleOutline')}>
                         <div className="flex items-center gap-1">
                             <input type="checkbox" checked={cmd.visible || false} onChange={e => updateCommand({ visible: e.target.checked })} className="w-4 h-4" />
-                            <span className="text-xs text-[var(--text-secondary)]">Draw the spot during play</span>
+                            <span className="text-xs text-[var(--text-secondary)]">{t('hotspot.drawDuringPlay')}</span>
                         </div>
                     </FormField>
                     {cmd.visible && (
                         <FormField label={t('shared.color')}><ColorInput value={cmd.highlightColor || 'rgba(99,102,241,0.35)'} onChange={val => updateCommand({ highlightColor: val })} /></FormField>
                     )}
                     <hr className="border-[var(--border-subtle)] my-2" />
-                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">Actions</h4>
+                    <h4 className="font-bold text-xs mb-2 text-[var(--text-secondary)]">{t('hotspot.actions')}</h4>
                     <div className="space-y-1.5">
                         {acts.map((action, idx) => (
                             <ActionCard key={idx} action={action} index={idx}
@@ -1653,9 +1641,9 @@ const PropertiesInspector: React.FC<{
                     (c, i) => c.type === CommandType.ShowHotSpot && i < selectedCommandIndex
                 ) as ShowHotSpotCommand[];
                 return (
-                    <FormField label="Target Hot Spot to Hide">
+                    <FormField label={t('hotspot.targetToHide')}>
                         <Select value={cmd.targetCommandId} onChange={e => updateCommand({ targetCommandId: e.target.value })}>
-                            <option value="">Select Hot Spot...</option>
+                            <option value="">{t('hotspot.selectToHide')}</option>
                             {availableHotSpots.map(c => (
                                 <option key={c.id} value={c.id}>{c.name || c.id}</option>
                             ))}

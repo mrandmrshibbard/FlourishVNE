@@ -1,4 +1,18 @@
 {
+  "branch": {
+    "otherwiseIf": "Senão se",
+    "otherwise": "Senão",
+    "setCondition": "(clique para definir uma condição)",
+    "segElseIfTitle": "Executa quando sua condição é atendida e nenhuma acima correspondeu",
+    "segElseTitle": "Executa quando nenhuma das condições acima correspondeu",
+    "removeSegment": "Remover este segmento (mantém seus comandos)",
+    "addOtherwiseIf": "+ Senão se",
+    "addOtherwiseIfTitle": "Adicionar um segmento de condição 'Senão se'",
+    "addOtherwise": "+ Senão",
+    "addOtherwiseTitle": "Adicionar um segmento alternativo 'Senão'",
+    "endOf": "⌟ Fim de “{{name}}”",
+    "unnamed": "ramo"
+  },
   "listTitle": "Cenas",
   "newSceneName": "Nova Cena {{n}}",
   "cannotDeleteLast": "Você não pode excluir a última cena.",

@@ -1,4 +1,6 @@
 {
+  "branchIf": "Se",
+  "branchAlwaysRuns": "sempre executa",
   "paletteTitle": "Eventos",
   "dragToAdd": "Arraste para adicionar o evento {{name}}",
   "categories": {

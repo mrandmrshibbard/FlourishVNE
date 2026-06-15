@@ -20,5 +20,9 @@
   "quickMenuBack": "Back",
   "quickMenuLog": "Log",
   "quickMenuAuto": "Auto",
-  "quickMenuSkip": "Skip"
+  "quickMenuSkip": "Skip",
+  "lightMarkerTitle": "{{type}} #{{n}} — drag to position",
+  "lightCandle": "candle",
+  "lightStar": "star",
+  "lightChristmas": "christmas"
 }

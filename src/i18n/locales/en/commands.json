@@ -1,4 +1,6 @@
 {
+  "branchIf": "If",
+  "branchAlwaysRuns": "always runs",
   "paletteTitle": "Events",
   "dragToAdd": "Drag to add {{name}} event",
   "categories": {

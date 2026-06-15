@@ -305,15 +305,17 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                                 {tab.icon}
                             </span>
                             
-                            {/* Label — to fit all tabs on narrow / lower-aspect-ratio windows, only
-                                the ACTIVE tab keeps its label below 2xl; inactive tabs go icon-only
-                                (their name is still in the hover tooltip). At 2xl+ every tab is labeled. */}
-                            <span className={`relative z-10 ${isActive ? 'inline' : 'hidden 2xl:inline'}`}>{label}</span>
+                            {/* Label — tabs are icon-only by default so the bar stays compact and
+                                left-packed (it can never clip under the right-hand controls across the
+                                full range of screen widths). The name is shown only for the ACTIVE
+                                ("highlighted") tab and on hover. Collapsed labels use display:none so
+                                they reserve no width — no phantom flex gap between icons. */}
+                            <span className={`relative z-10 whitespace-nowrap ${isActive ? 'inline' : 'hidden group-hover:inline'}`}>{label}</span>
 
                             {/* Count badge with fun styling */}
                             {tab.count > 0 && (
                                 <span
-                                    className={`hidden 2xl:inline-block relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                    className={`${isActive ? 'inline-block' : 'hidden group-hover:inline-block'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
                                         isActive
                                             ? 'bg-white/30 text-white shadow-sm'
                                             : 'text-[var(--text-secondary)]'

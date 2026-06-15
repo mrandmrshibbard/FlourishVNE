@@ -13,6 +13,7 @@ import ResizableDraggable from './menu-editor/ResizableDraggable';
 
 /** Drag-only marker for positioning a placed light on the scene preview (editor only). */
 const LightMarker: React.FC<{ light: VNLight; index: number; onMove: (x: number, y: number) => void }> = ({ light, index, onMove }) => {
+    const { t } = useTranslation('staging');
     const onPointerDown = (e: React.PointerEvent) => {
         e.stopPropagation(); e.preventDefault();
         const parent = (e.currentTarget as HTMLElement).parentElement;
@@ -31,7 +32,7 @@ const LightMarker: React.FC<{ light: VNLight; index: number; onMove: (x: number,
     return (
         <div
             onPointerDown={onPointerDown}
-            title={`${light.type} #${index + 1} — drag to position`}
+            title={t('lightMarkerTitle', { type: t('light' + light.type.charAt(0).toUpperCase() + light.type.slice(1)), n: index + 1 })}
             style={{ position: 'absolute', left: `${light.x}%`, top: `${light.y}%`, transform: 'translate(-50%, -50%)', cursor: 'grab', pointerEvents: 'auto', zIndex: 41 }}
         >
             <div style={{ width: 18, height: 18, borderRadius: '50%', background: color, boxShadow: `0 0 10px 3px ${color}`, border: '2px solid rgba(255,255,255,0.95)' }} />

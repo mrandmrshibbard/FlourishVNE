@@ -1,4 +1,18 @@
 {
+  "branch": {
+    "otherwiseIf": "Otherwise if",
+    "otherwise": "Otherwise",
+    "setCondition": "(click to set a condition)",
+    "segElseIfTitle": "Runs when its condition is met and none above matched",
+    "segElseTitle": "Runs when none of the conditions above matched",
+    "removeSegment": "Remove this segment (keeps its commands)",
+    "addOtherwiseIf": "+ Otherwise if",
+    "addOtherwiseIfTitle": "Add an 'Otherwise if' condition segment",
+    "addOtherwise": "+ Otherwise",
+    "addOtherwiseTitle": "Add an 'Otherwise' fallback segment",
+    "endOf": "⌟ End of “{{name}}”",
+    "unnamed": "branch"
+  },
   "listTitle": "Scenes",
   "newSceneName": "New Scene {{n}}",
   "cannotDeleteLast": "You cannot delete the last scene.",

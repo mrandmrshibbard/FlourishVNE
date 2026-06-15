@@ -61,7 +61,7 @@ const CommandItem: React.FC<{
                 const branchCmd = command as BranchStartCommand;
                 const desc = describeConditions(branchCmd.conditions, project.variables);
                 const namePart = branchCmd.name ? ` · ${branchCmd.name}` : '';
-                return `${desc || 'always runs'}${namePart}`;
+                return `${desc || t('branchAlwaysRuns')}${namePart}`;
             }
             case CommandType.BranchEnd:
                 return `End Branch`;
@@ -292,7 +292,7 @@ const CommandItem: React.FC<{
                                 color: isBranch ? branchColor : undefined
                             }}
                         >
-                            {isBranch ? 'If' : t(`names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() })}
+                            {isBranch ? t('branchIf') : t(`names.${command.type}`, { defaultValue: command.type.replace(/([A-Z])/g, ' $1').trim() })}
                         </p>
                         <p className="text-xs text-[var(--text-secondary)] truncate flex-1">{getCommandSummary()}</p>
                     </>
@@ -1878,17 +1878,17 @@ const SceneEditor: React.FC<{
                                                         <button
                                                             onClick={() => handleAddBranchSegment(branchCmd.branchId, CommandType.BranchElseIf)}
                                                             className="px-2 py-1 rounded text-[10px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/50"
-                                                            title="Add an 'Otherwise if' condition segment"
+                                                            title={t('branch.addOtherwiseIfTitle')}
                                                         >
-                                                            + Otherwise if
+                                                            {t('branch.addOtherwiseIf')}
                                                         </button>
                                                         {!branchCommands.some(c => c.type === CommandType.BranchElse) && (
                                                             <button
                                                                 onClick={() => handleAddBranchSegment(branchCmd.branchId, CommandType.BranchElse)}
                                                                 className="px-2 py-1 rounded text-[10px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-cyan)]/50"
-                                                                title="Add an 'Otherwise' fallback segment"
+                                                                title={t('branch.addOtherwiseTitle')}
                                                             >
-                                                                + Otherwise
+                                                                {t('branch.addOtherwise')}
                                                             </button>
                                                         )}
                                                         <AddCommandMenu onAdd={(type) => handleAddCommandToBranch(branchCmd.branchId, type)} />
@@ -1934,18 +1934,18 @@ const SceneEditor: React.FC<{
                                                                                 onClick={(e) => { e.stopPropagation(); setSelectedCommands(new Set([branchChildCmd.id])); setLastSelectedIndex(childIndex); setSelectedCommandIndex(childIndex); setSelectedVariableId(null); }}
                                                                                 className={`group flex items-center gap-2 py-1 px-2 rounded cursor-pointer border-2 border-dashed ${segSelected ? 'ring-2 ring-sky-400' : ''}`}
                                                                                 style={{ borderColor: branchColor, backgroundColor: `${branchColor}1a` }}
-                                                                                title={isElseIf ? 'Runs when its condition is met and none above matched' : 'Runs when none of the conditions above matched'}
+                                                                                title={isElseIf ? t('branch.segElseIfTitle') : t('branch.segElseTitle')}
                                                                             >
-                                                                                <span className="text-xs font-bold" style={{ color: branchColor }}>{isElseIf ? 'Otherwise if' : 'Otherwise'}</span>
+                                                                                <span className="text-xs font-bold" style={{ color: branchColor }}>{isElseIf ? t('branch.otherwiseIf') : t('branch.otherwise')}</span>
                                                                                 {isElseIf && (
                                                                                     <span className="text-xs text-[var(--text-secondary)] truncate">
-                                                                                        {segConds && segConds.length > 0 ? describeConditions(segConds, project.variables) : '(click to set a condition)'}
+                                                                                        {segConds && segConds.length > 0 ? describeConditions(segConds, project.variables) : t('branch.setCondition')}
                                                                                     </span>
                                                                                 )}
                                                                                 <button
                                                                                     onClick={(e) => { e.stopPropagation(); dispatch({ type: 'DELETE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: childIndex } }); }}
                                                                                     className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-500/20 rounded flex-shrink-0"
-                                                                                    title="Remove this segment (keeps its commands)"
+                                                                                    title={t('branch.removeSegment')}
                                                                                 >
                                                                                     <span className="text-red-400 text-xs">✕</span>
                                                                                 </button>
@@ -2017,7 +2017,7 @@ const SceneEditor: React.FC<{
                                                     )}
                                                     {/* Clear visual end-of-branch marker */}
                                                     <div className="pt-1 text-[10px] uppercase tracking-wide font-semibold opacity-60 select-none" style={{ color: branchColor }}>
-                                                        ⌟ End of “{branchCmd.name || 'branch'}”
+                                                        {t('branch.endOf', { name: branchCmd.name || t('branch.unnamed') })}
                                                     </div>
                                                 </div>
                                             );
