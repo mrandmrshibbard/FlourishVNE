@@ -42,7 +42,8 @@
     "buyItem": "Comprar item",
     "sellItem": "Vender item",
     "buySelectedItem": "Comprar item selecionado",
-    "sellSelectedItem": "Vender item selecionado"
+    "sellSelectedItem": "Vender item selecionado",
+    "openPauseMenu": "Abrir menu de pausa"
   },
   "actionsList": {
     "actions": "Ações",
@@ -230,7 +231,14 @@
     "addCustomButton": "Adicionar botão personalizado",
     "removeButton": "Remover botão",
     "visible": "Visível",
-    "qmLabels": { "skipBackward": "Voltar", "log": "Histórico", "autoAdvance": "Auto", "skipForward": "Pular", "save": "Salvar", "load": "Carregar" },
+    "qmLabels": {
+      "skipBackward": "Voltar",
+      "log": "Histórico",
+      "autoAdvance": "Auto",
+      "skipForward": "Pular",
+      "save": "Salvar",
+      "load": "Carregar"
+    },
     "quitConfirmation": "Confirmação de saída",
     "newGameConfirmation": "Confirmação de novo jogo",
     "dialogBoxAppearance": "Aparência da caixa de diálogo",
@@ -772,16 +780,44 @@
       "fireworks": "Fogos de artifício"
     },
     "params": {
-      "crtScanlines": { "lineSpacing": "Espaçamento das linhas", "speed": "Velocidade de rolagem" },
-      "chromaticGlitch": { "chromaticSpread": "Dispersão do deslocamento", "speed": "Velocidade da oscilação" },
-      "sunbeams": { "spread": "Dispersão dos raios", "speed": "Velocidade da animação" },
-      "shimmer": { "particleDensity": "Densidade de partículas", "speed": "Velocidade da animação" },
-      "rain": { "windStrength": "Força do vento", "dropLength": "Comprimento das gotas", "speed": "Velocidade da queda" },
-      "snowAsh": { "particleSize": "Tamanho das partículas", "windStrength": "Força do vento", "speed": "Velocidade da queda" },
-      "fog": { "speed": "Velocidade da deriva" },
-      "haze": { "speed": "Velocidade da deriva" },
-      "smoke": { "speed": "Velocidade de subida" },
-      "fireworks": { "speed": "Velocidade de lançamento" }
+      "crtScanlines": {
+        "lineSpacing": "Espaçamento das linhas",
+        "speed": "Velocidade de rolagem"
+      },
+      "chromaticGlitch": {
+        "chromaticSpread": "Dispersão do deslocamento",
+        "speed": "Velocidade da oscilação"
+      },
+      "sunbeams": {
+        "spread": "Dispersão dos raios",
+        "speed": "Velocidade da animação"
+      },
+      "shimmer": {
+        "particleDensity": "Densidade de partículas",
+        "speed": "Velocidade da animação"
+      },
+      "rain": {
+        "windStrength": "Força do vento",
+        "dropLength": "Comprimento das gotas",
+        "speed": "Velocidade da queda"
+      },
+      "snowAsh": {
+        "particleSize": "Tamanho das partículas",
+        "windStrength": "Força do vento",
+        "speed": "Velocidade da queda"
+      },
+      "fog": {
+        "speed": "Velocidade da deriva"
+      },
+      "haze": {
+        "speed": "Velocidade da deriva"
+      },
+      "smoke": {
+        "speed": "Velocidade de subida"
+      },
+      "fireworks": {
+        "speed": "Velocidade de lançamento"
+      }
     }
   },
   "actionEditor": {

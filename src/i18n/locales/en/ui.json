@@ -42,7 +42,8 @@
     "buyItem": "Buy Item",
     "sellItem": "Sell Item",
     "buySelectedItem": "Buy Selected Item",
-    "sellSelectedItem": "Sell Selected Item"
+    "sellSelectedItem": "Sell Selected Item",
+    "openPauseMenu": "Open Pause Menu"
   },
   "actionsList": {
     "actions": "Actions",
@@ -230,7 +231,14 @@
     "addCustomButton": "Add custom button",
     "removeButton": "Remove button",
     "visible": "Visible",
-    "qmLabels": { "skipBackward": "Back", "log": "Log", "autoAdvance": "Auto", "skipForward": "Skip", "save": "Save", "load": "Load" },
+    "qmLabels": {
+      "skipBackward": "Back",
+      "log": "Log",
+      "autoAdvance": "Auto",
+      "skipForward": "Skip",
+      "save": "Save",
+      "load": "Load"
+    },
     "quitConfirmation": "Quit Confirmation",
     "newGameConfirmation": "New Game Confirmation",
     "dialogBoxAppearance": "Dialog Box Appearance",
@@ -772,16 +780,44 @@
       "fireworks": "Fireworks"
     },
     "params": {
-      "crtScanlines": { "lineSpacing": "Line Spacing", "speed": "Scroll Speed" },
-      "chromaticGlitch": { "chromaticSpread": "Offset Spread", "speed": "Jitter Speed" },
-      "sunbeams": { "spread": "Ray Spread", "speed": "Animation Speed" },
-      "shimmer": { "particleDensity": "Particle Density", "speed": "Animation Speed" },
-      "rain": { "windStrength": "Wind Strength", "dropLength": "Drop Length", "speed": "Fall Speed" },
-      "snowAsh": { "particleSize": "Particle Size", "windStrength": "Wind Strength", "speed": "Fall Speed" },
-      "fog": { "speed": "Drift Speed" },
-      "haze": { "speed": "Drift Speed" },
-      "smoke": { "speed": "Rise Speed" },
-      "fireworks": { "speed": "Launch Speed" }
+      "crtScanlines": {
+        "lineSpacing": "Line Spacing",
+        "speed": "Scroll Speed"
+      },
+      "chromaticGlitch": {
+        "chromaticSpread": "Offset Spread",
+        "speed": "Jitter Speed"
+      },
+      "sunbeams": {
+        "spread": "Ray Spread",
+        "speed": "Animation Speed"
+      },
+      "shimmer": {
+        "particleDensity": "Particle Density",
+        "speed": "Animation Speed"
+      },
+      "rain": {
+        "windStrength": "Wind Strength",
+        "dropLength": "Drop Length",
+        "speed": "Fall Speed"
+      },
+      "snowAsh": {
+        "particleSize": "Particle Size",
+        "windStrength": "Wind Strength",
+        "speed": "Fall Speed"
+      },
+      "fog": {
+        "speed": "Drift Speed"
+      },
+      "haze": {
+        "speed": "Drift Speed"
+      },
+      "smoke": {
+        "speed": "Rise Speed"
+      },
+      "fireworks": {
+        "speed": "Launch Speed"
+      }
     }
   },
   "actionEditor": {

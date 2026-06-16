@@ -426,18 +426,23 @@ const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize 
     const tHeight = tweenValues?.height ?? overlay.height;
 
     const _orient = `${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim();
+    // Match the editor (StagingArea) exactly: text overlays are sized against a 1280x720
+    // design reference — font is `fontSize * stageW/1280` (scaleFontSize) and width/height
+    // are percent-of-1280/720 (pxToPercent). This keeps the built game identical to what the
+    // author sees on the scene canvas at any stage size (desktop, Android, web).
+    const ovScale = stageSize?.width ? stageSize.width / 1280 : 1;
     const baseStyle: React.CSSProperties = {
         left: `${tx}%`,
         top: `${ty}%`,
         ...(isSlideTransition ? (_orient ? { transform: _orient } : {}) : { transform: `translate(-50%, -50%) ${_orient}`.trim() }),
-        fontSize: `calc(var(--font-scale, 1) * ${tFontSize}px)`,
+        fontSize: `${tFontSize * ovScale}px`,
         fontFamily: overlay.fontFamily,
         color: tColor,
         fontWeight: overlay.fontWeight || 'normal',
         fontStyle: overlay.fontStyle || 'normal',
-        letterSpacing: overlay.letterSpacing ? `calc(var(--font-scale, 1) * ${overlay.letterSpacing}px)` : undefined,
-        width: tWidth ? `calc(var(--font-scale, 1) * ${tWidth}px)` : 'auto',
-        height: tHeight ? `calc(var(--font-scale, 1) * ${tHeight}px)` : 'auto',
+        letterSpacing: overlay.letterSpacing ? `${overlay.letterSpacing}px` : undefined,
+        width: tWidth ? `${(tWidth / 1280) * 100}%` : 'auto',
+        height: tHeight ? `${(tHeight / 720) * 100}%` : 'auto',
         textAlign: overlay.textAlign || 'left',
         display: 'flex',
         alignItems: overlay.verticalAlign === 'top' ? 'flex-start' : overlay.verticalAlign === 'bottom' ? 'flex-end' : 'center',
@@ -633,7 +638,7 @@ const ButtonOverlayElement: React.FC<{
             cursor: 'pointer',
             lineHeight: 0,
             color: overlay.textColor,
-            fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
+            fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
             fontWeight: overlay.fontWeight,
             transition: 'transform 0.1s',
             transform: isHovered ? 'translateY(-2px)' : 'none',
@@ -645,9 +650,9 @@ const ButtonOverlayElement: React.FC<{
             height: '100%',
             backgroundColor: bBgColor,
             color: overlay.textColor,
-            fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
+            fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
             fontWeight: overlay.fontWeight,
-            borderRadius: `${bBorderRadius}px`,
+            borderRadius: `calc(var(--ovl-scale, 1) * ${bBorderRadius}px)`,
             border: 'none',
             cursor: 'pointer',
             padding: 0,
@@ -822,12 +827,20 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     // "Fit to content": the width/height become a max bound and the box shrinks to the fitted
     // (undistorted) art, so the element footprint hugs the image with no surrounding margin.
     const fit = !!overlay.fitToContent;
+    // Size is stored in px against a 1280x720 design reference (REFERENCE_WIDTH/HEIGHT in
+    // StagingArea). Render it as a PERCENT of the stage — exactly like the editor — so the
+    // image keeps the same proportions on any stage size (desktop window, Android WebView,
+    // web). On a 1280-wide stage this is byte-identical to the old raw-px behaviour, so the
+    // desktop build is unchanged; smaller/larger stages (Android) now match instead of
+    // rendering the image too big/small.
+    const refPctW = (px: number) => `${(px / 1280) * 100}%`;
+    const refPctH = (px: number) => `${(px / 720) * 100}%`;
     const containerStyle: React.CSSProperties = {
         left: `${ix}%`,
         top: `${iy}%`,
         ...(fit
-            ? { width: 'auto', height: 'auto', maxWidth: `${iw}px`, maxHeight: `${ih}px` }
-            : { width: `${iw}px`, height: `${ih}px` }),
+            ? { width: 'auto', height: 'auto', maxWidth: refPctW(iw), maxHeight: refPctH(ih) }
+            : { width: refPctW(iw), height: refPctH(ih) }),
         transform: `${isSlideTransition ? '' : 'translate(-50%, -50%)'}${parallaxTransform(overlay.parallaxDepth)}`.trim() || undefined,
         // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
         zIndex: 1 + (overlay.layer ?? 0) * 100,
@@ -843,7 +856,8 @@ const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSiz
     const iFlipY = overlay.flipY ? -1 : 1;
     const imageStyle: React.CSSProperties = {
         ...(fit
-            ? { display: 'block', width: 'auto', height: 'auto', maxWidth: `${iw}px`, maxHeight: `${ih}px` }
+            // Inner image fills/bounds within the (percent-sized) container, like the editor.
+            ? { display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%' }
             : { width: '100%', height: '100%' }),
         transform: `rotate(${iRotation}deg) scale(${iScaleX * iFlipX}, ${iScaleY * iFlipY})`,
         transformOrigin: 'center center',
@@ -7962,12 +7976,34 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
              } else {
                  finishReturn();
              }
+        } else if (action.type === UIActionType.OpenPauseMenu) {
+            // Pause the game exactly like the Esc key does — needed for touch/mobile builds
+            // that have no keyboard. Sets paused mode, pauses scene music, and opens the
+            // configured pause screen. Resuming goes through ReturnToGame (which detects the
+            // paused mode and resumes the music).
+            if (playerState && playerState.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                if (musicAudioRef.current && !musicAudioRef.current.paused) {
+                    musicAudioRef.current.pause();
+                }
+                if (project.ui.pauseScreenId) {
+                    setScreenStack([project.ui.pauseScreenId]);
+                }
+            }
         } else if (action.type === UIActionType.ToggleScreen) {
             // Toggle a screen open/closed (e.g. an inventory overlay). During gameplay it
             // lives on the HUD stack (so it overlays the scene); otherwise the screen stack.
             const targetId = (action as ToggleScreenAction).targetScreenId;
             if (!targetId || !project.uiScreens[targetId]) {
                 runtimeDebugWarn(`ToggleScreen failed: Screen with ID ${targetId} not found`);
+                return;
+            }
+            // Toggling the configured PAUSE screen open should genuinely pause (freeze + stop
+            // scene music), like Open Pause Menu. (Closing/resume is handled by Return To Game.)
+            if (project.ui.pauseScreenId && targetId === project.ui.pauseScreenId && playerState?.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                if (musicAudioRef.current && !musicAudioRef.current.paused) musicAudioRef.current.pause();
+                setScreenStack([targetId]);
                 return;
             }
             if (playerState && playerState.mode === 'playing') {
@@ -7991,7 +8027,19 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 runtimeDebugWarn(`GoToScreen failed: Screen with ID ${targetId} not found`);
                 return;
             }
-            
+
+            // If this navigates to the project's configured PAUSE screen, actually pause the
+            // game (freeze the scene + stop its music) exactly like Open Pause Menu / Esc —
+            // instead of opening it as a non-pausing HUD overlay (which leaves scene music
+            // playing). This makes ANY "pause" button work whether the author used Open Pause
+            // Menu, Go To Screen, or Toggle Screen. Resume via Return To Game restores music.
+            if (project.ui.pauseScreenId && targetId === project.ui.pauseScreenId && playerState?.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                if (musicAudioRef.current && !musicAudioRef.current.paused) musicAudioRef.current.pause();
+                setScreenStack([targetId]);
+                return;
+            }
+
             // Handle music transition when going to screen
             if (playerState && playerState.mode === 'playing') {
                 const screenMusicInfo = targetScreen.music;
@@ -8175,11 +8223,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
                     const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
                     const hasTransition = effectiveTransitionOut !== 'none';
-                    
+
                     if (hasTransition) {
                         // Mark screen as closing
                         setClosingScreens(prev => new Set(prev).add(closingScreenId));
-                        
+
                         // Wait for transition to complete before removing from stack
                         setTimeout(() => {
                             setScreenStack(stack => stack.slice(0, -1));
@@ -8192,6 +8240,32 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     } else {
                         // No transition, close immediately
                         setScreenStack(stack => stack.slice(0, -1));
+                    }
+                } else if (screenStack.length === 1 && playerState?.mode === 'paused') {
+                    // Closing the LAST screen while paused (e.g. a Pause Menu "Back" button using
+                    // Return To Previous Screen) must resume gameplay + music — otherwise the player
+                    // is stuck paused. Mirrors Return To Game's finish step. (Previously this did
+                    // nothing because it only handled length > 1.)
+                    const closingScreenId = screenStack[0];
+                    const closingScreen = project.uiScreens[closingScreenId];
+                    const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+                    const hasTransition = (closingScreen?.transitionOut || 'fade') !== 'none';
+                    const wasPlaying = !!playerState?.musicState?.isPlaying;
+                    const finishResume = () => {
+                        updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                        setScreenStack([]);
+                        if (wasPlaying && musicAudioRef.current && musicAudioRef.current.src && musicAudioRef.current.paused) {
+                            musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
+                        }
+                    };
+                    if (hasTransition) {
+                        setClosingScreens(prev => new Set(prev).add(closingScreenId));
+                        setTimeout(() => {
+                            setClosingScreens(prev => { const next = new Set(prev); next.delete(closingScreenId); return next; });
+                            finishResume();
+                        }, transitionDuration + 50);
+                    } else {
+                        finishResume();
                     }
                 }
             }
@@ -9278,11 +9352,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
         return (
             <div 
-                ref={stageRef} 
+                ref={stageRef}
                 className="w-full h-full relative overflow-hidden bg-black"
                 onClick={handleStageClick}
                 onWheel={handleWheel}
-                style={{ cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default' }}
+                style={{
+                    cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default',
+                    // Overlay design-reference scale (stageW / 1280) — mirrors the editor's
+                    // scaleFontSize/scaledBorderRadius so ShowButton/ShowText overlays render
+                    // identically in the built game and on the scene canvas, at any stage size.
+                    ['--ovl-scale' as any]: stageSize?.width ? stageSize.width / 1280 : 1,
+                }}
             >
                 <div style={panZoomStyle}>
                     <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
@@ -10983,7 +11063,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     100% { background-position: 0% 0%; }
                 }
             `}</style>
-            <div ref={playContainerRef} className="relative overflow-hidden" style={{ aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`, maxWidth: '100%', maxHeight: '100%', width: '100%', '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
+            {/* Letterbox the stage to the game's aspect ratio. The parent is the full viewport
+                (fixed inset-0, flex-centered, black bg = the bars), so a pure-CSS min() fit works
+                in BOTH orientations: on a screen WIDER than the game aspect (most phones in
+                landscape) it pillarboxes; on a TALLER screen it letterboxes. The old
+                `width:100% + aspect-ratio + max-height` STRETCHED on wider-than-aspect screens,
+                which shifted every %-positioned element (e.g. the quick menu) on Android. At a
+                16:9 window this resolves to the same 1280x720 as before (desktop unchanged). */}
+            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
                 {playerState?.mode === 'playing' ? renderStage() : null}
                 
                 {/* Render closing + current menu screens together so a screen transitioning

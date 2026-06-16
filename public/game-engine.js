@@ -44,6 +44,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["ToggleAutoAdvance"] = "ToggleAutoAdvance";
     UIActionType2["ToggleSkip"] = "ToggleSkip";
     UIActionType2["SkipBackward"] = "SkipBackward";
+    UIActionType2["OpenPauseMenu"] = "OpenPauseMenu";
     UIActionType2["CallCommonEvent"] = "CallCommonEvent";
     UIActionType2["GiveItem"] = "GiveItem";
     UIActionType2["UseItem"] = "UseItem";
@@ -7850,18 +7851,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const tWidth = (tweenValues == null ? void 0 : tweenValues.width) ?? overlay.width;
     const tHeight = (tweenValues == null ? void 0 : tweenValues.height) ?? overlay.height;
     const _orient = `${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim();
+    const ovScale = (stageSize == null ? void 0 : stageSize.width) ? stageSize.width / 1280 : 1;
     const baseStyle = {
       left: `${tx}%`,
       top: `${ty}%`,
       ...isSlideTransition ? _orient ? { transform: _orient } : {} : { transform: `translate(-50%, -50%) ${_orient}`.trim() },
-      fontSize: `calc(var(--font-scale, 1) * ${tFontSize}px)`,
+      fontSize: `${tFontSize * ovScale}px`,
       fontFamily: overlay.fontFamily,
       color: tColor,
       fontWeight: overlay.fontWeight || "normal",
       fontStyle: overlay.fontStyle || "normal",
-      letterSpacing: overlay.letterSpacing ? `calc(var(--font-scale, 1) * ${overlay.letterSpacing}px)` : void 0,
-      width: tWidth ? `calc(var(--font-scale, 1) * ${tWidth}px)` : "auto",
-      height: tHeight ? `calc(var(--font-scale, 1) * ${tHeight}px)` : "auto",
+      letterSpacing: overlay.letterSpacing ? `${overlay.letterSpacing}px` : void 0,
+      width: tWidth ? `${tWidth / 1280 * 100}%` : "auto",
+      height: tHeight ? `${tHeight / 720 * 100}%` : "auto",
       textAlign: overlay.textAlign || "left",
       display: "flex",
       alignItems: overlay.verticalAlign === "top" ? "flex-start" : overlay.verticalAlign === "bottom" ? "flex-end" : "center",
@@ -7998,7 +8000,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       cursor: "pointer",
       lineHeight: 0,
       color: overlay.textColor,
-      fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
+      fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
       fontWeight: overlay.fontWeight,
       transition: "transform 0.1s",
       transform: isHovered ? "translateY(-2px)" : "none",
@@ -8009,9 +8011,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       height: "100%",
       backgroundColor: bBgColor,
       color: overlay.textColor,
-      fontSize: `calc(var(--font-scale, 1) * ${bFontSize}px)`,
+      fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
       fontWeight: overlay.fontWeight,
-      borderRadius: `${bBorderRadius}px`,
+      borderRadius: `calc(var(--ovl-scale, 1) * ${bBorderRadius}px)`,
       border: "none",
       cursor: "pointer",
       padding: 0,
@@ -8153,10 +8155,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const iScaleX = (tweenValues == null ? void 0 : tweenValues.scaleX) ?? overlay.scaleX;
     const iScaleY = (tweenValues == null ? void 0 : tweenValues.scaleY) ?? overlay.scaleY;
     const fit = !!overlay.fitToContent;
+    const refPctW = (px) => `${px / 1280 * 100}%`;
+    const refPctH = (px) => `${px / 720 * 100}%`;
     const containerStyle = {
       left: `${ix}%`,
       top: `${iy}%`,
-      ...fit ? { width: "auto", height: "auto", maxWidth: `${iw}px`, maxHeight: `${ih}px` } : { width: `${iw}px`, height: `${ih}px` },
+      ...fit ? { width: "auto", height: "auto", maxWidth: refPctW(iw), maxHeight: refPctH(ih) } : { width: refPctW(iw), height: refPctH(ih) },
       transform: `${isSlideTransition ? "" : "translate(-50%, -50%)"}${parallaxTransform(overlay.parallaxDepth)}`.trim() || void 0,
       // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
       zIndex: 1 + (overlay.layer ?? 0) * 100
@@ -8167,7 +8171,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const iFlipX = overlay.flipX ? -1 : 1;
     const iFlipY = overlay.flipY ? -1 : 1;
     const imageStyle = {
-      ...fit ? { display: "block", width: "auto", height: "auto", maxWidth: `${iw}px`, maxHeight: `${ih}px` } : { width: "100%", height: "100%" },
+      ...fit ? { display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "100%" } : { width: "100%", height: "100%" },
       transform: `rotate(${iRotation}deg) scale(${iScaleX * iFlipX}, ${iScaleY * iFlipY})`,
       transformOrigin: "center center",
       opacity: iOpacity
@@ -11104,7 +11108,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     );
   };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const { project } = useProject();
     const toast = useToast();
     const notify = React2.useCallback((message, type = "info") => {
@@ -11365,13 +11369,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [flashlight == null ? void 0 : flashlight.on, flashlight == null ? void 0 : flashlight.radius, flashlight == null ? void 0 : flashlight.softness, flashlight == null ? void 0 : flashlight.darkness, flashlight == null ? void 0 : flashlight.color]);
     const [activeCreditRoll, setActiveCreditRoll] = React2.useState(null);
     const assetResolver = React2.useCallback((assetId, type) => {
-      var _a2, _b2, _c2, _d2, _e, _f;
+      var _a2, _b2, _c2, _d2, _e2, _f2;
       if (!assetId) return null;
       switch (type) {
         case "audio":
           return ((_a2 = project.audio[assetId]) == null ? void 0 : _a2.audioUrl) || null;
         case "video":
-          return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.backgrounds[assetId]) == null ? void 0 : _c2.videoUrl) || ((_e = (_d2 = project.images) == null ? void 0 : _d2[assetId]) == null ? void 0 : _e.videoUrl) || null;
+          return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.backgrounds[assetId]) == null ? void 0 : _c2.videoUrl) || ((_e2 = (_d2 = project.images) == null ? void 0 : _d2[assetId]) == null ? void 0 : _e2.videoUrl) || null;
         case "image": {
           if (project.backgrounds[assetId]) {
             const bg = project.backgrounds[assetId];
@@ -11382,7 +11386,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             return img.videoUrl || img.imageUrl || null;
           }
           if (project.videos[assetId]) {
-            return ((_f = project.videos[assetId]) == null ? void 0 : _f.videoUrl) || null;
+            return ((_f2 = project.videos[assetId]) == null ? void 0 : _f2.videoUrl) || null;
           }
           for (const charId in project.characters) {
             const char = project.characters[charId];
@@ -13183,7 +13187,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (result.updates || result.stagePatch) {
               const isSceneChange = ((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
-                var _a5, _b3, _c3, _d3, _e, _f, _g, _h, _i, _j;
+                var _a5, _b3, _c3, _d3, _e2, _f2, _g, _h, _i, _j;
                 if (!p) return null;
                 let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
                 if (isSceneChange) {
@@ -13198,8 +13202,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 return {
                   ...p,
                   ...((_d3 = result.updates) == null ? void 0 : _d3.currentSceneId) !== void 0 ? { currentSceneId: result.updates.currentSceneId } : {},
-                  ...((_e = result.updates) == null ? void 0 : _e.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
-                  ...((_f = result.updates) == null ? void 0 : _f.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
+                  ...((_e2 = result.updates) == null ? void 0 : _e2.currentCommands) !== void 0 ? { currentCommands: result.updates.currentCommands } : {},
+                  ...((_f2 = result.updates) == null ? void 0 : _f2.currentIndex) !== void 0 ? { currentIndex: result.updates.currentIndex } : {},
                   ...((_g = result.updates) == null ? void 0 : _g.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
                   ...((_h = result.updates) == null ? void 0 : _h.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
                   ...nextStage !== void 0 ? { stageState: nextStage } : {},
@@ -14202,7 +14206,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j, _k, _l;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g, _h, _i, _j, _k, _l, _m;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -14248,10 +14252,26 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         } else {
           finishReturn();
         }
+      } else if (action.type === UIActionType.OpenPauseMenu) {
+        if (playerState && playerState.mode === "playing") {
+          updatePlayerState((p) => p ? { ...p, mode: "paused" } : null);
+          if (musicAudioRef.current && !musicAudioRef.current.paused) {
+            musicAudioRef.current.pause();
+          }
+          if (project.ui.pauseScreenId) {
+            setScreenStack([project.ui.pauseScreenId]);
+          }
+        }
       } else if (action.type === UIActionType.ToggleScreen) {
         const targetId = action.targetScreenId;
         if (!targetId || !project.uiScreens[targetId]) {
           runtimeDebugWarn(`ToggleScreen failed: Screen with ID ${targetId} not found`);
+          return;
+        }
+        if (project.ui.pauseScreenId && targetId === project.ui.pauseScreenId && (playerState == null ? void 0 : playerState.mode) === "playing") {
+          updatePlayerState((p) => p ? { ...p, mode: "paused" } : null);
+          if (musicAudioRef.current && !musicAudioRef.current.paused) musicAudioRef.current.pause();
+          setScreenStack([targetId]);
           return;
         }
         if (playerState && playerState.mode === "playing") {
@@ -14271,6 +14291,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const targetScreen = project.uiScreens[targetId];
         if (!targetScreen) {
           runtimeDebugWarn(`GoToScreen failed: Screen with ID ${targetId} not found`);
+          return;
+        }
+        if (project.ui.pauseScreenId && targetId === project.ui.pauseScreenId && (playerState == null ? void 0 : playerState.mode) === "playing") {
+          updatePlayerState((p) => p ? { ...p, mode: "paused" } : null);
+          if (musicAudioRef.current && !musicAudioRef.current.paused) musicAudioRef.current.pause();
+          setScreenStack([targetId]);
           return;
         }
         if (playerState && playerState.mode === "playing") {
@@ -14449,6 +14475,32 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               }, transitionDuration);
             } else {
               setScreenStack((stack) => stack.slice(0, -1));
+            }
+          } else if (screenStack.length === 1 && (playerState == null ? void 0 : playerState.mode) === "paused") {
+            const closingScreenId = screenStack[0];
+            const closingScreen = project.uiScreens[closingScreenId];
+            const transitionDuration = (closingScreen == null ? void 0 : closingScreen.transitionOutDuration) ?? (closingScreen == null ? void 0 : closingScreen.transitionDuration) ?? 300;
+            const hasTransition = ((closingScreen == null ? void 0 : closingScreen.transitionOut) || "fade") !== "none";
+            const wasPlaying = !!((_a2 = playerState == null ? void 0 : playerState.musicState) == null ? void 0 : _a2.isPlaying);
+            const finishResume = () => {
+              updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
+              setScreenStack([]);
+              if (wasPlaying && musicAudioRef.current && musicAudioRef.current.src && musicAudioRef.current.paused) {
+                musicAudioRef.current.play().catch((e) => console.error("Failed to resume music:", e));
+              }
+            };
+            if (hasTransition) {
+              setClosingScreens((prev) => new Set(prev).add(closingScreenId));
+              setTimeout(() => {
+                setClosingScreens((prev) => {
+                  const next = new Set(prev);
+                  next.delete(closingScreenId);
+                  return next;
+                });
+                finishResume();
+              }, transitionDuration + 50);
+            } else {
+              finishResume();
             }
           }
         }
@@ -14896,10 +14948,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         runtimeDebugLog("JumpToLabel handler triggered:", {
           targetLabel,
           currentSceneId: playerState.currentSceneId,
-          currentSceneName: (_a2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _a2.name,
+          currentSceneName: (_b2 = project.scenes[playerState.currentSceneId]) == null ? void 0 : _b2.name,
           screenSceneId: playerState.uiState.screenSceneId,
           targetSceneId,
-          targetSceneName: (_b2 = project.scenes[targetSceneId]) == null ? void 0 : _b2.name
+          targetSceneName: (_c2 = project.scenes[targetSceneId]) == null ? void 0 : _c2.name
         });
         const targetScene = project.scenes[targetSceneId];
         if (!targetScene) {
@@ -15001,7 +15053,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const savedVariables = {};
         const clearedVariables = [];
         for (const param of ce.parameters || []) {
-          const raw = (_c2 = ccAction.arguments) == null ? void 0 : _c2[param.id];
+          const raw = (_d2 = ccAction.arguments) == null ? void 0 : _d2[param.id];
           overrides[param.id] = raw !== void 0 ? coerceParam(raw, param.type) : param.defaultValue;
           if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
           else clearedVariables.push(param.id);
@@ -15023,29 +15075,29 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         });
       } else if (action.type === UIActionType.GiveItem) {
         const a = action;
-        const item = (_d2 = project.items) == null ? void 0 : _d2[a.itemId];
+        const item = (_e2 = project.items) == null ? void 0 : _e2[a.itemId];
         if (item) executeUIAction(item.unique ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 1 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "add", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseItem) {
         const a = action;
-        const item = (_e = project.items) == null ? void 0 : _e[a.itemId];
+        const item = (_f2 = project.items) == null ? void 0 : _f2[a.itemId];
         if (item) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.DestroyItem) {
         const a = action;
-        const item = (_f = project.items) == null ? void 0 : _f[a.itemId];
+        const item = (_g = project.items) == null ? void 0 : _g[a.itemId];
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
-        const selId = (_g = playerStateRef.current) == null ? void 0 : _g.selectedItemId;
-        const item = selId ? (_h = project.items) == null ? void 0 : _h[selId] : void 0;
+        const selId = (_h = playerStateRef.current) == null ? void 0 : _h.selectedItemId;
+        const item = selId ? (_i = project.items) == null ? void 0 : _i[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
         }
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_i = project.itemCollections) == null ? void 0 : _i[a.collectionId];
+        const collection = (_j = project.itemCollections) == null ? void 0 : _j[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -15054,12 +15106,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_j = project.itemCollections) == null ? void 0 : _j[a.collectionId];
+        const collection = (_k = project.itemCollections) == null ? void 0 : _k[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_k = playerStateRef.current) == null ? void 0 : _k.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_l = playerStateRef.current) == null ? void 0 : _l.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_l = playerStateRef.current) == null ? void 0 : _l.variables) || {};
+          const curVars = ((_m = playerStateRef.current) == null ? void 0 : _m.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -15372,7 +15424,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           className: "w-full h-full relative overflow-hidden bg-black",
           onClick: handleStageClick,
           onWheel: handleWheel,
-          style: { cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? "pointer" : "default" },
+          style: {
+            cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? "pointer" : "default",
+            // Overlay design-reference scale (stageW / 1280) — mirrors the editor's
+            // scaleFontSize/scaledBorderRadius so ShowButton/ShowText overlays render
+            // identically in the built game and on the scene canvas, at any stage size.
+            ["--ovl-scale"]: (stageSize == null ? void 0 : stageSize.width) ? stageSize.width / 1280 : 1
+          },
           children: [
             /* @__PURE__ */ jsxRuntime2.jsx("div", { style: panZoomStyle, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: `w-full h-full ${shakeClass} z-10`, style: { ...shakeIntensityStyle, backgroundColor: effBgColor }, children: [
               effBgUrl && (() => {
@@ -16830,7 +16888,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { aspectRatio: `${((_b = project.gameResolution) == null ? void 0 : _b.width) || 16} / ${((_c = project.gameResolution) == null ? void 0 : _c.height) || 9}`, maxWidth: "100%", maxHeight: "100%", width: "100%", "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_d = project.gameResolution) == null ? void 0 : _d.width) || 1920) : 1 }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_b = project.gameResolution) == null ? void 0 : _b.width) || 1920} / ${((_c = project.gameResolution) == null ? void 0 : _c.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_d = project.gameResolution) == null ? void 0 : _d.height) || 1080} / ${((_e = project.gameResolution) == null ? void 0 : _e.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_f = project.gameResolution) == null ? void 0 : _f.width) || 1920) : 1 }, children: [
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         (!playerState || playerState.mode === "paused") && (() => {
           const ordered = [];

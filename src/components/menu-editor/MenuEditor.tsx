@@ -604,36 +604,44 @@ const MenuEditor: React.FC<{
     }, [activeScreenId]);
 
     useLayoutEffect(() => {
-        const updateSize = () => {
-            // Cancel any pending RAF to avoid rapid updates
-            if (rafRef.current !== null) {
-                cancelAnimationFrame(rafRef.current);
+        // Letterbox the canvas to the game's aspect ratio: measure the PARENT (the panel
+        // content area) and size the stage to the largest aspect-correct box that fits, then
+        // center it with auto margins. This mirrors the scene editor (StagingArea) and the
+        // runtime stage, so a UI screen looks the same while editing as it does in the built
+        // game — even when the editor panel is wider/taller than the game's aspect ratio.
+        // (Previously the canvas used width:100% + aspect-ratio + max-height, which STRETCHED
+        // it on panels wider than the game aspect.)
+        const measure = () => {
+            const parent = stageRef.current?.parentElement;
+            if (!parent) return;
+            const cs = getComputedStyle(parent);
+            const pw = parent.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+            const ph = parent.clientHeight - parseFloat(cs.paddingTop || '0') - parseFloat(cs.paddingBottom || '0');
+            const ar = (project.gameResolution?.width || 1920) / (project.gameResolution?.height || 1080);
+            let w = pw;
+            let h = w / ar;
+            if (h > ph) { h = ph; w = h * ar; }
+            if (w > 0 && h > 0) {
+                setStageSize(prev => (Math.round(prev.width) === Math.round(w) && Math.round(prev.height) === Math.round(h))
+                    ? prev
+                    : { width: Math.round(w), height: Math.round(h) });
             }
-            rafRef.current = requestAnimationFrame(() => {
-                if (stageRef.current) {
-                    const rect = stageRef.current.getBoundingClientRect();
-                    // Only update if size actually changed
-                    setStageSize(prev => {
-                        if (prev.width === rect.width && prev.height === rect.height) {
-                            return prev;
-                        }
-                        return { width: rect.width, height: rect.height };
-                    });
-                }
-            });
+        };
+        const updateSize = () => {
+            if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(measure);
         };
         const resizeObserver = new ResizeObserver(updateSize);
-        if (stageRef.current) {
-            resizeObserver.observe(stageRef.current);
-        }
-        updateSize();
+        const parent = stageRef.current?.parentElement;
+        if (parent) resizeObserver.observe(parent);
+        measure(); // synchronous first measure (before paint) to avoid a collapsed first frame
         return () => {
             resizeObserver.disconnect();
             if (rafRef.current !== null) {
                 cancelAnimationFrame(rafRef.current);
             }
         };
-    }, [activeScreenId]);
+    }, [activeScreenId, project.gameResolution?.width, project.gameResolution?.height]);
 
     // --- Clipboard helpers (hooks must be above early return) ---
     const generateNewId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}` as VNID;
@@ -939,17 +947,17 @@ const MenuEditor: React.FC<{
                 title={`Editing Menu: ${screen.name}`} 
                 className="flex-1 min-h-0"
             >
-                <div className="bg-slate-900/50 rounded-md relative overflow-hidden mx-auto" ref={stageRef}
+                <div className="bg-slate-900/50 rounded-md relative overflow-hidden m-auto" ref={stageRef}
                     onMouseDown={() => setSelectedElementIds([])}
                     style={{
                         ...getBackground(),
                         // Confine element `layer` z-indices to this canvas (own stacking context)
                         // so a layered element never floats above the editor chrome.
                         isolation: 'isolate',
-                        aspectRatio: `${project.gameResolution?.width || 16} / ${project.gameResolution?.height || 9}`,
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        width: '100%',
+                        // Explicit aspect-fit size (computed from the parent above) + auto margins
+                        // to center it — letterboxes instead of stretching. Matches the runtime.
+                        width: stageSize.width || '100%',
+                        height: stageSize.height || undefined,
                         '--font-scale': stageSize.width > 0 ? stageSize.width / (project.gameResolution?.width || 1920) : 1,
                     } as React.CSSProperties}
                 >

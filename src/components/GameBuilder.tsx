@@ -10,6 +10,7 @@ import { VNProject } from '../types/project';
 import { buildStandaloneGame, downloadBlob, estimateBuildSize, BuildProgress } from '../utils/gameBundler';
 import { validateProjectForBuild, ValidationResult } from '../utils/buildValidator';
 import { GamepadIcon, XMarkIcon, GlobeIcon, SaveIcon, CheckIcon, ArrowDownTrayIcon } from './icons';
+import { defaultPackageName, isValidPackageName, AndroidOrientation } from '../utils/androidGameBundler';
 
 interface GameBuilderProps {
   project: VNProject;
@@ -17,8 +18,10 @@ interface GameBuilderProps {
 }
 
 type BuildStep = 'idle' | 'building' | 'success' | 'error';
-type BuildType = 'web' | 'desktop';
+type BuildType = 'web' | 'desktop' | 'android';
 type DesktopFormat = 'standalone' | 'installer';
+
+interface AndroidToolchainStatus { ready: boolean; estimate?: { totalGB: number; diskGB: number } }
 
 export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) => {
   const { t } = useTranslation('gameBuilder');
@@ -36,8 +39,25 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
   const [iconDataUrl, setIconDataUrl] = useState<string>('');
   const iconInputRef = React.useRef<HTMLInputElement>(null);
 
+  // ── Android config + one-time toolchain gate ──
+  const [androidAppName, setAndroidAppName] = useState<string>(project.title || 'Visual Novel');
+  const [androidPackage, setAndroidPackage] = useState<string>(defaultPackageName(project.title || 'game'));
+  const [androidVersion, setAndroidVersion] = useState<string>('1.0.0');
+  const [androidOrientation, setAndroidOrientation] = useState<AndroidOrientation>('landscape');
+  const [androidStatus, setAndroidStatus] = useState<AndroidToolchainStatus | null>(null);
+  const [showAndroidGate, setShowAndroidGate] = useState(false);
+
   const estimatedSize = estimateBuildSize(project);
   const validation = useMemo(() => validateProjectForBuild(project), [project]);
+  const androidPackageValid = isValidPackageName(androidPackage);
+
+  // Fetch toolchain status when the Android target is selected (Electron only).
+  React.useEffect(() => {
+    if (buildType !== 'android') return;
+    const api = (window as any).electronAPI;
+    if (!api?.androidToolchainStatus) { setAndroidStatus({ ready: false }); return; }
+    api.androidToolchainStatus().then((s: any) => setAndroidStatus({ ready: !!s?.ready, estimate: s?.estimate })).catch(() => setAndroidStatus({ ready: false }));
+  }, [buildType]);
 
   const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,13 +73,82 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
     reader.readAsDataURL(file);
   };
 
+  // Android: route through the one-time toolchain download gate when needed.
   const handleBuild = async () => {
+    if (buildType === 'android') {
+      if (androidStatus && androidStatus.ready) {
+        await runAndroidBuild();
+      } else {
+        setShowAndroidGate(true); // confirm the one-time download first
+      }
+      return;
+    }
+    await runWebOrDesktopBuild();
+  };
+
+  // After the user confirms the download gate: install the toolchain (streaming
+  // progress), then build the APK.
+  const handleConfirmAndroidSetup = async () => {
+    setShowAndroidGate(false);
+    const api = (window as any).electronAPI;
+    if (!api?.installAndroidToolchain) {
+      setError(t('androidBuild.desktopOnly'));
+      setBuildStep('error');
+      return;
+    }
     try {
       setBuildStep('building');
       setError('');
-      
+      if (api.onAndroidToolchainProgress) {
+        api.onAndroidToolchainProgress((d: any) =>
+          setProgress({ step: 'setup', progress: d?.pct ?? 0, message: d?.message || t('androidGate.downloading') })
+        );
+      }
+      setProgress({ step: 'setup', progress: 0, message: t('androidGate.downloading') });
+      const res = await api.installAndroidToolchain();
+      if (!res?.success) throw new Error(res?.error || t('error.unknown'));
+      setAndroidStatus({ ready: true, estimate: androidStatus?.estimate });
+      await runAndroidBuild();
+    } catch (err) {
+      console.error('Android setup error:', err);
+      setError(err instanceof Error ? err.message : t('error.unknown'));
+      setBuildStep('error');
+    }
+  };
+
+  const runAndroidBuild = async () => {
+    try {
+      setBuildStep('building');
+      setError('');
+      const { buildAndroidGame } = await import('../utils/androidGameBundler');
+      const versionCode = Math.max(1, parseInt(androidVersion.replace(/[^0-9]/g, '').slice(0, 6) || '1', 10) || 1);
+      await buildAndroidGame(
+        project,
+        (prog) => setProgress(prog),
+        {
+          appName: androidAppName || project.title || 'Visual Novel',
+          packageName: androidPackage,
+          versionName: androidVersion || '1.0.0',
+          versionCode,
+          orientation: androidOrientation,
+          iconDataUrl: iconDataUrl || undefined,
+        }
+      );
+      setBuildStep('success');
+    } catch (err) {
+      console.error('Android build error:', err);
+      setError(err instanceof Error ? err.message : t('error.unknown'));
+      setBuildStep('error');
+    }
+  };
+
+  const runWebOrDesktopBuild = async () => {
+    try {
+      setBuildStep('building');
+      setError('');
+
       let blob: Blob;
-      
+
       if (buildType === 'desktop') {
         // Import the desktop build function dynamically
         const { buildDesktopGame } = await import('../utils/desktopGameBundler');
@@ -160,12 +249,25 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       {t('desktopBuild.desc')}
                     </div>
                   </button>
+                  <button
+                    onClick={() => setBuildType('android')}
+                    style={{
+                      ...styles.buildTypeButton,
+                      ...(buildType === 'android' ? styles.buildTypeButtonActive : {})
+                    }}
+                  >
+                    <div style={styles.buildTypeIcon}><GamepadIcon style={{ width: 48, height: 48 }} /></div>
+                    <div style={styles.buildTypeName}>{t('androidBuild.name')}</div>
+                    <div style={styles.buildTypeDesc}>
+                      {t('androidBuild.desc')}
+                    </div>
+                  </button>
                 </div>
               </div>
 
               <div style={styles.infoBox}>
                 <h3 style={styles.infoTitle}>
-                  {buildType === 'web' ? t('webBuild.infoTitle') : t('desktopBuild.infoTitle')}
+                  {buildType === 'web' ? t('webBuild.infoTitle') : buildType === 'android' ? t('androidBuild.infoTitle') : t('desktopBuild.infoTitle')}
                 </h3>
                 {buildType === 'web' ? (
                   <>
@@ -177,6 +279,17 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       <li>{t('webBuild.item4')}</li>
                       <li>{t('webBuild.item5')}</li>
                     </ul>
+                  </>
+                ) : buildType === 'android' ? (
+                  <>
+                    <p style={styles.infoText}>{t('androidBuild.intro')}</p>
+                    <ul style={styles.list}>
+                      <li>{t('androidBuild.item1')}</li>
+                      <li>{t('androidBuild.item2')}</li>
+                      <li>{t('androidBuild.item3')}</li>
+                      <li>{t('androidBuild.item4')}</li>
+                    </ul>
+                    <p style={styles.infoText}><em>{t('androidBuild.publishingLater')}</em></p>
                   </>
                 ) : (
                   <>
@@ -201,7 +314,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </p>
               </div>
 
-              {buildType === 'desktop' && (
+              {(buildType === 'desktop' || buildType === 'android') && (
                 <div style={styles.iconPickerSection}>
                   <input
                     type="file"
@@ -296,6 +409,43 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </div>
               )}
 
+              {buildType === 'android' && (
+                <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: '8px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(100,116,139,0.3)' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '10px', color: '#e2e8f0' }}>{t('androidConfig.title')}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <label style={styles.androidField}>
+                      <span style={styles.androidFieldLabel}>{t('androidConfig.appName')}</span>
+                      <input value={androidAppName} onChange={(e) => setAndroidAppName(e.target.value)} style={styles.androidInput} />
+                    </label>
+                    <label style={styles.androidField}>
+                      <span style={styles.androidFieldLabel}>{t('androidConfig.packageName')}</span>
+                      <input
+                        value={androidPackage}
+                        onChange={(e) => setAndroidPackage(e.target.value.trim())}
+                        style={{ ...styles.androidInput, ...(androidPackageValid ? {} : { borderColor: '#f87171' }) }}
+                      />
+                      <span style={{ ...styles.androidHint, color: androidPackageValid ? '#64748b' : '#f87171' }}>
+                        {androidPackageValid ? t('androidConfig.packageHint') : t('androidConfig.packageInvalid')}
+                      </span>
+                    </label>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <label style={{ ...styles.androidField, flex: 1 }}>
+                        <span style={styles.androidFieldLabel}>{t('androidConfig.version')}</span>
+                        <input value={androidVersion} onChange={(e) => setAndroidVersion(e.target.value)} style={styles.androidInput} />
+                      </label>
+                      <label style={{ ...styles.androidField, flex: 1 }}>
+                        <span style={styles.androidFieldLabel}>{t('androidConfig.orientation')}</span>
+                        <select value={androidOrientation} onChange={(e) => setAndroidOrientation(e.target.value as AndroidOrientation)} style={styles.androidInput}>
+                          <option value="landscape">{t('androidConfig.orientationLandscape')}</option>
+                          <option value="portrait">{t('androidConfig.orientationPortrait')}</option>
+                          <option value="auto">{t('androidConfig.orientationAuto')}</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div style={styles.statsBox}>
                 <div style={styles.stat}>
                   <div style={styles.statLabel}>{t('stats.estimatedSize')}</div>
@@ -339,18 +489,23 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </div>
               )}
 
-              <button 
-                onClick={handleBuild} 
-                style={{
-                  ...styles.buildButton,
-                  ...(validation.errors.length > 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
-                }}
-                disabled={validation.errors.length > 0}
-              >
-                {validation.errors.length > 0
+              {(() => {
+                const disabled = validation.errors.length > 0 || (buildType === 'android' && !androidPackageValid);
+                const label = validation.errors.length > 0
                   ? t('buildBtn.fixErrors')
-                  : buildType === 'web' ? t('buildBtn.buildWeb') : desktopFormat === 'installer' ? t('buildBtn.buildInstaller') : t('buildBtn.buildStandalone')}
-              </button>
+                  : buildType === 'web' ? t('buildBtn.buildWeb')
+                  : buildType === 'android' ? t('buildBtn.buildAndroid')
+                  : desktopFormat === 'installer' ? t('buildBtn.buildInstaller') : t('buildBtn.buildStandalone');
+                return (
+                  <button
+                    onClick={handleBuild}
+                    style={{ ...styles.buildButton, ...(disabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                    disabled={disabled}
+                  >
+                    {label}
+                  </button>
+                );
+              })()}
 
               <div style={styles.helpBox}>
                 <p style={styles.helpText}>
@@ -377,6 +532,14 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                   <div style={getStepStyle(progress.step, 'assets', buildType)}>{t('progress.web.assets')}</div>
                   <div style={getStepStyle(progress.step, 'finalize', buildType)}>{t('progress.web.finalize')}</div>
                 </div>
+              ) : buildType === 'android' ? (
+                <div style={{ ...styles.progressSteps, gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr' }}>
+                  <div style={getStepStyle(progress.step, 'setup', buildType)}>{t('progress.android.setup')}</div>
+                  <div style={getStepStyle(progress.step, 'prepare', buildType)}>{t('progress.android.prepare')}</div>
+                  <div style={getStepStyle(progress.step, 'assets', buildType)}>{t('progress.android.assets')}</div>
+                  <div style={getStepStyle(progress.step, 'build', buildType)}>{t('progress.android.build')}</div>
+                  <div style={getStepStyle(progress.step, 'save', buildType)}>{t('progress.android.save')}</div>
+                </div>
               ) : (
                 <div style={{ ...styles.progressSteps, gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div style={getStepStyle(progress.step, 'prepare', buildType)}>{t('progress.desktop.prepare')}</div>
@@ -388,9 +551,9 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </div>
               )}
 
-              {buildType === 'desktop' && (
+              {(buildType === 'desktop' || buildType === 'android') && (
                 <p style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center', marginTop: '16px' }}>
-                  {t('progress.desktop.working')}
+                  {buildType === 'android' ? t('progress.android.working') : t('progress.desktop.working')}
                 </p>
               )}
             </div>
@@ -400,11 +563,13 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
             <div style={styles.successContainer}>
               <div style={styles.successIcon}><CheckIcon style={{ width: 64, height: 64, color: '#4CAF50' }} /></div>
               <h3 style={styles.successTitle}>
-                {buildType === 'web' ? t('success.webTitle') : desktopFormat === 'installer' ? t('success.installerTitle') : t('success.desktopTitle')}
+                {buildType === 'web' ? t('success.webTitle') : buildType === 'android' ? t('success.androidTitle') : desktopFormat === 'installer' ? t('success.installerTitle') : t('success.desktopTitle')}
               </h3>
               <p style={styles.successText}>
                 {buildType === 'web'
                   ? t('success.webText')
+                  : buildType === 'android'
+                  ? t('success.androidText')
                   : desktopFormat === 'installer'
                   ? t('success.installerText')
                   : t('success.desktopText')}
@@ -438,6 +603,17 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </div>
               )}
 
+              {buildType === 'android' && (
+                <div style={styles.successMessage}>
+                  <p style={{ fontSize: '16px', color: '#10b981', margin: '16px 0' }}>
+                    {t('success.apkSaved')}
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#94a3b8' }}>
+                    {t('success.apkLocation')}
+                  </p>
+                </div>
+              )}
+
               <div style={styles.nextSteps}>
                 <h4 style={styles.nextStepsTitle}>{t('nextSteps.title')}</h4>
                 {buildType === 'web' ? (
@@ -461,6 +637,13 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                     <li>
                       <strong>{t('nextSteps.web.step3Title')}</strong> {t('nextSteps.web.step3Desc')}
                     </li>
+                  </ol>
+                ) : buildType === 'android' ? (
+                  <ol style={styles.nextStepsList}>
+                    <li><strong>{t('nextSteps.android.step1Title')}</strong> {t('nextSteps.android.step1Desc')}</li>
+                    <li><strong>{t('nextSteps.android.step2Title')}</strong> {t('nextSteps.android.step2Desc')}</li>
+                    <li><strong>{t('nextSteps.android.step3Title')}</strong> {t('nextSteps.android.step3Desc')}</li>
+                    <li style={{ opacity: 0.8 }}>{t('nextSteps.android.note')}</li>
                   </ol>
                 ) : (
                   <ol style={styles.nextStepsList}>
@@ -539,6 +722,30 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
           )}
         </div>
       </div>
+
+      {showAndroidGate && (
+        <div style={styles.gateOverlay}>
+          <div style={styles.gateModal}>
+            <h3 style={styles.gateTitle}>{t('androidGate.title')}</h3>
+            <p style={styles.gateBody}>
+              {t('androidGate.body', {
+                size: androidStatus?.estimate?.totalGB ?? '~1.4',
+                disk: androidStatus?.estimate?.diskGB ?? '~3',
+              })}
+            </p>
+            <p style={styles.gateBodyMuted}>{t('androidGate.installerLite')}</p>
+            <p style={styles.gateBodyMuted}>{t('androidGate.oneTime')}</p>
+            <div style={styles.gateButtons}>
+              <button style={styles.gateCancel} onClick={() => setShowAndroidGate(false)}>
+                {t('androidGate.cancel')}
+              </button>
+              <button style={styles.gateContinue} onClick={handleConfirmAndroidSetup}>
+                {t('androidGate.continue')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -546,7 +753,8 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 function getStepStyle(currentStep: string, targetStep: string, bType: BuildType = 'web') {
   const webSteps = ['prepare', 'generate', 'assets', 'finalize'];
   const desktopSteps = ['prepare', 'generate', 'assets', 'install', 'build', 'save'];
-  const steps = bType === 'desktop' ? desktopSteps : webSteps;
+  const androidSteps = ['setup', 'prepare', 'assets', 'generate', 'build', 'save', 'complete'];
+  const steps = bType === 'desktop' ? desktopSteps : bType === 'android' ? androidSteps : webSteps;
 
   const isActive = currentStep === targetStep;
   const isPast = steps.indexOf(currentStep) > steps.indexOf(targetStep);
@@ -834,8 +1042,8 @@ const styles = {
   },
   buildTypes: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '15px'
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '12px'
   },
   buildTypeButton: {
     padding: '20px',
@@ -952,5 +1160,89 @@ const styles = {
   successMessage: {
     textAlign: 'center' as const,
     margin: '16px 0'
+  },
+  androidField: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px'
+  },
+  androidFieldLabel: {
+    color: '#cbd5e1',
+    fontSize: '12px',
+    fontWeight: 'bold' as const
+  },
+  androidInput: {
+    padding: '8px 10px',
+    borderRadius: '6px',
+    border: '1px solid rgba(100,116,139,0.5)',
+    background: '#0f172a',
+    color: '#e2e8f0',
+    fontSize: '13px',
+    outline: 'none'
+  },
+  androidHint: {
+    fontSize: '11px',
+    color: '#64748b'
+  },
+  gateOverlay: {
+    position: 'fixed' as const,
+    top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10001,
+    padding: '20px'
+  },
+  gateModal: {
+    background: '#1e1e2e',
+    borderRadius: '12px',
+    maxWidth: '460px',
+    width: '100%',
+    padding: '24px',
+    border: '1px solid #3b3b52',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.6)'
+  },
+  gateTitle: {
+    margin: '0 0 12px 0',
+    color: '#fff',
+    fontSize: '20px'
+  },
+  gateBody: {
+    color: '#e2e8f0',
+    fontSize: '14px',
+    lineHeight: '1.6',
+    margin: '0 0 10px 0'
+  },
+  gateBodyMuted: {
+    color: '#94a3b8',
+    fontSize: '13px',
+    lineHeight: '1.5',
+    margin: '0 0 10px 0'
+  },
+  gateButtons: {
+    display: 'flex',
+    gap: '10px',
+    marginTop: '18px',
+    justifyContent: 'flex-end'
+  },
+  gateCancel: {
+    padding: '10px 18px',
+    background: 'transparent',
+    color: '#cbd5e1',
+    border: '1px solid #475569',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px'
+  },
+  gateContinue: {
+    padding: '10px 18px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 'bold' as const
   }
 };

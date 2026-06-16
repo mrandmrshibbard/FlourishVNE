@@ -91,5 +91,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *  launched with a file path argument. */
   onOpenFile: (callback) =>
     ipcRenderer.on('open-file', (_event, filePath) => callback(filePath)),
+
+  // ── Android build ──
+  /** Returns { ready, estimate } — whether the one-time Android toolchain is
+   *  installed, plus the pinned download size to show in the confirmation gate. */
+  androidToolchainStatus: () =>
+    ipcRenderer.invoke('android-toolchain-status'),
+
+  /** Downloads + installs the Android toolchain (one-time, ~1.4 GB). Progress is
+   *  streamed via onAndroidToolchainProgress. */
+  installAndroidToolchain: () =>
+    ipcRenderer.invoke('android-toolchain-install'),
+
+  onAndroidToolchainProgress: (callback) =>
+    ipcRenderer.on('android-toolchain-progress', (_event, data) => callback(data)),
+
+  /** Builds an installable APK from the generated Android project files. */
+  buildAndroidGame: (project, androidFiles, options) =>
+    ipcRenderer.invoke('build-android-game', { project, androidFiles, options }),
+
+  onAndroidBuildProgress: (callback) =>
+    ipcRenderer.on('android-build-progress', (_event, data) => callback(data)),
 });
 

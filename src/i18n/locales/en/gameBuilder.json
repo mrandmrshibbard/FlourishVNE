@@ -3,7 +3,6 @@
   "chooseBuildType": "Choose Build Type:",
   "ready": "Ready to build...",
   "iconError": "Please select an image file (PNG recommended, 256×256 or larger).",
-
   "webBuild": {
     "name": "Web Build",
     "desc": "Play in browser • itch.io ready • No saves persist",
@@ -15,7 +14,6 @@
     "item4": "✅ Play offline in any browser",
     "item5": "⚠️ Note: Progress won't save (browser limitation)"
   },
-
   "desktopBuild": {
     "name": "Desktop Build",
     "desc": "Windows/Mac/Linux • Save progress • Offline play",
@@ -29,9 +27,7 @@
     "installerWarning": "⚡ Installer builds are faster to build and launch instantly after install — the setup extracts all files ahead of time",
     "standaloneWarning": "⏱ Standalone builds take longer to build and are slower to start — the exe must unpack itself into a temp folder on every launch"
   },
-
   "noCodingRequired": "No coding required! Just download and distribute.",
-
   "iconPicker": {
     "label": "Application Icon",
     "clickToChoose": "Click to choose an icon",
@@ -41,7 +37,6 @@
     "remove": "Remove",
     "hint": "Recommended: 256×256 PNG"
   },
-
   "formatPicker": {
     "title": "Build Format",
     "standaloneName": "📦 Standalone .exe",
@@ -51,32 +46,28 @@
     "installerDesc": "Setup wizard with shortcuts, install directory, uninstaller, and game saves folder",
     "installerNote": "⚡ Faster build & startup — files are pre-extracted during install"
   },
-
   "stats": {
     "estimatedSize": "Estimated Size:",
     "scenes": "Scenes:",
     "characters": "Characters:"
   },
-
   "validation": {
     "errors": "⛔ {{count}} Error(s)",
     "warnings": "⚠️ {{count}} Warning(s)",
     "separator": " • "
   },
-
   "buildBtn": {
     "fixErrors": "Fix Errors Before Building",
     "buildWeb": "Build Web Game",
     "buildInstaller": "Build Installer",
-    "buildStandalone": "Build Standalone EXE"
+    "buildStandalone": "Build Standalone EXE",
+    "buildAndroid": "Build Android App"
   },
-
   "helpBox": {
     "firstTime": "First time?",
     "before": "After building, you'll get a ZIP file. Upload it to",
     "after": "and you're done! No command line needed."
   },
-
   "progress": {
     "web": {
       "prepare": "📋 Preparing",
@@ -92,9 +83,16 @@
       "build": "🔨 Build EXE",
       "save": "💾 Save",
       "working": "Desktop builds take a few minutes — the app is working in the background."
+    },
+    "android": {
+      "setup": "Setup",
+      "prepare": "Prepare",
+      "assets": "Assets",
+      "build": "Build",
+      "save": "Save",
+      "working": "This can take several minutes the first time — please keep Flourish open."
     }
   },
-
   "success": {
     "webTitle": "Web Game Built Successfully!",
     "installerTitle": "Installer Built Successfully!",
@@ -108,9 +106,12 @@
     "downloadBtn": "Download Web Game ZIP",
     "execSaved": "Executable saved successfully!",
     "execLocation": "Check the location you selected to find your game's executable file.",
-    "buildAnotherVersion": "Build Another Version"
+    "buildAnotherVersion": "Build Another Version",
+    "androidTitle": "Your Android app is ready!",
+    "androidText": "Flourish built a signed, installable .apk.",
+    "apkSaved": "APK saved to your Android builds folder.",
+    "apkLocation": "Find it in Documents → Flourish VNE → Builds → Android."
   },
-
   "nextSteps": {
     "title": "What's Next?",
     "web": {
@@ -151,9 +152,17 @@
       "step5NoteInstaller": "The installer is platform-specific",
       "step5NoteStandalone": "The executable is platform-specific",
       "step5Platform": "Build on Windows for .exe, Mac for .app, Linux for .AppImage"
+    },
+    "android": {
+      "step1Title": "Get it onto your phone:",
+      "step1Desc": "Copy the .apk to your Android device (USB cable, a cloud drive, or email).",
+      "step2Title": "Allow the install:",
+      "step2Desc": "When you tap the file, Android may ask permission to install from this source — allow it.",
+      "step3Title": "Install & play:",
+      "step3Desc": "Tap the .apk to install, then open your game.",
+      "note": "More automated publishing options are coming in a future update."
     }
   },
-
   "error": {
     "title": "Build Failed",
     "unknown": "Unknown error occurred",
@@ -162,5 +171,38 @@
     "fix2": "Check that all assets are properly loaded",
     "fix3": "Try closing and reopening the app",
     "tryAgain": "Try Again"
+  },
+  "androidBuild": {
+    "name": "Android",
+    "desc": "Installable app for Android phones & tablets (.apk)",
+    "infoTitle": "Android App (.apk)",
+    "intro": "Packages your game as a native Android app that installs and runs on phones and tablets — taps instead of clicks, with saves stored on the device just like the desktop build.",
+    "item1": "Runs fully offline once installed",
+    "item2": "Saves & progress are kept on the device (no browser size limits)",
+    "item3": "Landscape or portrait — your choice",
+    "item4": "Share the .apk file directly with players",
+    "publishingLater": "More automated publishing options are coming in a future update.",
+    "desktopOnly": "Android builds are only available in the desktop version of Flourish."
+  },
+  "androidConfig": {
+    "title": "App details",
+    "appName": "App name",
+    "packageName": "Package name",
+    "packageHint": "A unique id like com.yourname.gamename",
+    "packageInvalid": "Use a unique id like com.yourname.game (lowercase letters and dots)",
+    "version": "Version",
+    "orientation": "Orientation",
+    "orientationLandscape": "Landscape",
+    "orientationPortrait": "Portrait",
+    "orientationAuto": "Auto (rotate)"
+  },
+  "androidGate": {
+    "title": "One-time Android setup",
+    "body": "Building for Android needs the Android toolchain (Java, the Android SDK and Gradle). Flourish sets this up for you automatically — but it is a one-time download of about {{size}} GB (about {{disk}} GB once unpacked).",
+    "installerLite": "We download it now instead of bundling it so Flourish’s installer stays small and fast.",
+    "oneTime": "You only do this once. Every Android build after this works offline.",
+    "downloading": "Setting up Android tools (one-time)…",
+    "continue": "Download & continue",
+    "cancel": "Cancel"
   }
 }

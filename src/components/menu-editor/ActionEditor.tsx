@@ -24,6 +24,7 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.GiveItem, UIActionType.UseItem, UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,
     UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,
     UIActionType.ShowLog, UIActionType.ToggleAutoAdvance, UIActionType.ToggleSkip, UIActionType.SkipBackward,
+    UIActionType.OpenPauseMenu,
 ];
 
 const ActionEditor: React.FC<{

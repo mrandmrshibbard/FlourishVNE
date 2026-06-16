@@ -3,7 +3,6 @@
   "chooseBuildType": "Escolha o Tipo de Compilação:",
   "ready": "Pronto para compilar...",
   "iconError": "Selecione um arquivo de imagem (PNG recomendado, 256×256 ou maior).",
-
   "webBuild": {
     "name": "Compilação Web",
     "desc": "Jogar no navegador • pronto para itch.io • Progresso não salvo",
@@ -15,7 +14,6 @@
     "item4": "✅ Jogar offline em qualquer navegador",
     "item5": "⚠️ Atenção: O progresso não será salvo (limitação do navegador)"
   },
-
   "desktopBuild": {
     "name": "Compilação Desktop",
     "desc": "Windows/Mac/Linux • Salvar progresso • Jogo offline",
@@ -29,9 +27,7 @@
     "installerWarning": "⚡ Compilações de instalador são mais rápidas e iniciam instantaneamente após a instalação — o setup extrai todos os arquivos com antecedência",
     "standaloneWarning": "⏱ Compilações autônomas demoram mais para compilar e iniciar — o exe precisa se descompactar em uma pasta temporária a cada execução"
   },
-
   "noCodingRequired": "Sem necessidade de programação! Basta baixar e distribuir.",
-
   "iconPicker": {
     "label": "Ícone do Aplicativo",
     "clickToChoose": "Clique para escolher um ícone",
@@ -41,7 +37,6 @@
     "remove": "Remover",
     "hint": "Recomendado: PNG 256×256"
   },
-
   "formatPicker": {
     "title": "Formato de Compilação",
     "standaloneName": "📦 Autônomo .exe",
@@ -51,32 +46,28 @@
     "installerDesc": "Assistente de instalação com atalhos, diretório de instalação, desinstalador e pasta de saves",
     "installerNote": "⚡ Compilação e inicialização mais rápidas — arquivos são pré-extraídos durante a instalação"
   },
-
   "stats": {
     "estimatedSize": "Tamanho Estimado:",
     "scenes": "Cenas:",
     "characters": "Personagens:"
   },
-
   "validation": {
     "errors": "⛔ {{count}} Erro(s)",
     "warnings": "⚠️ {{count}} Aviso(s)",
     "separator": " • "
   },
-
   "buildBtn": {
     "fixErrors": "Corrija os Erros Antes de Compilar",
     "buildWeb": "Compilar Jogo Web",
     "buildInstaller": "Compilar Instalador",
-    "buildStandalone": "Compilar EXE Autônomo"
+    "buildStandalone": "Compilar EXE Autônomo",
+    "buildAndroid": "Compilar app Android"
   },
-
   "helpBox": {
     "firstTime": "Primeira vez?",
     "before": "Após a compilação, você receberá um arquivo ZIP. Envie para o",
     "after": "e pronto! Sem linha de comando."
   },
-
   "progress": {
     "web": {
       "prepare": "📋 Preparando",
@@ -92,9 +83,16 @@
       "build": "🔨 Compilar EXE",
       "save": "💾 Salvar",
       "working": "Compilações desktop levam alguns minutos — o app está trabalhando em segundo plano."
+    },
+    "android": {
+      "setup": "Preparar",
+      "prepare": "Preparar",
+      "assets": "Recursos",
+      "build": "Compilar",
+      "save": "Salvar",
+      "working": "Isso pode levar alguns minutos na primeira vez — mantenha o Flourish aberto."
     }
   },
-
   "success": {
     "webTitle": "Jogo Web Compilado com Sucesso!",
     "installerTitle": "Instalador Compilado com Sucesso!",
@@ -108,9 +106,12 @@
     "downloadBtn": "Baixar ZIP do Jogo Web",
     "execSaved": "Executável salvo com sucesso!",
     "execLocation": "Verifique o local que você selecionou para encontrar o executável do seu jogo.",
-    "buildAnotherVersion": "Compilar Outra Versão"
+    "buildAnotherVersion": "Compilar Outra Versão",
+    "androidTitle": "Seu app Android está pronto!",
+    "androidText": "O Flourish gerou um .apk assinado e instalável.",
+    "apkSaved": "APK salvo na sua pasta de builds Android.",
+    "apkLocation": "Encontre em Documentos → Flourish VNE → Builds → Android."
   },
-
   "nextSteps": {
     "title": "O Que Vem Agora?",
     "web": {
@@ -151,9 +152,17 @@
       "step5NoteInstaller": "O instalador é específico por plataforma",
       "step5NoteStandalone": "O executável é específico por plataforma",
       "step5Platform": "Compile no Windows para .exe, Mac para .app, Linux para .AppImage"
+    },
+    "android": {
+      "step1Title": "Leve para o celular:",
+      "step1Desc": "Copie o .apk para o seu aparelho Android (cabo USB, nuvem ou e-mail).",
+      "step2Title": "Permita a instalação:",
+      "step2Desc": "Ao tocar no arquivo, o Android pode pedir permissão para instalar desta origem — permita.",
+      "step3Title": "Instale e jogue:",
+      "step3Desc": "Toque no .apk para instalar e abra seu jogo.",
+      "note": "Mais opções de publicação automatizada virão em uma atualização futura."
     }
   },
-
   "error": {
     "title": "Falha na Compilação",
     "unknown": "Ocorreu um erro desconhecido",
@@ -162,5 +171,38 @@
     "fix2": "Confirme que todos os assets estão carregados corretamente",
     "fix3": "Tente fechar e reabrir o aplicativo",
     "tryAgain": "Tentar Novamente"
+  },
+  "androidBuild": {
+    "name": "Android",
+    "desc": "App instalável para celulares e tablets Android (.apk)",
+    "infoTitle": "App Android (.apk)",
+    "intro": "Empacota seu jogo como um app Android nativo que instala e roda em celulares e tablets — toques em vez de cliques, com saves guardados no aparelho, igual à versão para desktop.",
+    "item1": "Roda totalmente offline depois de instalado",
+    "item2": "Saves e progresso ficam no aparelho (sem limites de tamanho do navegador)",
+    "item3": "Paisagem ou retrato — você escolhe",
+    "item4": "Compartilhe o arquivo .apk diretamente com os jogadores",
+    "publishingLater": "Mais opções de publicação automatizada virão em uma atualização futura.",
+    "desktopOnly": "As builds Android só estão disponíveis na versão para desktop do Flourish."
+  },
+  "androidConfig": {
+    "title": "Detalhes do app",
+    "appName": "Nome do app",
+    "packageName": "Nome do pacote",
+    "packageHint": "Um id único como com.seunome.nomedojogo",
+    "packageInvalid": "Use um id único como com.seunome.jogo (letras minúsculas e pontos)",
+    "version": "Versão",
+    "orientation": "Orientação",
+    "orientationLandscape": "Paisagem",
+    "orientationPortrait": "Retrato",
+    "orientationAuto": "Automática (girar)"
+  },
+  "androidGate": {
+    "title": "Configuração única do Android",
+    "body": "Compilar para Android precisa do conjunto de ferramentas Android (Java, o SDK do Android e o Gradle). O Flourish configura isso para você automaticamente — mas é um download único de cerca de {{size}} GB (cerca de {{disk}} GB depois de descompactado).",
+    "installerLite": "Baixamos agora em vez de embutir para que o instalador do Flourish continue pequeno e rápido.",
+    "oneTime": "Você faz isso só uma vez. Toda build Android depois disso funciona offline.",
+    "downloading": "Configurando as ferramentas Android (única vez)…",
+    "continue": "Baixar e continuar",
+    "cancel": "Cancelar"
   }
 }

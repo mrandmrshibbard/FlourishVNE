@@ -264,7 +264,7 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                         <button
                             onClick={() => onTabChange(tab.id)}
                             onContextMenu={(e) => handleRightClick(tab.id, e)}
-                            className={`relative flex items-center gap-1 xl:gap-1.5 2xl:gap-2.5 px-2 xl:px-2.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl text-[11px] xl:text-xs font-semibold transition-all duration-300 ${
+                            className={`relative flex items-center px-2 xl:px-2.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl text-[11px] xl:text-xs font-semibold transition-all duration-300 ${
                                 isActive
                                     ? 'text-white scale-[1.02]'
                                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:scale-[1.02]'
@@ -306,16 +306,24 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                             </span>
                             
                             {/* Label — tabs are icon-only by default so the bar stays compact and
-                                left-packed (it can never clip under the right-hand controls across the
-                                full range of screen widths). The name is shown only for the ACTIVE
-                                ("highlighted") tab and on hover. Collapsed labels use display:none so
-                                they reserve no width — no phantom flex gap between icons. */}
-                            <span className={`relative z-10 whitespace-nowrap ${isActive ? 'inline' : 'hidden group-hover:inline'}`}>{label}</span>
+                                left-packed (it can never clip under the right-hand controls). The name
+                                SPRINGS open for the ACTIVE ("highlighted") tab and on hover, and springs
+                                closed otherwise. It animates max-width/opacity/margin (which pushes the
+                                neighbouring tabs) plus a translateX that uses an overshooting spring
+                                easing for the bounce. Collapsed = max-w-0 + ml-0 so it reserves no width. */}
+                            <span
+                                className={`relative z-10 whitespace-nowrap overflow-hidden transition-all duration-300 ${
+                                    isActive
+                                        ? 'max-w-[10rem] opacity-100 ml-2 translate-x-0'
+                                        : 'max-w-0 opacity-0 ml-0 -translate-x-2 group-hover:max-w-[10rem] group-hover:opacity-100 group-hover:ml-2 group-hover:translate-x-0'
+                                }`}
+                                style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                            >{label}</span>
 
                             {/* Count badge with fun styling */}
                             {tab.count > 0 && (
                                 <span
-                                    className={`${isActive ? 'inline-block' : 'hidden group-hover:inline-block'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                    className={`${isActive ? 'inline-block ml-1.5' : 'hidden group-hover:inline-block group-hover:ml-1.5'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
                                         isActive
                                             ? 'bg-white/30 text-white shadow-sm'
                                             : 'text-[var(--text-secondary)]'

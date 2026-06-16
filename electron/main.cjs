@@ -4,6 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
+const androidToolchain = require('./androidToolchain.cjs');
 
 // ── Steam Detection ─────────────────────────────────────────────────────────
 // When Flourish is launched through the Steam client, Steam injects several
@@ -105,7 +107,7 @@ function spawnWithProgress(command, args, options, onLine) {
     proc.on('error', reject);
     proc.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error('electron-builder exited with code ' + code + (tail ? '\n' + tail : '')));
+      else reject(new Error(path.basename(command) + ' exited with code ' + code + (tail ? '\n' + tail : '')));
     });
   });
 }
@@ -248,12 +250,17 @@ const flourishDocsRoot = path.join(app.getPath('documents'), 'Flourish VNE');
 const defaultProjectsDir = path.join(flourishDocsRoot, 'Projects');
 const defaultBuildsWebDir = path.join(flourishDocsRoot, 'Builds', 'Web');
 const defaultBuildsDesktopDir = path.join(flourishDocsRoot, 'Builds', 'Desktop');
+const defaultBuildsAndroidDir = path.join(flourishDocsRoot, 'Builds', 'Android');
+
+// The Android build toolchain (JDK + Android SDK + Gradle) is downloaded once on
+// first use into userData (not bundled in the installer — it's ~3 GB on disk).
+const androidToolchainRoot = path.join(app.getPath('userData'), 'android-toolchain');
 
 /**
  * Ensure all default user directories exist.  Called once on app-ready.
  */
 function ensureUserDirectories() {
-  for (const dir of [defaultProjectsDir, defaultBuildsWebDir, defaultBuildsDesktopDir]) {
+  for (const dir of [defaultProjectsDir, defaultBuildsWebDir, defaultBuildsDesktopDir, defaultBuildsAndroidDir]) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -1172,6 +1179,180 @@ ipcMain.handle('build-desktop-game', async (event, { project, gameFiles }) => {
   }
 });
 
+// ── Android build: toolchain status + first-run install ──────────────────────
+// The Android toolchain is downloaded once into userData (not bundled). The UI
+// calls 'android-toolchain-status' to decide whether to show the download gate,
+// then 'android-toolchain-install' (after the user confirms) to fetch it.
+ipcMain.handle('android-toolchain-status', () => {
+  try {
+    return {
+      ready: androidToolchain.isAndroidToolchainReady(androidToolchainRoot),
+      estimate: androidToolchain.getDownloadEstimate(),
+      root: androidToolchainRoot,
+    };
+  } catch (error) {
+    return { ready: false, error: error && error.message ? error.message : String(error) };
+  }
+});
+
+let androidToolchainInstalling = false;
+ipcMain.handle('android-toolchain-install', async (event) => {
+  if (androidToolchainInstalling) {
+    return { success: false, error: 'A toolchain download is already in progress.' };
+  }
+  androidToolchainInstalling = true;
+  const send = (data) => { try { event.sender.send('android-toolchain-progress', data); } catch {} };
+  try {
+    if (androidToolchain.isAndroidToolchainReady(androidToolchainRoot)) {
+      send({ phase: 'done', pct: 100, message: 'Android toolchain already installed.' });
+      return { success: true, alreadyInstalled: true };
+    }
+    await androidToolchain.installToolchain(androidToolchainRoot, send);
+    return { success: true };
+  } catch (error) {
+    console.error('[android] toolchain install failed:', error);
+    send({ phase: 'error', pct: 0, message: (error && error.message) || String(error) });
+    return { success: false, error: error && error.message ? error.message : String(error) };
+  } finally {
+    androidToolchainInstalling = false;
+  }
+});
+
+/**
+ * Ensure a persistent app-signing keystore exists, generating one with keytool on
+ * first use. The same keystore is reused for every rebuild so that updated APKs
+ * keep a stable signature (Android requires this to upgrade an installed app).
+ * Returns { storeFile, storePassword, keyAlias, keyPassword }.
+ */
+async function ensureAndroidKeystore(p, javaHome) {
+  const metaPath = path.join(p.keystoreDir, 'keystore.json');
+  if (fs.existsSync(p.keystorePath) && fs.existsSync(metaPath)) {
+    try { return JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch {}
+  }
+  fs.mkdirSync(p.keystoreDir, { recursive: true });
+  const keytool = androidToolchain.binIn(javaHome, 'keytool');
+  if (!keytool || !fs.existsSync(keytool)) {
+    throw new Error('keytool was not found in the bundled JDK. Try reinstalling the Android tools.');
+  }
+  const password = (crypto.randomBytes(24).toString('base64').replace(/[^A-Za-z0-9]/g, '') + 'Fv1').slice(0, 24);
+  const alias = 'flourish';
+  // Remove any half-written keystore from a previous failed attempt.
+  try { if (fs.existsSync(p.keystorePath)) fs.rmSync(p.keystorePath, { force: true }); } catch {}
+  await spawnWithProgress(
+    keytool,
+    [
+      '-genkeypair', '-v',
+      '-keystore', p.keystorePath,
+      '-storetype', 'PKCS12',
+      '-storepass', password,
+      '-keypass', password,
+      '-alias', alias,
+      '-keyalg', 'RSA',
+      '-keysize', '2048',
+      '-validity', '10000',
+      '-dname', 'CN=Flourish VNE, OU=Games, O=Flourish, L=, ST=, C=US',
+    ],
+    { env: { ...process.env, JAVA_HOME: javaHome } },
+    (line) => console.log('[keytool]', line)
+  );
+  const meta = { storeFile: p.keystorePath, storePassword: password, keyAlias: alias, keyPassword: password };
+  fs.writeFileSync(metaPath, JSON.stringify(meta));
+  return meta;
+}
+
+// ── Android build: compile the WebView project into a signed, installable APK ──
+ipcMain.handle('build-android-game', async (event, { androidFiles, options }) => {
+  const send = (step, progress, message) => {
+    try { event.sender.send('android-build-progress', { step, progress, message }); } catch {}
+  };
+  let tempDir;
+  try {
+    if (!androidToolchain.isAndroidToolchainReady(androidToolchainRoot)) {
+      throw new Error('The Android build tools are not installed yet. Run the one-time setup first.');
+    }
+    const p = androidToolchain.getAndroidPaths(androidToolchainRoot);
+    const javaHome = androidToolchain.resolveJavaHome(p.jdkDir);
+    if (!javaHome) throw new Error('The bundled Java runtime is missing. Try reinstalling the Android tools.');
+
+    // 1. Write the generated project into a temp build dir.
+    tempDir = path.join(os.tmpdir(), 'flourish-android-build-' + Date.now());
+    fs.mkdirSync(tempDir, { recursive: true });
+    send('generate', 50, 'Writing project files...');
+    for (const [filename, content] of Object.entries(androidFiles || {})) {
+      writeGameFile(path.join(tempDir, filename), content);
+    }
+
+    // 2. Ensure the persistent signing key.
+    send('generate', 55, 'Preparing signing key...');
+    const ks = await ensureAndroidKeystore(p, javaHome);
+
+    // 3. Compile with the downloaded Gradle (caches were seeded → effectively offline).
+    send('build', 60, 'Compiling APK (this can take a few minutes)...');
+    const env = {
+      ...process.env,
+      JAVA_HOME: javaHome,
+      ANDROID_SDK_ROOT: p.sdkRoot,
+      ANDROID_HOME: p.sdkRoot,
+      GRADLE_USER_HOME: p.gradleHome,
+      PATH: `${path.join(javaHome, 'bin')}${path.delimiter}${process.env.PATH || ''}`,
+    };
+    let pct = 60;
+    await spawnWithProgress(
+      p.gradleBin,
+      [
+        'assembleRelease',
+        '--no-daemon',
+        '--console=plain',
+        `--gradle-user-home=${p.gradleHome}`,
+        `-PflourishStoreFile=${ks.storeFile}`,
+        `-PflourishStorePassword=${ks.storePassword}`,
+        `-PflourishKeyAlias=${ks.keyAlias}`,
+        `-PflourishKeyPassword=${ks.keyPassword}`,
+      ],
+      { cwd: tempDir, env },
+      (line) => {
+        console.log('[gradle]', line);
+        const lower = line.toLowerCase();
+        if (lower.includes('> task')) {
+          pct = Math.min(pct + 0.4, 90);
+          send('build', Math.round(pct), 'Compiling APK...');
+        } else if (lower.includes('build successful')) {
+          send('build', 92, 'Finalizing...');
+        }
+      }
+    );
+
+    // 4. Locate the signed APK.
+    send('save', 94, 'Locating APK...');
+    const apkDir = path.join(tempDir, 'app', 'build', 'outputs', 'apk', 'release');
+    const apkName = fs.existsSync(apkDir) ? fs.readdirSync(apkDir).find((f) => f.toLowerCase().endsWith('.apk')) : null;
+    if (!apkName) {
+      throw new Error('The build finished but produced no APK.');
+    }
+
+    // 5. Drop it into the user's Android builds folder.
+    send('save', 97, 'Saving to your Android builds folder...');
+    fs.mkdirSync(defaultBuildsAndroidDir, { recursive: true });
+    const safeName = ((options && options.appName) || 'game').replace(/[^a-z0-9 _-]/gi, '').trim() || 'game';
+    const destPath = path.join(defaultBuildsAndroidDir, safeName + '.apk');
+    if (fs.existsSync(destPath)) fs.rmSync(destPath, { force: true });
+    fs.copyFileSync(path.join(apkDir, apkName), destPath);
+
+    send('complete', 100, 'Build complete!');
+    try { shell.showItemInFolder(destPath); } catch {}
+    return { success: true, path: destPath, folder: defaultBuildsAndroidDir };
+  } catch (error) {
+    console.error('[android] build failed:', error);
+    return { success: false, error: error && error.message ? error.message : String(error), details: error && error.stack };
+  } finally {
+    if (tempDir) {
+      try { fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 1000 }); } catch (e) {
+        console.warn('[android] temp cleanup failed:', e && e.message);
+      }
+    }
+  }
+});
+
 // Multi-Window Management
 const managerWindows = new Map();
 
@@ -1361,6 +1542,7 @@ ipcMain.handle('get-user-data-paths', () => {
     projects: defaultProjectsDir,
     buildsWeb: defaultBuildsWebDir,
     buildsDesktop: defaultBuildsDesktopDir,
+    buildsAndroid: defaultBuildsAndroidDir,
     documents: flourishDocsRoot,
   };
 });

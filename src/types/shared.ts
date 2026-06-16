@@ -65,6 +65,9 @@ export enum UIActionType {
     ToggleSkip = 'ToggleSkip',
     /** Rewinds to the previous dialogue entry (history pop). */
     SkipBackward = 'SkipBackward',
+    /** Pauses the game and opens the configured pause screen — the same as pressing
+     *  Esc, but usable from a button. Needed for touch/mobile builds with no keyboard. */
+    OpenPauseMenu = 'OpenPauseMenu',
     /** Invokes a Common Event (optionally with arguments) from a button/choice. */
     CallCommonEvent = 'CallCommonEvent',
     // ─── Inventory items (sugar over each item's count variable) ─── //
