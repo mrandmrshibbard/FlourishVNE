@@ -1,0 +1,24 @@
+{
+  "tabs": {
+    "scenes": "Scene",
+    "characters": "Personaggi",
+    "ui": "UI / Schermate",
+    "assets": "Risorse",
+    "variables": "Variabili",
+    "commonEvents": "Eventi",
+    "systems": "Sistemi",
+    "settings": "Impostazioni"
+  },
+  "desc": {
+    "scenes": "Crea e modifica le scene della storia con dialoghi, scelte e comandi",
+    "characters": "Progetta personaggi con sprite a livelli ed espressioni",
+    "ui": "Progetta gli elementi UI di gioco e le schermate dei menu",
+    "assets": "Gestisci file di immagini, audio e video",
+    "variables": "Crea e gestisci le variabili della storia e lo stato del gioco",
+    "commonEvents": "Sequenze di comandi riutilizzabili attivate dalle scene",
+    "systems": "Sistemi di gioco opzionali come l'Inventario e il registro degli oggetti",
+    "settings": "Configura le impostazioni e le preferenze del progetto"
+  },
+  "rightClickHint": " | Clic destro per mettere a fuoco la finestra del gestore",
+  "openInWindow": "Apri o metti a fuoco {{label}} in una finestra separata"
+}

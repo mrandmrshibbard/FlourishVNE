@@ -1,0 +1,69 @@
+{
+  "listTitle": "Variables",
+  "newVariableName": "nueva_variable_{{n}}",
+  "addVariable": "Añadir Variable",
+  "selectToInspect": "Selecciona una variable para inspeccionar",
+  "selectToInspectHint": "Ver y editar las propiedades de la variable",
+  "notFound": "Variable no encontrada",
+  "scopeLabel": "Ámbito",
+  "typeLabel": "Tipo",
+  "defaultValue": "Valor Predeterminado",
+  "idLabel": "ID:",
+  "typeColon": "Tipo:",
+  "scopes": {
+    "local": "Local",
+    "global": "Global",
+    "persistent": "Persistente"
+  },
+  "scopeOptions": {
+    "local": "🟢 Local (ámbito de escena)",
+    "global": "🔵 Global (partida)",
+    "persistent": "🟡 Persistente (entre sesiones)"
+  },
+  "scopeDesc": {
+    "local": "Se reinicia cuando cambia la escena. Úsala para estados temporales o específicos de la escena.",
+    "global": "Persiste entre escenas durante una partida. Se reinicia al empezar un juego nuevo.",
+    "persistent": "Se guarda permanentemente entre sesiones de juego. Úsala para desbloqueos de la Galería de CG, logros, etc."
+  },
+  "types": {
+    "number": "Número",
+    "string": "Texto",
+    "boolean": "Booleano"
+  },
+  "boolean": {
+    "true": "Sí",
+    "false": "No"
+  },
+  "boolLabels": {
+    "label": "Etiquetas de valor",
+    "defaultPreset": "Sí / No (predeterminado)",
+    "custom": "Personalizado…",
+    "truePlaceholder": "Sí",
+    "falsePlaceholder": "No",
+    "hint": "Cómo aparecen los valores verdadero/falso de esta variable en las condiciones, en Establecer Variable y en el rastreador."
+  },
+  "delete": {
+    "inUseTitle": "Variable En Uso",
+    "deleteTitle": "Eliminar Variable",
+    "deleteAnyway": "Eliminar de Todos Modos",
+    "inUseBody_one": "Esta variable se usa en {{count}} lugar. ¡Eliminarla puede romper tu juego!",
+    "inUseBody_other": "Esta variable se usa en {{count}} lugares. ¡Eliminarla puede romper tu juego!",
+    "usagesFound": "Usos encontrados:",
+    "andMore": "...y {{count}} más",
+    "confirmBody": "¿Seguro que quieres eliminar esta variable? Esta acción no se puede deshacer."
+  },
+  "usage": {
+    "scene": "Escena: {{name}}",
+    "uiScreen": "Pantalla de UI: {{name}}",
+    "cmdSetVariable": "Comando {{n}}: Establecer Variable",
+    "cmdTextInput": "Comando {{n}}: Entrada de Texto",
+    "cmdCondition": "Comando {{n}}: Tiene una condición que usa la variable",
+    "optCondition": "Comando {{n}}, Opción {{opt}}: Tiene una condición",
+    "optSetsVariable": "Comando {{n}}, Opción {{opt}}: Establece la variable",
+    "cmdDialogueRef": "Comando {{n}}: Referenciada en el texto del diálogo",
+    "elCondition": "Elemento \"{{name}}\": Tiene una condición",
+    "elSetsVariable": "Elemento \"{{name}}\": Establece la variable",
+    "elCyclesLayer": "Elemento \"{{name}}\": Alterna el recurso de capa",
+    "elTextRef": "Elemento \"{{name}}\": Referenciada en el texto"
+  }
+}

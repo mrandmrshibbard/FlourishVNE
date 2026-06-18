@@ -1296,11 +1296,16 @@ ipcMain.handle('build-android-game', async (event, { androidFiles, options }) =>
       GRADLE_USER_HOME: p.gradleHome,
       PATH: `${path.join(javaHome, 'bin')}${path.delimiter}${process.env.PATH || ''}`,
     };
+    // AAB (Android App Bundle) targets the Google Play Store; APK is for direct
+    // install / sideloading. Same signing config covers both.
+    const isAab = options && options.format === 'aab';
+    const gradleTask = isAab ? 'bundleRelease' : 'assembleRelease';
+    const artifactLabel = isAab ? 'AAB' : 'APK';
     let pct = 60;
     await spawnWithProgress(
       p.gradleBin,
       [
-        'assembleRelease',
+        gradleTask,
         '--no-daemon',
         '--console=plain',
         `--gradle-user-home=${p.gradleHome}`,
@@ -1315,32 +1320,58 @@ ipcMain.handle('build-android-game', async (event, { androidFiles, options }) =>
         const lower = line.toLowerCase();
         if (lower.includes('> task')) {
           pct = Math.min(pct + 0.4, 90);
-          send('build', Math.round(pct), 'Compiling APK...');
+          send('build', Math.round(pct), `Compiling ${artifactLabel}...`);
         } else if (lower.includes('build successful')) {
           send('build', 92, 'Finalizing...');
         }
       }
     );
 
-    // 4. Locate the signed APK.
-    send('save', 94, 'Locating APK...');
-    const apkDir = path.join(tempDir, 'app', 'build', 'outputs', 'apk', 'release');
-    const apkName = fs.existsSync(apkDir) ? fs.readdirSync(apkDir).find((f) => f.toLowerCase().endsWith('.apk')) : null;
-    if (!apkName) {
-      throw new Error('The build finished but produced no APK.');
+    // 4. Locate the signed artifact (APK or AAB).
+    send('save', 94, `Locating ${artifactLabel}...`);
+    const outExt = isAab ? '.aab' : '.apk';
+    const outDir = isAab
+      ? path.join(tempDir, 'app', 'build', 'outputs', 'bundle', 'release')
+      : path.join(tempDir, 'app', 'build', 'outputs', 'apk', 'release');
+    const outName = fs.existsSync(outDir) ? fs.readdirSync(outDir).find((f) => f.toLowerCase().endsWith(outExt)) : null;
+    if (!outName) {
+      throw new Error(`The build finished but produced no ${artifactLabel}.`);
     }
 
     // 5. Drop it into the user's Android builds folder.
     send('save', 97, 'Saving to your Android builds folder...');
     fs.mkdirSync(defaultBuildsAndroidDir, { recursive: true });
     const safeName = ((options && options.appName) || 'game').replace(/[^a-z0-9 _-]/gi, '').trim() || 'game';
-    const destPath = path.join(defaultBuildsAndroidDir, safeName + '.apk');
+    const destPath = path.join(defaultBuildsAndroidDir, safeName + outExt);
     if (fs.existsSync(destPath)) fs.rmSync(destPath, { force: true });
-    fs.copyFileSync(path.join(apkDir, apkName), destPath);
+    fs.copyFileSync(path.join(outDir, outName), destPath);
+
+    // 5b. For AAB (Play Store) builds, also export the publishing guide and a copy
+    // of the signing key the user MUST keep — without it they can't ship updates.
+    if (isAab) {
+      try {
+        if (options.playStoreGuideText) {
+          fs.writeFileSync(path.join(defaultBuildsAndroidDir, safeName + '_PLAY_STORE_GUIDE.txt'), String(options.playStoreGuideText), 'utf8');
+        }
+        // Copy the upload keystore beside the bundle so the user owns/backs it up.
+        const keyCopyName = safeName + '_upload-key.keystore';
+        const keyCopyPath = path.join(defaultBuildsAndroidDir, keyCopyName);
+        try { fs.copyFileSync(ks.storeFile, keyCopyPath); } catch (e) { console.warn('[android] keystore copy failed:', e && e.message); }
+        if (options.signingReadmeTemplate) {
+          const readme = String(options.signingReadmeTemplate)
+            .replace(/\{\{keyFile\}\}/g, keyCopyName)
+            .replace(/\{\{alias\}\}/g, ks.keyAlias)
+            .replace(/\{\{password\}\}/g, ks.storePassword);
+          fs.writeFileSync(path.join(defaultBuildsAndroidDir, safeName + '_SIGNING_KEY_BACKUP.txt'), readme, 'utf8');
+        }
+      } catch (e) {
+        console.warn('[android] failed to write AAB docs:', e && e.message);
+      }
+    }
 
     send('complete', 100, 'Build complete!');
     try { shell.showItemInFolder(destPath); } catch {}
-    return { success: true, path: destPath, folder: defaultBuildsAndroidDir };
+    return { success: true, path: destPath, folder: defaultBuildsAndroidDir, format: isAab ? 'aab' : 'apk' };
   } catch (error) {
     console.error('[android] build failed:', error);
     return { success: false, error: error && error.message ? error.message : String(error), details: error && error.stack };

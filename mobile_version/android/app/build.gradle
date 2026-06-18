@@ -1,0 +1,49 @@
+plugins { id 'com.android.application' }
+
+android {
+  namespace 'com.flourish.vne.mobile'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId 'com.flourish.vne.mobile'
+    minSdk 24
+    targetSdk 34
+    versionCode 1
+    versionName '3.0.0'
+  }
+
+  // Signing is supplied at build time via -P properties (a keystore generated/reused
+  // by the build script). Absent them, the release build is left unsigned.
+  signingConfigs {
+    release {
+      if (project.hasProperty('flourishStoreFile')) {
+        storeFile file(project.property('flourishStoreFile'))
+        storePassword project.property('flourishStorePassword')
+        keyAlias project.property('flourishKeyAlias')
+        keyPassword project.property('flourishKeyPassword')
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      signingConfig signingConfigs.release
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  // The editor runs entirely from assets/www; AAPT must not compress media or the
+  // bundled engine assets.
+  androidResources {
+    noCompress 'mp3', 'mp4', 'ogg', 'webm', 'png', 'jpg', 'jpeg', 'webp', 'wav', 'm4a', 'js', 'json', 'flourish'
+  }
+}
+
+dependencies {
+  implementation 'androidx.core:core:1.13.1'
+}

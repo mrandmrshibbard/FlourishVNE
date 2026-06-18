@@ -307,23 +307,26 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                             
                             {/* Label — tabs are icon-only by default so the bar stays compact and
                                 left-packed (it can never clip under the right-hand controls). The name
-                                SPRINGS open for the ACTIVE ("highlighted") tab and on hover, and springs
-                                closed otherwise. It animates max-width/opacity/margin (which pushes the
-                                neighbouring tabs) plus a translateX that uses an overshooting spring
-                                easing for the bounce. Collapsed = max-w-0 + ml-0 so it reserves no width. */}
+                                SPRINGS open ONLY for the ACTIVE ("highlighted") tab (animates
+                                max-width/opacity/margin + an overshooting translateX for the bounce) and
+                                springs closed when it's deselected. Inactive tabs deliberately do NOT
+                                expand on hover: an inline hover-reveal pushed every neighbouring tab
+                                sideways, so sweeping the mouse across the bar made the whole row jitter
+                                ("shake"). The name is still surfaced on hover via the button's title
+                                tooltip, with zero layout shift. */}
                             <span
                                 className={`relative z-10 whitespace-nowrap overflow-hidden transition-all duration-300 ${
                                     isActive
                                         ? 'max-w-[10rem] opacity-100 ml-2 translate-x-0'
-                                        : 'max-w-0 opacity-0 ml-0 -translate-x-2 group-hover:max-w-[10rem] group-hover:opacity-100 group-hover:ml-2 group-hover:translate-x-0'
+                                        : 'max-w-0 opacity-0 ml-0 -translate-x-2'
                                 }`}
                                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
                             >{label}</span>
 
-                            {/* Count badge with fun styling */}
+                            {/* Count badge — only on the active tab, for the same no-reflow reason. */}
                             {tab.count > 0 && (
                                 <span
-                                    className={`${isActive ? 'inline-block ml-1.5' : 'hidden group-hover:inline-block group-hover:ml-1.5'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                    className={`${isActive ? 'inline-block ml-1.5' : 'hidden'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
                                         isActive
                                             ? 'bg-white/30 text-white shadow-sm'
                                             : 'text-[var(--text-secondary)]'

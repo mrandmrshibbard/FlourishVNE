@@ -1,0 +1,69 @@
+{
+  "listTitle": "Variabili",
+  "newVariableName": "nuova_variabile_{{n}}",
+  "addVariable": "Aggiungi Variabile",
+  "selectToInspect": "Seleziona una variabile da ispezionare",
+  "selectToInspectHint": "Visualizza e modifica le proprietà della variabile",
+  "notFound": "Variabile non trovata",
+  "scopeLabel": "Ambito",
+  "typeLabel": "Tipo",
+  "defaultValue": "Valore Predefinito",
+  "idLabel": "ID:",
+  "typeColon": "Tipo:",
+  "scopes": {
+    "local": "Locale",
+    "global": "Globale",
+    "persistent": "Persistente"
+  },
+  "scopeOptions": {
+    "local": "🟢 Locale (ambito scena)",
+    "global": "🔵 Globale (partita)",
+    "persistent": "🟡 Persistente (tra sessioni)"
+  },
+  "scopeDesc": {
+    "local": "Si azzera al cambio di scena. Usala per stati temporanei/specifici della scena.",
+    "global": "Persiste tra le scene all'interno di una partita. Si azzera con una nuova partita.",
+    "persistent": "Salvata permanentemente tra le sessioni di gioco. Usala per sblocchi della Galleria CG, obiettivi, ecc."
+  },
+  "types": {
+    "number": "Numero",
+    "string": "Stringa",
+    "boolean": "Booleano"
+  },
+  "boolean": {
+    "true": "Sì",
+    "false": "No"
+  },
+  "boolLabels": {
+    "label": "Etichette dei valori",
+    "defaultPreset": "Sì / No (predefinito)",
+    "custom": "Personalizzato…",
+    "truePlaceholder": "Sì",
+    "falsePlaceholder": "No",
+    "hint": "Come appaiono i valori vero/falso di questa variabile nelle condizioni, in Imposta Variabile e nel tracker."
+  },
+  "delete": {
+    "inUseTitle": "Variabile In Uso",
+    "deleteTitle": "Elimina Variabile",
+    "deleteAnyway": "Elimina Comunque",
+    "inUseBody_one": "Questa variabile è usata in {{count}} punto. Eliminarla potrebbe rompere il tuo gioco!",
+    "inUseBody_other": "Questa variabile è usata in {{count}} punti. Eliminarla potrebbe rompere il tuo gioco!",
+    "usagesFound": "Utilizzi trovati:",
+    "andMore": "...e altri {{count}}",
+    "confirmBody": "Sei sicuro di voler eliminare questa variabile? Questa azione non può essere annullata."
+  },
+  "usage": {
+    "scene": "Scena: {{name}}",
+    "uiScreen": "Schermata UI: {{name}}",
+    "cmdSetVariable": "Comando {{n}}: Imposta Variabile",
+    "cmdTextInput": "Comando {{n}}: Inserimento Testo",
+    "cmdCondition": "Comando {{n}}: Ha una condizione che usa la variabile",
+    "optCondition": "Comando {{n}}, Opzione {{opt}}: Ha una condizione",
+    "optSetsVariable": "Comando {{n}}, Opzione {{opt}}: Imposta la variabile",
+    "cmdDialogueRef": "Comando {{n}}: Referenziata nel testo del dialogo",
+    "elCondition": "Elemento \"{{name}}\": Ha una condizione",
+    "elSetsVariable": "Elemento \"{{name}}\": Imposta la variabile",
+    "elCyclesLayer": "Elemento \"{{name}}\": Cicla l'asset del livello",
+    "elTextRef": "Elemento \"{{name}}\": Referenziata nel testo"
+  }
+}

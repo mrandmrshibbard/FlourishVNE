@@ -1,0 +1,69 @@
+{
+  "listTitle": "変数",
+  "newVariableName": "new_variable_{{n}}",
+  "addVariable": "変数を追加",
+  "selectToInspect": "検査する変数を選択してください",
+  "selectToInspectHint": "変数のプロパティを表示・編集します",
+  "notFound": "変数が見つかりません",
+  "scopeLabel": "スコープ",
+  "typeLabel": "型",
+  "defaultValue": "デフォルト値",
+  "idLabel": "ID:",
+  "typeColon": "型:",
+  "scopes": {
+    "local": "ローカル",
+    "global": "グローバル",
+    "persistent": "永続"
+  },
+  "scopeOptions": {
+    "local": "🟢 ローカル(シーン範囲)",
+    "global": "🔵 グローバル(プレイスルー)",
+    "persistent": "🟡 永続(セッション間)"
+  },
+  "scopeDesc": {
+    "local": "シーンが変わるとリセットされます。一時的/シーン固有の状態に使用します。",
+    "global": "プレイスルー内のシーン間で保持されます。新規ゲームでリセットされます。",
+    "persistent": "プレイセッション間で永続的に保存されます。CGギャラリーのアンロックや実績などに使用します。"
+  },
+  "types": {
+    "number": "数値",
+    "string": "文字列",
+    "boolean": "真偽値"
+  },
+  "boolean": {
+    "true": "はい",
+    "false": "いいえ"
+  },
+  "boolLabels": {
+    "label": "値のラベル",
+    "defaultPreset": "はい / いいえ(デフォルト)",
+    "custom": "カスタム…",
+    "truePlaceholder": "はい",
+    "falsePlaceholder": "いいえ",
+    "hint": "この変数のtrue/falseの値が、条件、変数の設定、トラッカーでどのように表示されるか。"
+  },
+  "delete": {
+    "inUseTitle": "変数は使用中です",
+    "deleteTitle": "変数を削除",
+    "deleteAnyway": "それでも削除",
+    "inUseBody_one": "この変数は{{count}}か所で使用されています。削除するとゲームが壊れる可能性があります!",
+    "inUseBody_other": "この変数は{{count}}か所で使用されています。削除するとゲームが壊れる可能性があります!",
+    "usagesFound": "見つかった使用箇所:",
+    "andMore": "...他{{count}}件",
+    "confirmBody": "本当にこの変数を削除しますか?この操作は元に戻せません。"
+  },
+  "usage": {
+    "scene": "シーン: {{name}}",
+    "uiScreen": "UI画面: {{name}}",
+    "cmdSetVariable": "コマンド{{n}}: 変数を設定",
+    "cmdTextInput": "コマンド{{n}}: テキスト入力",
+    "cmdCondition": "コマンド{{n}}: 変数を使用する条件あり",
+    "optCondition": "コマンド{{n}}、選択肢{{opt}}: 条件あり",
+    "optSetsVariable": "コマンド{{n}}、選択肢{{opt}}: 変数を設定",
+    "cmdDialogueRef": "コマンド{{n}}: 会話テキストで参照",
+    "elCondition": "要素「{{name}}」: 条件あり",
+    "elSetsVariable": "要素「{{name}}」: 変数を設定",
+    "elCyclesLayer": "要素「{{name}}」: レイヤーアセットを循環",
+    "elTextRef": "要素「{{name}}」: テキストで参照"
+  }
+}

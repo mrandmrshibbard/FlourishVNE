@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+  <!-- Exposed for the share sheet. We copy the project into files/share_out/ then
+       hand out a content:// URI for it (never expose the projects dir directly). -->
+  <files-path name="share_out" path="share_out/" />
+  <cache-path name="cache" path="/" />
+</paths>

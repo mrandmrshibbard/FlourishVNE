@@ -20,6 +20,7 @@ interface GameBuilderProps {
 type BuildStep = 'idle' | 'building' | 'success' | 'error';
 type BuildType = 'web' | 'desktop' | 'android';
 type DesktopFormat = 'standalone' | 'installer';
+type AndroidFormat = 'apk' | 'aab';
 
 interface AndroidToolchainStatus { ready: boolean; estimate?: { totalGB: number; diskGB: number } }
 
@@ -44,6 +45,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
   const [androidPackage, setAndroidPackage] = useState<string>(defaultPackageName(project.title || 'game'));
   const [androidVersion, setAndroidVersion] = useState<string>('1.0.0');
   const [androidOrientation, setAndroidOrientation] = useState<AndroidOrientation>('landscape');
+  const [androidFormat, setAndroidFormat] = useState<AndroidFormat>('apk');
   const [androidStatus, setAndroidStatus] = useState<AndroidToolchainStatus | null>(null);
   const [showAndroidGate, setShowAndroidGate] = useState(false);
 
@@ -132,6 +134,11 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
           versionCode,
           orientation: androidOrientation,
           iconDataUrl: iconDataUrl || undefined,
+          format: androidFormat,
+          // For AAB, ship the localized publishing guide + signing-key backup note
+          // alongside the bundle (written by the main process).
+          playStoreGuideText: androidFormat === 'aab' ? t('androidPlayStore.guide') : undefined,
+          signingReadmeTemplate: androidFormat === 'aab' ? t('androidPlayStore.keyReadme') : undefined,
         }
       );
       setBuildStep('success');
@@ -289,7 +296,12 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                       <li>{t('androidBuild.item3')}</li>
                       <li>{t('androidBuild.item4')}</li>
                     </ul>
-                    <p style={styles.infoText}><em>{t('androidBuild.publishingLater')}</em></p>
+                    <div style={styles.noticeBox}>
+                      <p style={styles.noticeTitle}>{t('androidBuild.sideloadTitle')}</p>
+                      <p style={styles.noticeText}>{t('androidBuild.sideloadNotice')}</p>
+                      <p style={styles.noticeTitle}>{t('androidBuild.playStoreTitle')}</p>
+                      <p style={{ ...styles.noticeText, marginBottom: 0 }}>{t('androidBuild.playStoreNotice')}</p>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -411,6 +423,43 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
 
               {buildType === 'android' && (
                 <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: '8px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(100,116,139,0.3)' }}>
+                  {/* APK vs AAB format toggle */}
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px', color: '#e2e8f0' }}>{t('androidFormat.title')}</div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                    <button
+                      onClick={() => setAndroidFormat('apk')}
+                      style={{
+                        flex: 1, padding: '10px 12px', borderRadius: '8px',
+                        border: androidFormat === 'apk' ? '2px solid #8b5cf6' : '1px solid rgba(100,116,139,0.4)',
+                        background: androidFormat === 'apk' ? 'rgba(139,92,246,0.15)' : 'rgba(30,41,59,0.4)',
+                        color: '#e2e8f0', cursor: 'pointer', textAlign: 'left' as const, fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{t('androidFormat.apkName')}</div>
+                      <div style={{ fontSize: '11px', opacity: 0.7 }}>{t('androidFormat.apkDesc')}</div>
+                    </button>
+                    <button
+                      onClick={() => setAndroidFormat('aab')}
+                      style={{
+                        flex: 1, padding: '10px 12px', borderRadius: '8px',
+                        border: androidFormat === 'aab' ? '2px solid #8b5cf6' : '1px solid rgba(100,116,139,0.4)',
+                        background: androidFormat === 'aab' ? 'rgba(139,92,246,0.15)' : 'rgba(30,41,59,0.4)',
+                        color: '#e2e8f0', cursor: 'pointer', textAlign: 'left' as const, fontSize: '13px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{t('androidFormat.aabName')}</div>
+                      <div style={{ fontSize: '11px', opacity: 0.7 }}>{t('androidFormat.aabDesc')}</div>
+                    </button>
+                  </div>
+
+                  {/* AAB: loudly flag that publishing is the user's responsibility */}
+                  {androidFormat === 'aab' && (
+                    <div style={{ ...styles.noticeBox, marginTop: 0, marginBottom: '14px' }}>
+                      <p style={styles.noticeTitle}>{t('androidPlayStore.yourJobTitle')}</p>
+                      <p style={{ ...styles.noticeText, marginBottom: 0 }}>{t('androidPlayStore.yourJobBody')}</p>
+                    </div>
+                  )}
+
                   <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '10px', color: '#e2e8f0' }}>{t('androidConfig.title')}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <label style={styles.androidField}>
@@ -494,7 +543,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 const label = validation.errors.length > 0
                   ? t('buildBtn.fixErrors')
                   : buildType === 'web' ? t('buildBtn.buildWeb')
-                  : buildType === 'android' ? t('buildBtn.buildAndroid')
+                  : buildType === 'android' ? (androidFormat === 'aab' ? t('buildBtn.buildAndroidAab') : t('buildBtn.buildAndroid'))
                   : desktopFormat === 'installer' ? t('buildBtn.buildInstaller') : t('buildBtn.buildStandalone');
                 return (
                   <button
@@ -563,13 +612,13 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
             <div style={styles.successContainer}>
               <div style={styles.successIcon}><CheckIcon style={{ width: 64, height: 64, color: '#4CAF50' }} /></div>
               <h3 style={styles.successTitle}>
-                {buildType === 'web' ? t('success.webTitle') : buildType === 'android' ? t('success.androidTitle') : desktopFormat === 'installer' ? t('success.installerTitle') : t('success.desktopTitle')}
+                {buildType === 'web' ? t('success.webTitle') : buildType === 'android' ? (androidFormat === 'aab' ? t('success.androidAabTitle') : t('success.androidTitle')) : desktopFormat === 'installer' ? t('success.installerTitle') : t('success.desktopTitle')}
               </h3>
               <p style={styles.successText}>
                 {buildType === 'web'
                   ? t('success.webText')
                   : buildType === 'android'
-                  ? t('success.androidText')
+                  ? (androidFormat === 'aab' ? t('success.androidAabText') : t('success.androidText'))
                   : desktopFormat === 'installer'
                   ? t('success.installerText')
                   : t('success.desktopText')}
@@ -603,7 +652,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                 </div>
               )}
 
-              {buildType === 'android' && (
+              {buildType === 'android' && androidFormat === 'apk' && (
                 <div style={styles.successMessage}>
                   <p style={{ fontSize: '16px', color: '#10b981', margin: '16px 0' }}>
                     {t('success.apkSaved')}
@@ -611,6 +660,24 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
                   <p style={{ fontSize: '14px', color: '#94a3b8' }}>
                     {t('success.apkLocation')}
                   </p>
+                  <div style={{ ...styles.noticeBox, textAlign: 'left' }}>
+                    <p style={{ ...styles.noticeText, marginBottom: 0 }}>{t('success.androidSideloadHeadsUp')}</p>
+                  </div>
+                </div>
+              )}
+
+              {buildType === 'android' && androidFormat === 'aab' && (
+                <div style={styles.successMessage}>
+                  <p style={{ fontSize: '16px', color: '#10b981', margin: '16px 0' }}>
+                    {t('success.aabSaved')}
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#94a3b8' }}>
+                    {t('success.apkLocation')}
+                  </p>
+                  <div style={{ ...styles.noticeBox, textAlign: 'left' }}>
+                    <p style={styles.noticeTitle}>{t('success.aabNextTitle')}</p>
+                    <p style={{ ...styles.noticeText, marginBottom: 0 }}>{t('success.aabNextBody')}</p>
+                  </div>
                 </div>
               )}
 
@@ -1081,6 +1148,25 @@ const styles = {
     padding: '10px',
     background: '#2a2a2a',
     borderRadius: '6px'
+  },
+  noticeBox: {
+    marginTop: '14px',
+    padding: '14px 16px',
+    background: 'rgba(255, 152, 0, 0.08)',
+    border: '1px solid rgba(255, 152, 0, 0.4)',
+    borderRadius: '10px'
+  },
+  noticeTitle: {
+    color: '#ffb74d',
+    fontSize: '14px',
+    fontWeight: 700,
+    margin: '0 0 6px 0'
+  },
+  noticeText: {
+    color: '#d6d3d1',
+    fontSize: '13px',
+    lineHeight: '1.5',
+    margin: '0 0 12px 0'
   },
   iconPickerSection: {
     margin: '16px 0',

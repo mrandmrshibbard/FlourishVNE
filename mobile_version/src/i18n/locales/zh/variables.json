@@ -1,0 +1,69 @@
+{
+  "listTitle": "变量",
+  "newVariableName": "new_variable_{{n}}",
+  "addVariable": "添加变量",
+  "selectToInspect": "选择一个变量以查看",
+  "selectToInspectHint": "查看并编辑变量属性",
+  "notFound": "未找到变量",
+  "scopeLabel": "作用域",
+  "typeLabel": "类型",
+  "defaultValue": "默认值",
+  "idLabel": "ID：",
+  "typeColon": "类型：",
+  "scopes": {
+    "local": "局部",
+    "global": "全局",
+    "persistent": "持久"
+  },
+  "scopeOptions": {
+    "local": "🟢 局部（场景作用域）",
+    "global": "🔵 全局（单次游玩）",
+    "persistent": "🟡 持久（跨会话）"
+  },
+  "scopeDesc": {
+    "local": "场景切换时重置。用于临时或场景专属的状态。",
+    "global": "在单次游玩中跨场景保留。开始新游戏时重置。",
+    "persistent": "在多次游玩会话间永久保存。用于 CG 画廊解锁、成就等。"
+  },
+  "types": {
+    "number": "数字",
+    "string": "字符串",
+    "boolean": "布尔值"
+  },
+  "boolean": {
+    "true": "是",
+    "false": "否"
+  },
+  "boolLabels": {
+    "label": "值标签",
+    "defaultPreset": "是 / 否（默认）",
+    "custom": "自定义……",
+    "truePlaceholder": "是",
+    "falsePlaceholder": "否",
+    "hint": "此变量的真/假值在条件、设置变量和追踪器中的显示方式。"
+  },
+  "delete": {
+    "inUseTitle": "变量正在使用中",
+    "deleteTitle": "删除变量",
+    "deleteAnyway": "仍然删除",
+    "inUseBody_one": "此变量在 {{count}} 处被使用。删除它可能会破坏你的游戏！",
+    "inUseBody_other": "此变量在 {{count}} 处被使用。删除它可能会破坏你的游戏！",
+    "usagesFound": "找到的使用位置：",
+    "andMore": "……以及另外 {{count}} 处",
+    "confirmBody": "确定要删除此变量吗？此操作无法撤销。"
+  },
+  "usage": {
+    "scene": "场景：{{name}}",
+    "uiScreen": "UI 画面：{{name}}",
+    "cmdSetVariable": "命令 {{n}}：设置变量",
+    "cmdTextInput": "命令 {{n}}：文本输入",
+    "cmdCondition": "命令 {{n}}：含有使用该变量的条件",
+    "optCondition": "命令 {{n}}，选项 {{opt}}：含有条件",
+    "optSetsVariable": "命令 {{n}}，选项 {{opt}}：设置该变量",
+    "cmdDialogueRef": "命令 {{n}}：在对话文本中被引用",
+    "elCondition": "元素“{{name}}”：含有条件",
+    "elSetsVariable": "元素“{{name}}”：设置该变量",
+    "elCyclesLayer": "元素“{{name}}”：循环切换图层资源",
+    "elTextRef": "元素“{{name}}”：在文本中被引用"
+  }
+}

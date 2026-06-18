@@ -1,0 +1,24 @@
+{
+  "tabs": {
+    "scenes": "Scenes",
+    "characters": "Characters",
+    "ui": "UI / Screens",
+    "assets": "Assets",
+    "variables": "Variables",
+    "commonEvents": "Events",
+    "systems": "Systems",
+    "settings": "Settings"
+  },
+  "desc": {
+    "scenes": "Create and edit story scenes with dialogue, choices, and commands",
+    "characters": "Design characters with layered sprites and expressions",
+    "ui": "Design in-game UI elements and menu screens",
+    "assets": "Manage images, audio, and video files",
+    "variables": "Create and manage story variables and game state",
+    "commonEvents": "Reusable command sequences triggered from scenes",
+    "systems": "Opt-in gameplay systems like Inventory, and the item registry",
+    "settings": "Configure project settings and preferences"
+  },
+  "rightClickHint": " | Right-click to focus manager window",
+  "openInWindow": "Open or focus {{label}} in separate window"
+}

@@ -1,0 +1,69 @@
+{
+  "listTitle": "變數",
+  "newVariableName": "new_variable_{{n}}",
+  "addVariable": "新增變數",
+  "selectToInspect": "選擇一個變數以檢視",
+  "selectToInspectHint": "檢視並編輯變數屬性",
+  "notFound": "找不到變數",
+  "scopeLabel": "範圍",
+  "typeLabel": "類型",
+  "defaultValue": "預設值",
+  "idLabel": "ID：",
+  "typeColon": "類型：",
+  "scopes": {
+    "local": "區域",
+    "global": "全域",
+    "persistent": "持續性"
+  },
+  "scopeOptions": {
+    "local": "🟢 區域（場景範圍）",
+    "global": "🔵 全域（單次遊玩）",
+    "persistent": "🟡 持續性（跨工作階段）"
+  },
+  "scopeDesc": {
+    "local": "場景變更時重設。用於暫時性/特定場景的狀態。",
+    "global": "在單次遊玩的所有場景中保留。新遊戲時重設。",
+    "persistent": "在所有遊玩工作階段中永久儲存。用於 CG 畫廊解鎖、成就等。"
+  },
+  "types": {
+    "number": "數字",
+    "string": "字串",
+    "boolean": "布林值"
+  },
+  "boolean": {
+    "true": "是",
+    "false": "否"
+  },
+  "boolLabels": {
+    "label": "值標籤",
+    "defaultPreset": "是 / 否（預設）",
+    "custom": "自訂…",
+    "truePlaceholder": "是",
+    "falsePlaceholder": "否",
+    "hint": "此變數的 true/false 值在條件、設定變數及追蹤器中的顯示方式。"
+  },
+  "delete": {
+    "inUseTitle": "變數使用中",
+    "deleteTitle": "刪除變數",
+    "deleteAnyway": "仍要刪除",
+    "inUseBody_one": "此變數在 {{count}} 處使用中。刪除它可能會破壞你的遊戲！",
+    "inUseBody_other": "此變數在 {{count}} 處使用中。刪除它可能會破壞你的遊戲！",
+    "usagesFound": "找到的用法：",
+    "andMore": "…還有 {{count}} 個",
+    "confirmBody": "你確定要刪除此變數嗎？此動作無法復原。"
+  },
+  "usage": {
+    "scene": "場景：{{name}}",
+    "uiScreen": "UI 畫面：{{name}}",
+    "cmdSetVariable": "指令 {{n}}：設定變數",
+    "cmdTextInput": "指令 {{n}}：文字輸入",
+    "cmdCondition": "指令 {{n}}：有使用此變數的條件",
+    "optCondition": "指令 {{n}}，選項 {{opt}}：有條件",
+    "optSetsVariable": "指令 {{n}}，選項 {{opt}}：設定變數",
+    "cmdDialogueRef": "指令 {{n}}：在對話文字中被參考",
+    "elCondition": "元素「{{name}}」：有條件",
+    "elSetsVariable": "元素「{{name}}」：設定變數",
+    "elCyclesLayer": "元素「{{name}}」：循環圖層資源",
+    "elTextRef": "元素「{{name}}」：在文字中被參考"
+  }
+}

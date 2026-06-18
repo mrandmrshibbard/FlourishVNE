@@ -1,0 +1,11315 @@
+import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
+import { flushSync, createPortal } from 'react-dom';
+import { useProject } from '../contexts/ProjectContext';
+import { useToast } from '../contexts/ToastContext';
+import { interpolateVariables } from '../utils/variableInterpolation';
+import { combineConditions } from '../utils/conditionLogic';
+import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
+import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
+import { resolveBoolLabels } from '../features/variables/booleanLabels';
+import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, buildOrientationTransform } from '../utils/styleUtils';
+import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
+import { VNProject, CGGalleryEntry } from '../types/project';
+import {
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, RESET_ALL_VARIABLES
+} from '../types/shared';
+import {
+    VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
+    VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey
+} from '../features/ui/types';
+import { VNItem, VNItemCollection } from '../features/items/types';
+import {
+    VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
+    ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
+    PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
+    FlashScreenCommand, LightningCommand, FlashlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
+    ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
+    CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
+    SpawnParticlesCommand, StopParticlesCommand,
+    CallCommonEventCommand,
+    ShowHotSpotCommand, HideHotSpotCommand,
+    TweenElementCommand, REACTIVE_VISUAL_TYPES,
+} from '../features/scene/types';
+// FIX: VNCondition is not exported from scene/types, but from shared types.
+import { VNCondition } from '../types/shared';
+import { VNCharacter, VNCharacterLayer } from '../features/character/types';
+import { VNVariable, VNSetVariableOperator, VNVariableScope } from '../features/variables/types';
+import { ScreenOverlayEffects, runFireworksSim } from './live-preview/ScreenOverlayEffects';
+import { ParticleSystem } from './live-preview/ParticleSystem';
+import { registerDropTarget, hitTestDropTarget } from './live-preview/dropTargetRegistry';
+import { AnimatedDialogueText, useRainbowTick } from './live-preview/AnimatedDialogueText';
+import { 
+    normalizeSetVariableOperator as normalizeOperator,
+    calculateVariableValue 
+} from '../utils/variableUtils';
+import { computeArrangedPositions } from '../utils/characterArrange';
+
+/** Convert hex color to approximate hue rotation degrees for CSS filter */
+function getHueFromHex(hex: string): number {
+    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return 0;
+    const r = parseInt(match[1], 16) / 255;
+    const g = parseInt(match[2], 16) / 255;
+    const b = parseInt(match[3], 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0;
+    if (max !== min) {
+        const d = max - min;
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        else if (max === g) h = ((b - r) / d + 2) / 6;
+        else h = ((r - g) / d + 4) / 6;
+    }
+    return Math.round(h * 360);
+}
+
+/** One-shot fireworks volley canvas. Mounts on a Fireworks command, runs the shared sim for the
+ *  configured number of bursts, then calls onDone to unmount. onExplode fires per burst (per-burst SFX). */
+const FireworksBurst: React.FC<{
+    colors: string[]; intensity: number; bursts: number; duration: number; heightFrac: number;
+    width: number; height: number; onExplode?: () => void; onDone: () => void;
+}> = ({ colors, intensity, bursts, duration, heightFrac, width, height, onExplode, onDone }) => {
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const doneRef = useRef(onDone); doneRef.current = onDone;
+    const explodeRef = useRef(onExplode); explodeRef.current = onExplode;
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        // Wait for a measured stage size (the command can fire before the stage is laid out, e.g.
+        // as the first command in a scene); the effect re-runs when width/height become valid.
+        if (!canvas || width <= 0 || height <= 0) return;
+        const speedMul = Math.max(0.25, (430 * bursts) / (Math.max(0.5, duration) * 1000));
+        const stop = runFireworksSim(canvas, width, height, {
+            colors, intensity, speedMul, continuous: false, maxBursts: bursts, heightFrac,
+            onExplode: () => explodeRef.current?.(),
+            onIdle: () => doneRef.current(),
+        });
+        // Safety net so a never-idle sim can't leave the canvas mounted forever.
+        const safety = window.setTimeout(() => doneRef.current(), duration * 1000 + 4500);
+        return () => { stop(); clearTimeout(safety); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [width, height]);
+    return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ mixBlendMode: 'screen' }} aria-hidden />;
+};
+
+const hexToRgbStr = (hex: string): string => {
+    const m = (hex || '').match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!m) return '255, 255, 255';
+    return `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}`;
+};
+
+/** Renders the placed twinkling lights (candle flicker / star sparkle / christmas bulb blink styles). */
+const LightsLayer: React.FC<{ lights: VNLight[]; stageW: number; stageH: number }> = ({ lights, stageW, stageH }) => {
+    const base = Math.min(stageW || 800, stageH || 600);
+    return <>{lights.map((l, i) => {
+        const sizePx = Math.max(6, base * 0.05 * (l.size ?? 1));
+        const bright = Math.max(0, Math.min(1, l.brightness ?? 1));
+        const spd = l.twinkleSpeed && l.twinkleSpeed > 0 ? l.twinkleSpeed : 1;
+        // Every light is a pure point of light: a tight bright center that drops off through one
+        // continuous radial gradient to FULLY transparent at the edge — no boxShadow (its spread
+        // left a visible halo ring/boundary) and a box large enough to hold the whole soft glow.
+        let background = '';
+        let animation: string | undefined;
+        let delay = `${(i % 7) * 0.13}s`;
+        const wPx = sizePx * 1.8;
+        const hPx = sizePx * 1.8;
+        if (l.type === 'candle') {
+            background = `radial-gradient(circle at 50% 45%, rgba(255,250,220,${0.97 * bright}) 0%, rgba(255,185,75,${0.8 * bright}) 9%, rgba(255,135,45,${0.4 * bright}) 24%, rgba(255,105,25,${0.14 * bright}) 46%, rgba(255,95,15,${0.04 * bright}) 70%, rgba(255,95,15,0) 100%)`;
+            animation = `vnfx-candle ${(1.1 / spd).toFixed(2)}s ease-in-out infinite`;
+        } else if (l.type === 'star') {
+            const rgb = hexToRgbStr(l.color || '#ffffff');
+            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.85 * bright}) 8%, rgba(${rgb},${0.4 * bright}) 22%, rgba(${rgb},${0.14 * bright}) 44%, rgba(${rgb},${0.04 * bright}) 68%, rgba(${rgb},0) 100%)`;
+            animation = `vnfx-star ${(2.2 / spd).toFixed(2)}s ease-in-out infinite`;
+        } else {
+            const rgb = hexToRgbStr(l.color || '#ff3b3b');
+            background = `radial-gradient(circle, rgba(255,255,255,${0.98 * bright}) 0%, rgba(${rgb},${0.95 * bright}) 5%, rgba(${rgb},${0.5 * bright}) 13%, rgba(${rgb},${0.26 * bright}) 26%, rgba(${rgb},${0.1 * bright}) 44%, rgba(${rgb},${0.03 * bright}) 66%, rgba(${rgb},0) 100%)`;
+            const tw = l.twinkle ?? 'fade';
+            if (tw === 'fade') animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`;
+            else if (tw === 'blink') animation = `vnfx-bulb-blink ${(1.0 / spd).toFixed(2)}s steps(1, end) infinite`;
+            else if (tw === 'chase') { animation = `vnfx-bulb-fade ${(1.6 / spd).toFixed(2)}s ease-in-out infinite`; delay = `${(i % 5) * (0.32 / spd)}s`; }
+            // 'steady' → no animation
+        }
+        return <div key={l.id} data-vnlight={l.type} className="absolute pointer-events-none" style={{
+            left: `${l.x}%`, top: `${l.y}%`, width: wPx, height: hPx,
+            transform: 'translate(-50%, -50%)', borderRadius: '50%', background,
+            animation, animationDelay: animation ? delay : undefined,
+            mixBlendMode: 'screen',
+        }} />;
+    })}</>;
+};
+
+function isRuntimeDebugEnabled(): boolean {
+    try {
+        return window.localStorage.getItem('flourish:runtimeDebug') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function runtimeDebugLog(...args: unknown[]): void {
+    if (!isRuntimeDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+}
+
+function runtimeDebugWarn(...args: unknown[]): void {
+    if (!isRuntimeDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.warn(...args);
+}
+
+// --- Persistent Variable Helpers ---
+/** localStorage key for cross-session persistent variables */
+function getPersistentVarsKey(projectId: string): string {
+    return `vn-persistent-vars-${projectId}`;
+}
+
+/** Load persistent variables from storage (localStorage or Electron) */
+function loadPersistentVariables(projectId: string): Record<string, string | number | boolean> {
+    try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            // Electron storage is async — for initial sync load, fall back to localStorage
+        }
+        const raw = localStorage.getItem(getPersistentVarsKey(projectId));
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+}
+
+/** Save a single persistent variable to storage */
+function savePersistentVariables(projectId: string, vars: Record<string, string | number | boolean>): void {
+    try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.storage) {
+            (window as any).electronAPI.storage.setItem(getPersistentVarsKey(projectId), vars);
+        }
+        localStorage.setItem(getPersistentVarsKey(projectId), JSON.stringify(vars));
+    } catch (e) {
+        console.error('Failed to save persistent variables:', e);
+    }
+}
+
+/** Build initial variable state: defaults + persistent overrides from storage */
+function getInitialVariablesWithPersistent(
+    projectVariables: Record<string, any>,
+    projectId: string
+): Record<string, string | number | boolean> {
+    const vars: Record<string, string | number | boolean> = {};
+    Object.values(projectVariables).forEach((v: any) => {
+        vars[v.id] = v.defaultValue;
+    });
+    // Layer in any persistent-scope values saved from previous sessions
+    const persistentVars = loadPersistentVariables(projectId);
+    Object.values(projectVariables).forEach((v: any) => {
+        if ((v.scope || 'global') === 'persistent' && persistentVars[v.id] !== undefined) {
+            vars[v.id] = persistentVars[v.id];
+        }
+    });
+    return vars;
+}
+
+/** Get default values for all local-scope variables in a project */
+function getLocalVariableDefaults(projectVariables: Record<string, any>): Record<string, string | number | boolean> {
+    const defaults: Record<string, string | number | boolean> = {};
+    Object.values(projectVariables).forEach((v: any) => {
+        if ((v.scope || 'global') === 'local') {
+            defaults[v.id] = v.defaultValue;
+        }
+    });
+    return defaults;
+}
+
+// Command Handlers
+import {
+    CommandContext,
+    CommandResult,
+    RuntimeCommandHelpers,
+    handleDialogue,
+    handleSetVariable,
+    handleChoice,
+    handleShowCharacter,
+    handleHideCharacter,
+    handleSetBackground,
+    handlePlayMusic,
+    handleStopMusic,
+    handlePlaySoundEffect,
+    handleStopSoundEffect,
+    handleShowText,
+    handleHideText,
+    handleShowImage,
+    handleHideImage,
+    handleShowButton,
+    handleHideButton,
+    handleShowItem,
+    handleJump,
+    handleJumpToLabel,
+    handleLabel,
+    handleBranchStart,
+    handleBranchElseIf,
+    handleBranchElse,
+    handleBranchEnd,
+    handleGroup,
+    handleShakeScreen,
+    handleTintScreen,
+    handlePanZoomScreen,
+    handleResetScreenEffects,
+    handleFlashScreen,
+    handleTextInput,
+    handleCreditRoll,
+    handleRunScript,
+    handleSpawnParticles,
+    handleStopParticles,
+    handleCallCommonEvent,
+    handleTweenElement,
+} from './live-preview/command-handlers';
+import { handleItemCommand, handleRestockCollectionCommand, handleBuyItemCommand, handleSellItemCommand } from './live-preview/command-handlers/itemCommandHandler';
+import { computeCollectionRestock } from '../features/items/restock';
+import { computeBuy, computeSell, tradePrice } from '../features/items/trade';
+import { CommandScheduler } from './live-preview/runtime/commandScheduler';
+import { RuntimeVariableStore } from './live-preview/runtime/runtimeVariableStore';
+import { RuntimeDiagnostics } from './live-preview/runtime/runtimeDiagnostics';
+import { executeScript, ScriptRuntimeContext } from '../features/scripting/ScriptExecutor';
+import { pluginManager } from '../features/plugins/PluginManagerService';
+import { MAX_CALL_DEPTH, coerceParam } from './live-preview/command-handlers/commonEventHandler';
+import { VNScript } from '../types/scripting';
+import { VNCommonEvent } from '../types/commonEvents';
+
+// Import extracted types
+import {
+    TextOverlay,
+    ImageOverlay,
+    ButtonOverlay,
+    HotSpotOverlay,
+    StageCharacterState,
+    StageState,
+    MusicState,
+    PlayerState,
+    GameSettings,
+    HistoryEntry,
+} from './live-preview/types/gameState';
+
+type StageSize = { width: number; height: number };
+
+// Import utility functions from extracted modules
+import { getOverlayTransitionClass } from './live-preview/systems/transitionUtils';
+import { TweenManager } from './live-preview/systems/tweenManager';
+import { useTween } from './live-preview/hooks/useTween';
+
+const defaultSettings: GameSettings = {
+    textSpeed: 50,
+    musicVolume: 0.8,
+    sfxVolume: 0.8,
+    voiceVolume: 0.8,
+    ambientVolume: 0.8,
+    enableSkip: true,
+    autoAdvance: false,
+    autoAdvanceDelay: 3,
+};
+
+// Max pixel shift at parallaxDepth=1, intensity=1, full pointer offset. Tunable.
+const PARALLAX_MAX_PX = 40;
+/** CSS entry animation for a Play Video, mapped from the command's transition. Plays once on mount. */
+const movieEntryAnim = (transition?: string, durationSec?: number): string | undefined => {
+    const d = durationSec ?? 0.5;
+    switch (transition) {
+        case undefined: case '': case 'instant': return undefined;
+        case 'slide': return `slide-in-right ${d}s ease-out forwards`;
+        case 'iris-in': return `iris-in ${d}s ease-out forwards`;
+        case 'wipe-right': return `wipe-right ${d}s ease-out forwards`;
+        default: return `dissolve-in ${d}s ease-out forwards`; // fade / cross-fade / dissolve
+    }
+};
+// Camera (pan) parallax: a pan of this many stage-% maps to a full unit of the parallax
+// var (i.e. ~PARALLAX_MAX_PX at depth/intensity 1). Lower = stronger camera parallax. Tunable.
+const CAMERA_PAN_REF = 30;
+/** CSS transform fragment that shifts a visual by its parallax depth. Reads the live
+ *  `--ppx`/`--ppy` vars (eased pointer offset × scene intensity, written on the stage each
+ *  frame), so this composes onto a visual's existing transform with no per-frame React work.
+ *  Returns '' when depth is 0/undefined (no parallax). */
+const parallaxTransform = (depth?: number): string => {
+    if (!depth) return '';
+    const d = depth * PARALLAX_MAX_PX;
+    return ` translate(calc(var(--ppx, 0) * ${d}px), calc(var(--ppy, 0) * ${d}px))`;
+};
+
+// --- Utility Functions (keeping these until they can be extracted) ---
+const getPositionStyle = (transition: VNTransition, isHide: boolean): string => {
+    switch (transition) {
+        case 'fade':
+            return isHide ? 'transition-fade-out' : 'transition-dissolve';
+        case 'dissolve':
+            return isHide ? 'transition-dissolve-out' : 'transition-dissolve';
+        case 'slide':
+            return 'transition-slide';
+        case 'iris-in':
+            return isHide ? 'transition-iris-out' : 'transition-iris-in';
+        case 'wipe-right':
+            return isHide ? 'transition-wipe-out-right' : 'transition-wipe-right';
+        default:
+            return 'transition-dissolve';
+    }
+};
+
+const buildSlideStyle = (x: number, _y: number, action: 'show' | 'hide' | undefined, stageSize: StageSize): React.CSSProperties => {
+    const horizontalBias = x <= 50 ? -60 : 60;
+    const startPercent = action === 'show' ? horizontalBias : 0;
+    const endPercent = action === 'hide' ? horizontalBias : 0;
+
+    const style: React.CSSProperties = {
+        '--slide-start-x': `${startPercent}%`,
+        '--slide-start-y': `0%`,
+        '--slide-end-x': `${endPercent}%`,
+        '--slide-end-y': `0%`,
+    } as React.CSSProperties;
+
+    if (stageSize.width > 0 && stageSize.height > 0) {
+        style['--slide-start-px' as any] = `${(startPercent / 100) * stageSize.width}px`;
+        style['--slide-end-px' as any] = `${(endPercent / 100) * stageSize.width}px`;
+        style['--slide-start-py' as any] = `0px`;
+        style['--slide-end-py' as any] = `0px`;
+    }
+
+    return style;
+};
+
+const TextOverlayElement: React.FC<{ overlay: TextOverlay; stageSize: StageSize }> = ({ overlay, stageSize }) => {
+    const tweenValues = useTween(overlay.id, 'text');
+    const hasTransition = overlay.transition && overlay.transition !== 'instant';
+    const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
+    const timeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+
+        if (!overlay.transition || overlay.transition === 'instant') {
+            setPlayTransition(false);
+            return;
+        }
+
+        if (overlay.action === 'show') {
+            setPlayTransition(false);
+            timeoutRef.current = window.setTimeout(() => {
+                setPlayTransition(true);
+                timeoutRef.current = null;
+            }, 0);
+            return () => {
+                if (timeoutRef.current !== null) {
+                    clearTimeout(timeoutRef.current);
+                    timeoutRef.current = null;
+                }
+            };
+        }
+
+        setPlayTransition(true);
+        return () => {
+            if (timeoutRef.current !== null) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, [overlay.id, overlay.transition, overlay.action]);
+
+    const applyTransition = playTransition && !!hasTransition;
+    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
+    const animDuration = `${overlay.duration ?? 0.5}s`;
+    const isSlideTransition = overlay.transition === 'slide';
+    const slideStyle = isSlideTransition ? buildSlideStyle(overlay.x, overlay.y ?? 0, overlay.action, stageSize) : {};
+
+    // Apply tween interpolated values
+    const tx = tweenValues?.x ?? overlay.x;
+    const ty = tweenValues?.y ?? overlay.y;
+    const tFontSize = tweenValues?.fontSize ?? overlay.fontSize;
+    const tColor = tweenValues?.color ?? overlay.color;
+    const tWidth = tweenValues?.width ?? overlay.width;
+    const tHeight = tweenValues?.height ?? overlay.height;
+
+    const _orient = `${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim();
+    // Match the editor (StagingArea) exactly: text overlays are sized against a 1280x720
+    // design reference — font is `fontSize * stageW/1280` (scaleFontSize) and width/height
+    // are percent-of-1280/720 (pxToPercent). This keeps the built game identical to what the
+    // author sees on the scene canvas at any stage size (desktop, Android, web).
+    const ovScale = stageSize?.width ? stageSize.width / 1280 : 1;
+    const baseStyle: React.CSSProperties = {
+        left: `${tx}%`,
+        top: `${ty}%`,
+        ...(isSlideTransition ? (_orient ? { transform: _orient } : {}) : { transform: `translate(-50%, -50%) ${_orient}`.trim() }),
+        fontSize: `${tFontSize * ovScale}px`,
+        fontFamily: overlay.fontFamily,
+        color: tColor,
+        fontWeight: overlay.fontWeight || 'normal',
+        fontStyle: overlay.fontStyle || 'normal',
+        letterSpacing: overlay.letterSpacing ? `${overlay.letterSpacing}px` : undefined,
+        width: tWidth ? `${(tWidth / 1280) * 100}%` : 'auto',
+        height: tHeight ? `${(tHeight / 720) * 100}%` : 'auto',
+        textAlign: overlay.textAlign || 'left',
+        display: 'flex',
+        alignItems: overlay.verticalAlign === 'top' ? 'flex-start' : overlay.verticalAlign === 'bottom' ? 'flex-end' : 'center',
+        justifyContent: overlay.textAlign === 'left' ? 'flex-start' : overlay.textAlign === 'right' ? 'flex-end' : 'center',
+        whiteSpace: overlay.width ? 'pre-wrap' : 'nowrap',
+        overflow: 'hidden',
+        // Author stacking: text band (1) + layer. Default 0 → below characters (band 5), as today.
+        zIndex: 1 + (overlay.layer ?? 0) * 100,
+    };
+
+    // Apply text shadow / border / gradient via shared helper so editor & built game match.
+    // When a gradient is active, the shadow is moved to the gradient span as drop-shadow
+    // so it renders behind the transparent text (not on top).
+    const { containerStyle: effectsContainerStyle, gradientSpanStyle } = buildTextEffectStyles({
+        textShadow: overlay.textShadow,
+        textGradient: overlay.textGradient,
+        textBorder: overlay.textBorder,
+    });
+    Object.assign(baseStyle, effectsContainerStyle);
+
+    // Only pre-hide if we're showing WITH a transition that hasn't started yet
+    if (overlay.action === 'show' && hasTransition && !playTransition) {
+        baseStyle.opacity = 0;
+    }
+
+    const className = `absolute${applyTransition ? ` ${transitionClass} transition-base` : ''}`;
+    const style = {
+        ...baseStyle,
+        ...(applyTransition ? { animationDuration: animDuration } : {}),
+        ...(isSlideTransition ? slideStyle : {}),
+    } as React.CSSProperties;
+
+    return (
+        <div className={className} style={style}>
+            {gradientSpanStyle
+                // Key the gradient span to its colors so Chromium re-clips -webkit-background-clip:text
+                // (it otherwise paints the box, not the text, when the gradient changes on a live node).
+                ? <span key={`grad-${overlay.textGradient?.type}-${overlay.textGradient?.angle}-${(overlay.textGradient?.colors || []).join(',')}`} style={gradientSpanStyle}>{overlay.text}</span>
+                : overlay.text}
+        </div>
+    );
+};
+
+const ButtonOverlayElement: React.FC<{
+    overlay: ButtonOverlay;
+    onAction: (action: VNUIAction) => void;
+    playSound: (soundId: VNID | null) => void;
+    onAdvance?: () => void;
+    onCommitVariables?: () => void;
+    onPickup?: (overlay: ButtonOverlay) => void;
+}> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables, onPickup }) => {
+    const tweenValues = useTween(overlay.id, 'button');
+    const [isHovered, setIsHovered] = useState(false);
+    const hasTransition = overlay.transition && overlay.transition !== 'instant';
+    const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
+    const timeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+
+        if (!overlay.transition || overlay.transition === 'instant') {
+            setPlayTransition(false);
+            return;
+        }
+
+        if (overlay.action === 'show') {
+            setPlayTransition(false);
+            timeoutRef.current = window.setTimeout(() => {
+                setPlayTransition(true);
+                timeoutRef.current = null;
+            }, 0);
+            return () => {
+                if (timeoutRef.current !== null) {
+                    clearTimeout(timeoutRef.current);
+                    timeoutRef.current = null;
+                }
+            };
+        }
+
+        setPlayTransition(true);
+        return () => {
+            if (timeoutRef.current !== null) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, [overlay.id, overlay.transition, overlay.action]);
+
+    const handleClick = (e?: React.MouseEvent) => {
+        runtimeDebugLog('Button clicked:', overlay.text, 'Primary Action:', overlay.onClick, 'Additional Actions:', overlay.actions?.length || 0, 'quickMenuMode:', overlay.quickMenuMode);
+        // Always consume the click so the stage's click-to-advance handler doesn't run
+        // with stale state. The button's own logic (waitForClick / quickMenuMode) decides
+        // whether to advance below.
+        if (e) {
+            e.stopPropagation();
+        }
+        if (overlay.clickSound) {
+            try {
+                playSound(overlay.clickSound);
+            } catch (e) {
+                console.error('Error playing button click sound:', e);
+            }
+        }
+
+        const allActions: VNUIAction[] = [overlay.onClick, ...(overlay.actions || [])];
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+        const setVarActions = allActions.filter(isVarMutation);
+        const otherActions = allActions.filter(a => !isVarMutation(a));
+
+        // Process SetVariable actions first
+        setVarActions.forEach(action => onAction(action));
+
+        // CRITICAL: Commit variables to playerState BEFORE any navigation
+        // This ensures JumpToScene/ReturnToPreviousScreen see the updated values
+        if (setVarActions.length > 0 && onCommitVariables) {
+            runtimeDebugLog('[Button] Committing', setVarActions.length, 'variable changes before navigation');
+            onCommitVariables();
+        }
+
+        // Now process navigation/other actions with fresh playerState
+        otherActions.forEach(action => onAction(action));
+
+        // If this button requires click to advance, call the advance function
+        // BUT: Don't advance if primary action is JumpToScene (it handles its own navigation),
+        // never advance for quick-menu buttons (they fire actions but don't consume the click),
+        // and don't advance when an action called a Common Event — the CE has already switched
+        // execution (its return frame resumes past this button); advancing now would bump the
+        // CE's index from 0 to 1 and skip its first command.
+        const calledCommonEvent = allActions.some(a => a.type === UIActionType.CallCommonEvent);
+        if (overlay.waitForClick && onAdvance && !overlay.quickMenuMode && overlay.onClick.type !== UIActionType.JumpToScene && !calledCommonEvent) {
+            onAdvance();
+        }
+
+        // Show Item pickups: give the item, remove the icon, and (if "pick up once") record it —
+        // all applied directly to playerState in one atomic update by onPickup.
+        if ((overlay.giveItemId || overlay.removeAfterClick || overlay.pickUpOnceId) && onPickup) {
+            onPickup(overlay);
+        }
+    };
+
+    const applyTransition = playTransition && overlay.transition && overlay.transition !== 'instant';
+    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
+    const animDuration = `${overlay.duration ?? 0.3}s`;
+
+    // Apply tween interpolated values
+    const bx = tweenValues?.x ?? overlay.x;
+    const by = tweenValues?.y ?? overlay.y;
+    const bw = tweenValues?.width ?? overlay.width;
+    const bh = tweenValues?.height ?? overlay.height;
+    const bOpacity = tweenValues?.opacity ?? overlay.opacity;
+    const bFontSize = tweenValues?.fontSize ?? overlay.fontSize;
+    const bBorderRadius = tweenValues?.borderRadius ?? overlay.borderRadius;
+    const bBgColor = tweenValues?.backgroundColor ?? overlay.backgroundColor;
+
+    const displayImage = isHovered && overlay.hoverImageUrl ? overlay.hoverImageUrl : overlay.imageUrl;
+
+    const btnAlign = overlay.textAlign || 'center';
+    const btnJustify = { left: 'flex-start', center: 'center', right: 'flex-end' }[btnAlign];
+    const btnPadX = `${overlay.paddingX ?? 0}%`;
+
+    const containerStyle: React.CSSProperties = {
+        position: 'absolute',
+        left: `${bx}%`,
+        top: `${by}%`,
+        width: `${bw}%`,
+        // When an image is the button, let the height follow the image's aspect ratio so the
+        // box conforms to the art (no cropping, no distortion). Otherwise use the set height.
+        height: displayImage ? 'auto' : `${bh}%`,
+        transform: `translate(-${overlay.anchorX * 100}%, -${overlay.anchorY * 100}%) ${buildOrientationTransform({ rotation: overlay.rotation, flipX: overlay.flipX, flipY: overlay.flipY })}${parallaxTransform(overlay.parallaxDepth)}`.trim(),
+        pointerEvents: 'auto',
+        // Author stacking: button band (1) + layer. Default 0 → below characters (band 5), as today.
+        zIndex: 1 + (overlay.layer ?? 0) * 100,
+    };
+
+    // Pre-hide if showing WITH a transition that hasn't started yet
+    if (overlay.action === 'show' && hasTransition && !playTransition) {
+        containerStyle.opacity = 0;
+    }
+
+    const buttonStyle: React.CSSProperties = displayImage
+        ? {
+            // Image button: box conforms to the image; text (if any) layers on top.
+            position: 'relative',
+            width: '100%',
+            height: 'auto',
+            display: 'block',
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            lineHeight: 0,
+            color: overlay.textColor,
+            fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
+            fontWeight: overlay.fontWeight,
+            transition: 'transform 0.1s',
+            transform: isHovered ? 'translateY(-2px)' : 'none',
+            opacity: bOpacity ?? 1,
+        }
+        : {
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            backgroundColor: bBgColor,
+            color: overlay.textColor,
+            fontSize: `calc(var(--ovl-scale, 1) * ${bFontSize}px)`,
+            fontWeight: overlay.fontWeight,
+            borderRadius: `calc(var(--ovl-scale, 1) * ${bBorderRadius}px)`,
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            paddingLeft: btnPadX,
+            paddingRight: btnPadX,
+            boxSizing: 'border-box',
+            textAlign: btnAlign,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: btnJustify,
+            transition: 'transform 0.1s, box-shadow 0.1s',
+            boxShadow: isHovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)',
+            transform: isHovered ? 'translateY(-2px)' : 'none',
+            opacity: bOpacity ?? 1,
+        };
+
+    return (
+        <div
+            key={overlay.id}
+            style={{...containerStyle, ...(hasTransition ? { animationDuration: animDuration } : {})}}
+            className={`${transitionClass}`}
+            // Quick-menu buttons must never trigger a Wait command's click-to-advance.
+            // The Wait handler is a capture-phase window listener (fires before this
+            // button's stopPropagation), so it checks for this marker to ignore the click.
+            {...(overlay.quickMenuMode ? { 'data-vn-no-advance': 'true' } : {})}
+        >
+            <button
+                onClick={handleClick}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                style={buttonStyle}
+            >
+                {/* Image drives the button size (width 100%, height auto = aspect-correct). */}
+                {displayImage && (
+                    <img
+                        src={displayImage}
+                        alt={overlay.text}
+                        draggable={false}
+                        style={{ display: 'block', width: '100%', height: 'auto', objectFit: 'contain', borderRadius: `${overlay.borderRadius}px` }}
+                    />
+                )}
+                {overlay.text && (
+                    <span style={displayImage
+                        ? { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: btnJustify, lineHeight: 'normal', zIndex: 1, paddingLeft: btnPadX, paddingRight: btnPadX, boxSizing: 'border-box', textAlign: btnAlign }
+                        : { position: 'relative', zIndex: 1 }}>
+                        {overlay.text}
+                    </span>
+                )}
+            </button>
+        </div>
+    );
+};
+
+/**
+ * A single quick-menu button. Renders custom art (with hover swap) when assigned,
+ * otherwise the default styled pill. The art path keeps the click area tight to the
+ * image and preserves aspect ratio (no distortion) via the caller-supplied artImgStyle.
+ */
+const QuickMenuButtonEl: React.FC<{
+    label: string;
+    title: string;
+    icon: React.ReactNode;
+    onClick: (e: React.MouseEvent) => void;
+    disabled?: boolean;
+    config?: QuickMenuButtonConfig;
+    assetResolver: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    /** Style for the <img> when custom art is used (mode-dependent sizing). */
+    artImgStyle: React.CSSProperties;
+    /** Extra style for the art <button> wrapper (mode-dependent sizing). */
+    artButtonStyle?: React.CSSProperties;
+    /** className/style for the default (no-art) pill button. */
+    pillClassName: string;
+    pillStyle: React.CSSProperties;
+}> = ({ label, title, icon, onClick, disabled, config, assetResolver, artImgStyle, artButtonStyle, pillClassName, pillStyle }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const img = config?.image ? assetResolver(config.image.id, config.image.type) : null;
+    const hoverImg = config?.hoverImage ? assetResolver(config.hoverImage.id, config.hoverImage.type) : null;
+    const displayImg = (isHovered && hoverImg) ? hoverImg : img;
+
+    if (displayImg) {
+        return (
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                title={title}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                style={{
+                    padding: 0, margin: 0, border: 'none', background: 'transparent', lineHeight: 0,
+                    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1,
+                    display: 'block',
+                    ...artButtonStyle,
+                }}
+            >
+                <img src={displayImg} alt={label} draggable={false} style={artImgStyle} />
+            </button>
+        );
+    }
+
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            title={title}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className={pillClassName}
+            style={pillStyle}
+        >
+            {icon}
+            {label}
+        </button>
+    );
+};
+
+const ImageOverlayElement: React.FC<{ overlay: ImageOverlay; stageSize: StageSize }> = ({ overlay, stageSize }) => {
+    const tweenValues = useTween(overlay.id, 'image');
+    const hasTransition = overlay.transition && overlay.transition !== 'instant';
+    const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
+    const timeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+
+        if (!overlay.transition || overlay.transition === 'instant') {
+            setPlayTransition(false);
+            return;
+        }
+
+        if (overlay.action === 'show') {
+            setPlayTransition(false);
+            timeoutRef.current = window.setTimeout(() => {
+                setPlayTransition(true);
+                timeoutRef.current = null;
+            }, 0);
+            return () => {
+                if (timeoutRef.current !== null) {
+                    clearTimeout(timeoutRef.current);
+                    timeoutRef.current = null;
+                }
+            };
+        }
+
+        setPlayTransition(true);
+        return () => {
+            if (timeoutRef.current !== null) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, [overlay.id, overlay.transition, overlay.action]);
+
+    const applyTransition = playTransition && overlay.transition && overlay.transition !== 'instant';
+    const transitionClass = applyTransition && overlay.transition ? getOverlayTransitionClass(overlay.transition, overlay.action === 'hide') : '';
+    const animDuration = `${overlay.duration ?? 0.5}s`;
+    const isSlideTransition = overlay.transition === 'slide';
+    const slideStyle = isSlideTransition ? buildSlideStyle(overlay.x, overlay.y ?? 0, overlay.action, stageSize) : {};
+
+    // Apply tween interpolated values
+    const ix = tweenValues?.x ?? overlay.x;
+    const iy = tweenValues?.y ?? overlay.y;
+    const iw = tweenValues?.width ?? overlay.width;
+    const ih = tweenValues?.height ?? overlay.height;
+    const iOpacity = tweenValues?.opacity ?? overlay.opacity;
+    const iRotation = tweenValues?.rotation ?? overlay.rotation;
+    const iScaleX = tweenValues?.scaleX ?? overlay.scaleX;
+    const iScaleY = tweenValues?.scaleY ?? overlay.scaleY;
+
+    // "Fit to content": the width/height become a max bound and the box shrinks to the fitted
+    // (undistorted) art, so the element footprint hugs the image with no surrounding margin.
+    const fit = !!overlay.fitToContent;
+    // Size is stored in px against a 1280x720 design reference (REFERENCE_WIDTH/HEIGHT in
+    // StagingArea). Render it as a PERCENT of the stage — exactly like the editor — so the
+    // image keeps the same proportions on any stage size (desktop window, Android WebView,
+    // web). On a 1280-wide stage this is byte-identical to the old raw-px behaviour, so the
+    // desktop build is unchanged; smaller/larger stages (Android) now match instead of
+    // rendering the image too big/small.
+    const refPctW = (px: number) => `${(px / 1280) * 100}%`;
+    const refPctH = (px: number) => `${(px / 720) * 100}%`;
+    const containerStyle: React.CSSProperties = {
+        left: `${ix}%`,
+        top: `${iy}%`,
+        ...(fit
+            ? { width: 'auto', height: 'auto', maxWidth: refPctW(iw), maxHeight: refPctH(ih) }
+            : { width: refPctW(iw), height: refPctH(ih) }),
+        transform: `${isSlideTransition ? '' : 'translate(-50%, -50%)'}${parallaxTransform(overlay.parallaxDepth)}`.trim() || undefined,
+        // Author stacking: image band (1) + layer. Default 0 → below characters (band 5), as today.
+        zIndex: 1 + (overlay.layer ?? 0) * 100,
+    };
+
+    // Only pre-hide if we're showing WITH a transition that hasn't started yet
+    if (overlay.action === 'show' && hasTransition && !playTransition) {
+        containerStyle.opacity = 0;
+    }
+
+    // Orientation flips compose with the existing scaleX/scaleY.
+    const iFlipX = overlay.flipX ? -1 : 1;
+    const iFlipY = overlay.flipY ? -1 : 1;
+    const imageStyle: React.CSSProperties = {
+        ...(fit
+            // Inner image fills/bounds within the (percent-sized) container, like the editor.
+            ? { display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%' }
+            : { width: '100%', height: '100%' }),
+        transform: `rotate(${iRotation}deg) scale(${iScaleX * iFlipX}, ${iScaleY * iFlipY})`,
+        transformOrigin: 'center center',
+        opacity: iOpacity,
+    };
+    // When fitting, the media is in-flow (so it drives the box size); otherwise it fills the box.
+    const mediaCls = `${fit ? '' : 'absolute inset-0 w-full h-full '}object-contain pointer-events-none`;
+
+    const className = `absolute${applyTransition ? ` ${transitionClass} transition-base` : ''}`;
+    const style = {
+        ...containerStyle,
+        ...(applyTransition ? { animationDuration: animDuration } : {}),
+        ...(isSlideTransition ? slideStyle : {}),
+    } as React.CSSProperties;
+
+    return (
+        <div className={className} style={style}>
+            {overlay.isVideo && overlay.videoUrl ? (
+                <video
+                    src={overlay.videoUrl}
+                    autoPlay
+                    muted
+                    loop={overlay.videoLoop}
+                    playsInline
+                    className={mediaCls}
+                    style={imageStyle}
+                />
+            ) : (
+                <img
+                    src={overlay.imageUrl}
+                    alt=""
+                    className={mediaCls}
+                    style={imageStyle}
+                />
+            )}
+        </div>
+    );
+};
+
+/** Interactive scene hot spot (ShowHotSpot). A click/hover island that fires actions,
+ *  and (for drag-drop) a registry-published drop target reachable from any surface. */
+const HotSpotOverlayElement: React.FC<{
+    overlay: HotSpotOverlay;
+    onAction: (action: VNUIAction) => void;
+    onAdvance?: () => void;
+    evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
+    variables: Record<VNID, string | number | boolean>;
+    /** Editor preview (not exported game): show a faint outline even when invisible. */
+    editTime?: boolean;
+}> = ({ overlay, onAction, onAdvance, evaluateConditions, variables, editTime }) => {
+    const active = !overlay.conditions || overlay.conditions.length === 0 || evaluateConditions(overlay.conditions, variables);
+
+    // Publish drag-drop spots to the global registry so draggables from any surface
+    // (HUD / screens) can be dropped here.
+    useEffect(() => {
+        if (!active || overlay.trigger !== 'drag-drop') return;
+        return registerDropTarget({
+            id: `scene-${overlay.commandId}`,
+            rectPct: { x: overlay.x, y: overlay.y, width: overlay.width, height: overlay.height },
+            acceptTag: overlay.acceptedTag || undefined,
+            onDrop: () => { overlay.actions.forEach(a => onAction(a)); },
+        });
+    }, [active, overlay, onAction]);
+
+    if (!active) return null;
+
+    const fire = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        overlay.actions.forEach(a => onAction(a));
+        if (overlay.advanceOnTrigger && onAdvance) onAdvance();
+    };
+
+    const style: React.CSSProperties = {
+        position: 'absolute',
+        left: `${overlay.x}%`, top: `${overlay.y}%`,
+        width: `${overlay.width}%`, height: `${overlay.height}%`,
+        borderRadius: overlay.shape === 'circle' ? '50%' : 6,
+        zIndex: 8, // above characters (z-5), below dialogue (z-20)
+        // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
+        // so empty/drag clicks still reach the stage. click/hover spots capture.
+        pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
+        cursor: overlay.trigger === 'click' ? 'pointer' : 'default',
+        background: overlay.visible
+            ? (overlay.highlightColor || 'rgba(99,102,241,0.35)')
+            : (editTime ? 'rgba(99,102,241,0.08)' : 'transparent'),
+        border: overlay.visible
+            ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}`
+            : (editTime ? '2px dashed rgba(99,102,241,0.7)' : undefined),
+    };
+
+    return (
+        <div
+            style={style}
+            onClick={overlay.trigger === 'click' ? fire : undefined}
+            onMouseEnter={overlay.trigger === 'hover' ? () => overlay.actions.forEach(a => onAction(a)) : undefined}
+        />
+    );
+};
+
+// GameStateSave interface (keeping local as it's not in extracted types)
+interface GameStateSave {
+    timestamp: number;
+    sceneName: string;
+    playerStateData: {
+        currentSceneId: VNID;
+        currentCommands: VNCommand[];
+        currentIndex: number;
+        commandStack: Array<{sceneId: VNID, commands: VNCommand[], index: number}>;
+        variables: Record<VNID, string | number | boolean>;
+        stageState: StageState;
+        musicState: MusicState;
+        inventorySlots?: (VNID | null)[];
+        selectedItemId?: VNID | null;
+        selectedElementId?: VNID | null;
+        pickedUpItems?: VNID[];
+    }
+}
+
+// --- Typewriter Hook ---
+const useTypewriter = (text: string, speed: number) => {
+    const [displayText, setDisplayText] = useState('');
+    const hasFinished = displayText.length === text.length;
+
+    useEffect(() => {
+        setDisplayText('');
+        if (!text) return;
+
+        const interval = setInterval(() => {
+            setDisplayText(prev => {
+                if (prev.length < text.length) {
+                    return text.substring(0, prev.length + 1);
+                } else {
+                    clearInterval(interval);
+                    return prev;
+                }
+            });
+        }, 1000 / speed);
+
+        return () => clearInterval(interval);
+    }, [text, speed]);
+    
+    const skip = () => setDisplayText(text);
+
+    return { displayText, skip, hasFinished };
+};
+
+// --- Stage size & measurement hook ---
+const useStageSize = (ref: React.RefObject<HTMLElement | null>) => {
+    const [size, setSize] = useState<StageSize>({ width: 0, height: 0 });
+    // Track ref.current becoming available (e.g. after conditional render)
+    const [element, setElement] = useState<HTMLElement | null>(null);
+
+    // Poll for ref.current to handle conditionally-rendered elements
+    useEffect(() => {
+        if (ref.current) {
+            setElement(ref.current);
+            return;
+        }
+        // ref.current is null — poll until the element mounts
+        const interval = setInterval(() => {
+            if (ref.current) {
+                setElement(ref.current);
+                clearInterval(interval);
+            }
+        }, 100);
+        return () => clearInterval(interval);
+    }, [ref]);
+
+    // Observe the actual element once available
+    useEffect(() => {
+        if (!element) return;
+        let rafId: number | null = null;
+        
+        const obs = new ResizeObserver(() => {
+            // Debounce with RAF to avoid rapid updates
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+            }
+            rafId = requestAnimationFrame(() => {
+                const r = element.getBoundingClientRect();
+                setSize(prev => {
+                    // Only update if size actually changed
+                    if (prev.width === r.width && prev.height === r.height) {
+                        return prev;
+                    }
+                    return { width: r.width, height: r.height };
+                });
+            });
+        });
+        obs.observe(element);
+        // initial measure
+        const r = element.getBoundingClientRect();
+        setSize({ width: r.width, height: r.height });
+        return () => {
+            obs.disconnect();
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+            }
+        };
+    }, [element]);
+
+    // Sync if ref changes to a different element (e.g. remount)
+    useEffect(() => {
+        if (ref.current && ref.current !== element) {
+            setElement(ref.current);
+        }
+    });
+
+    return size;
+}
+
+// --- UI Rendering Helpers ---
+
+/** Convert hex color + opacity (0-100) to rgba string */
+function hexToRgba(hex: string, opacity: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+}
+
+/** Build CSS background style based on size mode */
+function buildImageBackgroundStyle(url: string, sizeMode: string, slicePx?: number): React.CSSProperties {
+    switch (sizeMode) {
+        case 'nine-slice': {
+            const s = slicePx ?? 30;
+            return {
+                borderImageSource: `url(${url})`,
+                borderImageSlice: `${s} fill`,
+                borderImageWidth: `calc(var(--font-scale,1) * ${s}px)`,
+                borderImageRepeat: 'stretch',
+                borderStyle: 'solid',
+                borderColor: 'transparent',
+                borderWidth: `calc(var(--font-scale,1) * ${s}px)`,
+            };
+        }
+        case 'contain':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'cover':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+        case 'tile':
+            return { backgroundImage: `url(${url})`, backgroundSize: 'auto', backgroundRepeat: 'repeat' };
+        case 'stretch':
+        default:
+            return { backgroundImage: `url(${url})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+    }
+}
+
+/** Scale a pixel value by the --font-scale CSS variable so layout proportions
+ *  remain consistent regardless of actual container size. */
+const scalePx = (n: number) => `calc(var(--font-scale,1) * ${n}px)`;
+
+// --- Player UI Components ---
+// Crossfades an <img> when its `src` changes — used for appearance-state image swaps so a reactive
+// picture change eases instead of snapping. transitionMs falsy → instant. The new image is layered
+// on top and fades in; older layers are dropped once the fade completes. The host container must be
+// positioned (the element wrapper is position:absolute), so the absolute layers fill it.
+const CrossfadeImage: React.FC<{ src: string; alt?: string; style: React.CSSProperties; transitionMs?: number }> = ({ src, alt, style, transitionMs }) => {
+    const keyRef = useRef(0);
+    const prev = useRef(src);
+    const [layers, setLayers] = useState<{ src: string; k: number }[]>([{ src, k: 0 }]);
+    useEffect(() => {
+        if (src === prev.current) return;
+        prev.current = src;
+        keyRef.current += 1;
+        const k = keyRef.current;
+        if (!transitionMs) { setLayers([{ src, k }]); return; }
+        setLayers(ls => [...ls, { src, k }]);
+        const t = window.setTimeout(() => setLayers([{ src, k }]), transitionMs + 60);
+        return () => window.clearTimeout(t);
+    }, [src, transitionMs]);
+    return (
+        <>
+            {layers.map((layer, i) => (
+                <img
+                    key={layer.k}
+                    src={layer.src}
+                    alt={alt}
+                    style={{
+                        ...style,
+                        ...(i === 0 ? {} : { position: 'absolute', inset: 0 }),
+                        ...(i > 0 && transitionMs ? { animation: `vnImgCrossfade ${transitionMs}ms ease forwards` } : {}),
+                    }}
+                />
+            ))}
+        </>
+    );
+};
+
+// Resolve a speaker's effective textbox appearance. Precedence: a per-line theme override (from the
+// Dialogue command) wins outright; otherwise the character's assigned theme is the base with the
+// character's inline custom `textbox` layered on top. Missing/deleted theme ids fall back safely.
+const resolveEffectiveTextbox = (
+    project: VNProject,
+    character: { textbox?: Record<string, unknown>; textboxThemeId?: VNID } | null | undefined,
+    lineThemeId?: VNID | null,
+): Record<string, unknown> | undefined => {
+    const themes = project.textboxThemes as Record<string, any> | undefined;
+    if (lineThemeId && themes?.[lineThemeId]) return themes[lineThemeId];
+    const base = character?.textboxThemeId ? themes?.[character.textboxThemeId] : undefined;
+    const inline = character?.textbox;
+    if (base || inline) return { ...(base || {}), ...(inline || {}) };
+    return undefined;
+};
+
+// ── Appearance states (variable-reactive element styling) ──
+// The FIRST state whose conditions all match wins; a state with no conditions never auto-activates.
+const pickActiveAppearanceState = (
+    element: VNUIElement,
+    variables: Record<VNID, string | number | boolean>,
+    evalConditions: (conditions: any, variables: any) => boolean,
+): UIAppearanceState | null => {
+    const states = (element as { appearanceStates?: UIAppearanceState[] }).appearanceStates;
+    if (!states || states.length === 0) return null;
+    for (const st of states) {
+        if (st.conditions && st.conditions.length > 0 && evalConditions(st.conditions, variables)) return st;
+    }
+    return null;
+};
+
+// Returns a shallow clone with the state's primaryColor/image mapped onto the element's typed
+// "main" fields (Meter fill, Text colour, Button bg, Image/Button picture). Universal overrides
+// (opacity/scale/rotation/glow) are applied to the wrapper style by the caller, not here.
+const mergeAppearanceStatePrimary = (element: VNUIElement, state: UIAppearanceState): VNUIElement => {
+    if (!state.primaryColor && !state.image) return element;
+    const el = { ...element } as Record<string, unknown> & { type: UIElementType };
+    if (state.primaryColor) {
+        if (el.type === UIElementType.Meter) { el.fillColor = state.primaryColor; el.fillColorEnd = undefined; }
+        else if (el.type === UIElementType.Text) { el.font = { ...(el.font as object || {}), color: state.primaryColor }; }
+        else if (el.type === UIElementType.Button) { el.backgroundColor = state.primaryColor; }
+    }
+    if (state.image) {
+        if (el.type === UIElementType.Image) { el.background = { type: 'image', assetId: state.image.id }; el.image = state.image; }
+        else if (el.type === UIElementType.Button) { el.image = state.image; }
+    }
+    return el as unknown as VNUIElement;
+};
+
+// Flashlight overlay background: a radial hole (transparent center → dark edges) centered at the
+// cursor. `mx/my` are px within the overlay; softness widens the feathered falloff.
+const flashlightBg = (mx: number, my: number, radiusPx: number, softness: number, darkRgba: string): string => {
+    const inner = Math.round(Math.max(0, Math.min(1, 1 - softness)) * 100); // solid-clear inner %
+    return `radial-gradient(circle ${Math.max(20, radiusPx)}px at ${mx}px ${my}px, transparent 0%, transparent ${inner}%, ${darkRgba} 100%)`;
+};
+
+// First built-in dialogue reactive state whose conditions match (empty-conditions states never auto-fire).
+const pickReactiveTextboxState = (
+    states: any[] | undefined,
+    variables: Record<VNID, string | number | boolean>,
+    evalConditions: (conditions: any, variables: any) => boolean,
+): any | null => {
+    if (!states || states.length === 0) return null;
+    for (const st of states) {
+        if (st.conditions && st.conditions.length > 0 && evalConditions(st.conditions, variables)) return st;
+    }
+    return null;
+};
+
+const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState }) => {
+    if (!dialogue) return null;
+    const interpolatedText = interpolateVariables(dialogue.text, variables, project);
+    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, settings.textSpeed);
+
+    // Per-character textbox overrides (appearance only). Resolves a per-line theme override > the
+    // character's assigned theme (+ inline custom on top). Any field left undefined falls back to
+    // the project-global dialogue UI below via `charTb?.X ?? projectUI.X`.
+    const character = dialogue.characterId ? project.characters[dialogue.characterId] : null;
+    let charTb = resolveEffectiveTextbox(project, character, dialogue.textboxThemeId) as any;
+
+    // Variable-reactive dialogue state: layer its DEFINED textbox fields on top of the resolved
+    // character/theme look. `reactiveTransition` tweens the change (both into and out of the state,
+    // since the duration is the max across all states, not just the active one).
+    if (reactiveState) {
+        const merged = { ...(charTb || {}) };
+        for (const [k, v] of Object.entries(reactiveState)) {
+            if (v !== undefined && k !== 'id' && k !== 'name' && k !== 'conditions' && k !== 'hideNamebox' && k !== 'transitionMs') merged[k] = v;
+        }
+        charTb = merged;
+    }
+    const reactiveMs = (projectUI.dialogueReactiveStates || []).reduce(
+        (m: number, s: any) => (s.transitionMs ? Math.max(m, s.transitionMs) : m), 0);
+    const reactiveTransition = reactiveMs > 0
+        ? `background-color ${reactiveMs}ms ease, background ${reactiveMs}ms ease, opacity ${reactiveMs}ms ease, border-radius ${reactiveMs}ms ease`
+        : undefined;
+    
+    const handleClick = () => {
+        if (hasFinished) {
+            onFinished();
+        } else if (settings.enableSkip) {
+            skip();
+        }
+    }
+
+    // Resolve dialogue box image/video URL (character override, else global)
+    const boxImage = charTb?.dialogueBoxImage ?? projectUI.dialogueBoxImage;
+    const dialogueBoxUrl = boxImage
+        ? (boxImage.type === 'video'
+            ? project.videos[boxImage.id]?.videoUrl
+            : (project.images[boxImage.id]?.imageUrl || project.backgrounds[boxImage.id]?.imageUrl)
+          )
+        : null;
+    const isDialogueBoxVideo = boxImage?.type === 'video';
+
+    // Resolve dialogue box border image URL (character override, else global)
+    const borderImage = charTb?.dialogueBoxBorderImage ?? projectUI.dialogueBoxBorderImage;
+    const dialogueBorderUrl = borderImage
+        ? (project.images[borderImage.id]?.imageUrl || project.backgrounds[borderImage.id]?.imageUrl)
+        : null;
+    const dialogueBorderPadding = charTb?.dialogueBorderPadding ?? projectUI.dialogueBorderPadding ?? 12;
+
+    // Dialogue box layout settings
+    const dialogueBoxWidth = projectUI.dialogueBoxWidth ?? 100;
+    const dialogueBoxHeight = projectUI.dialogueBoxHeight || 0;
+    const dialogueBoxBottomMargin = projectUI.dialogueBoxBottomMargin ?? 20;
+    const dialogueBoxPadding = projectUI.dialogueBoxPadding ?? 20;
+
+    // New appearance settings (character override, else global)
+    const dialogueSizeMode = charTb?.dialogueBoxSizeMode ?? projectUI.dialogueBoxSizeMode ?? 'stretch';
+    const dialogueSlice = charTb?.dialogueBoxSlice ?? projectUI.dialogueBoxSlice ?? 30;
+    const dialogueColor = charTb?.dialogueBoxColor ?? projectUI.dialogueBoxColor ?? '#0f172a';
+    const dialogueOpacity = charTb?.dialogueBoxOpacity ?? projectUI.dialogueBoxOpacity ?? 90;
+    const dialogueBorderRadius = charTb?.dialogueBoxBorderRadius ?? projectUI.dialogueBoxBorderRadius ?? 8;
+
+    // Namebox settings (character override, else global)
+    const nameboxImage = charTb?.nameboxImage ?? projectUI.nameboxImage;
+    const nameboxImageUrl = nameboxImage
+        ? (project.images[nameboxImage.id]?.imageUrl || project.backgrounds[nameboxImage.id]?.imageUrl)
+        : null;
+    const nameboxColor = charTb?.nameboxColor ?? projectUI.nameboxColor ?? '#0f172a';
+    const nameboxOpacity = charTb?.nameboxOpacity ?? projectUI.nameboxOpacity ?? 92;
+    const nameboxPadding = charTb?.nameboxPadding ?? projectUI.nameboxPadding ?? 8;
+    const nameboxHPadding = charTb?.nameboxHorizontalPadding ?? projectUI.nameboxHorizontalPadding ?? 14;
+    const nameboxBorderRadius = charTb?.nameboxBorderRadius ?? projectUI.nameboxBorderRadius ?? 6;
+    const nameboxOffsetX = projectUI.nameboxOffsetX ?? 20;
+    const nameboxOffsetY = projectUI.nameboxOffsetY ?? 0;
+    const nameboxSizeMode = charTb?.nameboxSizeMode ?? projectUI.nameboxSizeMode ?? 'stretch';
+
+    // Get character-specific font if available
+    const characterFont = character?.fontFamily;
+    const characterFontSize = character?.fontSize;
+    const characterFontWeight = character?.fontWeight;
+    const characterFontItalic = character?.fontItalic;
+    
+    const dialogueTextStyle = {
+        ...fontSettingsToStyle(charTb?.dialogueTextFont ?? projectUI.dialogueTextFont),
+        ...(characterFont ? { fontFamily: characterFont } : {}),
+        ...(characterFontSize ? { fontSize: `calc(var(--font-scale, 1) * ${characterFontSize}px)` } : {}),
+        ...(characterFontWeight ? { fontWeight: characterFontWeight } : {}),
+        ...(characterFontItalic ? { fontStyle: 'italic' } : {})
+    };
+
+    const hasCustomImage = dialogueBoxUrl || dialogueBorderUrl;
+    const showNamebox = dialogue.characterName !== 'Narrator' && !reactiveState?.hideNamebox;
+
+    // Namebox style: uses name font (character override, else global) with character colour override
+    const nameFont = charTb?.dialogueNameFont ?? projectUI.dialogueNameFont;
+    const nameStyle: React.CSSProperties = {
+        ...fontSettingsToStyle(nameFont),
+        ...(dialogue.characterColor && dialogue.characterColor !== '#FFFFFF' ? { color: dialogue.characterColor } : {})
+    };
+
+    // Build namebox background style
+    const nameboxBgStyle: React.CSSProperties = nameboxImageUrl
+        ? { ...buildImageBackgroundStyle(nameboxImageUrl, nameboxSizeMode), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition }
+        : { backgroundColor: hexToRgba(nameboxColor, nameboxOpacity), borderRadius: scalePx(nameboxBorderRadius), transition: reactiveTransition };
+
+    // Build dialogue box background color (used when no image, or behind transparent images)
+    const dialogueBgColor = hexToRgba(dialogueColor, dialogueOpacity);
+
+    // Build image style for the dialogue box
+    const dialogueImageStyle: React.CSSProperties = (dialogueBoxUrl && !isDialogueBoxVideo)
+        ? buildImageBackgroundStyle(dialogueBoxUrl, dialogueSizeMode, dialogueSlice)
+        : {};
+
+    /* ── Percentage-based layout rects (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+
+    const dialogueHPct = dialogueBoxHeight ? (dialogueBoxHeight * 100 / gameH) : 20;
+    const dialogueXPct = projectUI.dialogueBoxX ?? ((100 - dialogueBoxWidth) / 2);
+    const bmPct = dialogueBoxBottomMargin * 100 / gameH;
+    // If a bottom Quick Menu preset is active and the user hasn't overridden
+    // the dialogue Y or Quick Menu Y, reserve room at the bottom so the
+    // dialogue box sits just above the menu rather than on top of it.
+    // Skip reservation if quickMenuFloatOverDialogue is enabled.
+    const _qmPosForReserve = projectUI.quickMenuPosition ?? 'above-dialogue';
+    const _isBottomQmPreset = _qmPosForReserve === 'bottom-right' || _qmPosForReserve === 'bottom-left';
+    const _shouldFloatQm = projectUI.quickMenuFloatOverDialogue ?? false;
+    const _qmBottomReservePct = (!_shouldFloatQm && _isBottomQmPreset && projectUI.quickMenuY === undefined)
+        ? ((projectUI.quickMenuHeight ?? 4) + 2)
+        : 0;
+    const dialogueYPct = projectUI.dialogueBoxY ?? (100 - dialogueHPct - bmPct - _qmBottomReservePct);
+
+    const nameWPct = projectUI.nameboxWidth ?? 15;
+    const nameHPct = projectUI.nameboxHeight ?? 5;
+    const nameXPct = projectUI.nameboxX ?? (dialogueXPct + nameboxOffsetX * 100 / gameW);
+    const nameYPct = projectUI.nameboxY ?? (dialogueYPct - nameHPct - nameboxOffsetY * 100 / gameH);
+
+    const textPadTop = projectUI.dialogueTextPaddingTop ?? 0;
+    const textPadBot = projectUI.dialogueTextPaddingBottom ?? 0;
+    const textPadLeft = projectUI.dialogueTextPaddingLeft ?? 0;
+    const textPadRight = projectUI.dialogueTextPaddingRight ?? 0;
+
+    return (
+        <>
+            {/* Namebox – positioned independently (matching InGameUIEditor) */}
+            {showNamebox && (
+                <div
+                    className="absolute z-[21] cursor-pointer"
+                    style={{
+                        left: `${nameXPct}%`,
+                        top: `${nameYPct}%`,
+                        width: `${nameWPct}%`,
+                        height: `${nameHPct}%`,
+                        animation: 'vnDialogueIn 0.25s ease-out',
+                    }}
+                    onClick={handleClick}
+                >
+                    <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: nameFont?.align === 'center' ? 'center' : nameFont?.align === 'right' ? 'flex-end' : 'flex-start',
+                        ...nameboxBgStyle,
+                        padding: `${scalePx(nameboxPadding)} ${scalePx(nameboxHPadding)}`,
+                        ...(hasCustomImage || nameboxImageUrl ? {} : {
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            backdropFilter: 'blur(6px)',
+                            WebkitBackdropFilter: 'blur(6px)',
+                        }),
+                    }}>
+                        <span style={{...nameStyle, lineHeight: 1.3}}>
+                            <span style={extractTextGradientStyle(nameFont) || undefined}>{dialogue.characterName}</span>
+                        </span>
+                    </div>
+                </div>
+            )}
+            {/* Dialogue box – percentage positioned (matching InGameUIEditor) */}
+            <div 
+                className="absolute z-20 cursor-pointer"
+                style={{
+                    left: `${dialogueXPct}%`,
+                    top: `${dialogueYPct}%`,
+                    width: `${dialogueBoxWidth}%`,
+                    height: `${dialogueHPct}%`,
+                    animation: 'vnDialogueIn 0.25s ease-out',
+                    ...(dialogueBorderUrl 
+                        ? { ...buildImageBackgroundStyle(dialogueBorderUrl, dialogueSizeMode, dialogueSlice), padding: scalePx(dialogueBorderPadding), borderRadius: scalePx(dialogueBorderRadius) }
+                        : {})
+                }}
+                onClick={handleClick}
+            >
+                <div
+                    className="relative"
+                    style={{
+                        borderRadius: scalePx(dialogueBorderRadius),
+                        overflow: 'hidden',
+                        width: '100%',
+                        height: '100%',
+                        transition: reactiveTransition,
+                        ...(hasCustomImage ? {} : {
+                            backgroundColor: dialogueBgColor,
+                            border: '1px solid rgba(148,163,184,0.25)',
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
+                        }),
+                        ...(dialogueBoxUrl && !isDialogueBoxVideo 
+                            ? { 
+                                ...dialogueImageStyle,
+                                backgroundColor: dialogueBgColor,
+                                ...(dialogueSizeMode !== 'nine-slice' ? { padding: scalePx(dialogueBoxPadding) } : {})
+                              } 
+                            : { padding: scalePx(dialogueBoxPadding) })
+                    }}
+                >
+                    {isDialogueBoxVideo && dialogueBoxUrl && (
+                        <video 
+                            autoPlay 
+                            loop 
+                            muted 
+                            className="absolute inset-0 w-full h-full -z-10"
+                            style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(dialogueBorderRadius) }}
+                        >
+                            <source src={dialogueBoxUrl} />
+                        </video>
+                    )}
+                    <div style={{
+                        position: 'relative',
+                        zIndex: 1,
+                        padding: dialogueSizeMode === 'nine-slice' && dialogueBoxUrl ? scalePx(dialogueBoxPadding) : undefined,
+                        paddingTop: textPadTop ? scalePx(textPadTop) : undefined,
+                        paddingBottom: textPadBot ? scalePx(textPadBot) : undefined,
+                        paddingLeft: textPadLeft ? scalePx(textPadLeft) : undefined,
+                        paddingRight: textPadRight ? scalePx(textPadRight) : undefined,
+                    }}>
+                        <p className="leading-relaxed" style={{...dialogueTextStyle, wordBreak: 'normal' as const, overflowWrap: 'break-word' as const}}>
+                            <AnimatedDialogueText 
+                                displayText={displayText}
+                                textEffect={dialogue.textEffect}
+                                gradientStyle={extractTextGradientStyle(projectUI.dialogueTextFont) || undefined}
+                            />
+                            {!hasFinished && (
+                                <span style={{ 
+                                    display: 'inline-block', 
+                                    width: '0.5em', 
+                                    height: '1em', 
+                                    marginLeft: '2px', 
+                                    verticalAlign: 'text-bottom',
+                                    backgroundColor: dialogueTextStyle.color || projectUI.dialogueTextFont?.color || '#FFFFFF',
+                                    animation: 'vnCursorBlink 0.8s step-end infinite',
+                                    opacity: 0.85
+                                }} />
+                            )}
+                        </p>
+                        {/* Click-to-advance indicator */}
+                        {hasFinished && (
+                            <div style={{
+                                position: 'absolute',
+                                bottom: '8px',
+                                right: '12px',
+                                animation: 'vnAdvanceBounce 1.2s ease-in-out infinite',
+                                opacity: 0.6,
+                                fontSize: 'calc(var(--font-scale, 1) * 12px)',
+                                color: '#94a3b8',
+                            }}>
+                                ▼
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {/* Inject keyframe animations */}
+                <style>{`
+                    @keyframes vnDialogueIn {
+                        from { opacity: 0; transform: translateY(12px); }
+                        to   { opacity: 1; transform: translateY(0); }
+                    }
+                    @keyframes vnCursorBlink {
+                        0%, 100% { opacity: 0.85; }
+                        50% { opacity: 0; }
+                    }
+                    @keyframes vnAdvanceBounce {
+                        0%, 100% { transform: translateY(0); }
+                        50% { transform: translateY(4px); }
+                    }
+                `}</style>
+            </div>
+        </>
+    );
+};
+
+const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: (choice: ChoiceOption) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, layout?: 'vertical' | 'horizontal' | 'free' }> = ({ choices, projectUI, onSelect, variables, project, layout }) => {
+    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+    
+    // Resolve choice button image/video URL
+    const choiceButtonUrl = projectUI.choiceButtonImage 
+        ? (projectUI.choiceButtonImage.type === 'video' 
+            ? project.videos[projectUI.choiceButtonImage.id]?.videoUrl 
+            : (project.images[projectUI.choiceButtonImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonImage.id]?.imageUrl)
+          )
+        : null;
+    const isChoiceButtonVideo = projectUI.choiceButtonImage?.type === 'video';
+
+    // Resolve choice button border image URL
+    const choiceBorderUrl = projectUI.choiceButtonBorderImage
+        ? (project.images[projectUI.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonBorderImage.id]?.imageUrl)
+        : null;
+    const choiceBorderPadding = projectUI.choiceBorderPadding ?? 8;
+
+    // Choice button layout settings
+    const choiceWidth = projectUI.choiceButtonWidth || 0;
+    const choiceHeight = projectUI.choiceButtonHeight || 0;
+    const choicePadding = projectUI.choiceButtonPadding ?? 16;
+
+    // New appearance settings
+    const choiceSizeMode = projectUI.choiceButtonSizeMode ?? 'stretch';
+    const choiceSlice = projectUI.choiceButtonSlice ?? 15;
+    const choiceColor = projectUI.choiceButtonColor ?? '#1e293b';
+    const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
+    const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
+    const choiceHoverColor = projectUI.choiceHoverColor ?? '#334155';
+
+    // Resolve hover image
+    const choiceHoverUrl = projectUI.choiceHoverImage
+        ? (project.images[projectUI.choiceHoverImage.id]?.imageUrl || project.backgrounds[projectUI.choiceHoverImage.id]?.imageUrl)
+        : null;
+
+    const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
+    const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
+    const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
+
+    /* ── Percentage-based layout rect (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+    const choiceWPct = choiceWidth ? (choiceWidth * 100 / gameW) : 30;
+    const choiceHPct = choiceHeight ? (choiceHeight * 100 / gameH) : 25;
+    const choiceXPct = projectUI.choiceButtonX ?? (50 - choiceWPct / 2);
+    const choiceYPct = projectUI.choiceButtonY ?? 35;
+
+    // Resolve a per-option art asset (image/video) to a URL.
+    const resolveChoiceImg = (a?: { type: 'image' | 'video'; id: VNID } | null): string | null => {
+        if (!a) return null;
+        return a.type === 'video'
+            ? (project.videos[a.id]?.videoUrl || (project.backgrounds[a.id] as any)?.videoUrl || (project.images[a.id] as any)?.videoUrl || null)
+            : (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null);
+    };
+
+    // Render one choice button. Per-option overrides (art / colors / fontSize / radius) fall back to
+    // the global project.ui.choice* style, so with no overrides this is identical to the classic look.
+    // `fill` = the button should fill its wrapper's height (used by the free/positioned layout).
+    const renderButton = (choice: ChoiceOption, index: number, fill: boolean) => {
+        const interpolatedText = interpolateVariables(choice.text, variables, project);
+        const isHovered = hoveredIndex === index;
+        const optImg = resolveChoiceImg(choice.image);
+        const optHoverImg = resolveChoiceImg(choice.hoverImage);
+        const baseImg = optImg ?? choiceButtonUrl;
+        const baseIsVideo = optImg ? choice.image?.type === 'video' : isChoiceButtonVideo;
+        const hoverImg = optHoverImg ?? choiceHoverUrl;
+        const activeButtonUrl = (isHovered && hoverImg) ? hoverImg : baseImg;
+        const optBg = choice.backgroundColor ? hexToRgba(choice.backgroundColor, choiceOpacity) : choiceBgColor;
+        const optHoverBg = choice.hoverBackgroundColor ? hexToRgba(choice.hoverBackgroundColor, choiceOpacity) : choiceHoverBgColor;
+        const optRadius = choice.borderRadius ?? choiceBorderRadius;
+        const hasImg = !!(baseImg || choiceBorderUrl);
+        return (
+            <button
+                onClick={() => onSelect(choice)}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                className="relative overflow-hidden w-full transition-all duration-200 hover:scale-[1.03]"
+                style={{
+                    borderRadius: scalePx(optRadius),
+                    ...(fill ? { height: '100%' } : {}),
+                    ...(activeButtonUrl && !baseIsVideo
+                        ? {
+                            ...buildImageBackgroundStyle(activeButtonUrl, choiceSizeMode, choiceSlice),
+                            backgroundColor: isHovered ? optHoverBg : optBg,
+                          }
+                        : !hasImg
+                            ? {
+                                backgroundColor: isHovered ? optHoverBg : optBg,
+                                border: '1px solid rgba(148,163,184,0.3)',
+                                boxShadow: '0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                backdropFilter: 'blur(6px)',
+                                WebkitBackdropFilter: 'blur(6px)',
+                              }
+                            : { backgroundColor: isHovered ? optHoverBg : 'transparent' }),
+                    padding: `${scalePx(choicePadding)} ${scalePx(choicePadding * 2)}`,
+                    ...(!fill && choiceHeight ? { height: scalePx(choiceHeight) } : {}),
+                    ...fontSettingsToStyle(projectUI.choiceTextFont),
+                    ...(choice.fontSize ? { fontSize: scalePx(choice.fontSize) } : {}),
+                    ...(choice.textColor ? { color: choice.textColor } : {}),
+                    textAlign: (projectUI.choiceTextFont?.align || 'center') as any,
+                    wordBreak: 'normal' as const,
+                    overflowWrap: 'break-word' as const,
+                    cursor: 'pointer',
+                }}
+            >
+                {baseIsVideo && baseImg && (
+                    <video autoPlay loop muted className="absolute inset-0 w-full h-full -z-10" style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(optRadius) }}>
+                        <source src={baseImg} />
+                    </video>
+                )}
+                <span className="relative z-10" style={{ ...(extractTextGradientStyle(projectUI.choiceTextFont) || {}), ...(choice.textColor ? { color: choice.textColor } : {}) }}>{interpolatedText}</span>
+            </button>
+        );
+    };
+
+    const choiceKeyframes = (
+        <style>{`
+            @keyframes vnChoiceOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes vnChoiceSlideIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        `}</style>
+    );
+
+    // ── Free layout: each option positioned/sized by its own x/y/width/height ──
+    if (layout === 'free') {
+        return (
+            <div className="absolute inset-0 z-30" style={{ pointerEvents: 'none', animation: 'vnChoiceOverlayIn 0.3s ease-out' }}>
+                {choices.map((choice, index) => {
+                    const bx = choice.x ?? (34 + index * 2);
+                    const by = choice.y ?? (40 + index * 12);
+                    const bw = choice.width ?? 25;
+                    const bh = choice.height ?? 9;
+                    return (
+                        <div key={index} style={{
+                            position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto',
+                            animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                            ...(choiceBorderUrl ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) } : {}),
+                        }}>
+                            {renderButton(choice, index, true)}
+                        </div>
+                    );
+                })}
+                {choiceKeyframes}
+            </div>
+        );
+    }
+
+    // ── Vertical (default) or Horizontal stack ──
+    const horizontal = layout === 'horizontal';
+    return (
+        <div className={`absolute z-30 flex ${horizontal ? 'flex-row flex-wrap gap-3' : 'flex-col'} items-center justify-center`}
+             style={{
+                 left: `${choiceXPct}%`,
+                 top: `${choiceYPct}%`,
+                 width: `${choiceWPct}%`,
+                 height: `${choiceHPct}%`,
+                 animation: 'vnChoiceOverlayIn 0.3s ease-out',
+             }}>
+            {choices.map((choice, index) => (
+                <div
+                    key={index}
+                    className={horizontal ? '' : 'mb-3'}
+                    style={{
+                        animation: `vnChoiceSlideIn 0.35s ease-out ${index * 0.08}s both`,
+                        ...(horizontal ? {} : { width: '100%' }),
+                        ...(choiceBorderUrl
+                            ? { ...buildImageBackgroundStyle(choiceBorderUrl, choiceSizeMode, choiceSlice), padding: scalePx(choiceBorderPadding), borderRadius: scalePx(choiceBorderRadius) }
+                            : {})
+                    }}
+                >
+                    {renderButton(choice, index, false)}
+                </div>
+            ))}
+            {choiceKeyframes}
+        </div>
+    );
+};
+
+const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], onSubmit: (value: string) => void, variables: Record<VNID, string | number | boolean>, project: VNProject, projectUI?: any }> = ({ textInput, onSubmit, variables, project, projectUI }) => {
+    const [inputValue, setInputValue] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSubmit(inputValue);
+    };
+
+    const interpolatedPrompt = interpolateVariables(textInput.prompt, variables, project);
+
+    // Resolve input box image/video URL
+    const inputBoxUrl = projectUI?.inputBoxImage
+        ? (projectUI.inputBoxImage.type === 'video'
+            ? project.videos[projectUI.inputBoxImage.id]?.videoUrl
+            : (project.images[projectUI.inputBoxImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxImage.id]?.imageUrl)
+          )
+        : null;
+    const isInputBoxVideo = projectUI?.inputBoxImage?.type === 'video';
+
+    // Resolve input box border image URL
+    const inputBorderUrl = projectUI?.inputBoxBorderImage
+        ? (project.images[projectUI.inputBoxBorderImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxBorderImage.id]?.imageUrl)
+        : null;
+    const inputBorderPadding = projectUI?.inputBorderPadding ?? 8;
+    const inputBoxWidth = projectUI?.inputBoxWidth || 0;
+    const inputBoxPadding = projectUI?.inputBoxPadding ?? 24;
+
+    // New appearance settings
+    const inputSizeMode = projectUI?.inputBoxSizeMode ?? 'stretch';
+    const inputSlice = projectUI?.inputBoxSlice ?? 20;
+    const inputColor = projectUI?.inputBoxColor ?? '#0f172a';
+    const inputOpacity = projectUI?.inputBoxOpacity ?? 92;
+    const inputBorderRadius = projectUI?.inputBoxBorderRadius ?? 8;
+    const inputBgColor = hexToRgba(inputColor, inputOpacity);
+
+    const hasCustomImage = inputBoxUrl || inputBorderUrl;
+
+    // Font styles
+    const promptStyle: React.CSSProperties = projectUI?.inputPromptFont
+        ? { ...fontSettingsToStyle(projectUI.inputPromptFont), textAlign: projectUI.inputPromptFont.align || 'center' }
+        : { color: '#FFFFFF', textAlign: 'center' };
+    const fieldStyle: React.CSSProperties = projectUI?.inputFieldFont
+        ? fontSettingsToStyle(projectUI.inputFieldFont)
+        : { color: '#FFFFFF' };
+    const submitStyle: React.CSSProperties = projectUI?.inputSubmitFont
+        ? fontSettingsToStyle(projectUI.inputSubmitFont)
+        : { color: '#FFFFFF' };
+
+    /* ── Percentage-based layout rect (matching InGameUIEditor) ── */
+    const gameW = project.gameResolution?.width || 1920;
+    const gameH = project.gameResolution?.height || 1080;
+    const inputWPct = inputBoxWidth ? (inputBoxWidth * 100 / gameW) : 30;
+    const inputHPct = projectUI?.inputBoxHeight ? (projectUI.inputBoxHeight * 100 / gameH) : 20;
+    const inputXPct = projectUI?.inputBoxX ?? (50 - inputWPct / 2);
+    const inputYPct = projectUI?.inputBoxY ?? 40;
+
+    return (
+        <div className="absolute z-30 flex flex-col items-center justify-center"
+             style={{
+                 left: `${inputXPct}%`,
+                 top: `${inputYPct}%`,
+                 width: `${inputWPct}%`,
+                 height: `${inputHPct}%`,
+             }}>
+            <div
+                className="relative"
+                style={{
+                    borderRadius: scalePx(inputBorderRadius),
+                    width: '100%',
+                    ...(inputBorderUrl
+                        ? { ...buildImageBackgroundStyle(inputBorderUrl, inputSizeMode, inputSlice), padding: scalePx(inputBorderPadding) }
+                        : {}),
+                    animation: 'vnDialogueIn 0.25s ease-out',
+                }}
+            >
+                <div
+                    className="relative"
+                    style={{
+                        borderRadius: scalePx(inputBorderRadius),
+                        overflow: 'hidden',
+                        ...(hasCustomImage ? {} : {
+                            backgroundColor: inputBgColor,
+                            border: '1px solid rgba(148,163,184,0.3)',
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
+                        }),
+                        ...(inputBoxUrl && !isInputBoxVideo
+                            ? { ...buildImageBackgroundStyle(inputBoxUrl, inputSizeMode, inputSlice), backgroundColor: inputBgColor, ...(inputSizeMode !== 'nine-slice' ? { padding: scalePx(inputBoxPadding) } : {}) }
+                            : { padding: scalePx(inputBoxPadding) })
+                    }}
+                >
+                    {isInputBoxVideo && inputBoxUrl && (
+                        <video
+                            autoPlay
+                            loop
+                            muted
+                            className="absolute inset-0 w-full h-full -z-10"
+                            style={{ pointerEvents: 'none', objectFit: 'fill', borderRadius: scalePx(inputBorderRadius) }}
+                        >
+                            <source src={inputBoxUrl} />
+                        </video>
+                    )}
+                    <div style={{ position: 'relative', zIndex: 1, padding: inputSizeMode === 'nine-slice' && inputBoxUrl ? scalePx(inputBoxPadding) : undefined }}>
+                        <p className="mb-4" style={promptStyle}>
+                            <span style={extractTextGradientStyle(projectUI?.inputPromptFont) || undefined}>{interpolatedPrompt}</span>
+                        </p>
+                        <form onSubmit={handleSubmit}>
+                            <input
+                                type="text"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                placeholder={textInput.placeholder}
+                                maxLength={textInput.maxLength}
+                                className="w-full px-3 py-2 focus:outline-none transition-colors"
+                                style={{
+                                    ...fieldStyle,
+                                    backgroundColor: 'rgba(15,23,42,0.6)',
+                                    border: '1px solid rgba(148,163,184,0.3)',
+                                    borderRadius: scalePx(Math.max(4, inputBorderRadius - 4)),
+                                }}
+                                autoFocus
+                            />
+                            <button
+                                type="submit"
+                                className="w-full mt-4 px-4 py-2 transition-colors hover:brightness-110"
+                                style={{
+                                    ...submitStyle,
+                                    backgroundColor: hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)',
+                                    border: '1px solid rgba(148,163,184,0.2)',
+                                    borderRadius: scalePx(Math.max(4, inputBorderRadius - 4)),
+                                }}
+                            >
+                                <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>Submit</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── Save/Load Slot Grid with Pagination ──────────────────────────────────
+const SLOTS_PER_PAGE = 4;
+
+const SaveSlotGridComponent: React.FC<{
+    element: UISaveSlotGridElement;
+    style: React.CSSProperties;
+    isSaveMode: boolean;
+    gameSaves: Record<number, GameStateSave>;
+    onAction: (action: VNUIAction) => void;
+}> = ({ element, style, isSaveMode, gameSaves, onAction }) => {
+    const [currentPage, setCurrentPage] = useState(0);
+    const el = element;
+    const totalSlots = el.slotCount;
+    const totalPages = Math.max(1, Math.ceil(totalSlots / SLOTS_PER_PAGE));
+    const startIndex = currentPage * SLOTS_PER_PAGE;
+    const pageSlots = Array.from({ length: SLOTS_PER_PAGE }, (_, k) => startIndex + k).filter(i => i < totalSlots);
+
+    const baseFont = fontSettingsToStyle(el.font);
+    const slotBgColor = el.slotBackgroundColor || '#1e293b';
+    const slotBorderColor = el.slotBorderColor || '#475569';
+    const slotHoverBorderColor = el.slotHoverBorderColor || '#38bdf8';
+    const slotHeaderColor = el.slotHeaderColor || '#7dd3fc';
+    const slotTextColor = el.slotTextColor || '#e2e8f0';
+
+    // Empty slot text: use emptySlotFont if configured, otherwise fall back to emptySlotTextColor
+    const emptySlotStyle: React.CSSProperties = el.emptySlotFont
+        ? { ...fontSettingsToStyle(el.emptySlotFont), textAlign: undefined }
+        : { color: el.emptySlotTextColor || '#a0aec0', fontSize: baseFont.fontSize, fontFamily: baseFont.fontFamily };
+
+    // Nav buttons: use navButtonFont if configured - exclude textAlign
+    const navBtnStyle: React.CSSProperties = el.navButtonFont
+        ? { ...fontSettingsToStyle(el.navButtonFont), textAlign: undefined, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' }
+        : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize, fontWeight: 'bold' as const, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', padding: '2px 10px' };
+
+    const pageIndicatorStyle: React.CSSProperties = el.pageIndicatorFont
+        ? { ...fontSettingsToStyle(el.pageIndicatorFont), textAlign: undefined }
+        : { color: slotHeaderColor, fontFamily: baseFont.fontFamily, fontSize: baseFont.fontSize };
+
+    const prevLabel = el.prevButtonText ?? '◀ Prev';
+    const nextLabel = el.nextButtonText ?? 'Next ▶';
+
+    // Shared slot-card markup — identical between the classic grid and free placement,
+    // so a freely-positioned slot looks and behaves exactly like a grid slot.
+    const renderSlot = (i: number) => {
+        const slotData = gameSaves[i + 1];
+        const action: VNUIAction = isSaveMode
+            ? { type: UIActionType.SaveGame, slotNumber: i + 1 }
+            : { type: UIActionType.LoadGame, slotNumber: i + 1 };
+
+        return (
+            <button
+                key={i}
+                onClick={() => {
+                    if (!isSaveMode && !slotData) return;
+                    onAction(action);
+                }}
+                disabled={!isSaveMode && !slotData}
+                className="rounded-lg border-2 overflow-hidden flex flex-col w-full h-full"
+                style={{
+                    backgroundColor: slotBgColor,
+                    borderColor: slotBorderColor,
+                    transition: 'border-color 0.15s',
+                    cursor: (!isSaveMode && !slotData) ? 'default' : 'pointer',
+                } as React.CSSProperties}
+                onMouseEnter={(e) => {
+                    if (!e.currentTarget.disabled) {
+                        e.currentTarget.style.borderColor = slotHoverBorderColor;
+                    }
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = slotBorderColor;
+                }}
+            >
+                {/* Screenshot area — flex:1 so it fills remaining height, info area always visible */}
+                <div className="relative w-full overflow-hidden" style={{ flex: '1 1 0', minHeight: 0 }}>
+                    {slotData?.screenshot ? (
+                        <img
+                            src={slotData.screenshot}
+                            alt={`Save slot ${i + 1}`}
+                            className="absolute inset-0 w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '0 8%' }}>
+                            <span style={{ ...emptySlotStyle, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                                {el.emptySlotText}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Slot label overlay — positioned on top of screenshot */}
+                    {!el.hideSlotLabel && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '4px',
+                            left: '4px',
+                            color: slotHeaderColor,
+                            fontWeight: 'bold',
+                            fontSize: baseFont.fontSize,
+                            fontFamily: baseFont.fontFamily,
+                            textShadow: '0 2px 4px rgba(0,0,0,0.7)',
+                            zIndex: 10
+                        }}>
+                            Slot {i + 1}
+                        </div>
+                    )}
+                </div>
+
+                {/* Info area — compact metadata display */}
+                {!el.hideInfoBar && slotData && (
+                    <div style={{ flex: '0 0 auto', padding: '2px 4px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <div style={{ color: slotTextColor, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: `calc(0.8 * ${baseFont.fontSize})` }}>{slotData.sceneName}</div>
+                        <div style={{ color: slotTextColor, opacity: 0.6, margin: 0, fontSize: `calc(0.65 * ${baseFont.fontSize})` }}>{new Date(slotData.timestamp).toLocaleString()}</div>
+                    </div>
+                )}
+            </button>
+        );
+    };
+
+    // ── Free placement ── each slot positioned individually (screen-percent), no
+    // pagination. The element box is ignored; slots span the full screen so their
+    // coordinates line up with the background art. Slots without a rect are hidden.
+    if (el.slotLayout === 'free' && el.slotRects && el.slotRects.length > 0) {
+        const rects = el.slotRects;
+        return (
+            <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: style.zIndex, opacity: style.opacity as number | undefined, pointerEvents: 'none' }}>
+                {Array.from({ length: totalSlots }, (_, i) => {
+                    const rect = rects[i];
+                    if (!rect) return null;
+                    return (
+                        <div
+                            key={i}
+                            style={{ position: 'absolute', left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: 'auto' }}
+                        >
+                            {renderSlot(i)}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    return (
+        <div style={style} className="flex flex-col h-full">
+            {/* 2×2 grid – each slot is a card with screenshot on top, info below */}
+            <div className="grid grid-cols-2 gap-[3%] flex-1 min-h-0 p-[2%]">
+                {pageSlots.map(renderSlot)}
+            </div>
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 py-2 flex-shrink-0">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(0, p - 1)); }}
+                        disabled={currentPage === 0}
+                        className="disabled:opacity-30"
+                        style={navBtnStyle}
+                    >
+                        {prevLabel}
+                    </button>
+                    <span style={pageIndicatorStyle}>
+                        Page {currentPage + 1} / {totalPages}
+                    </span>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages - 1, p + 1)); }}
+                        disabled={currentPage >= totalPages - 1}
+                        className="disabled:opacity-30"
+                        style={navBtnStyle}
+                    >
+                        {nextLabel}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ButtonElement: React.FC<{
+    element: UIButtonElement,
+    style: React.CSSProperties,
+    playSound: (soundId: VNID | null) => void,
+    onAction: (action: VNUIAction) => void,
+    getElementAssetUrl: (image: { type: 'image' | 'video', id: VNID } | null) => string | null,
+    variables?: Record<VNID, string | number | boolean>,
+    project?: VNProject,
+    onCommitVariables?: () => void
+}> = ({ element, style, playSound, onAction, getElementAssetUrl, variables = {}, project, onCommitVariables }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const bgUrl = getElementAssetUrl(element.image);
+    const hoverUrl = getElementAssetUrl(element.hoverImage);
+    const displayUrl = isHovered && hoverUrl ? hoverUrl : bgUrl;
+    const textStyle = fontSettingsToStyle(element.font);
+    const interpolatedText = project ? interpolateVariables(element.text, variables, project) : element.text;
+    
+    const handleClick = () => {
+        try { playSound(element.clickSoundId); } catch(e) {}
+
+        // Collect all actions (primary + additional)
+        const allActions: VNUIAction[] = [];
+        if (element.action) {
+            allActions.push(element.action);
+        }
+        if (element.actions && element.actions.length > 0) {
+            allActions.push(...element.actions);
+        }
+        
+        // Process SetVariable actions FIRST to ensure variables are updated before navigation/screen changes
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+        const setVarActions = allActions.filter(isVarMutation);
+        const otherActions = allActions.filter(a => !isVarMutation(a));
+
+        // Execute SetVariable actions first
+        setVarActions.forEach(action => onAction(action));
+        
+        // CRITICAL: Commit UI variables to playerState before any navigation
+        if (setVarActions.length > 0 && onCommitVariables) {
+            runtimeDebugLog('[UI Button] Committing', setVarActions.length, 'variable changes before navigation');
+            onCommitVariables();
+        }
+        
+        // Then execute other actions (navigation, screen changes, etc.)
+        otherActions.forEach(action => onAction(action));
+    };
+    
+    // Use stored backgroundColor or default purple theme color
+    const buttonBg = element.backgroundColor || '#4D3273';
+    const hoverBg = element.hoverBackgroundColor || (element.backgroundColor ? undefined : '#6B4C9A');
+
+    // The incoming `style` carries the parallax transform (updated every frame via --ppx).
+    // The button's hover effect uses `transition-transform` — if both lived on the same
+    // element, that CSS transition would animate every parallax frame (janky "slow then fast"
+    // drift, out of step with same-depth elements). So the parallax transform goes on a
+    // non-transitioned WRAPPER, and the hover-scale stays on the inner <button>.
+    const { transform, overflow, ...wrapperStyle } = style;
+
+    // "Fit to content": shrink the visible art AND the clickable button to the image's fitted
+    // rectangle (kept undistorted), so there's no empty/letterbox margin around it. Only applies
+    // when the button actually has art — a colored/text button has nothing to trim.
+    // `interactive` mirrors the wrapper's pointer-events so a disabled element stays non-clickable.
+    const fit = !!element.fitToContent && !!displayUrl;
+    const interactive = wrapperStyle.pointerEvents !== 'none';
+    if (fit) {
+        return (
+            <div key={element.id} style={{ ...wrapperStyle, transform, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <button
+                    style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', padding: 0, border: 'none', background: 'transparent', position: 'relative', display: 'block', lineHeight: 0, cursor: interactive ? 'pointer' : 'default', pointerEvents: interactive ? 'auto' : 'none' }}
+                    className="transition-transform transform hover:scale-105"
+                    onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
+                    onMouseLeave={() => setIsHovered(false)}
+                    onClick={handleClick}
+                >
+                    <img src={displayUrl!} alt={element.text} draggable={false} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                    {interpolatedText && (
+                        <span className="absolute inset-0 flex items-center justify-center z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), pointerEvents: 'none'}}>
+                            {interpolatedText}
+                        </span>
+                    )}
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div key={element.id} style={{ ...wrapperStyle, transform }}>
+            <button
+                style={{ width: '100%', height: '100%', position: 'relative', overflow, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', paddingLeft: `${element.paddingX ?? 0}%`, paddingRight: `${element.paddingX ?? 0}%`, boxSizing: 'border-box' }}
+                className={`transition-transform transform hover:scale-105 flex items-center ${{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[element.font?.align || 'center']}`}
+                onMouseEnter={() => { try { playSound(element.hoverSoundId); } catch(e) {} setIsHovered(true); }}
+                onMouseLeave={() => setIsHovered(false)}
+                onClick={handleClick}
+            >
+                {displayUrl ? (
+                    <img src={displayUrl} alt={element.text} className="absolute inset-0 w-full h-full object-fill" />
+                ) : (
+                    <div
+                        className="absolute inset-0 w-full h-full rounded"
+                        style={{ backgroundColor: isHovered && hoverBg ? hoverBg : buttonBg }}
+                    />
+                )}
+                <span className="relative z-10" style={{...textStyle, ...(extractTextGradientStyle(element.font) || {}), display: 'inline-block', pointerEvents: 'none'}}>
+                    {interpolatedText}
+                </span>
+            </button>
+        </div>
+    );
+};
+
+// --- AssetCycler Component ---
+const AssetCyclerElement: React.FC<{
+    element: UIAssetCyclerElement,
+    style: React.CSSProperties,
+    variables: Record<VNID, string | number | boolean>,
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void,
+    project: VNProject
+}> = ({ element, style, variables, onVariableChange, project }) => {
+    const el = element;
+    const character = project.characters[el.characterId];
+    const layer = character?.layers[el.layerId];
+    let currentAssetId = String(variables[el.variableId] || '');
+    
+    runtimeDebugLog(`[AssetCycler] Rendering cycler for variable ${el.variableId}, current value:`, currentAssetId);
+    
+    // Apply filtering - NEW: Support assetConditions system first, fall back to filterPattern
+    let filteredAssetIds = el.assetIds;
+    
+    // NEW: Asset conditions-based filtering (simpler, more explicit)
+    if (el.assetConditions && el.assetConditions.length > 0) {
+        runtimeDebugLog(`[AssetCycler] Using assetConditions filtering for ${el.variableId}`);
+        
+        // Filter assets based on which conditions match the current variable state
+        filteredAssetIds = el.assetConditions
+            .filter(condition => {
+                // Check if ALL conditions for this asset are met
+                const allConditionsMet = condition.conditions.every(cond => {
+                    const currentVarValue = String(variables[cond.variableId] || '');
+                    const conditionMet = currentVarValue === cond.value;
+                    runtimeDebugLog(`[AssetCycler] Condition check: var ${cond.variableId} = "${currentVarValue}" === "${cond.value}" ? ${conditionMet}`);
+                    return conditionMet;
+                });
+                
+                if (allConditionsMet) {
+                    runtimeDebugLog(`[AssetCycler] ✓ All conditions met for asset ${condition.assetId}`);
+                }
+                return allConditionsMet;
+            })
+            .map(condition => condition.assetId);
+        
+        // If no conditions match yet (no selections made), show all assets as fallback
+        if (filteredAssetIds.length === 0) {
+            // Check if any condition variables have values
+            const conditionVars = new Set<VNID>(el.assetConditions.flatMap(c => c.conditions.map(cond => cond.variableId)));
+            const anyVarsSet = Array.from(conditionVars).some(varId => variables[varId]);
+            
+            if (!anyVarsSet) {
+                // No condition variables set yet, show all assets
+                filteredAssetIds = el.assetIds;
+                runtimeDebugLog(`[AssetCycler] No condition variables set yet, showing all ${filteredAssetIds.length} assets`);
+            } else {
+                runtimeDebugLog(`[AssetCycler] Conditions set but no matches, filtered to 0 assets`);
+            }
+        }
+        
+        runtimeDebugLog(`[AssetCycler] Condition-filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+    }
+    // OLD: Pattern-based filtering (for backwards compatibility)
+    else if (el.filterPattern) {
+        // Support both old single variable and new multi-variable filtering
+        const filterVarIds = el.filterVariableIds || (el.filterVariableId ? [el.filterVariableId] : []);
+        
+        if (filterVarIds.length > 0) {
+            runtimeDebugLog(`[AssetCycler] Filter variables for ${el.variableId}:`, filterVarIds);
+            
+            // Get all filter variable values (as asset names, not IDs)
+            const filterValues: Record<string, string> = {};
+            let allFiltersHaveValues = true;
+            
+            for (const varId of filterVarIds) {
+                const assetId = String(variables[varId] || '');
+                if (!assetId) {
+                    allFiltersHaveValues = false;
+                    break;
+                }
+                // Get the asset name from the ID
+                const asset = layer?.assets[assetId];
+                const assetName = asset?.name || assetId;
+                runtimeDebugLog(`[AssetCycler] Filter var ${varId}: assetId=${assetId}, assetName=${assetName}`);
+                filterValues[varId] = assetName;
+            }
+            
+            if (allFiltersHaveValues) {
+                // Replace placeholders in the pattern with asset names or parts of asset names
+                let pattern = el.filterPattern;
+                
+                // Helper function to extract part of asset name by index
+                const extractPart = (assetName: string, index: number): string => {
+                    const parts = assetName.split('_');
+                    if (index >= 0 && index < parts.length) {
+                        return parts[index];
+                    }
+                    return assetName;
+                };
+                
+                // First, try to replace specific {varId} or {varId[index]} placeholders
+                for (const varId of filterVarIds) {
+                    const assetName = filterValues[varId];
+                    
+                    // Replace {varId[index]} with specific part of asset name
+                    const indexedRegex = new RegExp(`\\{${varId}\\[(\\d+)\\]\\}`, 'g');
+                    pattern = pattern.replace(indexedRegex, (match, indexStr) => {
+                        const index = parseInt(indexStr, 10);
+                        const part = extractPart(assetName, index);
+                        runtimeDebugLog(`[AssetCycler] Extracting part ${index} from ${assetName}: ${part}`);
+                        return part;
+                    });
+                    
+                    // Replace {varId} with full asset name
+                    const specificRegex = new RegExp(`\\{${varId}\\}`, 'g');
+                    pattern = pattern.replace(specificRegex, assetName);
+                }
+                
+                // Then, replace any remaining generic placeholders by position
+                const remainingPlaceholders = pattern.match(/\{[^}]*\}/g);
+                if (remainingPlaceholders) {
+                    for (let i = 0; i < Math.min(remainingPlaceholders.length, filterVarIds.length); i++) {
+                        const varId = filterVarIds[i];
+                        const assetName = filterValues[varId];
+                        
+                        // Check if placeholder has [index] syntax
+                        const indexMatch = remainingPlaceholders[i].match(/\[(\d+)\]/);
+                        if (indexMatch) {
+                            const index = parseInt(indexMatch[1], 10);
+                            const part = extractPart(assetName, index);
+                            runtimeDebugLog(`[AssetCycler] Generic placeholder [${index}] extracting from ${assetName}: ${part}`);
+                            pattern = pattern.replace(/\{[^}]*\}/, part);
+                        } else {
+                            pattern = pattern.replace(/\{[^}]*\}/, assetName);
+                        }
+                    }
+                }
+                
+                runtimeDebugLog(`[AssetCycler] Filtering with resolved pattern: ${pattern}`);
+                
+                filteredAssetIds = el.assetIds.filter(assetId => {
+                    const asset = layer?.assets[assetId];
+                    if (!asset) return false;
+                    
+                    const matches = asset.name.toLowerCase().includes(pattern.toLowerCase());
+                    if (matches) {
+                        runtimeDebugLog(`[AssetCycler] ✓ Match: ${asset.name} contains ${pattern}`);
+                    }
+                    return matches;
+                });
+                runtimeDebugLog(`[AssetCycler] Filtered assets (${filteredAssetIds.length}):`, filteredAssetIds);
+            } else {
+                runtimeDebugLog(`[AssetCycler] Not all filter variables have values yet, showing all ${filteredAssetIds.length} assets`);
+            }
+        }
+    }
+    
+    // Initialize variable to first asset if not set (using useEffect to avoid setState during render)
+    React.useEffect(() => {
+        if (!currentAssetId && filteredAssetIds.length > 0 && onVariableChange) {
+            const firstAsset = filteredAssetIds[0];
+            runtimeDebugLog(`[AssetCycler] Initializing variable ${el.variableId} to:`, firstAsset);
+            onVariableChange(el.variableId, firstAsset);
+        }
+    }, [currentAssetId, filteredAssetIds.length > 0 ? filteredAssetIds[0] : null, el.variableId, onVariableChange]);
+    
+    // Update variable when filtered results change (for filter-driven cyclers OR condition-driven cyclers)
+    React.useEffect(() => {
+        const hasConditionFiltering = el.assetConditions && el.assetConditions.length > 0;
+        const hasPatternFiltering = el.filterVariableIds && el.filterVariableIds.length > 0;
+        
+        if ((hasConditionFiltering || hasPatternFiltering) && filteredAssetIds.length > 0 && onVariableChange) {
+            if (!filteredAssetIds.includes(currentAssetId)) {
+                const firstFiltered = filteredAssetIds[0];
+                runtimeDebugLog(`[AssetCycler] Filter changed - updating variable ${el.variableId} to first match:`, firstFiltered);
+                onVariableChange(el.variableId, firstFiltered);
+            }
+        }
+    }, [filteredAssetIds.join(','), el.assetConditions, el.filterVariableIds, el.variableId, currentAssetId, onVariableChange]);
+    
+    const currentIndex = filteredAssetIds.indexOf(currentAssetId);
+    const currentAsset = currentAssetId && layer ? layer.assets[currentAssetId] : null;
+    
+    const handlePrevious = () => {
+        if (filteredAssetIds.length === 0) return;
+        const newIndex = currentIndex <= 0 ? filteredAssetIds.length - 1 : currentIndex - 1;
+        runtimeDebugLog(`[AssetCycler] Previous: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+        onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
+    };
+    
+    const handleNext = () => {
+        if (filteredAssetIds.length === 0) return;
+        const newIndex = currentIndex >= filteredAssetIds.length - 1 ? 0 : currentIndex + 1;
+        runtimeDebugLog(`[AssetCycler] Next: setting variable ${el.variableId} to:`, filteredAssetIds[newIndex]);
+        onVariableChange?.(el.variableId, filteredAssetIds[newIndex]);
+    };
+    
+    return (
+        <div
+            key={el.id}
+            style={{
+                ...style,
+                backgroundColor: el.backgroundColor || 'rgba(30, 41, 59, 0.8)',
+                borderRadius: '8px',
+                padding: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: el.visible === false ? 0 : 1,
+                pointerEvents: el.visible === false ? 'none' : 'auto'
+            }}
+        >
+            {el.label && (
+                <div
+                    style={{
+                        fontSize: `calc(var(--font-scale, 1) * ${(el.font?.size || 16) * 0.8}px)`,
+                        fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                        fontWeight: el.font?.weight || 'normal',
+                        fontStyle: el.font?.italic ? 'italic' : 'normal',
+                        color: el.font?.color || '#f1f5f9',
+                        opacity: 0.8,
+                        textAlign: 'center'
+                    }}
+                >
+                    {el.label}
+                </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+                <button
+                    onClick={handlePrevious}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: el.arrowColor || '#a855f7',
+                        fontSize: `calc(var(--font-scale, 1) * ${el.arrowSize || 24}px)`,
+                        cursor: 'pointer',
+                        padding: '4px',
+                        lineHeight: 1,
+                        opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
+                        transition: 'opacity 0.2s'
+                    }}
+                    disabled={filteredAssetIds.length === 0}
+                >
+                    ◀
+                </button>
+                <div
+                    style={{
+                        flex: 1,
+                        fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
+                        fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                        fontWeight: el.font?.weight || 'normal',
+                        fontStyle: el.font?.italic ? 'italic' : 'normal',
+                        color: el.font?.color || '#f1f5f9',
+                        textAlign: 'center',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    {el.showAssetName && currentAsset ? currentAsset.name : (currentIndex >= 0 ? `${currentIndex + 1} / ${filteredAssetIds.length}` : '–')}
+                </div>
+                <button
+                    onClick={handleNext}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: el.arrowColor || '#a855f7',
+                        fontSize: `calc(var(--font-scale, 1) * ${el.arrowSize || 24}px)`,
+                        cursor: 'pointer',
+                        padding: '4px',
+                        lineHeight: 1,
+                        opacity: filteredAssetIds.length > 0 ? 1 : 0.3,
+                        transition: 'opacity 0.2s'
+                    }}
+                    disabled={filteredAssetIds.length === 0}
+                >
+                    ▶
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// --- CG Gallery Grid Component ---
+const CGGalleryGridElement: React.FC<{
+    element: UICGGalleryElement;
+    entries: CGGalleryEntry[];
+    variables: Record<VNID, string | number | boolean>;
+    project: VNProject;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    /** The screen-root node to portal the fullscreen viewer into, so it overlays ALL screen
+     *  elements (e.g. a Back button) regardless of their layer instead of being trapped in this
+     *  element's stacking context. */
+    viewerPortalRef?: React.RefObject<HTMLElement>;
+}> = ({ element, entries, variables, project, assetResolver, viewerPortalRef }) => {
+    const [viewingEntry, setViewingEntry] = useState<CGGalleryEntry | null>(null);
+    const [viewerIndex, setViewerIndex] = useState(0);
+
+    const isEntryUnlocked = (entry: CGGalleryEntry): boolean => {
+        if (!entry.unlockable) return true;
+        if (!entry.unlockVariableId) return true;
+        const val = variables[entry.unlockVariableId];
+        return val === true || val === 'true' || val === 1;
+    };
+
+    const unlockedEntries = entries.filter(e => isEntryUnlocked(e));
+
+    const handleThumbnailClick = (entry: CGGalleryEntry, index: number) => {
+        if (!isEntryUnlocked(entry)) return;
+        setViewingEntry(entry);
+        setViewerIndex(unlockedEntries.indexOf(entry));
+    };
+
+    const navigateViewer = (dir: -1 | 1) => {
+        const newIndex = (viewerIndex + dir + unlockedEntries.length) % unlockedEntries.length;
+        setViewerIndex(newIndex);
+        setViewingEntry(unlockedEntries[newIndex]);
+    };
+
+    // Fullscreen viewer overlay. Portaled to the screen root at a very high z-index so it ALWAYS
+    // sits above other screen elements (Back buttons, etc.) and fills the whole screen — never
+    // trapped inside this gallery element's box/stacking context.
+    if (viewingEntry) {
+        const viewUrl = assetResolver(viewingEntry.assetId, 'image');
+        const viewer = (
+            <div
+                className="absolute inset-0 z-[9999] flex items-center justify-center"
+                style={{ backgroundColor: element.backgroundColor || 'rgba(0,0,0,0.95)', pointerEvents: 'auto' }}
+                onClick={() => setViewingEntry(null)}
+            >
+                {viewUrl && (
+                    <img
+                        src={viewUrl}
+                        alt={viewingEntry.name}
+                        className="max-w-[90%] max-h-[85%] object-contain"
+                        onClick={e => e.stopPropagation()}
+                    />
+                )}
+                {/* Close (X) button — explicit, always-visible affordance. Inset DOWN from the very
+                    corner so it doesn't collide with the editor test-play's own close-✕ that sits in
+                    the top-right corner; still reads as a top-right close in exported games. */}
+                <button
+                    aria-label="Close"
+                    className="absolute top-16 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-black/55 hover:bg-black/85 text-white text-xl leading-none"
+                    onClick={e => { e.stopPropagation(); setViewingEntry(null); }}
+                >
+                    ✕
+                </button>
+                {/* Navigation arrows */}
+                {unlockedEntries.length > 1 && (
+                    <>
+                        <button
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl p-2"
+                            onClick={e => { e.stopPropagation(); navigateViewer(-1); }}
+                        >
+                            ◀
+                        </button>
+                        <button
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-4xl p-2"
+                            onClick={e => { e.stopPropagation(); navigateViewer(1); }}
+                        >
+                            ▶
+                        </button>
+                    </>
+                )}
+                {/* Entry name and close hint */}
+                <div className="absolute bottom-4 left-0 right-0 text-center">
+                    {element.showNames !== false && (
+                        <div className="text-white text-sm mb-1">{viewingEntry.name}</div>
+                    )}
+                    <div className="text-white/40 text-xs">Click anywhere (or ✕) to close</div>
+                </div>
+                {/* Counter — inset down to clear the editor test-play top-left chrome. */}
+                <div className="absolute top-16 left-4 text-white/50 text-sm">
+                    {viewerIndex + 1} / {unlockedEntries.length}
+                </div>
+            </div>
+        );
+        const portalTarget = viewerPortalRef?.current;
+        return portalTarget ? createPortal(viewer, portalTarget) : viewer;
+    }
+
+    // Thumbnail grid
+    const lockedPlaceholderUrl = project.cgGallery?.lockedPlaceholderAssetId
+        ? assetResolver(project.cgGallery.lockedPlaceholderAssetId, 'image')
+        : null;
+
+    // Shared thumbnail markup. In `free` mode the wrapper sizes the thumb (no fixed
+    // aspect ratio); in grid mode it keeps the 16/9 cell.
+    const renderThumb = (entry: CGGalleryEntry, idx: number, free: boolean) => {
+        const unlocked = isEntryUnlocked(entry);
+        const thumbAssetId = entry.thumbnailAssetId || entry.assetId;
+        const thumbUrl = unlocked ? assetResolver(thumbAssetId, 'image') : lockedPlaceholderUrl;
+
+        return (
+            <div
+                key={entry.id}
+                className="relative overflow-hidden flex items-center justify-center"
+                style={{
+                    ...(free ? { width: '100%', height: '100%' } : { aspectRatio: '16/9' }),
+                    borderRadius: `${element.thumbnailBorderRadius || 8}px`,
+                    border: `2px solid ${element.thumbnailBorderColor || '#4D3273'}`,
+                    backgroundColor: unlocked ? '#334155' : (element.lockedColor || '#1e293b'),
+                    cursor: unlocked ? 'pointer' : 'default',
+                    transition: 'transform 0.15s ease, border-color 0.15s ease',
+                }}
+                onClick={() => handleThumbnailClick(entry, idx)}
+                onMouseEnter={e => {
+                    if (unlocked) {
+                        (e.currentTarget as HTMLElement).style.transform = 'scale(1.05)';
+                        (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf6';
+                    }
+                }}
+                onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                    (e.currentTarget as HTMLElement).style.borderColor = element.thumbnailBorderColor || '#4D3273';
+                }}
+            >
+                {unlocked && thumbUrl ? (
+                    <img src={thumbUrl} alt={entry.name} className="w-full h-full object-cover" />
+                ) : !unlocked ? (
+                    <span className="text-2xl">{element.lockedText || '🔒'}</span>
+                ) : (
+                    <span className="text-xs text-slate-500">{entry.name}</span>
+                )}
+                {/* Name label */}
+                {element.showNames !== false && unlocked && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5 truncate px-1">
+                        {entry.name}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // ── Free placement ── each thumbnail positioned individually (screen-percent).
+    // The element box is ignored; thumbs span the full screen so they line up with
+    // background art. Only entries that have a placed rect are shown. The container is
+    // click-through (pointerEvents:none) so other screen elements behind it stay usable.
+    if (element.slotLayout === 'free' && element.slotRects && element.slotRects.length > 0) {
+        const rects = element.slotRects;
+        return (
+            <div style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                {entries.map((entry, idx) => {
+                    const rect = rects[idx];
+                    if (!rect) return null;
+                    return (
+                        <div
+                            key={entry.id}
+                            style={{ position: 'absolute', left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%`, pointerEvents: 'auto' }}
+                        >
+                            {renderThumb(entry, idx, true)}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="w-full h-full overflow-y-auto p-2 rounded"
+            style={{ backgroundColor: element.hideBackgroundPanel ? 'transparent' : (element.backgroundColor || 'rgba(15, 23, 42, 0.9)') }}
+        >
+            <div
+                className="grid"
+                style={{
+                    gridTemplateColumns: `repeat(${element.columns || 4}, 1fr)`,
+                    gap: `${element.gap || 8}px`,
+                }}
+            >
+                {entries.map((entry, idx) => renderThumb(entry, idx, false))}
+            </div>
+        </div>
+    );
+};
+
+// --- Inventory Grid (data-driven; auto-renders owned items from project.items) ---
+const InventoryGridElement: React.FC<{
+    element: UIInventoryGridElement;
+    items: VNItem[];
+    variables: Record<VNID, string | number | boolean>;
+    project: VNProject;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    onAction: (action: VNUIAction) => void;
+    onCommitVariables?: () => void;
+    inventorySlots?: (VNID | null)[];
+    onReorderSlots?: (slots: (VNID | null)[]) => void;
+    selectedItemId?: VNID | null;
+    selectedElementId?: VNID | null;
+    onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
+}> = ({ element, items, variables, project, assetResolver, onAction, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+    const count = (it: VNItem) => Number(variables[it.countVariableId] ?? 0);
+    const filteredAll = element.categoryFilter ? items.filter(it => it.category === element.categoryFilter) : items;
+    // An item shows when owned (count >= 1). At 0 it's hidden if either the grid hides unowned items
+    // OR the item itself is flagged hideWhenEmpty (per-item override for grids that show empties).
+    const shown = filteredAll.filter(it => count(it) >= 1 || (element.hideUnowned === false && !it.hideWhenEmpty));
+    const itemById = new Map<VNID, VNItem>(shown.map(it => [it.id, it] as [VNID, VNItem]));
+
+    const cols = element.columns || 4;
+    const colGap = element.columnGap ?? element.gap ?? 8;
+    const rowGap = element.rowGap ?? element.gap ?? 8;
+    // When the author hasn't pinned a row count, fill the element's box with (square) slots so the WHOLE
+    // grid is visible — empty slots included — giving players drop targets across the whole inventory.
+    const gridContainerRef = useRef<HTMLDivElement>(null);
+    const [autoRows, setAutoRows] = useState(0);
+    useEffect(() => {
+        if (element.rows && element.rows > 0) { setAutoRows(0); return; }
+        const node = gridContainerRef.current;
+        if (!node) return;
+        const compute = () => {
+            const cs = window.getComputedStyle(node);
+            const availW = node.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+            const availH = node.clientHeight - parseFloat(cs.paddingTop || '0') - parseFloat(cs.paddingBottom || '0');
+            if (availW <= 0 || availH <= 0) return;
+            const slotW = (availW - colGap * (cols - 1)) / cols;
+            if (slotW <= 0) return;
+            setAutoRows(Math.max(1, Math.floor((availH + rowGap) / (slotW + rowGap)))); // slots are square
+        };
+        compute();
+        const ro = new ResizeObserver(compute);
+        ro.observe(node);
+        return () => ro.disconnect();
+    }, [element.rows, cols, colGap, rowGap]);
+    const minSlots = (element.rows && element.rows > 0) ? cols * element.rows : cols * autoRows;
+    const totalSlots = Math.max(shown.length, minSlots);
+
+    // Positional slot layout: honor the player's saved slots (dropping items no longer shown),
+    // then drop any remaining shown items into the first empty slots. Items can sit in any slot.
+    const slots: (VNID | null)[] = [];
+    const placed = new Set<VNID>();
+    for (let i = 0; i < totalSlots; i++) {
+        const saved = inventorySlots?.[i] ?? null;
+        if (saved && itemById.has(saved) && !placed.has(saved)) { slots.push(saved); placed.add(saved); }
+        else slots.push(null);
+    }
+    const unplaced = shown.filter(it => !placed.has(it.id));
+    let u = 0;
+    for (let i = 0; i < slots.length && u < unplaced.length; i++) { if (!slots[i]) { slots[i] = unplaced[u].id; placed.add(unplaced[u].id); u++; } }
+    while (u < unplaced.length) { slots.push(unplaced[u].id); placed.add(unplaced[u].id); u++; }
+
+    const reorderEnabled = element.allowReorder !== false && !!onReorderSlots;
+    const selectEnabled = !!onSelectItem;
+    const [dragSlot, setDragSlot] = useState<number | null>(null);
+    const [hoverUseId, setHoverUseId] = useState<VNID | null>(null);
+    // Swap two slots — moves to an empty slot, or exchanges positions with another item.
+    const swap = (a: number | null, b: number) => {
+        if (!onReorderSlots || a == null || a === b) { setDragSlot(null); return; }
+        const next = [...slots];
+        const tmp = next[a]; next[a] = next[b]; next[b] = tmp;
+        onReorderSlots(next);
+        setDragSlot(null);
+    };
+
+    const useItem = (it: VNItem) => {
+        if (!it.usable) return;
+        // Mirror the screen Button flow: run SetVariable/ResetVariable mutations FIRST, then COMMIT
+        // them to player state (otherwise they stay in the uncommitted UI-variable buffer and are
+        // lost), then run any navigation/other actions. The count decrement is a var mutation too —
+        // unless the item is reusable (consumeOnUse === false), in which case using only runs the effect.
+        const actions: VNUIAction[] = [
+            ...(it.consumeOnUse === false ? [] : [{ type: UIActionType.SetVariable, variableId: it.countVariableId, operator: 'subtract', value: 1 } as VNUIAction]),
+            ...(it.useEffect || []),
+        ];
+        const isVarMutation = (a: VNUIAction) => a.type === UIActionType.SetVariable || a.type === UIActionType.ResetVariable || a.type === UIActionType.GiveItem || a.type === UIActionType.UseItem || a.type === UIActionType.DestroyItem || a.type === UIActionType.UseSelectedItem || a.type === UIActionType.RestockCollection || a.type === UIActionType.BuyItem || a.type === UIActionType.SellItem || a.type === UIActionType.BuySelectedItem || a.type === UIActionType.SellSelectedItem;
+        const setVarActions = actions.filter(isVarMutation);
+        const otherActions = actions.filter(a => !isVarMutation(a));
+        setVarActions.forEach(a => onAction(a));
+        if (setVarActions.length > 0 && onCommitVariables) onCommitVariables();
+        otherActions.forEach(a => onAction(a));
+    };
+
+    // Per-slot button mode. Back-compat: unset → derive from the legacy showUseButton flag.
+    const slotButtonMode: 'use' | 'buy' | 'sell' | 'none' = element.slotButton ?? (element.showUseButton ? 'use' : 'none');
+    const tradeCollectionId = slotButtonMode === 'buy' ? element.collectionId : slotButtonMode === 'sell' ? element.sellToCollectionId : undefined;
+    const tradeCollection = tradeCollectionId ? project.itemCollections?.[tradeCollectionId] : undefined;
+    // Fire a Buy/Sell action then commit (mirrors the screen Button var-mutation→commit flow).
+    const tradeItem = (it: VNItem) => {
+        if (!tradeCollectionId) return;
+        onAction({ type: slotButtonMode === 'buy' ? UIActionType.BuyItem : UIActionType.SellItem, itemId: it.id, collectionId: tradeCollectionId } as VNUIAction);
+        if (onCommitVariables) onCommitVariables();
+    };
+    // Can this item be traded right now? (drives the disabled / dimmed state.)
+    const tradeBlocked = (it: VNItem): boolean => {
+        if (!tradeCollection) return true;
+        const res = slotButtonMode === 'buy'
+            ? computeBuy(it.id, tradeCollection, project, variables)
+            : computeSell(it.id, tradeCollection, project, variables);
+        return 'blocked' in res;
+    };
+
+    const slotStyle: React.CSSProperties = { aspectRatio: '1 / 1', borderRadius: `${element.slotBorderRadius ?? 8}px`, border: `2px solid ${element.slotBorderColor || '#4D3273'}`, background: element.slotColor || 'transparent' };
+    const selectedRing = element.selectedBorderColor || '#38bdf8';
+
+    return (
+        <div ref={gridContainerRef} className="w-full h-full overflow-y-auto p-2 rounded" style={{ backgroundColor: element.backgroundColor || 'rgba(15, 23, 42, 0.9)' }}>
+            {totalSlots === 0 && (
+                <div className="w-full h-full flex items-center justify-center text-center text-xs text-white/50 px-2">{element.emptyText || ''}</div>
+            )}
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, columnGap: `${colGap}px`, rowGap: `${rowGap}px` }}>
+                {slots.map((slotId, i) => {
+                    const it = slotId ? itemById.get(slotId) : undefined;
+                    if (!it) return <div key={`slot-${i}`} style={slotStyle}
+                        onDragOver={reorderEnabled ? (e => e.preventDefault()) : undefined}
+                        onDrop={reorderEnabled ? (() => swap(dragSlot, i)) : undefined} />;
+                    const url = it.icon?.id ? assetResolver(it.icon.id, it.icon.type === 'video' ? 'video' : 'image') : null;
+                    const qty = count(it);
+                    const selected = selectEnabled && selectedItemId === it.id && selectedElementId === element.id;
+                    return (
+                        <div key={`slot-${i}`} className="relative flex flex-col items-center justify-center p-1"
+                            style={{ ...slotStyle, cursor: reorderEnabled ? 'grab' : (selectEnabled ? 'pointer' : undefined), opacity: dragSlot === i ? 0.4 : 1, ...(selected ? { boxShadow: `0 0 0 2px ${selectedRing} inset`, borderColor: selectedRing } : {}) }}
+                            draggable={reorderEnabled}
+                            onDragStart={reorderEnabled ? () => setDragSlot(i) : undefined}
+                            onDragOver={reorderEnabled ? (e => e.preventDefault()) : undefined}
+                            onDrop={reorderEnabled ? (() => swap(dragSlot, i)) : undefined}
+                            onClick={selectEnabled ? (() => onSelectItem!(selected ? null : it.id, element.id)) : undefined}>
+                            {url
+                                ? <img src={url} alt={it.name} className="w-full flex-1 min-h-0 object-contain" draggable={false} />
+                                : <div className="w-full flex-1 min-h-0" />}
+                            {element.showQuantity !== false && qty > 1 && (
+                                <span className="absolute top-1 right-1 bg-black/70 text-white text-[10px] rounded px-1 leading-tight">×{qty}</span>
+                            )}
+                            {element.showNames !== false && (
+                                <span className="text-[10px] text-white truncate w-full mt-0.5" style={{ ...(element.nameFont ? fontSettingsToStyle(element.nameFont) : {}), textAlign: 'center' }}>{it.name}</span>
+                            )}
+                            {(() => {
+                                // Generalized per-slot button: Use / Buy / Sell. 'use' only on usable items;
+                                // buy/sell show on every slot and dim when the trade can't happen.
+                                const showBtn = slotButtonMode === 'use' ? !!it.usable
+                                    : (slotButtonMode === 'buy' || slotButtonMode === 'sell') ? !!tradeCollection
+                                    : false;
+                                if (!showBtn) return null;
+                                const blocked = (slotButtonMode === 'buy' || slotButtonMode === 'sell') && tradeBlocked(it);
+                                const hovered = hoverUseId === it.id && !blocked;
+                                const baseArt = element.useButtonImage?.id ? assetResolver(element.useButtonImage.id, element.useButtonImage.type === 'video' ? 'video' : 'image') : null;
+                                const hoverArt = element.useButtonHoverImage?.id ? assetResolver(element.useButtonHoverImage.id, element.useButtonHoverImage.type === 'video' ? 'video' : 'image') : null;
+                                const art = hovered && hoverArt ? hoverArt : baseArt;
+                                const bg = art ? undefined : (hovered ? (element.useButtonHoverColor || element.useButtonColor || '#0ea5e9') : (element.useButtonColor || '#0ea5e9'));
+                                const defaultLabel = slotButtonMode === 'buy' ? 'Buy' : slotButtonMode === 'sell' ? 'Sell' : 'Use';
+                                let label = element.useButtonText || defaultLabel;
+                                if (!element.useButtonText && (slotButtonMode === 'buy' || slotButtonMode === 'sell') && tradeCollection) {
+                                    const entry = tradeCollection.entries.find(e => e.itemId === it.id);
+                                    const price = tradePrice(it, entry);
+                                    if (price > 0) label = `${defaultLabel} ${price}`;
+                                }
+                                const onClick = (e: React.MouseEvent) => { e.stopPropagation(); if (blocked) return; slotButtonMode === 'use' ? useItem(it) : tradeItem(it); };
+                                return (
+                                    <button onClick={onClick} disabled={blocked} onMouseEnter={() => setHoverUseId(it.id)} onMouseLeave={() => setHoverUseId(null)}
+                                        className="mt-0.5 px-1.5 py-0.5 relative overflow-hidden leading-tight"
+                                        style={{
+                                            borderRadius: `${element.useButtonRadius ?? 6}px`,
+                                            background: art ? `center / cover no-repeat url(${art})` : bg,
+                                            color: element.useButtonTextColor || '#ffffff',
+                                            fontSize: '9px',
+                                            opacity: blocked ? 0.4 : 1,
+                                            cursor: blocked ? 'not-allowed' : 'pointer',
+                                            ...(element.useButtonFont ? fontSettingsToStyle(element.useButtonFont) : {}),
+                                        }}>
+                                        {label}
+                                    </button>
+                                );
+                            })()}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// --- Helper for Element Transitions ---
+const getTransitionStyle = (
+    transitionIn?: 'none' | 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scale',
+    duration?: number,
+    delay?: number
+): React.CSSProperties => {
+    const durationMs = duration || 300;
+    const delayMs = delay || 0;
+    
+    if (!transitionIn || transitionIn === 'none') return {};
+
+    // NB: do NOT transition `transform`. Parallax updates the element's transform every
+    // frame (via CSS vars); a `transition: all` would CSS-animate each step and fight the
+    // rAF easing (janky "slow then speeds up" drift). Only fade opacity/filter.
+    const transitionProp = `opacity ${durationMs}ms ease-out ${delayMs}ms, filter ${durationMs}ms ease-out ${delayMs}ms`;
+
+    return {
+        transition: transitionProp,
+        animation: `elementTransition${transitionIn} ${durationMs}ms ease-out ${delayMs}ms`,
+    };
+};
+
+// --- Hot Zone Text Input (commits on Enter / confirm button) ---
+const HotZoneTextInput: React.FC<{
+    element: VNHotZoneElement;
+    variables: Record<VNID, string | number | boolean>;
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
+    playSound: (soundId: VNID | null) => void;
+    font?: any;
+}> = ({ element, variables, onVariableChange, playSound, font }) => {
+    const vid = (element as any).variableId;
+    const currentVal = (vid && variables[vid] != null) ? String(variables[vid]) : '';
+    const [localValue, setLocalValue] = useState(currentVal);
+    // Sync when external variable changes (e.g. reset)
+    useEffect(() => { setLocalValue(currentVal); }, [currentVal]);
+    const commit = () => {
+        if (vid && onVariableChange) onVariableChange(vid, localValue);
+    };
+    return (
+        <div className="w-full h-full flex items-center gap-0">
+            <input
+                type="text"
+                className="flex-1 h-full rounded-l px-2 outline-none min-w-0"
+                style={{
+                    backgroundColor: (element as any).backgroundColor || '#1e293b',
+                    border: `1px solid ${(element as any).borderColor || '#475569'}`,
+                    borderRight: 'none',
+                    color: font?.color || '#fff',
+                    fontFamily: font?.fontFamily,
+                    fontSize: font?.fontSize,
+                }}
+                placeholder={(element as any).placeholder || ''}
+                maxLength={(element as any).maxLength || undefined}
+                value={localValue}
+                onChange={e => setLocalValue(e.target.value)}
+                onKeyDown={e => {
+                    if (e.key === 'Enter') { commit(); try { playSound((element as any).clickSoundId || null); } catch(_) {} }
+                }}
+                onClick={e => e.stopPropagation()}
+            />
+            <button
+                type="button"
+                className="h-full px-2 rounded-r text-xs font-semibold flex items-center justify-center shrink-0"
+                style={{
+                    backgroundColor: (element as any).borderColor || '#475569',
+                    color: '#fff',
+                    border: `1px solid ${(element as any).borderColor || '#475569'}`,
+                }}
+                onClick={e => {
+                    e.stopPropagation();
+                    commit();
+                    try { playSound((element as any).clickSoundId || null); } catch(_) {}
+                }}
+                title="Confirm"
+            >
+                ✓
+            </button>
+        </div>
+    );
+};
+
+/** Renders an imageMap element in HotZone runtime with Ren'Py-style hover support */
+const HotZoneImageMapRenderer: React.FC<{
+    el: VNHotZoneElement;
+    imageUrl: string | null;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
+    variables: Record<VNID, string | number | boolean>;
+    playSound: (soundId: VNID | null) => void;
+    handleLocalAction: (action: VNUIAction) => void;
+}> = ({ el, imageUrl, assetResolver, evaluateConditions, variables, playSound, handleLocalAction }) => {
+    const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+    const hoverImageUrl = (el as any).hoverImageId ? assetResolver((el as any).hoverImageId, 'image') : null;
+    const regions: any[] = (el as any).imageMapRegions || [];
+
+    // Compute clip-path for the hovered region
+    const hoveredRegion = hoveredRegionId ? regions.find((r: any) => r.id === hoveredRegionId) : null;
+    let hoverClipPath: string | undefined;
+    if (hoveredRegion) {
+        if (hoveredRegion.shape === 'rect' && hoveredRegion.coords.length >= 4) {
+            const [x, y, w, h] = hoveredRegion.coords;
+            hoverClipPath = `inset(${y}% ${100 - x - w}% ${100 - y - h}% ${x}%)`;
+        } else if (hoveredRegion.shape === 'circle' && hoveredRegion.coords.length >= 3) {
+            const [cx, cy, r] = hoveredRegion.coords;
+            hoverClipPath = `circle(${r}% at ${cx}% ${cy}%)`;
+        } else if (hoveredRegion.shape === 'poly' && hoveredRegion.coords.length >= 6) {
+            const points: string[] = [];
+            for (let i = 0; i < hoveredRegion.coords.length; i += 2) {
+                points.push(`${hoveredRegion.coords[i]}% ${hoveredRegion.coords[i + 1]}%`);
+            }
+            hoverClipPath = `polygon(${points.join(', ')})`;
+        }
+    }
+
+    return (
+        <div className="w-full h-full relative pointer-events-none">
+            {imageUrl && <img src={imageUrl} alt={el.name} className="w-full h-full object-contain" draggable={false} />}
+            {/* Ren'Py-style hover image clipped to hovered region */}
+            {hoverImageUrl && hoverClipPath && (
+                <img
+                    src={hoverImageUrl}
+                    alt=""
+                    style={{
+                        position: 'absolute',
+                        left: 0, top: 0,
+                        width: '100%', height: '100%',
+                        objectFit: 'contain',
+                        pointerEvents: 'none',
+                        clipPath: hoverClipPath,
+                        zIndex: 1,
+                    }}
+                    draggable={false}
+                />
+            )}
+            {regions.map((region: any) => {
+                if (region.conditions && region.conditions.length > 0 && !evaluateConditions(region.conditions, variables)) return null;
+                const regionStyle: React.CSSProperties = {
+                    position: 'absolute',
+                    cursor: region.cursor || 'pointer',
+                    pointerEvents: 'auto',
+                    zIndex: 2,
+                };
+                if (region.shape === 'rect') {
+                    regionStyle.left = `${region.coords[0]}%`;
+                    regionStyle.top = `${region.coords[1]}%`;
+                    regionStyle.width = `${region.coords[2]}%`;
+                    regionStyle.height = `${region.coords[3]}%`;
+                } else if (region.shape === 'circle') {
+                    const r = region.coords[2];
+                    regionStyle.left = `${region.coords[0] - r}%`;
+                    regionStyle.top = `${region.coords[1] - r}%`;
+                    regionStyle.width = `${r * 2}%`;
+                    regionStyle.height = `${r * 2}%`;
+                    regionStyle.borderRadius = '50%';
+                }
+                return (
+                    <div
+                        key={region.id}
+                        style={regionStyle}
+                        title={region.tooltip || region.name}
+                        className={!hoverImageUrl ? 'hover:bg-white/10 transition-colors' : 'transition-colors'}
+                        onClick={e => {
+                            e.stopPropagation();
+                            try { playSound((el as any).clickSoundId || null); } catch {}
+                            (region.actions || []).forEach((action: VNUIAction) => handleLocalAction(action));
+                        }}
+                        onMouseEnter={() => setHoveredRegionId(region.id)}
+                        onMouseLeave={() => setHoveredRegionId(null)}
+                    />
+                );
+            })}
+        </div>
+    );
+};
+
+// --- Hot Zone Runtime Renderer ---
+const InteractiveRuntime: React.FC<{
+    screen: VNUIScreen;
+    onAction: (action: VNUIAction) => void;
+    variables: Record<VNID, string | number | boolean>;
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
+    evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    playSound: (soundId: VNID | null) => void;
+}> = ({ screen, onAction, variables, onVariableChange, evaluateConditions, assetResolver, playSound }) => {
+    const { project } = useProject();
+    // Derive the legacy hot zone shapes from the unified `screen.elements` map.
+    // Post-Phase-3, screens no longer carry separate `hotSpots` / `interactiveElements`
+    // maps; hot spots, image maps, and any draggable element are first-class
+    // `VNUIElement` entries that we convert back to the shapes this runtime
+    // expects via a derivation shim.
+    const hotSpots = useMemo(() => deriveHotSpotsFromScreen(screen), [screen]);
+    const interactiveElements = useMemo(() => deriveInteractiveElementsFromScreen(screen), [screen]);
+
+    // Track element positions during drag (runtime-only state)
+    const [elementPositions, setElementPositions] = useState<Record<VNID, { x: number; y: number }>>({});
+    const [dragState, setDragState] = useState<{
+        elementId: VNID;
+        startMouseX: number;
+        startMouseY: number;
+        startX: number;
+        startY: number;
+    } | null>(null);
+    const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerSize, setContainerSize] = useState({ width: 1, height: 1 });
+    // Track which elements have been placed on hot spots
+    const [placedElements, setPlacedElements] = useState<Record<VNID, VNID>>({}); // elementId -> hotSpotId
+    // Track image overrides from ChangeImage actions
+    const [imageOverrides, setImageOverrides] = useState<Record<VNID, VNID>>({});
+    // Track active animations
+    const [activeAnimations, setActiveAnimations] = useState<Record<VNID, { animation: string; duration: number }>>({});
+    // Track sticky end-states for animations whose final frame should persist (e.g. fadeOut → opacity 0)
+    const [persistentEffects, setPersistentEffects] = useState<Record<VNID, 'fadedOut'>>({});
+
+    // Handle ChangeImage / PlayAnimation locally, delegate everything else
+    const handleLocalAction = useCallback((action: VNUIAction) => {
+        if (action.type === UIActionType.ChangeImage) {
+            const a = action as any;
+            if (a.targetElementId && a.newImageId) {
+                setImageOverrides(prev => ({ ...prev, [a.targetElementId]: a.newImageId }));
+            }
+            return;
+        }
+        if (action.type === UIActionType.PlayAnimation) {
+            const a = action as any;
+            if (a.targetElementId) {
+                const anim = a.animation || 'shake';
+                const dur = a.duration || 500;
+                // fadeIn clears any sticky fadedOut state so the animation can play over a visible element
+                if (anim === 'fadeIn') {
+                    setPersistentEffects(prev => {
+                        if (!prev[a.targetElementId]) return prev;
+                        const next = { ...prev };
+                        delete next[a.targetElementId];
+                        return next;
+                    });
+                }
+                setActiveAnimations(prev => ({ ...prev, [a.targetElementId]: { animation: anim, duration: dur } }));
+                setTimeout(() => {
+                    setActiveAnimations(prev => {
+                        const next = { ...prev };
+                        delete next[a.targetElementId];
+                        return next;
+                    });
+                    // Persist the final hidden state so the element stays faded out
+                    if (anim === 'fadeOut') {
+                        setPersistentEffects(prev => ({ ...prev, [a.targetElementId]: 'fadedOut' }));
+                    }
+                }, dur);
+            }
+            return;
+        }
+        onAction(action);
+    }, [onAction]);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const observer = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+            }
+        });
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    // Check win condition
+    useEffect(() => {
+        if (!screen.winCondition) return;
+        const wc = screen.winCondition;
+        if (wc.type === 'allPlaced') {
+            const draggableElements = (Object.values(interactiveElements) as VNHotZoneElement[]).filter(el => el.draggable);
+            const allPlaced = draggableElements.length > 0 && draggableElements.every(el => placedElements[el.id]);
+            if (allPlaced) {
+                wc.actions.forEach(action => handleLocalAction(action));
+            }
+        } else if (wc.type === 'variable' && wc.variableId && wc.operator && wc.value !== undefined) {
+            const met = evaluateConditions([{ variableId: wc.variableId, operator: wc.operator, value: wc.value }], variables);
+            if (met) {
+                wc.actions.forEach(action => handleLocalAction(action));
+            }
+        }
+    }, [placedElements, variables, screen.winCondition, interactiveElements, handleLocalAction, evaluateConditions]);
+
+    // Publish this screen's drag-drop hot spots to the global registry so draggables
+    // from ANY surface (scene, HUD, other screens) can be dropped on them.
+    useEffect(() => {
+        const unregs: Array<() => void> = [];
+        for (const spot of Object.values(hotSpots) as VNHotSpot[]) {
+            if (spot.trigger !== 'drag-drop') continue;
+            if (spot.conditions && spot.conditions.length > 0 && !evaluateConditions(spot.conditions, variables)) continue;
+            unregs.push(registerDropTarget({
+                id: `screen-${screen.id}-${spot.id}`,
+                rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
+                acceptedElementIds: spot.acceptedElementIds,
+                onDrop: () => { spot.actions.forEach(a => handleLocalAction(a)); },
+            }));
+        }
+        return () => unregs.forEach(u => u());
+    }, [hotSpots, screen.id, variables, evaluateConditions, handleLocalAction]);
+
+    // Drag handlers
+    const handleElementMouseDown = useCallback((e: React.MouseEvent, el: VNHotZoneElement) => {
+        if (!el.draggable) {
+            // Click sound + Click actions
+            try { playSound((el as any).clickSoundId || null); } catch(e) {}
+            if (el.actions) el.actions.forEach(a => handleLocalAction(a));
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        try { playSound((el as any).clickSoundId || null); } catch(e) {}
+        const pos = elementPositions[el.id] || { x: el.x, y: el.y };
+        setDragState({
+            elementId: el.id,
+            startMouseX: e.clientX,
+            startMouseY: e.clientY,
+            startX: pos.x,
+            startY: pos.y,
+        });
+        setDragOffset(null);
+        // Remove from placed if re-dragging
+        setPlacedElements(prev => {
+            const next = { ...prev };
+            delete next[el.id];
+            return next;
+        });
+    }, [elementPositions, handleLocalAction, playSound]);
+
+    useEffect(() => {
+        if (!dragState) return;
+        const sw = containerSize.width || 1;
+        const sh = containerSize.height || 1;
+        const onMove = (e: MouseEvent) => {
+            const dx = ((e.clientX - dragState.startMouseX) / sw) * 100;
+            const dy = ((e.clientY - dragState.startMouseY) / sh) * 100;
+            let nx = Math.round((dragState.startX + dx) * 10) / 10;
+            let ny = Math.round((dragState.startY + dy) * 10) / 10;
+            setDragOffset({ x: nx, y: ny });
+        };
+        const onUp = () => {
+            if (!dragOffset) { setDragState(null); return; }
+            const el = interactiveElements[dragState.elementId] as VNHotZoneElement | undefined;
+            if (!el) { setDragState(null); setDragOffset(null); return; }
+
+            // Hit-test the GLOBAL registry (this screen's spots, other screens', and the
+            // scene's ShowHotSpot targets all register there), using the dragged element's
+            // centre. Top-most matching target wins.
+            const cx = dragOffset.x + el.width / 2;
+            const cy = dragOffset.y + el.height / 2;
+            const target = hitTestDropTarget({ x: cx, y: cy }, el.id);
+
+            if (target) {
+                // Snap to the target's centre if configured (works for local or remote targets).
+                const r = target.rectPct;
+                const finalPos = el.snapToHotSpot
+                    ? { x: r.x + (r.width - el.width) / 2, y: r.y + (r.height - el.height) / 2 }
+                    : { x: dragOffset.x, y: dragOffset.y };
+                setElementPositions(prev => ({ ...prev, [el.id]: finalPos }));
+                setPlacedElements(prev => ({ ...prev, [el.id]: target.id }));
+                // Fire the target's actions (in its own surface's context).
+                target.onDrop(el.id);
+            } else if (el.snapBack) {
+                // Snap back to original position
+                setElementPositions(prev => ({ ...prev, [el.id]: { x: el.x, y: el.y } }));
+            } else {
+                setElementPositions(prev => ({ ...prev, [el.id]: { x: dragOffset.x, y: dragOffset.y } }));
+            }
+
+            setDragState(null);
+            setDragOffset(null);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [dragState, dragOffset, containerSize, interactiveElements, hotSpots, handleLocalAction]);
+
+    // Handle hot spot click/hover triggers
+    const handleSpotClick = useCallback((spot: VNHotSpot) => {
+        if (spot.trigger === 'click') {
+            spot.actions.forEach(a => handleLocalAction(a));
+        }
+    }, [handleLocalAction]);
+
+    const handleSpotHover = useCallback((spot: VNHotSpot) => {
+        if (spot.trigger === 'hover') {
+            spot.actions.forEach(a => handleLocalAction(a));
+        }
+    }, [handleLocalAction]);
+
+    return (
+        // pointer-events:none lets clicks pass through empty overlay areas to standard
+        // elements (buttons, etc.) rendered underneath; interactive children below
+        // re-enable pointer events individually with pointer-events:auto.
+        <div ref={containerRef} className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+            {/* Hot Spots */}
+            {(Object.values(hotSpots) as VNHotSpot[]).map(spot => {
+                if (spot.conditions && !evaluateConditions(spot.conditions, variables)) return null;
+                return (
+                    <div
+                        key={spot.id}
+                        className="absolute"
+                        style={{
+                            left: `${spot.x}%`, top: `${spot.y}%`,
+                            width: `${spot.width}%`, height: `${spot.height}%`,
+                            borderRadius: spot.shape === 'circle' ? '50%' : undefined,
+                            backgroundColor: spot.visible ? (spot.highlightColor || 'rgba(59, 130, 246, 0.2)') : 'transparent',
+                            border: spot.visible ? `2px dashed ${spot.highlightColor || 'rgba(59, 130, 246, 0.5)'}` : 'none',
+                            pointerEvents: spot.trigger === 'drag-drop' ? 'none' : 'auto',
+                            cursor: spot.trigger === 'click' ? 'pointer' : undefined,
+                        }}
+                        onClick={() => handleSpotClick(spot)}
+                        onMouseEnter={() => handleSpotHover(spot)}
+                    />
+                );
+            })}
+            {/* Hot Zone Elements */}
+            {(Object.values(interactiveElements) as VNHotZoneElement[]).map(el => {
+                if (el.conditions && !evaluateConditions(el.conditions, variables)) return null;
+                // Hide-on-drop: when snap-to-center + hide-on-drop are on and element has been placed on a hot spot, omit rendering
+                if (el.snapToHotSpot && el.hideOnDrop && placedElements[el.id]) return null;
+                const isDragging = dragState?.elementId === el.id;
+                const pos = isDragging && dragOffset
+                    ? dragOffset
+                    : (elementPositions[el.id] || { x: el.x, y: el.y });
+                // Use image override if ChangeImage was triggered
+                const effectiveImageId = imageOverrides[el.id] || el.imageId;
+                const imageUrl = assetResolver(effectiveImageId, 'image');
+                const anim = activeAnimations[el.id];
+                const animationKeyframes: Record<string, string> = {
+                    shake: 'hz-shake', bounce: 'hz-bounce', pulse: 'hz-pulse', spin: 'hz-spin',
+                    fadeIn: 'hz-fadeIn', fadeOut: 'hz-fadeOut', slideIn: 'hz-slideIn', glow: 'hz-glow',
+                };
+                const elType = (el as any).elementType || 'image';
+                const elText = (el as any).text || '';
+                const elFont = (el as any).font;
+                const videoUrl = (el as any).videoId ? assetResolver((el as any).videoId, 'video') : null;
+                // Sticky end-state from a previously-played fadeOut animation. Skipped while an animation
+                // is currently running so the keyframes still drive the visual transition.
+                const isFadedOut = !anim && persistentEffects[el.id] === 'fadedOut';
+                return (
+                    <div
+                        key={el.id}
+                        className="absolute"
+                        style={{
+                            left: `${pos.x}%`, top: `${pos.y}%`,
+                            width: `${el.width}%`, height: `${el.height}%`,
+                            cursor: el.draggable ? (isDragging ? 'grabbing' : 'grab') : (elType === 'textInput' ? 'text' : 'pointer'),
+                            zIndex: isDragging ? 50 : 10,
+                            pointerEvents: isFadedOut ? 'none' : 'auto',
+                            opacity: isFadedOut ? 0 : undefined,
+                            transition: isDragging ? 'none' : 'left 0.2s, top 0.2s',
+                            animation: anim ? `${animationKeyframes[anim.animation] || 'hz-shake'} ${anim.duration}ms ease` : undefined,
+                        }}
+                        onMouseDown={e => elType !== 'textInput' && handleElementMouseDown(e, el)}
+                        onMouseEnter={() => { try { playSound((el as any).hoverSoundId || null); } catch(e) {} }}
+                    >
+                        {elType === 'text' ? (
+                            <div className="w-full h-full flex items-center justify-center text-white pointer-events-none"
+                                style={elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, fontWeight: elFont.bold ? 'bold' : 'normal', fontStyle: elFont.italic ? 'italic' : 'normal', color: elFont.color || '#fff' } : {}}>
+                                {project ? interpolateVariables(elText, variables, project) : elText}
+                            </div>
+                        ) : elType === 'button' ? (
+                            <div className="w-full h-full relative flex items-center justify-center pointer-events-none">
+                                {imageUrl && <img src={imageUrl} alt={el.name} className="absolute inset-0 w-full h-full object-fill" draggable={false} />}
+                                <span className="relative z-10 text-white text-sm font-semibold"
+                                    style={elFont ? { fontFamily: elFont.fontFamily, fontSize: elFont.fontSize, color: elFont.color || '#fff' } : {}}>
+                                    {project ? interpolateVariables(elText, variables, project) : elText}
+                                </span>
+                            </div>
+                        ) : elType === 'video' ? (
+                            videoUrl ? (
+                                <video
+                                    src={videoUrl}
+                                    className="w-full h-full object-contain pointer-events-none"
+                                    autoPlay
+                                    loop={(el as any).videoLoop ?? true}
+                                    muted={(el as any).videoMuted ?? true}
+                                    playsInline
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-indigo-500/30 border border-indigo-400 rounded flex items-center justify-center text-xs text-white pointer-events-none">
+                                    {el.name} (no video)
+                                </div>
+                            )
+                        ) : elType === 'textInput' ? (
+                            <HotZoneTextInput
+                                element={el}
+                                variables={variables}
+                                onVariableChange={onVariableChange}
+                                playSound={playSound}
+                                font={elFont}
+                            />
+                        ) : elType === 'imageMap' ? (
+                            <HotZoneImageMapRenderer
+                                el={el}
+                                imageUrl={imageUrl}
+                                assetResolver={assetResolver}
+                                evaluateConditions={evaluateConditions}
+                                variables={variables}
+                                playSound={playSound}
+                                handleLocalAction={handleLocalAction}
+                            />
+                        ) : imageUrl ? (
+                            <img src={imageUrl} alt={el.name} className="w-full h-full object-contain pointer-events-none" draggable={false} />
+                        ) : (
+                            <div className="w-full h-full bg-purple-500/30 border border-purple-400 rounded flex items-center justify-center text-xs text-white pointer-events-none">
+                                {el.name}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// --- UI Screen Renderer (for menus) ---
+const UIScreenRenderer: React.FC<{
+    screenId: VNID;
+    onAction: (action: VNUIAction) => void;
+    settings: GameSettings;
+    onSettingsChange: (key: keyof GameSettings, value: any) => void;
+    assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    gameSaves: Record<number, GameStateSave>;
+    playSound: (soundId: VNID | null) => void;
+    variables?: Record<VNID, string | number | boolean>;
+    onVariableChange?: (variableId: VNID, value: string | number | boolean) => void;
+    isClosing?: boolean;
+    evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
+    onCommitVariables?: () => void;
+    inventorySlots?: (VNID | null)[];
+    onReorderSlots?: (slots: (VNID | null)[]) => void;
+    selectedItemId?: VNID | null;
+    selectedElementId?: VNID | null;
+    onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+    const { project } = useProject();
+    const screen = project.uiScreens[screenId];
+    const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
+    const screenRootRef = React.useRef<HTMLDivElement>(null);
+    const screenSize = useStageSize(screenRootRef);
+
+    // Cleanup video on unmount
+    React.useEffect(() => {
+        return () => {
+            if (backgroundVideoRef.current) {
+                backgroundVideoRef.current.pause();
+                backgroundVideoRef.current.src = '';
+                backgroundVideoRef.current.load();
+            }
+        };
+    }, []);
+
+    // Mouse parallax for screen elements — same eased-pointer → CSS-var approach as the
+    // scene stage, scoped to this screen's container (confined by its isolate context).
+    React.useEffect(() => {
+        const root = screenRootRef.current;
+        if (!root) return;
+        const px = screen?.parallax;
+        const active = px?.mode === 'mouse' || px?.mode === 'both';
+        const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!active || reduce) { root.style.setProperty('--ppx', '0'); root.style.setProperty('--ppy', '0'); return; }
+        const intensity = px?.intensity ?? 1;
+        const target = { x: 0, y: 0 };
+        const cur = { x: 0, y: 0 };
+        let raf = 0;
+        const onMove = (e: MouseEvent) => {
+            const r = root.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            target.x = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
+            target.y = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
+        };
+        const onLeave = () => { target.x = 0; target.y = 0; };
+        const tick = () => {
+            cur.x += (target.x - cur.x) * 0.08;
+            cur.y += (target.y - cur.y) * 0.08;
+            root.style.setProperty('--ppx', (cur.x * intensity).toFixed(4));
+            root.style.setProperty('--ppy', (cur.y * intensity).toFixed(4));
+            raf = requestAnimationFrame(tick);
+        };
+        window.addEventListener('mousemove', onMove);
+        root.addEventListener('mouseleave', onLeave);
+        raf = requestAnimationFrame(tick);
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('mousemove', onMove);
+            root.removeEventListener('mouseleave', onLeave);
+        };
+    }, [screen?.parallax?.mode, screen?.parallax?.intensity]);
+
+    if (!screen) return <div className="text-red-500">Error: Screen {screenId} not found.</div>;
+
+    // Pass-through (transparent HUD) screens let clicks fall through empty areas to the
+    // scene; only visible elements capture input. Defaults to on for the Game HUD screen.
+    const isPassThrough = screen.passThrough ?? (screenId === project.ui.gameHudScreenId);
+
+    // Over-scale a parallaxed screen background just enough that the max drift never reveals
+    // its edges: scale-1 = 2 × (depth × PARALLAX_MAX_PX × intensity) / smaller rendered dim.
+    const screenBgScale = (depth: number): number => {
+        if (!depth) return 1;
+        const intensity = Math.max(1, screen.parallax?.intensity ?? 1);
+        const maxShiftPx = depth * PARALLAX_MAX_PX * intensity * 1.1;
+        const minDim = Math.min(screenSize?.width || 1280, screenSize?.height || 720);
+        return 1 + (2 * maxShiftPx) / minDim;
+    };
+    // Build one background plane (used for the main bg + each additional plane). `videoRef`
+    // attaches only to the main bg so its playback is cleaned up on unmount.
+    // Entry-transition CSS for a background plane (plays once on mount). Reuses the shared
+    // background keyframes; fade/crossfade/dissolve all dissolve in.
+    const bgTransitionAnim = (transition?: string, durationMs?: number): string | undefined => {
+        const d = durationMs ?? 400;
+        switch (transition) {
+            case undefined: case '': case 'none': return undefined;
+            case 'slide': return `slide-in-right ${d}ms ease-out forwards`;
+            case 'iris': return `iris-in ${d}ms ease-out forwards`;
+            case 'wipe': return `wipe-right ${d}ms ease-out forwards`;
+            default: return `dissolve-in ${d}ms ease-out forwards`; // fade / crossfade / dissolve
+        }
+    };
+    const buildBgPlane = (
+        bg: { type: 'color', value: string } | { type: 'image' | 'video', assetId: VNID | null, loop?: boolean },
+        depth: number, layer: number, key: string, videoRef?: React.RefObject<HTMLVideoElement>,
+        transition?: string, transitionDuration?: number
+    ): React.ReactNode => {
+        let node: React.ReactNode = null;
+        if (bg.type === 'color') {
+            node = <div className="absolute inset-0" style={{ backgroundColor: bg.value }} />;
+        } else if (bg.assetId) {
+            // Render based on the ACTUAL asset, not the declared type: a video can be selected
+            // under an 'image'-typed background (the image picker lists videos), which otherwise
+            // renders as a broken <img src=videoUrl>. Detect video by the asset's videoUrl/isVideo.
+            const asset: any = project.backgrounds[bg.assetId] || project.images?.[bg.assetId] || project.videos[bg.assetId];
+            const isVid = bg.type === 'video' || !!(asset && (asset.isVideo || asset.videoUrl));
+            const url = isVid ? assetResolver(bg.assetId, 'video') : assetResolver(bg.assetId, 'image');
+            if (url) {
+                // `loop` defaults to true (preserves existing behavior); off = play once and hold last frame.
+                node = isVid
+                    ? <video ref={videoRef} src={url} autoPlay loop={bg.loop ?? true} muted playsInline className="absolute inset-0 w-full h-full object-cover" />
+                    : <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover" />;
+            }
+        }
+        if (!node) return null;
+        const inner = depth
+            ? <div className="absolute inset-0" style={{ transform: `scale(${screenBgScale(depth)})${parallaxTransform(depth)}`, transformOrigin: 'center' }}>{node}</div>
+            : node;
+        // Wrap with an explicit zIndex so the background participates in the layer system
+        // (default 0 = behind 0-layer elements, as before). `animation` plays the entry transition.
+        return <div key={key} className="absolute inset-0 overflow-hidden" style={{ zIndex: layer, animation: bgTransitionAnim(transition, transitionDuration) }}>{inner}</div>;
+    };
+
+    const getBackgroundElement = () => <>
+        {buildBgPlane(screen.background, screen.backgroundParallaxDepth ?? 0, screen.backgroundLayer ?? 0, 'main-bg', backgroundVideoRef, screen.backgroundTransition, screen.backgroundTransitionDuration)}
+        {(screen.additionalBackgrounds || []).map(b => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, undefined, b.transition, b.transitionDuration))}
+    </>;
+    
+    const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject, onCommitVariables?: () => void) => {
+        runtimeDebugLog('🎯 renderElement called:', element.type, element.name, element.id);
+        
+        // Check visibility conditions - if conditions exist and are not met, don't render
+        if (element.conditions && element.conditions.length > 0) {
+            const conditionsMet = evaluateConditions(element.conditions, variables);
+            if (!conditionsMet) {
+                runtimeDebugLog('🚫 Element conditions not met, skipping render:', element.name);
+                return null;
+            }
+        }
+
+        // Variable-reactive appearance state: the active state merges its "main" colour/image into
+        // the element's typed fields (below), and its universal overrides (opacity/scale/rotation/
+        // glow) fold into the wrapper `style`. `transitionMs` tweens the change.
+        const activeState = pickActiveAppearanceState(element, variables, evaluateConditions);
+        if (activeState) element = mergeAppearanceStatePrimary(element, activeState);
+        let stateExtraTransform = '';
+        let stateFilter: string | undefined;
+        let stateOpacityMul = 1;
+        let stateTransition: string | undefined;
+        if (activeState) {
+            if (activeState.scale != null && activeState.scale !== 1) stateExtraTransform += ` scale(${activeState.scale})`;
+            if (activeState.rotation) stateExtraTransform += ` rotate(${activeState.rotation}deg)`;
+            // No typed primary target (not Meter/Text/Button) → primaryColor acts as the glow colour.
+            const noTypedPrimary = element.type !== UIElementType.Meter && element.type !== UIElementType.Text && element.type !== UIElementType.Button;
+            const glow = activeState.glowColor || (activeState.primaryColor && noTypedPrimary ? activeState.primaryColor : undefined);
+            if (glow) stateFilter = `drop-shadow(0 0 ${activeState.glowSize ?? 8}px ${glow})`;
+            if (activeState.opacity != null) stateOpacityMul = activeState.opacity;
+            if (activeState.transitionMs) stateTransition = `transform ${activeState.transitionMs}ms ease, opacity ${activeState.transitionMs}ms ease, filter ${activeState.transitionMs}ms ease`;
+        }
+
+        const transitionStyle = getTransitionStyle(element.transitionIn, element.transitionDuration, element.transitionDelay);
+
+        // "Disabled When" gating: when disabledConditions are met, the element is shown
+        // greyed-out and non-interactive (e.g. a Buy button you can't yet afford). This is
+        // folded into the shared style so every element that spreads `style` honours it.
+        const isDisabled = !!(element.disabledConditions && element.disabledConditions.length > 0
+            && evaluateConditions(element.disabledConditions, variables));
+
+        const combinedFilter = [isDisabled ? 'grayscale(0.6)' : '', stateFilter || ''].filter(Boolean).join(' ') || undefined;
+        const style: React.CSSProperties = {
+            position: 'absolute',
+            left: `${element.x}%`, top: `${element.y}%`,
+            width: `${element.width}%`, height: `${element.height}%`,
+            // `translateZ(0)` promotes each element onto its own compositing layer. A <video>
+            // background is ALWAYS GPU-composited and (once it has a parallax/scale transform)
+            // will paint over non-composited siblings at the same z-index — which made buttons
+            // vanish behind a parallaxed video bg. Promoting elements keeps normal z-order.
+            // `stateExtraTransform` (appearance-state scale/rotation) composes on top.
+            transform: `translate(-${element.anchorX * 100}%, -${element.anchorY * 100}%)${parallaxTransform((element as any).parallaxDepth)} translateZ(0)${stateExtraTransform}`,
+            overflow: 'hidden', // Prevent content overflow when using cover
+            // Author-controlled stacking. Default 0 → insertion order (back-compat).
+            zIndex: element.layer ?? 0,
+            opacity: (element.opacity ?? 1) * (isDisabled ? 0.45 : 1) * stateOpacityMul,
+            // On a pass-through screen the wrapper is pointer-events:none, so each visible
+            // element must opt back in to remain clickable.
+            ...(isPassThrough && !isDisabled ? { pointerEvents: 'auto' as const } : {}),
+            ...(isDisabled ? { pointerEvents: 'none' as const, cursor: 'not-allowed' } : {}),
+            ...(combinedFilter ? { filter: combinedFilter } : {}),
+            ...(stateTransition ? { transition: stateTransition } : {}),
+            ...transitionStyle,
+        };
+
+        const getElementAssetUrl = (image: { type: 'image' | 'video', id: VNID } | null) => {
+            if (!image) return null;
+            return assetResolver(image.id, image.type);
+        };
+
+        switch (element.type) {
+            case UIElementType.Button: {
+                const el = element as UIButtonElement;
+                return <ButtonElement key={el.id} element={el} style={style} playSound={playSound} onAction={onAction} getElementAssetUrl={getElementAssetUrl} variables={variables} project={project} onCommitVariables={onCommitVariables} />;
+            }
+            case UIElementType.Text: {
+                const el = element as UITextElement;
+                const effectiveAlign = el.textAlign || el.font?.align || 'center';
+                const hAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[effectiveAlign];
+                const vAlignClass = { top: 'items-start', middle: 'items-center', bottom: 'items-end' }[el.verticalAlign || 'middle'];
+                const interpolatedText = interpolateVariables(el.text, variables, project);
+
+                const textStyle: React.CSSProperties = {
+                    ...fontSettingsToStyle(el.font),
+                    ...(activeState?.transitionMs ? { transition: `color ${activeState.transitionMs}ms ease` } : {}),
+                };
+
+                return <div key={el.id}
+                    style={style}
+                    className={`flex ${hAlignClass} ${vAlignClass} p-1`}
+                >
+                    <div style={textStyle}><span style={extractTextGradientStyle(el.font) || undefined}>{interpolatedText}</span></div>
+                </div>;
+            }
+            case UIElementType.Image: {
+                const el = element as UIImageElement;
+                
+                // Support new background property with fallback to old image property
+                const bgType = el.background?.type || 'image';
+                const bgValue = el.background?.type === 'color' ? el.background.value :
+                               el.background?.type ? el.background.assetId :
+                               el.image?.id || null;
+                
+                // "Fit to content": center the media and let it shrink to its fitted (undistorted)
+                // size so there's no empty letterbox margin around it. Only meaningful for media.
+                const fit = !!el.fitToContent;
+                const containerStyle: React.CSSProperties = {
+                    ...style,
+                    overflow: 'hidden',
+                    ...(fit ? { display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}),
+                };
+
+                // If it's a color background
+                if (bgType === 'color' && typeof bgValue === 'string') {
+                    return <div key={el.id} style={{ ...style, overflow: 'hidden', backgroundColor: bgValue }} />;
+                }
+                
+                // Otherwise it's an image or video asset. Resolve via assetResolver so a video
+                // stored under any collection (videos/backgrounds/images) is found.
+                const url = bgValue ? assetResolver(bgValue as VNID, bgType === 'video' ? 'video' : 'image') : null;
+                
+                if (!url || url === '' || url === 'http://localhost:3000/') {
+                    return <div key={el.id} style={containerStyle} className="bg-slate-800/50" />;
+                }
+                
+                const isVideo = bgType === 'video';
+                
+                // Media fills container using object-fit — unless "fit to content", where it shrinks
+                // to its own fitted rect (no surrounding dead-space).
+                const mediaStyle: React.CSSProperties = fit
+                    ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: el.objectFit || 'contain', display: 'block' }
+                    : { width: '100%', height: '100%', objectFit: el.objectFit || 'contain', display: 'block' };
+                
+                if (isVideo) {
+                    return (
+                        <div key={el.id} style={containerStyle}>
+                            <video 
+                                ref={(videoEl) => {
+                                    if (videoEl && url) {
+                                        // Fix for React Strict Mode calling ref twice with empty src
+                                        // Ensure src is set properly even if it gets reset
+                                        if (!videoEl.src || videoEl.src === 'http://localhost:3000/' || videoEl.src === window.location.href) {
+                                            videoEl.src = url;
+                                        }
+                                        
+                                        // Force play after a brief delay to ensure src is loaded
+                                        setTimeout(() => {
+                                            if (videoEl.readyState >= 2) {  // HAVE_CURRENT_DATA or better
+                                                videoEl.play().catch(error => {
+                                                    console.error('[Video Play Error]', el.name, error);
+                                                });
+                                            } else {
+                                                // Retry if not ready
+                                                setTimeout(() => videoEl.play().catch(() => {}), 500);
+                                            }
+                                        }, 100);
+                                    }
+                                }}
+                                src={url}
+                                style={mediaStyle}
+                                autoPlay
+                                loop={(el.background as any)?.loop ?? true}
+                                muted
+                                playsInline
+                            >
+                                <source src={url} type="video/webm" />
+                                <source src={url} type="video/mp4" />
+                                Your browser doesn't support this video format.
+                            </video>
+                        </div>
+                    );
+                } else {
+                    // Crossfade duration for reactive image swaps = the longest transitionMs among this
+                    // element's appearance states that swap the image (0 = no crossfade → instant). Using
+                    // the element's states (not just the active one) keeps the swap-out animated too.
+                    const imageCrossfadeMs = (el.appearanceStates || []).reduce(
+                        (m, s) => (s.image && s.transitionMs ? Math.max(m, s.transitionMs) : m), 0);
+                    return (
+                        <div key={el.id} style={containerStyle}>
+                            <CrossfadeImage src={url} alt={el.name} style={mediaStyle} transitionMs={imageCrossfadeMs || undefined} />
+                        </div>
+                    );
+                }
+            }
+            case UIElementType.SettingsSlider: {
+                const el = element as UISettingsSliderElement;
+                
+                // Determine the value and range
+                let value: number;
+                let min: number;
+                let max: number;
+                let step: number;
+                
+                if (el.variableId) {
+                    // Variable mode
+                    value = Number(variables[el.variableId]) || (el.minValue ?? 0);
+                    min = el.minValue ?? 0;
+                    max = el.maxValue ?? 100;
+                    step = 1;
+                } else {
+                    // Settings mode (legacy)
+                    const settingKey = el.setting === 'textSpeed' ? 'textSpeed' : el.setting;
+                    value = settings[settingKey];
+                    min = el.setting === 'textSpeed' ? 10 : 0;
+                    max = el.setting === 'textSpeed' ? 100 : 1;
+                    step = el.setting === 'textSpeed' ? 1 : 0.01;
+                }
+                
+                const thumbUrl = el.thumbImage ? getElementAssetUrl(el.thumbImage) : null;
+                const trackUrl = el.trackImage ? getElementAssetUrl(el.trackImage) : null;
+                
+                // Use stored colors or defaults
+                const thumbColor = el.thumbColor || '#8a2be2';
+                const trackColor = el.trackColor || '#4D3273';
+                
+                const customSliderStyle: React.CSSProperties = {
+                    // Custom thumb via CSS variable (if no image)
+                    ...(!thumbUrl ? {
+                        ['--slider-thumb-color' as any]: thumbColor,
+                    } : {}),
+                    // Custom track via CSS variable (if no image)
+                    ...(!trackUrl ? {
+                        ['--slider-track-color' as any]: trackColor,
+                    } : {}),
+                    // Thumb image as background
+                    ...(thumbUrl ? {
+                        ['--slider-thumb-bg' as any]: `url(${thumbUrl})`,
+                    } : {}),
+                    // Track image as background
+                    ...(trackUrl ? {
+                        ['--slider-track-bg' as any]: `url(${trackUrl})`,
+                    } : {}),
+                };
+                
+                return <div key={el.id} style={style} className="flex items-center">
+                    <input 
+                        type="range" 
+                        min={min} 
+                        max={max} 
+                        step={step} 
+                        value={value} 
+                        onChange={e => {
+                            const newValue = parseFloat(e.target.value);
+                            if (el.variableId) {
+                                // Update variable
+                                onVariableChange?.(el.variableId, newValue);
+                            } else {
+                                // Update setting (legacy)
+                                onSettingsChange(el.setting, newValue);
+                            }
+                            // Execute additional actions
+                            if (el.actions && el.actions.length > 0) {
+                                el.actions.forEach(action => onAction(action));
+                            }
+                        }} 
+                        style={customSliderStyle}
+                        className={thumbUrl || trackUrl ? 'custom-slider' : ''}
+                    />
+                </div>;
+            }
+            case UIElementType.SettingsToggle: {
+                const el = element as UISettingsToggleElement;
+                
+                // Determine checked state
+                let isChecked: boolean;
+                if (el.variableId) {
+                    // Variable mode
+                    const currentValue = variables[el.variableId];
+                    if (el.checkedValue !== undefined && el.uncheckedValue !== undefined) {
+                        isChecked = currentValue === el.checkedValue;
+                    } else {
+                        // Default to boolean interpretation
+                        isChecked = Boolean(currentValue);
+                    }
+                } else {
+                    // Settings mode (legacy)
+                    isChecked = settings[el.setting];
+                }
+                
+                const checkboxImage = isChecked ? el.checkedImage : el.uncheckedImage;
+                const imageUrl = checkboxImage ? getElementAssetUrl(checkboxImage) : null;
+                
+                const handleToggle = () => {
+                    if (el.variableId) {
+                        // Update variable
+                        if (el.checkedValue !== undefined && el.uncheckedValue !== undefined) {
+                            const newValue = isChecked ? el.uncheckedValue : el.checkedValue;
+                            onVariableChange?.(el.variableId, newValue);
+                        } else {
+                            // Default boolean toggle
+                            onVariableChange?.(el.variableId, !isChecked);
+                        }
+                    } else {
+                        // Update setting (legacy)
+                        onSettingsChange(el.setting, !isChecked);
+                    }
+                    // Execute additional actions
+                    if (el.actions && el.actions.length > 0) {
+                        el.actions.forEach(action => onAction(action));
+                    }
+                };
+                
+                return <div key={el.id} style={style} className="flex items-center gap-2">
+                    {imageUrl ? (
+                        <img 
+                            src={imageUrl} 
+                            alt={isChecked ? 'checked' : 'unchecked'}
+                            onClick={handleToggle}
+                            className="h-5 w-5 cursor-pointer object-contain"
+                        />
+                    ) : (
+                        <input 
+                            type="checkbox" 
+                            checked={isChecked} 
+                            onChange={handleToggle} 
+                            className="h-5 w-5"
+                            style={el.checkboxColor ? { accentColor: el.checkboxColor } : {}}
+                        />
+                    )}
+                    <label style={fontSettingsToStyle(el.font)}><span style={extractTextGradientStyle(el.font) || undefined}>{el.text}</span></label>
+                </div>
+            }
+            case UIElementType.SaveSlotGrid: {
+                const el = element as UISaveSlotGridElement;
+                const isSaveMode = screenId === project.ui.saveScreenId && screenId !== project.ui.loadScreenId;
+                
+                return (
+                    <SaveSlotGridComponent
+                        key={el.id}
+                        element={el}
+                        style={style}
+                        isSaveMode={isSaveMode}
+                        gameSaves={gameSaves}
+                        onAction={onAction}
+                    />
+                );
+            }
+            case UIElementType.CharacterPreview: {
+                const el = element as UICharacterPreviewElement;
+                const character = project.characters[el.characterId];
+                if (!character) return null;
+                
+                runtimeDebugLog(`[CharacterPreview] layerVariableMap:`, el.layerVariableMap);
+                runtimeDebugLog(`[CharacterPreview] Available variables:`, Object.keys(variables));
+                
+                const imageUrls: string[] = [];
+                const videoUrls: string[] = [];
+                let hasVideo = false;
+                let videoLoop = false;
+                
+                // Add base image/video
+                if (character.baseVideoUrl) {
+                    videoUrls.push(character.baseVideoUrl);
+                    hasVideo = true;
+                    videoLoop = !!character.baseVideoLoop;
+                } else if (character.baseImageUrl) {
+                    imageUrls.push(character.baseImageUrl);
+                }
+                
+                // Get the default expression if specified
+                const defaultExpression = el.expressionId ? character.expressions[el.expressionId] : null;
+                
+                // Add layer assets - process in layer order
+                Object.entries(character.layers).forEach(([layerId, layer]: [string, VNCharacterLayer]) => {
+                    const variableId = el.layerVariableMap[layerId];
+                    let asset = null;
+                    
+                    runtimeDebugLog(`[CharacterPreview] Processing layer ${layer.name} (${layerId}), mapped variableId:`, variableId);
+                    
+                    if (variableId && variables) {
+                        // Get asset from variable (variable contains asset ID as string)
+                        const assetId = String(variables[variableId] || '');
+                        runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} (${layerId}): variableId=${variableId}, assetId from variable="${assetId}"`);
+                        runtimeDebugLog(`[CharacterPreview] Available assets in layer:`, Object.keys(layer.assets));
+                        
+                        if (assetId) {
+                            asset = layer.assets[assetId];
+                            if (asset) {
+                                runtimeDebugLog(`[CharacterPreview] ✓ Found asset: ${asset.name}`);
+                            } else {
+                                runtimeDebugWarn(`[CharacterPreview] ✗ Asset ID "${assetId}" not found in layer ${layer.name}!`);
+                            }
+                        } else {
+                            runtimeDebugLog(`[CharacterPreview] Variable ${variableId} is empty, skipping layer`);
+                        }
+                    } else if (defaultExpression && defaultExpression.layerConfiguration[layerId]) {
+                        // Get asset from default expression
+                        const assetId = defaultExpression.layerConfiguration[layerId];
+                        runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} using default expression asset: ${assetId}`);
+                        asset = assetId ? layer.assets[assetId] : null;
+                    } else {
+                        runtimeDebugLog(`[CharacterPreview] Layer ${layer.name} has no mapping and no default expression`);
+                    }
+                    
+                    if (asset) {
+                        if (asset.videoUrl) {
+                            videoUrls.push(asset.videoUrl);
+                            hasVideo = true;
+                            videoLoop = videoLoop || !!asset.loop;
+                        } else if (asset.imageUrl) {
+                            imageUrls.push(asset.imageUrl);
+                        }
+                    }
+                });
+                
+                // Render character preview
+                const containerStyle: React.CSSProperties = {
+                    ...style,
+                    overflow: 'hidden',
+                };
+                
+                return (
+                    <div key={el.id} style={containerStyle}>
+                        <div className="relative w-full h-full">
+                            {hasVideo && videoUrls.length > 0 ? (
+                                videoUrls.map((url, index) => (
+                                    <video 
+                                        key={index}
+                                        src={url} 
+                                        autoPlay 
+                                        muted 
+                                        loop={videoLoop} 
+                                        playsInline
+                                        className="absolute top-0 left-0 w-full h-full object-contain" 
+                                        style={{ zIndex: index }}
+                                    />
+                                ))
+                            ) : (
+                                imageUrls.map((url, index) => (
+                                    <img 
+                                        key={index}
+                                        src={url} 
+                                        alt="" 
+                                        className="absolute top-0 left-0 w-full h-full object-contain" 
+                                        style={{ zIndex: index }}
+                                    />
+                                ))
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+            case UIElementType.TextInput: {
+                const el = element as UITextInputElement;
+                const currentValue = String(variables[el.variableId] || '');
+
+                return (
+                    <div
+                        key={el.id}
+                        style={style}
+                    >
+                        <input
+                            type="text"
+                            value={currentValue}
+                            onChange={(e) => {
+                                onVariableChange?.(el.variableId, e.target.value);
+                            }}
+                            placeholder={el.placeholder}
+                            maxLength={el.maxLength}
+                            className="w-full h-full outline-none"
+                            style={{
+                                backgroundColor: el.backgroundColor || '#1e293b',
+                                color: el.font?.color || '#f1f5f9',
+                                fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
+                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontWeight: el.font?.weight || 'normal',
+                                fontStyle: el.font?.italic ? 'italic' : 'normal',
+                                border: `2px solid ${el.borderColor || '#475569'}`,
+                                borderRadius: '4px',
+                                padding: '8px 12px',
+                            }}
+                        />
+                    </div>
+                );
+            }
+            case UIElementType.Dropdown: {
+                const el = element as UIDropdownElement;
+                const currentValue = variables[el.variableId];
+                
+                return (
+                    <div
+                        key={el.id}
+                        style={style}
+                    >
+                        <select
+                            value={String(currentValue ?? el.options[0]?.value ?? '')}
+                            onChange={(e) => {
+                                // Find the selected option to get the proper typed value
+                                const selectedOption = el.options.find(opt => String(opt.value) === e.target.value);
+                                if (selectedOption) {
+                                    onVariableChange?.(el.variableId, selectedOption.value);
+                                    
+                                    // Execute additional actions
+                                    if (el.actions && el.actions.length > 0) {
+                                        el.actions.forEach(action => onAction(action));
+                                    }
+                                }
+                            }}
+                            className="w-full h-full outline-none cursor-pointer"
+                            style={{
+                                backgroundColor: el.backgroundColor || '#1e293b',
+                                color: el.font?.color || '#f1f5f9',
+                                fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
+                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontWeight: el.font?.weight || 'normal',
+                                fontStyle: el.font?.italic ? 'italic' : 'normal',
+                                border: `2px solid ${el.borderColor || '#475569'}`,
+                                borderRadius: '4px',
+                                padding: '8px 12px',
+                                direction: el.arrowSide === 'left' ? 'rtl' : 'ltr',
+                                textAlign: el.arrowSide === 'left' ? 'right' : 'left',
+                            }}
+                            onMouseEnter={(e) => {
+                                if (el.hoverColor) {
+                                    e.currentTarget.style.backgroundColor = el.hoverColor;
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = el.backgroundColor || '#1e293b';
+                            }}
+                        >
+                            {el.options.map(opt => (
+                                <option key={opt.id} value={String(opt.value)}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                );
+            }
+            case UIElementType.Checkbox: {
+                const el = element as UICheckboxElement;
+                const currentValue = variables[el.variableId];
+                
+                // Determine if checkbox is checked based on current variable value
+                const isChecked = currentValue === el.checkedValue;
+                
+                return (
+                    <div
+                        key={el.id}
+                        style={style}
+                        className="flex items-center gap-2 cursor-pointer"
+                        onClick={() => {
+                            // Toggle between checked and unchecked values
+                            const newValue = isChecked ? el.uncheckedValue : el.checkedValue;
+                            onVariableChange?.(el.variableId, newValue);
+                            
+                            // Execute additional actions
+                            if (el.actions && el.actions.length > 0) {
+                                el.actions.forEach(action => onAction(action));
+                            }
+                        }}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}} // Handled by parent div onClick
+                            className="w-5 h-5 cursor-pointer"
+                            style={{
+                                accentColor: el.checkboxColor || '#3b82f6'
+                            }}
+                        />
+                        <span
+                            style={{
+                                color: el.labelColor || '#f1f5f9',
+                                fontSize: `calc(var(--font-scale, 1) * ${el.font?.size || 16}px)`,
+                                fontFamily: el.font?.family || 'Inter, system-ui, sans-serif',
+                                fontWeight: el.font?.weight || 'normal',
+                                fontStyle: el.font?.italic ? 'italic' : 'normal',
+                                cursor: 'pointer',
+                                userSelect: 'none'
+                            }}
+                        >
+                            {el.label}
+                        </span>
+                    </div>
+                );
+            }
+            case UIElementType.AssetCycler: {
+                const el = element as UIAssetCyclerElement;
+                return <AssetCyclerElement 
+                    key={el.id} 
+                    element={el} 
+                    style={style} 
+                    variables={variables} 
+                    onVariableChange={onVariableChange} 
+                    project={project} 
+                />;
+            }
+            case UIElementType.CGGallery: {
+                const el = element as UICGGalleryElement;
+                const galleryEntries = Object.values(project.cgGallery?.entries || {}) as CGGalleryEntry[];
+                const filteredEntries = el.categoryFilter
+                    ? galleryEntries.filter(e => e.category === el.categoryFilter)
+                    : galleryEntries;
+                // Sort by order then by name
+                filteredEntries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+
+                // In free mode the gallery spans the whole screen (so slot rects align with
+                // the background art) and is click-through except on the placed thumbnails.
+                const galleryIsFree = el.slotLayout === 'free' && !!el.slotRects && el.slotRects.length > 0;
+                const galleryWrapperStyle: React.CSSProperties = galleryIsFree
+                    ? { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: (style as React.CSSProperties).zIndex, opacity: (style as React.CSSProperties).opacity, pointerEvents: 'none' }
+                    : style;
+
+                return (
+                    <div key={el.id} style={galleryWrapperStyle}>
+                        <CGGalleryGridElement
+                            element={el}
+                            entries={filteredEntries}
+                            variables={variables}
+                            project={project}
+                            assetResolver={assetResolver}
+                            viewerPortalRef={screenRootRef}
+                        />
+                    </div>
+                );
+            }
+            case UIElementType.Inventory: {
+                const el = element as UIInventoryGridElement;
+                // If bound to an item list (collection), show THAT list's entries with their own per-list
+                // stock — by swapping each item's countVariableId to the entry's backing var, the grid's
+                // existing count logic "just works". Unset = the player's own inventory (global owned set).
+                const boundCollection = el.collectionId ? project.itemCollections?.[el.collectionId] : undefined;
+                const allOwnedItems = () => (Object.values(project.items || {}) as VNItem[]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
+                const invItems = !boundCollection
+                    ? allOwnedItems()
+                    : (boundCollection.tracksOwnedItems && boundCollection.entries.length === 0)
+                        // Player inventory with no curated items = show everything the player owns.
+                        ? allOwnedItems()
+                        : boundCollection.entries
+                            .map(e => { const it = project.items?.[e.itemId]; return it ? { ...it, countVariableId: e.countVariableId } : null; })
+                            .filter((x): x is VNItem => !!x);
+                // A SHOP list shows its FULL catalogue (0 = sold out), so force "hide unowned" off. A player-
+                // inventory list behaves like the player's bag, so it keeps the grid's hide-unowned setting.
+                const isShopList = !!boundCollection && !boundCollection.tracksOwnedItems;
+                const gridEl = isShopList ? { ...el, hideUnowned: false } : el;
+                return (
+                    <div key={el.id} style={style}>
+                        <InventoryGridElement
+                            element={gridEl}
+                            items={invItems}
+                            variables={variables}
+                            project={project}
+                            assetResolver={assetResolver}
+                            onAction={onAction}
+                            onCommitVariables={onCommitVariables}
+                            inventorySlots={inventorySlots}
+                            onReorderSlots={onReorderSlots}
+                            selectedItemId={selectedItemId}
+                            selectedElementId={selectedElementId}
+                            onSelectItem={onSelectItem}
+                        />
+                    </div>
+                );
+            }
+            case UIElementType.Meter: {
+                const el = element as UIMeterElement;
+                const boundVar = el.variableId ? project.variables[el.variableId] : undefined;
+                const raw = Number((el.variableId ? variables[el.variableId] : undefined) ?? boundVar?.defaultValue ?? 0);
+                const min = el.minValue ?? (boundVar as any)?.min ?? 0;
+                const max = el.maxValue ?? (boundVar as any)?.max ?? 100;
+                const pct = Math.max(0, Math.min(1, (raw - min) / ((max - min) || 1)));
+                const dir = el.direction || 'ltr';
+                // The fill is a full-size layer revealed by clip-path — works identically for
+                // solid colors, gradients, and art fills, with no divide-by-zero edge cases.
+                const cut = (1 - pct) * 100;
+                const clipPath = dir === 'rtl' ? `inset(0 0 0 ${cut}%)` : dir === 'up' ? `inset(${cut}% 0 0 0)` : `inset(0 ${cut}% 0 0)`;
+                const fillImageUrl = el.fillImage ? getElementAssetUrl(el.fillImage) : null;
+                const bgImageUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+                const fillBackground = fillImageUrl
+                    ? undefined
+                    : (el.fillColorEnd
+                        ? `linear-gradient(${dir === 'up' ? '0deg' : '90deg'}, ${el.fillColor || '#a78bfa'}, ${el.fillColorEnd})`
+                        : (el.fillColor || '#a78bfa'));
+                const valueText = el.valueFormat === 'percent' ? `${Math.round(pct * 100)}%`
+                    : el.valueFormat === 'valueMax' ? `${raw}/${max}`
+                    : `${raw}`;
+                const radius = el.borderRadius ?? 6;
+                return (
+                    <div key={el.id} style={{ ...style, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {el.showLabel && (
+                            <div style={{ ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }}>
+                                {el.label || boundVar?.name || ''}
+                            </div>
+                        )}
+                        <div style={{
+                            position: 'relative', flex: 1, minHeight: 4, overflow: 'hidden',
+                            borderRadius: radius,
+                            backgroundColor: el.backgroundColor || 'rgba(0,0,0,0.4)',
+                            ...(bgImageUrl ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                            ...(el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}),
+                        }}>
+                            <div style={{
+                                position: 'absolute', inset: 0,
+                                clipPath,
+                                background: fillBackground,
+                                ...(fillImageUrl ? { backgroundImage: `url(${fillImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                                borderRadius: radius,
+                                // Tween the fill colour too when an appearance state with a transition is active
+                                // (e.g. HP bar eases green→red). Solid fills animate via background-color.
+                                transition: `clip-path 0.3s ease${activeState?.transitionMs ? `, background-color ${activeState.transitionMs}ms ease, background ${activeState.transitionMs}ms ease` : ''}`,
+                            }} />
+                            {el.showValue && (
+                                <div style={{
+                                    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    ...fontSettingsToStyle(el.valueFont),
+                                    textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                }}>
+                                    {valueText}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+            default: return null;
+        }
+    }
+
+    // Get screen transition style
+    const transitionType = isClosing ? (screen.transitionOut || 'fade') : (screen.transitionIn || 'fade');
+    const duration = isClosing
+        ? (screen.transitionOutDuration ?? screen.transitionDuration ?? 300)
+        : (screen.transitionInDuration ?? screen.transitionDuration ?? 300);
+    const screenTransitionStyle: React.CSSProperties = {
+        animation: transitionType !== 'none' ? `screenTransition${transitionType}${isClosing ? 'Out' : ''} ${duration}ms ${transitionType === 'crossfade' ? 'linear' : 'ease-out'} forwards` : undefined,
+    };
+
+    // Check if dialogue should be shown
+    const shouldShowDialogue = screen.showDialogue && variables;
+
+    return (
+        <div
+            ref={screenRootRef}
+            // Key is just the screenId — switching isClosing on the SAME screen must
+            // not unmount/remount this div, or the crossfade will visibly flicker.
+            key={screenId}
+            className="absolute inset-0 w-full h-full"
+            // Pass-through screens don't intercept clicks on empty areas — the scene
+            // beneath stays interactive (dialogue advance, scene hot spots).
+            // `isolation: isolate` confines element `layer` z-indices to this screen so a
+            // high-layer element can't paint above the dialogue/quick-menu bands.
+            style={{
+                isolation: 'isolate',
+                ...screenTransitionStyle,
+                ...(isPassThrough ? { pointerEvents: 'none' } : {}),
+                // Pass-through HUDs normally sit below the dialogue box (z20) + choices (z30). When
+                // `hudAboveDialogue` is set, lift this overlay above them (but below flash/history z50)
+                // so its buttons are visible + clickable while dialogue/choices are on screen. Empty
+                // areas stay pointer-events:none, so clicks there still fall through to advance dialogue.
+                ...(isPassThrough && screen.hudAboveDialogue ? { zIndex: 45 } : {}),
+                // A pausing overlay (modal-style) sits ABOVE the dialogue box + backdrop so it
+                // reads as a popup over a frozen, dimmed scene.
+                ...(screen.pauseSceneWhileOpen ? { zIndex: 46 } : {}),
+            }}
+        >
+            {/* Pass-through (HUD) screens skip their opaque background so the scene shows through. */}
+            {!isPassThrough && getBackgroundElement()}
+            {/* Standard renderer skips interactive types — InteractiveRuntime owns them. */}
+            {Object.values(screen.elements).map(element => {
+                const el = element as any;
+                if (el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true) return null;
+                return renderElement(element as VNUIElement, variables, project, onCommitVariables);
+            })}
+            {/* Hot zone runtime activates whenever the screen has any interactive content
+                (hot spots, image maps, draggable elements) or a win condition. */}
+            {(
+                Object.values(screen.elements || {}).some((el: any) =>
+                    el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true
+                ) ||
+                !!screen.winCondition
+            ) && (
+                <InteractiveRuntime
+                    screen={screen}
+                    onAction={onAction}
+                    variables={variables}
+                    onVariableChange={onVariableChange}
+                    evaluateConditions={evaluateConditions}
+                    assetResolver={assetResolver}
+                    playSound={playSound}
+                />
+            )}
+        </div>
+    );
+});
+
+
+// --- In-Game Confirmation Dialog ---
+const InGameConfirmDialog: React.FC<{
+    type: 'quit' | 'newGame';
+    settings?: VNConfirmDialogSettings;
+    assetResolver: (id: VNID, type: string) => string;
+    onConfirm: () => void;
+    onCancel: () => void;
+}> = ({ type, settings: s, assetResolver, onConfirm, onCancel }) => {
+    const isQuit = type === 'quit';
+    const title = isQuit
+        ? (s?.quitTitle || 'Quit Game')
+        : (s?.newGameTitle || 'Start New Game');
+    const message = isQuit
+        ? (s?.quitMessage || 'Are you sure you want to quit?')
+        : (s?.newGameMessage || 'Any unsaved progress will be lost. Are you sure?');
+    const confirmLabel = isQuit
+        ? (s?.quitConfirmLabel || 'Quit')
+        : (s?.newGameConfirmLabel || 'New Game');
+    const cancelLabel = isQuit
+        ? (s?.quitCancelLabel || 'Cancel')
+        : (s?.newGameCancelLabel || 'Cancel');
+
+    const bgColor = s?.backgroundColor || '#0f172a';
+    const bgOpacity = (s?.backgroundOpacity ?? 92) / 100;
+    const borderRadius = s?.borderRadius ?? 12;
+    const overlayColor = s?.overlayColor || 'rgba(0,0,0,0.75)';
+    const confirmBtnColor = s?.confirmButtonColor || '';
+    const cancelBtnColor = s?.cancelButtonColor || '#1e293b';
+    const confirmHoverColor = s?.confirmHoverColor || '';
+    const cancelHoverColor = s?.cancelHoverColor || '#334155';
+    const btnBorderRadius = s?.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
+    const btnPad = s?.buttonPadding ?? 8;
+    const dialogPad = s?.dialogPadding ?? 32;
+
+    const titleStyle: React.CSSProperties = s?.titleFont ? fontSettingsToStyle(s.titleFont) : { fontSize: '1.25rem', fontWeight: 600, color: '#fff' };
+    const messageStyle: React.CSSProperties = s?.messageFont ? fontSettingsToStyle(s.messageFont) : { fontSize: '0.95rem', color: '#cbd5e1' };
+    const buttonStyle: React.CSSProperties = s?.buttonFont ? fontSettingsToStyle(s.buttonFont) : { fontSize: '0.95rem', fontWeight: 500, color: '#fff' };
+
+    // Resolve asset URLs
+    const resolveAsset = (asset?: { id: VNID } | null) => asset?.id ? assetResolver(asset.id, 'image') : null;
+    const bgImageUrl = resolveAsset(s?.backgroundImage);
+    const borderImageUrl = resolveAsset(s?.borderImage);
+    const confirmBtnImgUrl = resolveAsset(s?.confirmButtonImage);
+    const cancelBtnImgUrl = resolveAsset(s?.cancelButtonImage);
+    const confirmHoverImgUrl = resolveAsset(s?.confirmHoverImage);
+    const cancelHoverImgUrl = resolveAsset(s?.cancelHoverImage);
+
+    const sizeMode = s?.backgroundSizeMode || 'stretch';
+    const bgImageStyle: React.CSSProperties = bgImageUrl ? {
+        backgroundImage: `url(${bgImageUrl})`,
+        backgroundSize: sizeMode === 'nine-slice' ? undefined : (sizeMode === 'stretch' ? '100% 100%' : sizeMode),
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        ...(sizeMode === 'nine-slice' ? {
+            borderImage: `url(${bgImageUrl}) ${s?.backgroundSlice ?? 20} fill`,
+            borderImageWidth: `${s?.backgroundSlice ?? 20}px`,
+        } : {}),
+    } : {};
+
+    const makeBtnImageStyle = (imgUrl: string | null): React.CSSProperties => {
+        if (!imgUrl) return {};
+        const bsm = s?.buttonSizeMode || 'stretch';
+        return {
+            backgroundImage: `url(${imgUrl})`,
+            backgroundSize: bsm === 'nine-slice' ? undefined : (bsm === 'stretch' ? '100% 100%' : bsm),
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: 'transparent',
+            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${s?.buttonSlice ?? 10} fill`, borderImageWidth: `${s?.buttonSlice ?? 10}px` } : {}),
+        };
+    };
+
+    const borderPad = s?.borderPadding ?? 12;
+
+    return (
+        <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ backgroundColor: overlayColor, zIndex: 9998, animation: 'fade-in 0.2s ease-out' }}
+            onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+        >
+            {/* Border image wrapper */}
+            <div style={borderImageUrl ? {
+                backgroundImage: `url(${borderImageUrl})`,
+                backgroundSize: '100% 100%',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                padding: borderPad,
+                borderRadius,
+            } : {}}>
+                <div
+                    style={{
+                        backgroundColor: bgImageUrl ? 'transparent' : bgColor,
+                        opacity: bgImageUrl ? 1 : undefined,
+                        borderRadius,
+                        padding: dialogPad,
+                        ...(s?.dialogWidth ? { width: s.dialogWidth } : { minWidth: 320, maxWidth: 440 }),
+                        textAlign: 'center',
+                        boxShadow: borderImageUrl ? 'none' : '0 12px 40px rgba(0,0,0,0.5)',
+                        ...bgImageStyle,
+                        ...(bgImageUrl ? {} : { background: `${bgColor}${Math.round(bgOpacity * 255).toString(16).padStart(2, '0')}` }),
+                    }}
+                >
+                    <div style={{ ...titleStyle, marginBottom: '0.75rem' }}>{title}</div>
+                    <div style={{ ...messageStyle, marginBottom: '1.5rem' }}>{message}</div>
+                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                        <button
+                            onClick={onCancel}
+                            style={{
+                                ...buttonStyle,
+                                padding: `${btnPad}px ${btnPad * 3}px`,
+                                borderRadius: btnBorderRadius,
+                                backgroundColor: cancelBtnImgUrl ? 'transparent' : cancelBtnColor,
+                                border: cancelBtnImgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s',
+                                ...makeBtnImageStyle(cancelBtnImgUrl),
+                            }}
+                            onMouseEnter={e => {
+                                if (cancelHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${cancelHoverImgUrl})`;
+                                } else {
+                                    e.currentTarget.style.backgroundColor = cancelHoverColor;
+                                }
+                            }}
+                            onMouseLeave={e => {
+                                if (cancelBtnImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${cancelBtnImgUrl})`;
+                                } else if (cancelHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = 'none';
+                                    e.currentTarget.style.backgroundColor = cancelBtnColor;
+                                } else {
+                                    e.currentTarget.style.backgroundColor = cancelBtnColor;
+                                }
+                            }}
+                        >
+                            {cancelLabel}
+                        </button>
+                        <button
+                            onClick={onConfirm}
+                            style={{
+                                ...buttonStyle,
+                                padding: `${btnPad}px ${btnPad * 3}px`,
+                                borderRadius: btnBorderRadius,
+                                background: confirmBtnImgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)'),
+                                border: 'none',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s, box-shadow 0.15s',
+                                ...makeBtnImageStyle(confirmBtnImgUrl),
+                            }}
+                            onMouseEnter={e => {
+                                if (confirmHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${confirmHoverImgUrl})`;
+                                } else if (confirmHoverColor) {
+                                    e.currentTarget.style.background = confirmHoverColor;
+                                } else {
+                                    e.currentTarget.style.boxShadow = '0 4px 16px rgba(236,72,153,0.3)';
+                                }
+                            }}
+                            onMouseLeave={e => {
+                                if (confirmBtnImgUrl) {
+                                    e.currentTarget.style.backgroundImage = `url(${confirmBtnImgUrl})`;
+                                } else if (confirmHoverImgUrl) {
+                                    e.currentTarget.style.backgroundImage = 'none';
+                                    e.currentTarget.style.background = confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)';
+                                } else if (confirmHoverColor) {
+                                    e.currentTarget.style.background = confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)';
+                                } else {
+                                    e.currentTarget.style.boxShadow = 'none';
+                                }
+                            }}
+                        >
+                            {confirmLabel}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Main Player Component ---
+const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean; isStandalone?: boolean }> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
+    const { project } = useProject();
+    const toast = useToast();
+    // Stable notify bridge for scripts (game.notify) and surfaced script errors.
+    const notify = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+        try { toast.addToast(message, type); } catch { console.log(`[notify] [${type}] ${message}`); }
+    }, [toast]);
+
+    const getValidTitleScreenId = useCallback(() => {
+        // 1. Check if the assigned title screen ID is valid
+        if (project.ui.titleScreenId && project.uiScreens[project.ui.titleScreenId]) {
+            return project.ui.titleScreenId;
+        }
+        // 2. Fallback: Look for a screen named "Title Screen"
+        const fallbackByName = Object.values(project.uiScreens).find(s => (s as VNUIScreen).name.toLowerCase() === 'title screen');
+        if (fallbackByName) {
+            return (fallbackByName as VNUIScreen).id;
+        }
+        // 3. Last resort: Fallback to the very first screen available
+        return Object.keys(project.uiScreens)[0] || null;
+    }, [project.ui.titleScreenId, project.uiScreens]);
+
+    const titleScreenId = getValidTitleScreenId();
+    const [screenStack, setScreenStack] = useState<VNID[]>(titleScreenId ? [titleScreenId] : []);
+    // hudStack holds screens shown as in-game overlays while in 'playing' mode
+    const [hudStack, setHudStack] = useState<VNID[]>([]);
+    // Track screens that are currently closing with transitions
+    const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
+    // In-game confirmation dialog state
+    const [confirmDialog, setConfirmDialog] = useState<{ type: 'quit' | 'newGame'; pendingAction: VNUIAction } | null>(null);
+    // Track scene exit transition (type, duration, and active state)
+    const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
+    const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
+    const [sceneTransitionDuration, setSceneTransitionDuration] = useState(0.5);
+    // New-game transition: fade the title out to black, load the scene, then fade in.
+    const [gameStartFade, setGameStartFade] = useState<'none' | 'toBlack' | 'fromBlack'>('none');
+    const [settings, setSettings] = useState<GameSettings>(() => {
+        const projectDefaults = project.ui?.defaultGameSettings;
+        if (projectDefaults) {
+            // Merge with defaults to fill any missing fields (e.g. ambientVolume for older projects)
+            return { ...defaultSettings, ...projectDefaults };
+        }
+        return { ...defaultSettings };
+    });
+    const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+    const playerStateRef = useRef<PlayerState | null>(null);
+    // A "pausing overlay": a screen open on the HUD stack flagged `pauseSceneWhileOpen`. While one
+    // is open the scene is FROZEN (no auto-advance / skip / manual advance) but stays visible behind it.
+    const pausingOverlayScreen = (() => {
+        for (let i = hudStack.length - 1; i >= 0; i--) {
+            const s = project.uiScreens[hudStack[i]];
+            if (s?.pauseSceneWhileOpen) return s;
+        }
+        return null;
+    })();
+    const scenePaused = !!pausingOverlayScreen;
+    // Editor-only live Variable Tracker overlay (never shown in exported/standalone games).
+    const [showVarWatcher, setShowVarWatcher] = useState(false);
+    // Tween tick counter — forces re-render each frame during active tweens
+    const [, setTweenTick] = useState(0);
+    useEffect(() => {
+        const unsub = TweenManager.subscribe(() => {
+            setTweenTick(t => t + 1);
+        });
+        return unsub;
+    }, []);
+    const updatePlayerState = useCallback((updater: React.SetStateAction<PlayerState | null>) => {
+        setPlayerState(prev => {
+            const next = typeof updater === 'function'
+                ? (updater as (prevState: PlayerState | null) => PlayerState | null)(prev)
+                : updater;
+            playerStateRef.current = next;
+            return next;
+        });
+    }, []);
+    // Reactive-restock bookkeeping: last-observed condition truth / watched-variable value per collection.
+    // Reset on mount/load so a freshly-loaded save records current state WITHOUT restocking (no re-roll).
+    const restockPrevConditionRef = useRef<Record<VNID, boolean>>({});
+    const restockPrevWatchRef = useRef<Record<VNID, string | number | boolean | undefined>>({});
+    // Mirror hudStack into a ref so the parallel scheduler interval can read it without restarting.
+    const hudStackRef = useRef<VNID[]>([]);
+    hudStackRef.current = hudStack;
+    // Project ref for the plugin runtime bridge (variable name→id resolution).
+    const projectRef = useRef(project);
+    projectRef.current = project;
+
+    useEffect(() => {
+        playerStateRef.current = playerState;
+        if (playerState?.mode === 'playing') {
+            const stage = playerState.stageState;
+            if (
+                stage.backgroundUrl ||
+                Object.keys(stage.characters).length > 0 ||
+                stage.textOverlays.length > 0 ||
+                stage.imageOverlays.length > 0 ||
+                stage.buttonOverlays.length > 0
+            ) {
+                hasRenderedSceneRef.current = true;
+            }
+        } else {
+            hasRenderedSceneRef.current = false;
+        }
+    }, [playerState]);
+    const [gameSaves, setGameSaves] = useState<Record<number, GameStateSave>>({});
+    const [isJustLoaded, setIsJustLoaded] = useState(false);
+    
+    // Menu variables: used for UI screens before game starts (e.g., character customization)
+    // Includes persistent variable overrides so CG unlock status is visible on title/menu screens
+    const [menuVariables, setMenuVariables] = useState<Record<VNID, string | number | boolean>>(() => {
+        return getInitialVariablesWithPersistent(project.variables, project.id);
+    });
+    
+    // UI variables: used for UI screens during gameplay (separate from game variables until merged back)
+    const [uiVariables, setUiVariables] = useState<Record<VNID, string | number | boolean>>(() => {
+        return getInitialVariablesWithPersistent(project.variables, project.id);
+    });
+    const uiVariablesRef = useRef<Record<VNID, string | number | boolean>>(uiVariables);
+
+    useEffect(() => {
+        uiVariablesRef.current = uiVariables;
+    }, [uiVariables]);
+    
+    // Sync menuVariables when project variables change
+    useEffect(() => {
+        const updatedVars: Record<VNID, string | number | boolean> = {};
+        Object.values(project.variables).forEach((v: any) => {
+            // Keep existing value if it exists, otherwise use default
+            updatedVars[v.id] = menuVariables[v.id] !== undefined ? menuVariables[v.id] : v.defaultValue;
+        });
+        setMenuVariables(updatedVars);
+    }, [project.variables]);
+    
+    // Load custom fonts (project library + character overrides)
+    useEffect(() => {
+        const loadCustomFonts = async () => {
+            // Project-level font library
+            const projectFonts = (project as any).fonts || {};
+            for (const fontId in projectFonts) {
+                const font = projectFonts[fontId];
+                if (font?.fontUrl && font?.fontFamily) {
+                    try {
+                        const fontFace = new FontFace(font.fontFamily, `url(${font.fontUrl})`);
+                        await fontFace.load();
+                        (document as any).fonts.add(fontFace);
+                        runtimeDebugLog(`✓ Loaded project font: ${font.fontFamily}`);
+                    } catch (error) {
+                        console.error(`Failed to load project font ${font?.name || fontId}:`, error);
+                    }
+                }
+            }
+
+            for (const charId in project.characters) {
+                const char = project.characters[charId];
+                if (char.fontUrl && char.fontFamily) {
+                    try {
+                        // Create @font-face rule for custom font
+                        const fontFace = new FontFace(char.fontFamily, `url(${char.fontUrl})`);
+                        await fontFace.load();
+                        (document as any).fonts.add(fontFace);
+                        runtimeDebugLog(`✓ Loaded custom font: ${char.fontFamily}`);
+                    } catch (error) {
+                        console.error(`Failed to load custom font for ${char.name}:`, error);
+                    }
+                }
+            }
+        };
+        loadCustomFonts();
+    }, [project.characters, (project as any).fonts]);
+    
+    const musicAudioRef = useRef<HTMLAudioElement>(new Audio());
+    const ambientNoiseAudioRef = useRef<HTMLAudioElement>(new Audio());
+    const menuMusicUrlRef = useRef<string | null>(null);
+    const menuAmbientUrlRef = useRef<string | null>(null);
+    const audioFadeInterval = useRef<number | null>(null);
+    const ambientFadeInterval = useRef<number | null>(null);
+    // Stage ref used for measuring pixel size for accurate slide animations
+    const stageRef = useRef<HTMLDivElement | null>(null);
+    const stageSize = useStageSize(stageRef);
+
+    // ── Parallax (scene stage): mouse and/or camera ───────────────────────────
+    // Each frame, write the eased offset to `--ppx`/`--ppy` (×intensity) on the stage
+    // container; visuals translate by `parallaxDepth` via those vars. Pure DOM writes (no
+    // React re-render). `mouse` follows the pointer; `camera` follows the live pan (so
+    // PanZoomScreen makes nearer layers sweep past farther ones); `both` sums them. Gated by
+    // the scene's `parallax.mode` + reduced-motion.
+    const sceneBasePanX = playerState?.stageState.screen.panX ?? 0;
+    const sceneBasePanY = playerState?.stageState.screen.panY ?? 0;
+    useEffect(() => {
+        const stage = stageRef.current;
+        if (!stage) return;
+        const scene = playerState ? project.scenes[playerState.currentSceneId] : null;
+        const px = scene?.parallax;
+        const wantMouse = px?.mode === 'mouse' || px?.mode === 'both';
+        const wantCamera = px?.mode === 'camera' || px?.mode === 'both';
+        const active = (wantMouse || wantCamera) && playerState?.mode === 'playing';
+        const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!active || reduce) {
+            stage.style.setProperty('--ppx', '0');
+            stage.style.setProperty('--ppy', '0');
+            return;
+        }
+        const intensity = px?.intensity ?? 1;
+        const mouseT = { x: 0, y: 0 };
+        const cur = { x: 0, y: 0 };
+        let raf = 0;
+        const onMove = (e: MouseEvent) => {
+            const r = stage.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            mouseT.x = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
+            mouseT.y = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
+        };
+        const onLeave = () => { mouseT.x = 0; mouseT.y = 0; };
+        const tick = () => {
+            // Mouse: ease the raw pointer (it's jumpy). Camera: take the live pan DIRECTLY —
+            // the PanZoom tween is already smooth and drives the base stage transform frame-
+            // for-frame, so easing it again would lag the sprites behind the backdrop (the
+            // "parallax happens for a second then they move together" bug). Sync it instead.
+            const mx = wantMouse ? mouseT.x : 0;
+            const my = wantMouse ? mouseT.y : 0;
+            cur.x += (mx - cur.x) * 0.08;
+            cur.y += (my - cur.y) * 0.08;
+            let cx = 0, cy = 0;
+            if (wantCamera) {
+                // Live pan: the active screen tween if one is running, else the committed/resting pan.
+                const tw = TweenManager.getCurrentValues('__screen__', 'screen');
+                const panX = (tw && tw.x != null) ? tw.x : sceneBasePanX;
+                const panY = (tw && tw.y != null) ? tw.y : sceneBasePanY;
+                cx = panX / CAMERA_PAN_REF;
+                cy = panY / CAMERA_PAN_REF;
+            }
+            stage.style.setProperty('--ppx', ((cur.x + cx) * intensity).toFixed(4));
+            stage.style.setProperty('--ppy', ((cur.y + cy) * intensity).toFixed(4));
+            raf = requestAnimationFrame(tick);
+        };
+        if (wantMouse) {
+            window.addEventListener('mousemove', onMove);
+            stage.addEventListener('mouseleave', onLeave);
+        }
+        raf = requestAnimationFrame(tick);
+        return () => {
+            cancelAnimationFrame(raf);
+            if (wantMouse) {
+                window.removeEventListener('mousemove', onMove);
+                stage.removeEventListener('mouseleave', onLeave);
+            }
+            stage.style.setProperty('--ppx', '0');
+            stage.style.setProperty('--ppy', '0');
+        };
+    }, [playerState?.currentSceneId, playerState?.mode, project.scenes, sceneBasePanX, sceneBasePanY]);
+
+    // Play-container ref – measures the aspect-ratio box so we can set --font-scale
+    const playContainerRef = useRef<HTMLDivElement | null>(null);
+    const playContainerSize = useStageSize(playContainerRef);
+    // WebAudio resources for SFX
+    const audioCtxRef = useRef<AudioContext | null>(null);
+    const sfxBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
+    const sfxSourceNodesRef = useRef<AudioBufferSourceNode[]>([]);
+    const sfxMasterGainRef = useRef<GainNode | null>(null);
+    const sfxCompressorRef = useRef<DynamicsCompressorNode | null>(null);
+    const sfxProcessingCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
+    const MAX_SIMULTANEOUS_SFX = 8;
+    // Live (reactive) sound effects: a PlaySoundEffect with `liveConditions` registers here when
+    // reached. An effect re-evaluates each entry's conditions as variables change — playing while
+    // met (looping) / firing once on a false→true edge (non-loop), and stopping when no longer met.
+    const liveSfxRef = useRef<Map<string, { audioId: VNID; conditions?: VNCondition[]; loop: boolean; volume?: number; audio: HTMLAudioElement | null; lastMet: boolean }>>(new Map());
+    const [liveSfxTick, setLiveSfxTick] = useState(0);
+
+    // In-memory saves fallback when localStorage is unavailable or full
+    const savesPersistentRef = useRef<boolean>(true); // assume persistent until proven otherwise
+    const inMemorySavesRef = useRef<Record<number, GameStateSave>>({});
+
+    // Queue music when autoplay is blocked; retry when user interacts
+    const queuedMusicRef = useRef<{ url: string; loop: boolean; fadeDuration: number } | null>(null);
+    const userGestureDetectedRef = useRef<boolean>(false);
+
+    // Track active one-shot SFX (tagged with their audioId so Stop Sound Effect can
+    // target a specific sound) so we can stop them when a scene ends or on command.
+    const sfxPoolRef = useRef<{ audio: HTMLAudioElement; audioId: VNID }[]>([]);
+    const commandSchedulerRef = useRef(new CommandScheduler());
+    const hasRenderedSceneRef = useRef(false);
+    const runtimeDiagnosticsRef = useRef(new RuntimeDiagnostics());
+    const variableStoreRef = useRef<RuntimeVariableStore | null>(null);
+    const uiDirtyVariableIdsRef = useRef<Set<VNID>>(new Set());
+    const activeEffectTimeoutsRef = useRef<number[]>([]);
+    
+    // Use refs for visual effects to avoid triggering command loop re-execution
+    const activeFlashRef = useRef<{ color: string; duration: number; key: number } | null>(null);
+    const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
+    const [flashTrigger, setFlashTrigger] = useState(0);
+    const [shakeTrigger, setShakeTrigger] = useState(0);
+    // Lightning (one-shot flash sequence) — mirrors the flash ref/trigger pattern.
+    // The single currently-playing dialogue voice clip — kept separate from the SFX pool so a new
+    // line (or advancing) can stop it (no overlap) and so its volume follows the Voice slider, not SFX.
+    const currentVoiceRef = useRef<HTMLAudioElement | null>(null);
+    const activeLightningRef = useRef<{ color: string; intensity: number; duration: number; flashes: number; affectsDialogue: boolean; key: number } | null>(null);
+    const [lightningTrigger, setLightningTrigger] = useState(0);
+    const activeFireworksRef = useRef<{ colors: string[]; intensity: number; bursts: number; duration: number; burstHeight: number; affectsDialogue: boolean; sfxId: VNID | null; sfxVolume?: number; sfxPerBurst: boolean; key: number } | null>(null);
+    const [fireworksTrigger, setFireworksTrigger] = useState(0);
+    // Flashlight (persistent mouse-following dark overlay). `on` is the live toggle state.
+    const [flashlight, setFlashlight] = useState<{ radius: number; softness: number; darkness: number; color: string; toggleKey?: string; affectsDialogue: boolean; darkWhenOff: boolean; on: boolean } | null>(null);
+    const flashlightOverlayRef = useRef<HTMLDivElement | null>(null);
+
+    // Flashlight: let the player toggle it on/off with the author-chosen key.
+    useEffect(() => {
+        const key = flashlight?.toggleKey;
+        if (!key) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === key.toLowerCase()) {
+                e.preventDefault();
+                setFlashlight(f => f ? { ...f, on: !f.on } : f);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [flashlight?.toggleKey]);
+
+    // Flashlight: move the light hole to follow the cursor (updates the overlay's gradient directly,
+    // no React re-render per mouse move).
+    useEffect(() => {
+        if (!flashlight?.on) return;
+        const onMove = (e: MouseEvent) => {
+            const el = flashlightOverlayRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const radiusPx = (flashlight.radius / 100) * Math.min(rect.width, rect.height);
+            el.style.background = flashlightBg(mx, my, radiusPx, flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100));
+        };
+        window.addEventListener('mousemove', onMove);
+        return () => window.removeEventListener('mousemove', onMove);
+    }, [flashlight?.on, flashlight?.radius, flashlight?.softness, flashlight?.darkness, flashlight?.color]);
+    const [activeCreditRoll, setActiveCreditRoll] = useState<CreditRollCommand | null>(null);
+
+    const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
+        if (!assetId) return null;
+        
+        switch(type) {
+            case 'audio': 
+                return project.audio[assetId]?.audioUrl || null;
+            case 'video':
+                // A "video" asset can live in the videos collection OR in backgrounds/images
+                // (a video uploaded under those Asset Manager tabs is stored there with a
+                // videoUrl). Resolve across all three so Play Video works regardless of where
+                // the asset was uploaded.
+                return project.videos[assetId]?.videoUrl
+                    || project.backgrounds[assetId]?.videoUrl
+                    || project.images?.[assetId]?.videoUrl
+                    || null;
+            case 'image': {
+                // Check backgrounds first (primary source for UI images)
+                if (project.backgrounds[assetId]) {
+                    const bg = project.backgrounds[assetId];
+                    return bg.videoUrl || bg.imageUrl || null;
+                }
+                // Check images collection
+                if (project.images && project.images[assetId]) {
+                    const img = project.images[assetId];
+                    return img.videoUrl || img.imageUrl || null;
+                }
+                // Check videos collection as fallback (in case type='image' was passed for a video asset)
+                if (project.videos[assetId]) {
+                    return project.videos[assetId]?.videoUrl || null;
+                }
+                // Check character assets as final fallback
+                for (const charId in project.characters) {
+                    const char = project.characters[charId];
+                    // Character's base image ID is the character's ID itself
+                    if (char.id === assetId) {
+                        return char.baseVideoUrl || char.baseImageUrl || null;
+                    }
+                    for (const layerId in char.layers) {
+                        const layer = char.layers[layerId];
+                        if (layer.assets[assetId]) {
+                            const asset = layer.assets[assetId];
+                            return asset.videoUrl || asset.imageUrl || null;
+                        }
+                    }
+                }
+                return null;
+            }
+        }
+    }, [project]);
+    
+    // Helper to get asset metadata (is it a video, should it loop, etc.)
+    const getAssetMetadata = useCallback((assetId: VNID | null, type: 'image'): { isVideo: boolean; loop: boolean } => {
+        if (!assetId) return { isVideo: false, loop: false };
+        
+        if (project.backgrounds[assetId]) {
+            const bg = project.backgrounds[assetId];
+            return { isVideo: !!bg.isVideo, loop: !!bg.loop };
+        }
+        
+        if (project.images && project.images[assetId]) {
+            const img = project.images[assetId];
+            return { isVideo: !!img.isVideo, loop: !!img.loop };
+        }
+
+        // Check videos collection
+        if (project.videos && project.videos[assetId]) {
+            return { isVideo: true, loop: true };
+        }
+        
+        // Check characters
+        for (const charId in project.characters) {
+            const char = project.characters[charId];
+            if (char.id === assetId) {
+                return { isVideo: !!char.isBaseVideo, loop: !!char.baseVideoLoop };
+            }
+            for (const layerId in char.layers) {
+                const layer = char.layers[layerId];
+                if (layer.assets[assetId]) {
+                    const asset = layer.assets[assetId];
+                    return { isVideo: !!asset.isVideo, loop: !!asset.loop };
+                }
+            }
+        }
+        
+        return { isVideo: false, loop: false };
+    }, [project]);
+    
+    const fadeAudio = useCallback((audioElement: HTMLAudioElement, targetVolume: number, duration: number, onComplete?: () => void) => {
+        // Ensure target volume is a valid finite number
+        const safeTarget = Number.isFinite(targetVolume) ? Math.max(0, Math.min(1, targetVolume)) : 0.8;
+        // Use different interval refs for different audio elements
+        const intervalRef = audioElement === musicAudioRef.current ? audioFadeInterval : ambientFadeInterval;
+        
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        
+        const startVolume = audioElement.volume;
+        const volumeChange = safeTarget - startVolume;
+        if (duration === 0) {
+            audioElement.volume = safeTarget;
+            onComplete?.();
+            return;
+        }
+        
+        const startTime = Date.now();
+
+        intervalRef.current = window.setInterval(() => {
+            const elapsedTime = Date.now() - startTime;
+            const progress = Math.min(elapsedTime / (duration * 1000), 1);
+            const newVol = startVolume + volumeChange * progress;
+            audioElement.volume = Math.max(0, Math.min(1, newVol));
+
+            if (progress >= 1) {
+                if (intervalRef.current) clearInterval(intervalRef.current);
+                intervalRef.current = null;
+                onComplete?.();
+            }
+        }, 30);
+    }, []);
+
+    const stopAndResetMusic = useCallback(() => {
+        const audio = musicAudioRef.current;
+        if (audio && !audio.paused) {
+            fadeAudio(audio, 0, 0.5, () => {
+                audio.pause();
+                audio.src = '';
+            });
+        } else if (audio) {
+            // If paused but has a source, just clear it
+            audio.src = '';
+        }
+
+        menuMusicUrlRef.current = null;
+
+        // Also stop ambient noise
+        const ambientAudio = ambientNoiseAudioRef.current;
+        if (ambientAudio && !ambientAudio.paused) {
+            fadeAudio(ambientAudio, 0, 0.5, () => {
+                ambientAudio.pause();
+                ambientAudio.src = '';
+            });
+        } else if (ambientAudio) {
+            ambientAudio.src = '';
+        }
+        menuAmbientUrlRef.current = null;
+    }, [fadeAudio]);
+
+    // --- Save/Load System ---
+    const savesKey = useMemo(() => `vn-saves-${project.id}`, [project.id]);
+
+    const hasElectronStorage = useCallback((): boolean => {
+        return typeof window !== 'undefined' &&
+            typeof (window as any).electronAPI !== 'undefined' &&
+            typeof (window as any).electronAPI?.storage !== 'undefined';
+    }, []);
+
+    const getGameSaves = useCallback(async (): Promise<Record<number, GameStateSave>> => {
+        try {
+            if (hasElectronStorage()) {
+                const raw = await (window as any).electronAPI.storage.getItem(savesKey);
+                if (raw == null) return {};
+                // We store the object directly in Electron storage
+                return raw as Record<number, GameStateSave>;
+            }
+
+            const savesJson = localStorage.getItem(savesKey);
+            return savesJson ? JSON.parse(savesJson) : {};
+        } catch (e) {
+            runtimeDebugWarn('Failed to load saves from storage:', e);
+            return {};
+        }
+    }, [hasElectronStorage, savesKey]);
+
+    const saveGameSaves = useCallback(async (saves: Record<number, GameStateSave>) => {
+        try {
+            if (hasElectronStorage()) {
+                await (window as any).electronAPI.storage.setItem(savesKey, saves);
+            } else {
+                localStorage.setItem(savesKey, JSON.stringify(saves));
+            }
+            savesPersistentRef.current = true;
+        } catch (e) {
+            console.error('Failed to save to storage:', e);
+            // switch to in-memory saves and mark persistence as false to avoid repeated attempts
+            savesPersistentRef.current = false;
+            inMemorySavesRef.current = saves;
+            // Could show a user notification here
+        }
+    }, [hasElectronStorage, savesKey]);
+
+    // Export saves to a file (user can download to keep them outside localStorage)
+    const exportSavesToFile = useCallback(() => {
+        const saves = savesPersistentRef.current ? getGameSaves() : inMemorySavesRef.current;
+        const blob = new Blob([JSON.stringify(saves, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vn-saves-${project.id}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }, [getGameSaves, project.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const saves = await getGameSaves();
+            if (!cancelled) setGameSaves(saves);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [getGameSaves, screenStack]);
+
+    const saveGame = (slotNumber: number) => {
+        if (!playerState) return;
+        const musicCurrentTime = musicAudioRef.current ? musicAudioRef.current.currentTime : 0;
+        const finalMusicState: MusicState = {
+            ...playerState.musicState,
+            currentTime: musicCurrentTime,
+            isPlaying: !musicAudioRef.current.paused,
+        };
+
+        // Capture a screenshot thumbnail from the stage
+        const captureScreenshot = (): Promise<string | undefined> => {
+            return new Promise((resolve) => {
+                try {
+                    const stage = playerState.stageState;
+                    const THUMB_W = 640;
+                    const THUMB_H = 360;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = THUMB_W;
+                    canvas.height = THUMB_H;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) { resolve(undefined); return; }
+
+                    // Collect image sources to draw in order: background, then characters
+                    const imageSources: { url: string; x: number; y: number; w: number; h: number }[] = [];
+
+                    // Background
+                    if (stage.backgroundUrl && !stage.backgroundIsVideo) {
+                        imageSources.push({ url: stage.backgroundUrl, x: 0, y: 0, w: THUMB_W, h: THUMB_H });
+                    }
+
+                    // Characters (layer images stacked at their positions)
+                    for (const char of Object.values(stage.characters) as StageCharacterState[]) {
+                        if (char.isVideo) continue;
+                        const pos = char.position;
+                        let xPct = 50, yPct = 10;
+                        if (typeof pos === 'string') {
+                            const presets: Record<string, { x: number; y: number }> = {
+                                'left': { x: 25, y: 10 }, 'center': { x: 50, y: 10 }, 'right': { x: 75, y: 10 },
+                                'off-left': { x: -25, y: 10 }, 'off-right': { x: 125, y: 10 },
+                            };
+                            const p = presets[pos]; if (p) { xPct = p.x; yPct = p.y; }
+                        } else if (typeof pos === 'object') {
+                            xPct = pos.x; yPct = pos.y;
+                        }
+                        // Characters are ~75% of stage width in aspect 3:4, vertically 90% height
+                        const charH = THUMB_H * 0.9;
+                        const charW = charH * 0.75;
+                        const cx = (xPct / 100) * THUMB_W - charW / 2;
+                        const cy = (yPct / 100) * THUMB_H;
+                        for (const url of char.imageUrls) {
+                            imageSources.push({ url, x: cx, y: cy, w: charW, h: charH });
+                        }
+                    }
+
+                    if (imageSources.length === 0) {
+                        // No visual content, just fill black
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                        return;
+                    }
+
+                    let loaded = 0;
+                    const images: (HTMLImageElement | null)[] = new Array(imageSources.length).fill(null);
+                    const onAllLoaded = () => {
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+                        for (let idx = 0; idx < images.length; idx++) {
+                            const img = images[idx];
+                            const src = imageSources[idx];
+                            if (img && img.complete && img.naturalWidth > 0) {
+                                ctx.drawImage(img, src.x, src.y, src.w, src.h);
+                            }
+                        }
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                    };
+
+                    for (let idx = 0; idx < imageSources.length; idx++) {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => { images[idx] = img; loaded++; if (loaded >= imageSources.length) onAllLoaded(); };
+                        img.onerror = () => { loaded++; if (loaded >= imageSources.length) onAllLoaded(); };
+                        img.src = imageSources[idx].url;
+                    }
+
+                    // Timeout fallback
+                    setTimeout(() => { if (loaded < imageSources.length) onAllLoaded(); }, 2000);
+                } catch {
+                    resolve(undefined);
+                }
+            });
+        };
+
+        const createSaveRecord = async () => {
+            const screenshot = await captureScreenshot();
+            const saves = await getGameSaves();
+            saves[slotNumber] = {
+            timestamp: Date.now(),
+            sceneName: project.scenes[playerState.currentSceneId]?.name || 'Unknown Scene',
+            screenshot,
+            playerStateData: {
+                currentSceneId: playerState.currentSceneId,
+                currentCommands: playerState.currentCommands,
+                currentIndex: playerState.currentIndex,
+                commandStack: playerState.commandStack,
+                variables: playerState.variables,
+                stageState: playerState.stageState,
+                musicState: finalMusicState,
+                inventorySlots: playerState.inventorySlots,
+                selectedItemId: playerState.selectedItemId,
+                selectedElementId: playerState.selectedElementId,
+                pickedUpItems: playerState.pickedUpItems,
+            }
+            };
+
+            // Plugin hook: let plugins read/augment the save record before it is persisted.
+            try { pluginManager.invokeHook('onSave', saves[slotNumber]); } catch { /* isolated */ }
+
+            // If persistence failed previously, store in memory and avoid hitting storage repeatedly
+            if (!savesPersistentRef.current) {
+                inMemorySavesRef.current = saves;
+            } else {
+                await saveGameSaves(saves);
+            }
+            setGameSaves(saves);
+        };
+
+        void createSaveRecord();
+    };
+
+    const loadGame = (slotNumber: number) => {
+        // Immediately stop music without fade to avoid race condition where
+        // old fade callback clears audio.src after the new track is loaded
+        const audio = musicAudioRef.current;
+        if (audioFadeInterval.current) { clearInterval(audioFadeInterval.current); audioFadeInterval.current = null; }
+        if (audio) { audio.pause(); audio.volume = 0; audio.src = ''; }
+        const ambientAudio = ambientNoiseAudioRef.current;
+        if (ambientFadeInterval.current) { clearInterval(ambientFadeInterval.current); ambientFadeInterval.current = null; }
+        if (ambientAudio) { ambientAudio.pause(); ambientAudio.src = ''; }
+        menuMusicUrlRef.current = null;
+        const doLoad = async () => {
+            const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+            const saveData = saves[slotNumber];
+            if (!saveData) return;
+
+            // Re-arm the reactive-restock guards so a freshly-loaded save records current state without
+            // spuriously restocking (the next effect run treats each list as a first observation).
+            restockPrevConditionRef.current = {};
+            restockPrevWatchRef.current = {};
+            updatePlayerState({
+                mode: 'playing',
+                currentSceneId: saveData.playerStateData.currentSceneId,
+                currentCommands: saveData.playerStateData.currentCommands || project.scenes[saveData.playerStateData.currentSceneId]?.commands || [],
+                currentIndex: saveData.playerStateData.currentIndex ?? 0,
+                commandStack: saveData.playerStateData.commandStack || [],
+                variables: saveData.playerStateData.variables,
+                stageState: saveData.playerStateData.stageState,
+                inventorySlots: saveData.playerStateData.inventorySlots,
+                selectedItemId: saveData.playerStateData.selectedItemId,
+                selectedElementId: saveData.playerStateData.selectedElementId,
+                pickedUpItems: saveData.playerStateData.pickedUpItems,
+                history: [],
+                savedInputs: {},
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
+                musicState: saveData.playerStateData.musicState,
+            });
+            setScreenStack([]);
+            setHudStack([]);
+            setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+            setIsJustLoaded(true);
+            // Plugin hook: a save has just been loaded (state applied).
+            try { pluginManager.invokeHook('onLoadAfterSave', saveData); } catch { /* isolated */ }
+        };
+
+        void doLoad();
+    };
+
+
+    // --- State Initialization ---
+    const startNewGame = useCallback(() => {
+        stopAndResetMusic();
+        // Re-arm reactive-restock guards for the fresh playthrough (record-only on first observation).
+        restockPrevConditionRef.current = {};
+        restockPrevWatchRef.current = {};
+
+        // Use menuVariables (which may have been modified by character customization) instead of defaults
+        const initialVariables: Record<VNID, string | number | boolean> = { ...menuVariables };
+
+        // Merge persistent variables from storage — they survive across sessions
+        const persistentVars = loadPersistentVariables(project.id);
+        Object.values(project.variables).forEach((v: any) => {
+            if ((v.scope || 'global') === 'persistent' && persistentVars[v.id] !== undefined) {
+                initialVariables[v.id] = persistentVars[v.id];
+            }
+        });
+
+        // Economy reset: item counts, shop stock, and shop currencies ALWAYS return to their defaults on
+        // a new game. menuVariables can legitimately carry pre-game customization (name/appearance), but it
+        // must never carry gameplay economy state (e.g. a shop opened from a menu writes to menuVariables) —
+        // otherwise the player would start a new game with their old inventory/money. Persistent-scope vars
+        // are left alone (they survive by design).
+        const resetGameplayVar = (varId?: VNID | null) => {
+            if (!varId) return;
+            const v = project.variables[varId];
+            if (!v || (v.scope || 'global') === 'persistent') return;
+            initialVariables[varId] = v.defaultValue;
+        };
+        Object.values(project.items || {}).forEach((it: any) => resetGameplayVar(it.countVariableId));
+        Object.values(project.itemCollections || {}).forEach((c: any) => {
+            resetGameplayVar(c.currencyVariableId);
+            (c.entries || []).forEach((e: any) => resetGameplayVar(e.countVariableId));
+        });
+
+        // Note: We can't use navigateToScene here because it's defined after startNewGame
+        // We'll check start scene conditions inline
+        let startSceneId = project.startSceneId;
+        const startScene = project.scenes[startSceneId];
+        
+        // Check if start scene has conditions that fail
+        if (startScene && startScene.conditions && startScene.conditions.length > 0) {
+            const conditionsMet = combineConditions(startScene.conditions, condition => {
+                const varValue = initialVariables[condition.variableId];
+                if (varValue === undefined) return false;
+                
+                switch (condition.operator) {
+                    case 'is true': return !!varValue;
+                    case 'is false': return !varValue;
+                    case '==': return String(varValue).toLowerCase() == String(condition.value).toLowerCase();
+                    case '!=': return String(varValue).toLowerCase() != String(condition.value).toLowerCase();
+                    case '>': return Number(varValue) > Number(condition.value);
+                    case '<': return Number(varValue) < Number(condition.value);
+                    case '>=': return Number(varValue) >= Number(condition.value);
+                    case '<=': return Number(varValue) <= Number(condition.value);
+                    case 'contains': return String(varValue).toLowerCase().includes(String(condition.value).toLowerCase());
+                    case 'startsWith': return String(varValue).toLowerCase().startsWith(String(condition.value).toLowerCase());
+                    default: return false;
+                }
+            });
+            
+            if (!conditionsMet && startScene.fallbackSceneId) {
+                runtimeDebugLog(`Start scene "${startScene.name}" conditions not met, using fallback`);
+                startSceneId = startScene.fallbackSceneId;
+            }
+        }
+
+        // Initialize uiVariables with the same initial values as game variables
+    setUiVariables(initialVariables);
+    uiVariablesRef.current = initialVariables;
+    runtimeDebugLog('[CLEAR] Dirty set cleared after startNewGame');
+    uiDirtyVariableIdsRef.current.clear();
+        
+    updatePlayerState({
+            mode: 'playing',
+            currentSceneId: startSceneId,
+            currentCommands: project.scenes[startSceneId]?.commands || [],
+            currentIndex: 0,
+            commandStack: [],
+            variables: initialVariables,
+            stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
+            history: [],
+            savedInputs: {},
+            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
+            musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
+        });
+        setScreenStack([]);
+        setHudStack([]);
+        setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
+    }, [project, stopAndResetMusic, menuVariables]);
+
+    // Start a new game with a fade: title fades to black (≈400ms), the scene loads behind the
+    // black, then the black fades out — revealing the first scene background (fade-in).
+    const startNewGameWithFade = useCallback(() => {
+        setGameStartFade('toBlack');
+        window.setTimeout(() => {
+            startNewGame();
+            setGameStartFade('fromBlack');
+            window.setTimeout(() => setGameStartFade('none'), 450);
+        }, 400);
+    }, [startNewGame]);
+
+    // Helper function to get asset name from ID
+    const getAssetNameFromId = useCallback((assetId: string): string | null => {
+        // Search through all asset types to find the asset name
+        
+        // Check backgrounds
+        const background = project.backgrounds[assetId];
+        if (background) return background.name;
+        
+        // Check images  
+        const image = project.images[assetId];
+        if (image) return image.name;
+        
+        // Check videos
+        const video = project.videos[assetId];
+        if (video) return video.name;
+        
+        // Check audio
+        const audio = project.audio[assetId];
+        if (audio) return audio.name;
+        
+        // Check character layers
+        for (const character of Object.values(project.characters) as VNCharacter[]) {
+            if (character && character.layers) {
+                for (const layer of Object.values(character.layers) as VNCharacterLayer[]) {
+                    if (layer && layer.assets) {
+                        const asset = layer.assets[assetId];
+                        if (asset) return asset.name;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }, [project]);
+
+    const normalizeToBoolean = useCallback((value: unknown): boolean | null => {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'number') {
+            if (value === 1) return true;
+            if (value === 0) return false;
+            return null;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            if (normalized.length === 0) {
+                return null;
+            }
+            if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+            if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+            return null;
+        }
+        return null;
+    }, []);
+
+    const evaluateConditions = useCallback((conditions: VNCondition[] | undefined, variables: PlayerState['variables']): boolean => {
+        if (!conditions || conditions.length === 0) {
+            return true;
+        }
+
+        return combineConditions(conditions, condition => {
+            const varValue = variables[condition.variableId];
+            const projectVar = project.variables[condition.variableId];
+            // Use default value if runtime value is not set
+            const effectiveVarValue = varValue !== undefined ? varValue : (projectVar ? projectVar.defaultValue : undefined);
+    
+            runtimeDebugLog('[DEBUG evaluateConditions]', {
+                variableId: condition.variableId,
+                operator: condition.operator,
+                conditionValue: condition.value,
+                effectiveVarValue,
+                varValue,
+                defaultValue: projectVar?.defaultValue
+            });
+    
+            if (effectiveVarValue === undefined) {
+                runtimeDebugLog('[DEBUG evaluateConditions] Variable undefined, returning false');
+                return false; // condition on non-existent variable is false
+            }
+            
+            let result = false;
+            
+            // For string comparisons, also check if we're comparing against an asset name when variable contains an asset ID
+            const stringVarValue = String(effectiveVarValue);
+            const stringCondValue = String(condition.value);
+            const normVarString = stringVarValue.toLowerCase();
+            const normCondString = stringCondValue.toLowerCase();
+            const normalizedVarBool = normalizeToBoolean(effectiveVarValue);
+            const normalizedCondBool = normalizeToBoolean(condition.value);
+            const boolNumericForComparison = normalizedVarBool === null ? null : (normalizedVarBool ? 100 : 0);
+            const condBoolNumericForComparison = normalizedCondBool === null ? null : (normalizedCondBool ? 100 : 0);
+            let assetName: string | null = null;
+            const varIsNumeric = typeof effectiveVarValue === 'number' || (typeof effectiveVarValue === 'string' && effectiveVarValue.trim().length > 0 && !Number.isNaN(Number(effectiveVarValue)));
+            const condIsNumeric = typeof condition.value === 'number' || (typeof condition.value === 'string' && condition.value.trim().length > 0 && !Number.isNaN(Number(condition.value)));
+            
+            // If variable contains an asset ID, try to get the asset name for comparison
+            if (stringVarValue.startsWith('asset-')) {
+                assetName = getAssetNameFromId(stringVarValue);
+                runtimeDebugLog('[DEBUG evaluateConditions] Variable contains asset ID, resolved name:', assetName);
+            }
+            
+            switch (condition.operator) {
+                case 'is true': {
+                    if (normalizedVarBool !== null) {
+                        result = normalizedVarBool === true;
+                    } else {
+                        result = String(effectiveVarValue).trim().toLowerCase() === 'true';
+                    }
+                    break;
+                }
+                case 'is false': {
+                    if (normalizedVarBool !== null) {
+                        result = normalizedVarBool === false;
+                    } else {
+                        const normalizedString = String(effectiveVarValue).trim().toLowerCase();
+                        result = normalizedString === 'false' || normalizedString.length === 0;
+                    }
+                    break;
+                }
+                case '==': {
+                    if (normalizedVarBool !== null && normalizedCondBool !== null) {
+                        result = normalizedVarBool === normalizedCondBool;
+                    } else if (projectVar?.type === 'boolean' && normCondString.length === 0) {
+                        // Treat blank condition as an implicit check for true
+                        result = normalizedVarBool === true;
+                    } else if (varIsNumeric && condIsNumeric) {
+                        result = Number(effectiveVarValue) === Number(condition.value);
+                    } else {
+                        const matchesString = normVarString === normCondString;
+                        const matchesAsset = assetName ? assetName.toLowerCase() === normCondString : false;
+                        result = matchesString || matchesAsset;
+                    }
+                    break;
+                }
+                case '!=': {
+                    if (normalizedVarBool !== null && normalizedCondBool !== null) {
+                        result = normalizedVarBool !== normalizedCondBool;
+                    } else if (projectVar?.type === 'boolean' && normCondString.length === 0) {
+                        // Treat blank condition as an implicit check for true
+                        result = normalizedVarBool !== true;
+                    } else if (varIsNumeric && condIsNumeric) {
+                        result = Number(effectiveVarValue) !== Number(condition.value);
+                    } else {
+                        const matchesString = normVarString === normCondString;
+                        const matchesAsset = assetName ? assetName.toLowerCase() === normCondString : false;
+                        result = !matchesString && !matchesAsset;
+                    }
+                    break;
+                }
+                case '>': {
+                    if (projectVar?.type === 'boolean' && boolNumericForComparison !== null) {
+                        const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+                        if (condTarget !== null && Number.isFinite(condTarget)) {
+                            result = boolNumericForComparison > condTarget;
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison >', {
+                                effectiveVarValue,
+                                conditionValue: condition.value,
+                                boolNumericValue: boolNumericForComparison,
+                                numericCond: condTarget,
+                                result
+                            });
+                            break;
+                        }
+                    }
+
+                    const numericVar = Number(effectiveVarValue);
+                    const numericCond = Number(condition.value);
+                    result = numericVar > numericCond;
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison >', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar,
+                        numericCond,
+                        result
+                    });
+                    break;
+                }
+                case '<': {
+                    if (projectVar?.type === 'boolean' && boolNumericForComparison !== null) {
+                        const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+                        if (condTarget !== null && Number.isFinite(condTarget)) {
+                            result = boolNumericForComparison < condTarget;
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison <', {
+                                effectiveVarValue,
+                                conditionValue: condition.value,
+                                boolNumericValue: boolNumericForComparison,
+                                numericCond: condTarget,
+                                result
+                            });
+                            break;
+                        }
+                    }
+
+                    const numericVar = Number(effectiveVarValue);
+                    const numericCond = Number(condition.value);
+                    result = numericVar < numericCond;
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison <', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar,
+                        numericCond,
+                        result
+                    });
+                    break;
+                }
+                case '>=': {
+                    if (projectVar?.type === 'boolean' && boolNumericForComparison !== null) {
+                        const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+                        if (condTarget !== null && Number.isFinite(condTarget)) {
+                            result = boolNumericForComparison >= condTarget;
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison >=', {
+                                effectiveVarValue,
+                                conditionValue: condition.value,
+                                boolNumericValue: boolNumericForComparison,
+                                numericCond: condTarget,
+                                result
+                            });
+                            break;
+                        }
+                    }
+
+                    const numericVar = Number(effectiveVarValue);
+                    const numericCond = Number(condition.value);
+                    result = numericVar >= numericCond;
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison >=', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar,
+                        numericCond,
+                        result
+                    });
+                    break;
+                }
+                case '<=': {
+                    if (projectVar?.type === 'boolean' && boolNumericForComparison !== null) {
+                        const condTarget = condIsNumeric ? Number(condition.value) : condBoolNumericForComparison;
+                        if (condTarget !== null && Number.isFinite(condTarget)) {
+                            result = boolNumericForComparison <= condTarget;
+                            runtimeDebugLog('[DEBUG evaluateConditions] Boolean comparison <=', {
+                                effectiveVarValue,
+                                conditionValue: condition.value,
+                                boolNumericValue: boolNumericForComparison,
+                                numericCond: condTarget,
+                                result
+                            });
+                            break;
+                        }
+                    }
+
+                    const numericVar = Number(effectiveVarValue);
+                    const numericCond = Number(condition.value);
+                    result = numericVar <= numericCond;
+                    runtimeDebugLog('[DEBUG evaluateConditions] Numeric comparison <=', {
+                        effectiveVarValue,
+                        conditionValue: condition.value,
+                        numericVar,
+                        numericCond,
+                        result
+                    });
+                    break;
+                }
+                case 'contains': {
+                    const varContains = normVarString.includes(normCondString);
+                    const assetContains = assetName ? assetName.toLowerCase().includes(normCondString) : false;
+                    result = varContains || assetContains;
+                    break;
+                }
+                case 'startsWith': {
+                    const varStartsWith = normVarString.startsWith(normCondString);
+                    const assetStartsWith = assetName ? assetName.toLowerCase().startsWith(normCondString) : false;
+                    result = varStartsWith || assetStartsWith;
+                    break;
+                }
+                default: 
+                    result = false;
+            }
+            
+            runtimeDebugLog('[DEBUG evaluateConditions] Result:', result);
+            return result;
+        });
+    }, [project.variables, getAssetNameFromId, normalizeToBoolean]);
+
+    // Reactive restock: auto-refill item lists whose restock trigger is condition / variableChange.
+    // Transition-based (false→true, or watched value changed) with a first-observation guard so a freshly
+    // started/loaded game records current state WITHOUT restocking (the load path clears the refs). Manual
+    // lists are handled by the Restock command/action only.
+    useEffect(() => {
+        if (!playerState) return;
+        const collections = project.itemCollections;
+        if (!collections) return;
+        const gameVars = playerState.variables;
+        const restockUpdates: Record<VNID, number> = {};
+        for (const collection of Object.values(collections) as VNItemCollection[]) {
+            const rule = collection.restock;
+            if (!rule) continue;
+            if (rule.trigger === 'condition') {
+                const isTrue = evaluateConditions(rule.condition, gameVars);
+                const prev = restockPrevConditionRef.current[collection.id];
+                restockPrevConditionRef.current[collection.id] = isTrue;
+                if (prev === undefined) continue;            // first observation — just record
+                if (isTrue && !prev) Object.assign(restockUpdates, computeCollectionRestock(collection, project.variables));
+            } else if (rule.trigger === 'variableChange' && rule.watchVariableId) {
+                const cur = gameVars[rule.watchVariableId];
+                const seen = Object.prototype.hasOwnProperty.call(restockPrevWatchRef.current, collection.id);
+                const prev = restockPrevWatchRef.current[collection.id];
+                restockPrevWatchRef.current[collection.id] = cur;
+                if (!seen) continue;                          // first observation — just record
+                if (cur !== prev) Object.assign(restockUpdates, computeCollectionRestock(collection, project.variables));
+            }
+        }
+        if (Object.keys(restockUpdates).length > 0) {
+            updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...restockUpdates } } : null);
+        }
+    }, [playerState?.variables, project.itemCollections, project.variables, evaluateConditions, updatePlayerState]);
+
+    // Helper function to navigate to a scene with condition checking
+    const navigateToScene = useCallback((targetSceneId: VNID, variables: PlayerState['variables']): VNID => {
+        let sceneToPlay = targetSceneId;
+        let attempts = 0;
+        const maxAttempts = 50; // Prevent infinite loops
+
+        while (attempts < maxAttempts) {
+            const scene = project.scenes[sceneToPlay];
+            if (!scene) {
+                console.error(`Scene not found: ${sceneToPlay}`);
+                return targetSceneId; // Return original target if not found
+            }
+
+            // Check if scene conditions are met
+            if (evaluateConditions(scene.conditions, variables)) {
+                return sceneToPlay; // Conditions met, play this scene
+            }
+
+            // Conditions failed, check for fallback
+            if (scene.fallbackSceneId && project.scenes[scene.fallbackSceneId]) {
+                runtimeDebugLog(`Scene "${scene.name}" conditions failed, jumping to fallback: ${scene.fallbackSceneId}`);
+                sceneToPlay = scene.fallbackSceneId;
+            } else {
+                // No fallback, find next scene in scene list
+                const sceneIds = Object.keys(project.scenes);
+                const currentIndex = sceneIds.indexOf(sceneToPlay);
+                if (currentIndex !== -1 && currentIndex < sceneIds.length - 1) {
+                    sceneToPlay = sceneIds[currentIndex + 1];
+                    runtimeDebugLog(`Scene "${scene.name}" conditions failed, trying next scene: ${sceneToPlay}`);
+                } else {
+                    runtimeDebugLog(`Scene "${scene.name}" conditions failed and no fallback/next scene available`);
+                    return sceneToPlay; // Can't go anywhere, return current
+                }
+            }
+
+            attempts++;
+        }
+
+        console.error('Scene navigation exceeded max attempts - possible circular fallback');
+        return targetSceneId;
+    }, [project.scenes, evaluateConditions]);
+
+    // --- Scene Exit Transition Helper ---
+    const startSceneExitTransition = useCallback((currentSceneId: string, executeChange: () => void) => {
+        const currentScene = project.scenes[currentSceneId];
+        const transType = currentScene?.outTransition || 'fade';
+        const duration = currentScene?.outTransitionDuration ?? 0.5;
+        const shouldFade = hasRenderedSceneRef.current;
+
+        if (transType === 'instant' || !shouldFade) {
+            executeChange();
+            return;
+        }
+
+        // Fade audio during transition
+        const audio = musicAudioRef.current;
+        if (audio && !audio.paused) {
+            fadeAudio(audio, 0, duration, () => {
+                audio.pause();
+                audio.currentTime = 0;
+            });
+        }
+
+        setSceneTransitionType(transType);
+        setSceneTransitionDuration(duration);
+        setSceneTransitionFading(true);
+
+        setTimeout(() => {
+            executeChange();
+            setSceneTransitionFading(false);
+        }, duration * 1000);
+    }, [project.scenes]);
+
+    // --- Audio Management ---
+    useEffect(() => {
+        if (playerState?.mode === 'playing') {
+            return;
+        }
+
+        const audio = musicAudioRef.current;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        if (!activeScreen) {
+            if (!audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuMusicUrlRef.current = null;
+            return;
+        }
+
+        const musicInfo = activeScreen.music;
+        if (playerState?.mode === 'paused' && musicInfo.policy === 'continue') {
+            return;
+        }
+
+        const newAudioUrl = musicInfo?.audioId ? assetResolver(musicInfo.audioId, 'audio') : null;
+        const normalize = (value: string | null): string | null => {
+            if (!value) return null;
+            try {
+                return new URL(value, window.location.href).href;
+            } catch (e) {
+                return value;
+            }
+        };
+
+        const currentSrcNormalized = audio.src ? normalize(audio.src) : null;
+        const newSrcNormalized = normalize(newAudioUrl);
+
+        if (!newAudioUrl) {
+            if (!audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuMusicUrlRef.current = null;
+            return;
+        }
+
+        const startPlayback = () => {
+            audio.loop = true;
+            audio.play().then(() => {
+                menuMusicUrlRef.current = newAudioUrl;
+                const screenVol = musicInfo.volume ?? 1;
+                fadeAudio(audio, screenVol * settings.musicVolume, 0.5);
+            }).catch(e => {
+                console.error('Menu music play failed:', e);
+                if (!userGestureDetectedRef.current) {
+                    queuedMusicRef.current = { url: newAudioUrl, loop: true, fadeDuration: 0.5 };
+                }
+            });
+        };
+
+        if (currentSrcNormalized !== newSrcNormalized) {
+            audio.src = newAudioUrl;
+            audio.load();
+            startPlayback();
+        } else if (audio.paused) {
+            startPlayback();
+        } else {
+            menuMusicUrlRef.current = newAudioUrl;
+        }
+
+    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.musicVolume, fadeAudio]);
+    
+    useEffect(() => {
+        if (!musicAudioRef.current) return;
+        const safeVol = Number.isFinite(settings.musicVolume) ? settings.musicVolume : 0.8;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        const screenVol = activeScreen?.music?.volume ?? 1;
+        musicAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * safeVol));
+    }, [settings.musicVolume, screenStack, project.uiScreens]);
+
+    // Ambient Noise Management
+    useEffect(() => {
+        // Only manage ambient audio when NOT actively playing the game
+        const isInActiveGameplay = playerState?.mode === 'playing' && screenStack.length === 0;
+        if (isInActiveGameplay) {
+            return;
+        }
+
+        const audio = ambientNoiseAudioRef.current;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        
+        if (!activeScreen) {
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuAmbientUrlRef.current = null;
+            return;
+        }
+
+        const ambientInfo = activeScreen.ambientNoise;
+        if (playerState?.mode === 'paused' && ambientInfo.policy === 'stop') {
+            // If paused and policy is 'stop', fade out ambient
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            return;
+        }
+
+        const newAudioUrl = ambientInfo?.audioId ? assetResolver(ambientInfo.audioId, 'audio') : null;
+        const normalize = (value: string | null): string | null => {
+            if (!value) return null;
+            try {
+                return new URL(value, window.location.href).href;
+            } catch (e) {
+                return value;
+            }
+        };
+
+        const currentSrcNormalized = audio?.src ? normalize(audio.src) : null;
+        const newSrcNormalized = normalize(newAudioUrl);
+
+        if (!newAudioUrl) {
+            if (audio && !audio.paused) {
+                fadeAudio(audio, 0, 0.5, () => audio.pause());
+            }
+            menuAmbientUrlRef.current = null;
+            return;
+        }
+
+        const startAmbientPlayback = () => {
+            if (!audio) return;
+            audio.loop = true;
+            audio.volume = 0;
+            audio.play().then(() => {
+                menuAmbientUrlRef.current = newAudioUrl;
+                const screenVol = ambientInfo.volume ?? 1;
+                fadeAudio(audio, screenVol * settings.ambientVolume, 0.5);
+            }).catch(e => {
+                console.error('[Ambient] Play failed:', e);
+            });
+        };
+
+        if (currentSrcNormalized !== newSrcNormalized) {
+            if (!audio) return;
+            audio.src = newAudioUrl;
+            audio.load();
+            startAmbientPlayback();
+        } else if (audio && audio.paused) {
+            startAmbientPlayback();
+        } else {
+            menuAmbientUrlRef.current = newAudioUrl;
+        }
+
+    }, [screenStack, playerState?.mode, project.uiScreens, assetResolver, settings.ambientVolume, fadeAudio]);
+    
+    useEffect(() => {
+        if (!ambientNoiseAudioRef.current) return;
+        const safeVol = Number.isFinite(settings.ambientVolume) ? settings.ambientVolume : 0.8;
+        const activeScreen = screenStack.length > 0 ? project.uiScreens[screenStack[screenStack.length - 1]] : null;
+        const screenVol = activeScreen?.ambientNoise?.volume ?? 1;
+        ambientNoiseAudioRef.current.volume = Math.max(0, Math.min(1, screenVol * safeVol));
+    }, [settings.ambientVolume, screenStack, project.uiScreens]);
+
+    useEffect(() => {
+        if (playerState?.mode !== 'playing' || screenStack.length > 0) {
+            return;
+        }
+
+        const normalize = (value: string | null): string | null => {
+            if (!value) return null;
+            try {
+                return new URL(value, window.location.href).href;
+            } catch (e) {
+                return value;
+            }
+        };
+
+        const musicAudio = musicAudioRef.current;
+        if (menuMusicUrlRef.current) {
+            const currentSrc = musicAudio?.src ? normalize(musicAudio.src) : null;
+            const menuSrc = normalize(menuMusicUrlRef.current);
+            if (currentSrc && menuSrc && currentSrc === menuSrc && musicAudio && !musicAudio.paused) {
+                fadeAudio(musicAudio, 0, 0.5, () => musicAudio.pause());
+            }
+            menuMusicUrlRef.current = null;
+        }
+
+        const ambientAudio = ambientNoiseAudioRef.current;
+        if (menuAmbientUrlRef.current && ambientAudio && !ambientAudio.paused) {
+            fadeAudio(ambientAudio, 0, 0.5, () => ambientAudio.pause());
+            menuAmbientUrlRef.current = null;
+        }
+    }, [playerState?.mode, screenStack, fadeAudio]);
+
+    // On first user gesture, mark gesture detection and play queued music if any
+    useEffect(() => {
+        const handler = () => {
+            userGestureDetectedRef.current = true;
+            const queued = queuedMusicRef.current;
+            if (queued) {
+                const audio = musicAudioRef.current;
+                audio.src = queued.url;
+                audio.loop = queued.loop;
+                audio.load();
+                audio.play().then(() => {
+                    fadeAudio(audio, settings.musicVolume, queued.fadeDuration);
+                    queuedMusicRef.current = null;
+                }).catch(e => console.error('Queued music play failed:', e));
+            }
+        };
+        window.addEventListener('click', handler, { once: true });
+        return () => window.removeEventListener('click', handler);
+    }, [fadeAudio, settings.musicVolume]);
+
+    // If autoStartMusic is enabled (standalone mode), mark user gesture as detected immediately
+    useEffect(() => {
+        if (autoStartMusic) {
+            userGestureDetectedRef.current = true;
+        }
+    }, [autoStartMusic]);
+
+    useEffect(() => {
+        if (isJustLoaded && playerState?.mode === 'playing') {
+            const { musicState } = playerState;
+            // Always play music if there's an audioId (user expects music when loading)
+            if (musicState.audioId) {
+                const audio = musicAudioRef.current;
+                const url = assetResolver(musicState.audioId, 'audio');
+                if (url) {
+                    audio.src = url;
+                    audio.loop = musicState.loop;
+                    audio.currentTime = musicState.currentTime;
+                    audio.play().then(() => {
+                        fadeAudio(audio, settings.musicVolume, 0.5);
+                    }).catch(e => console.error("Failed to resume music on load:", e));
+                }
+            }
+            setIsJustLoaded(false);
+        }
+    }, [isJustLoaded, playerState, assetResolver, fadeAudio, settings.musicVolume]);
+
+    // Reactive music sync: when musicState changes (e.g. from backward skip restoring a
+    // snapshot), drive the actual <audio> element to match. Uses a ref to track the last
+    // audioId we applied so we don't re-trigger on every render.
+    const lastSyncedMusicIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing' || isJustLoaded) return;
+        const { musicState } = playerState;
+        const audio = musicAudioRef.current;
+        if (!audio) return;
+
+        const currentAudioId = musicState.audioId || null;
+        const previousAudioId = lastSyncedMusicIdRef.current;
+
+        // Only act when the audioId actually changed
+        if (currentAudioId === previousAudioId) return;
+        lastSyncedMusicIdRef.current = currentAudioId;
+
+        if (!currentAudioId) {
+            // Music was cleared — stop playback
+            audio.pause();
+            audio.currentTime = 0;
+            audio.src = '';
+            return;
+        }
+
+        // Music changed — load and play the new track
+        const url = assetResolver(currentAudioId, 'audio');
+        if (!url) return;
+        audio.src = url;
+        audio.loop = musicState.loop;
+        audio.currentTime = musicState.currentTime || 0;
+        if (musicState.isPlaying) {
+            audio.play().then(() => {
+                fadeAudio(audio, settings.musicVolume, 0.3);
+            }).catch(e => console.error('[Music Sync] Failed to play restored music:', e));
+        }
+    }, [playerState?.musicState?.audioId, playerState?.mode, isJustLoaded, assetResolver, fadeAudio, settings.musicVolume]);
+
+    const stopAllSfx = useCallback(() => {
+        // Stop the current dialogue voice too (scene change / quit / load / skip-backward).
+        if (currentVoiceRef.current) {
+            try { currentVoiceRef.current.pause(); currentVoiceRef.current.currentTime = 0; currentVoiceRef.current.src = ''; } catch (e) {}
+            currentVoiceRef.current = null;
+        }
+        // Stop any WebAudio buffer sources
+        try {
+            sfxSourceNodesRef.current.forEach(src => {
+                try { src.stop(); } catch(e) {}
+            });
+        } catch (e) {}
+        sfxSourceNodesRef.current = [];
+        // Clear HTMLAudio fallbacks if any
+        sfxPoolRef.current.forEach(({ audio }) => { try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {} });
+        sfxPoolRef.current = [];
+        // Clear live (reactive) SFX too so loops don't survive a quit / return to title.
+        liveSfxRef.current.forEach(entry => { entry.audio = null; entry.lastMet = false; });
+        liveSfxRef.current.clear();
+        // Optionally clear buffer cache to free memory
+        sfxBufferCacheRef.current.clear();
+    }, []);
+
+    /**
+     * Stop sound effects on demand (the Stop Sound Effect command).
+     * - `audioId` omitted/null → stop ALL currently-playing sound effects.
+     * - `audioId` given → stop only instances of that sound.
+     * - `fadeDuration` (seconds) > 0 → fade the matched sounds out instead of cutting them.
+     */
+    const stopSfx = useCallback((audioId?: VNID | null, fadeDuration?: number) => {
+        const fade = typeof fadeDuration === 'number' && fadeDuration > 0 ? fadeDuration : 0;
+        const matched = sfxPoolRef.current.filter(e => !audioId || e.audioId === audioId);
+        // Drop matched entries from the pool immediately so they aren't targeted twice.
+        sfxPoolRef.current = sfxPoolRef.current.filter(e => !matched.includes(e));
+
+        if (fade <= 0) {
+            matched.forEach(({ audio }) => { try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {} });
+            // When stopping everything, also halt any WebAudio buffer sources.
+            if (!audioId) {
+                try { sfxSourceNodesRef.current.forEach(src => { try { src.stop(); } catch (e) {} }); } catch (e) {}
+                sfxSourceNodesRef.current = [];
+            }
+            return;
+        }
+
+        // Per-sound volume ramp (local interval — fadeAudio's shared refs would clobber
+        // concurrent sfx fades).
+        matched.forEach(({ audio }) => {
+            const startVol = audio.volume;
+            const startTime = Date.now();
+            const iv = window.setInterval(() => {
+                const progress = Math.min((Date.now() - startTime) / (fade * 1000), 1);
+                audio.volume = Math.max(0, startVol * (1 - progress));
+                if (progress >= 1) {
+                    clearInterval(iv);
+                    try { audio.pause(); audio.currentTime = 0; audio.src = ''; } catch (e) {}
+                }
+            }, 30);
+        });
+    }, []);
+
+    const playSound = useCallback((soundId: VNID | null, volume?: number, loop?: boolean): HTMLAudioElement | null => {
+        runtimeDebugLog('[SFX] playSound called with soundId:', soundId, 'volume:', volume, 'loop:', loop);
+        if (!soundId) return null;
+
+        try {
+            const url = assetResolver(soundId, 'audio');
+            runtimeDebugLog('[SFX] assetResolver returned URL:', url, 'for soundId:', soundId);
+            if (!url) {
+                runtimeDebugWarn(`[SFX] No audio URL found for soundId: ${soundId}`);
+                return null;
+            }
+
+            // Use HTMLAudio for SFX - more reliable in packaged environments. Each call creates an
+            // independent element, so multiple distinct sounds layer/overlap (pooled up to MAX).
+            runtimeDebugLog('[SFX] Creating HTMLAudio element for playback');
+            const audio = new Audio(url);
+            audio.loop = !!loop;
+            audio.volume = (typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : 1.0) * (Number.isFinite(settings.sfxVolume) ? settings.sfxVolume : 0.8);
+
+            // Limit simultaneous one-shot SFX. Looping sounds are excluded from eviction so a
+            // sustained ambient isn't cut off by a burst of one-shots.
+            if (!loop) {
+                const oneShots = sfxPoolRef.current.filter(e => !e.audio.loop);
+                if (oneShots.length >= MAX_SIMULTANEOUS_SFX) {
+                    const oldest = oneShots[0];
+                    sfxPoolRef.current = sfxPoolRef.current.filter(e => e !== oldest);
+                    try { oldest?.audio.pause(); if (oldest) oldest.audio.currentTime = 0; } catch (e) {}
+                }
+            }
+
+            sfxPoolRef.current.push({ audio, audioId: soundId });
+            runtimeDebugLog('[SFX] Playing audio, volume:', audio.volume);
+
+            audio.play()
+                .then(() => {
+                    runtimeDebugLog('[SFX] Audio playback started successfully');
+                })
+                .catch(e => {
+                    console.error('[SFX] Audio playback failed:', e);
+                });
+
+            // Remove from pool when ended (looping sounds never fire 'ended').
+            audio.addEventListener('ended', () => {
+                runtimeDebugLog('[SFX] Audio playback ended');
+                sfxPoolRef.current = sfxPoolRef.current.filter(e => e.audio !== audio);
+            }, { once: true });
+
+            return audio;
+        } catch (outerError) {
+            console.error('[SFX] Critical error in playSound:', outerError);
+            console.error('[SFX] Error stack:', outerError instanceof Error ? outerError.stack : 'N/A');
+            return null;
+        }
+    }, [assetResolver, settings.sfxVolume]);
+
+    /** Stop the current dialogue voice clip (called when advancing past a voiced line). */
+    const stopVoice = useCallback(() => {
+        const a = currentVoiceRef.current;
+        if (a) { try { a.pause(); a.currentTime = 0; a.src = ''; } catch (e) {} }
+        currentVoiceRef.current = null;
+    }, []);
+
+    /**
+     * Play a dialogue VOICE clip. Unlike playSound: (1) only one voice plays at a time — a new voice
+     * (or advancing) stops the previous one, so lines never overlap; (2) its volume follows the Voice
+     * slider INDEPENDENTLY of the SFX volume (own audio category).
+     */
+    const playVoice = useCallback((soundId: VNID | null, voiceVol?: number): HTMLAudioElement | null => {
+        stopVoice();
+        if (!soundId) return null;
+        try {
+            const url = assetResolver(soundId, 'audio');
+            if (!url) return null;
+            const audio = new Audio(url);
+            audio.volume = typeof voiceVol === 'number' ? Math.max(0, Math.min(1, voiceVol)) : 1.0;
+            currentVoiceRef.current = audio;
+            audio.play().catch(e => console.error('[Voice] playback failed:', e));
+            audio.addEventListener('ended', () => {
+                if (currentVoiceRef.current === audio) currentVoiceRef.current = null;
+            }, { once: true });
+            return audio;
+        } catch (e) {
+            console.error('[Voice] error:', e);
+            return null;
+        }
+    }, [assetResolver, stopVoice]);
+
+    // Keep master gain in sync with settings
+    useEffect(() => {
+        if (sfxMasterGainRef.current) {
+            try { sfxMasterGainRef.current.gain.setTargetAtTime(settings.sfxVolume, (audioCtxRef.current?.currentTime) || 0, 0.01); } catch(e) {}
+        }
+    }, [settings.sfxVolume]);
+
+    // --- Game Loop ---
+    // ── Scene lifecycle scripts (onSceneEnter / onSceneExit) ──────────────────
+    // Scripts with trigger 'onSceneEnter'/'onSceneExit' are global lifecycle hooks:
+    // they run on every scene change (the data model has no per-scene binding).
+    // Run for side effects (variables, notify, SFX/music, dialogue); navigation
+    // from a lifecycle script is intentionally ignored to avoid scene-change loops.
+    const prevLifecycleSceneRef = useRef<VNID | null>(null);
+    // Tracks the scene id for which 'auto' common events have already been injected,
+    // so they run once per scene entry (re-entry after visiting another scene re-runs).
+    const autoRanSceneRef = useRef<VNID | null>(null);
+    const runLifecycleScripts = useCallback(async (trigger: 'onSceneEnter' | 'onSceneExit', sceneId: VNID) => {
+        const scripts = (Object.values(project.scripts || {}) as VNScript[]).filter(s => s.enabled && s.trigger === trigger);
+        if (scripts.length === 0) return;
+
+        const store = variableStoreRef.current;
+        const baseVars: Record<VNID, string | number | boolean> = store ? store.snapshot().globals : { ...(playerState?.variables || {}) };
+        const variableUpdates: Record<VNID, string | number | boolean> = { ...baseVars };
+
+        const resolveVarId = (nameOrId: string): VNID => {
+            if (project.variables[nameOrId]) return nameOrId;
+            const lower = nameOrId.toLowerCase();
+            for (const [id, v] of Object.entries(project.variables)) if ((v as { name: string }).name.toLowerCase() === lower) return id;
+            return nameOrId;
+        };
+        const resolveAudioId = (nameOrId: string): string => {
+            if (project.audio[nameOrId]) return nameOrId;
+            const lower = nameOrId.toLowerCase();
+            for (const [id, a] of Object.entries(project.audio)) if ((a as { name: string }).name.toLowerCase() === lower) return id;
+            return nameOrId;
+        };
+
+        // Run one lifecycle script (recursively, so onSceneEnter/Exit scripts CAN chain via
+        // game.runScript). game.callCommonEvent isn't supported here (lifecycle runs outside the
+        // command loop / stack) — warned, not silently ignored.
+        const LIFECYCLE_MAX_DEPTH = 16;
+        const execLifecycle = async (scr: VNScript, depth: number): Promise<void> => {
+            if (depth > LIFECYCLE_MAX_DEPTH) {
+                console.error(`[Lifecycle:${trigger}] script recursion limit reached at "${scr.name}"`);
+                return;
+            }
+            const ctx: ScriptRuntimeContext = {
+                project,
+                variables: variableUpdates,
+                currentSceneId: sceneId,
+                args: {},
+                onSetVariable: (nameOrId, value) => { variableUpdates[resolveVarId(nameOrId)] = value; },
+                onJumpToScene: () => { /* ignored for lifecycle scripts */ },
+                onJumpToLabel: () => { /* ignored for lifecycle scripts */ },
+                onShowDialogue: (characterName, text) => {
+                    const match = (Object.values(project.characters) as Array<{ id: VNID; name: string; color?: string }>).find(c => c.name.toLowerCase() === (characterName || '').toLowerCase());
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, dialogue: { characterName: characterName || 'Narrator', characterColor: match?.color || '#FFFFFF', characterId: match?.id || null, text } } } : null);
+                },
+                onPlaySFX: (nameOrId, volume) => { playSound(resolveAudioId(nameOrId), volume); },
+                onPlayMusic: (nameOrId, loop, volume) => {
+                    const url = assetResolver(resolveAudioId(nameOrId), 'audio');
+                    const audio = musicAudioRef.current;
+                    if (!url || !audio) return;
+                    audio.src = url; audio.load(); audio.loop = !!loop; audio.volume = 0;
+                    audio.play().then(() => fadeAudio(audio, typeof volume === 'number' ? volume : settings.musicVolume, 1)).catch(() => {});
+                },
+                onStopMusic: (fade) => { if (musicAudioRef.current) fadeAudio(musicAudioRef.current, 0, fade || 1); },
+                onNotify: (message, type) => { notify(message, type); },
+                onRunScript: (nameOrId) => {
+                    const lower = String(nameOrId).toLowerCase();
+                    const target = (Object.values(project.scripts || {}) as VNScript[]).find(s => s.id === nameOrId || s.name.toLowerCase() === lower);
+                    if (target && target.enabled) return execLifecycle(target, depth + 1);
+                    console.warn(`[Lifecycle:${trigger}] runScript: not found/disabled "${nameOrId}"`);
+                    return undefined;
+                },
+                onCallCommonEvent: () => { console.warn(`[Lifecycle:${trigger}] game.callCommonEvent is not available from lifecycle scripts — use a Common Event's "auto" trigger instead.`); },
+            };
+            const result = await executeScript(scr, ctx);
+            if (!result.success) {
+                console.error(`[Lifecycle:${trigger}] Script "${scr.name}" failed:`, result.error);
+                notify(`Script "${scr.name}" error: ${result.error}`, 'error');
+            }
+        };
+        for (const scr of scripts) await execLifecycle(scr, 0);
+
+        // Apply accumulated variable writes through the store + player state.
+        if (store) {
+            store.applyWrites(Object.entries(variableUpdates).map(([variableId, value]) => ({ variableId, value, scope: 'global' as const, sourceCommandId: `lifecycle-${trigger}` })));
+        }
+        updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...variableUpdates } } : null);
+    }, [project, playerState?.variables, updatePlayerState, assetResolver, playSound, fadeAudio, settings.musicVolume, notify]);
+
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing') { prevLifecycleSceneRef.current = null; return; }
+        const sceneId = playerState.currentSceneId;
+        if (!sceneId) return;
+        const prev = prevLifecycleSceneRef.current;
+        if (prev === sceneId) return;
+        if (prev) runLifecycleScripts('onSceneExit', prev);
+        runLifecycleScripts('onSceneEnter', sceneId);
+        try { pluginManager.invokeHook('onSceneChange', prev || '', sceneId); } catch { /* isolated */ }
+        prevLifecycleSceneRef.current = sceneId;
+    }, [playerState?.currentSceneId, playerState?.mode, runLifecycleScripts]);
+
+    // ── Parallel Common Events scheduler ──────────────────────────────────────
+    // CEs with trigger 'parallel' run alongside the active scene on a slow interval,
+    // sharing the global variable store. Each tick advances one command per active CE
+    // (looping). Only background-safe commands run (variables / scripts / audio / wait);
+    // presentation-takeover commands (dialogue, choices, backgrounds, jumps, …) are
+    // skipped so parallel events can never hijack the main flow. See the mini-spec in
+    // SCRIPTING_PLUGINS_COMMONEVENTS_PLAN.md. Pure runtime — nothing is serialized.
+    const parallelStateRef = useRef<Map<string, { index: number; waitUntil?: number }>>(new Map());
+    const parallelWarnedRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        const ALLOWED = new Set<string>([
+            CommandType.SetVariable, CommandType.RunScript, CommandType.Wait,
+            CommandType.PlayMusic, CommandType.StopMusic, CommandType.PlaySoundEffect, CommandType.StopSoundEffect,
+            CommandType.CallCommonEvent,
+        ]);
+        const PARALLEL_CALL_MAX_DEPTH = 8;
+        const isTruthy = (v: unknown) => !(v === undefined || v === null || v === false || v === 0 || v === '' || v === 'false');
+
+        const tick = () => {
+            const ps = playerStateRef.current;
+            if (!ps || ps.mode !== 'playing') return;
+            // Plugin heartbeat (~120ms). Fires during play even when no parallel CEs are active.
+            try { pluginManager.invokeHook('onRuntimeTick', 120); } catch { /* isolated */ }
+            if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
+
+            const events = Object.values(project.commonEvents || {}) as VNCommonEvent[];
+            const active = events.filter(ce => ce.enabled && ce.trigger === 'parallel'
+                && ce.commands && ce.commands.length > 0
+                && (!ce.conditionVariableId || isTruthy(ps.variables[ce.conditionVariableId])));
+
+            // Drop state for CEs no longer active so they restart cleanly next activation.
+            const activeIds = new Set<string>(active.map(c => c.id));
+            for (const id of Array.from(parallelStateRef.current.keys()) as string[]) {
+                if (!activeIds.has(id)) parallelStateRef.current.delete(id);
+            }
+            if (active.length === 0) return;
+
+            const now = Date.now();
+            let varAccum: Record<string, string | number | boolean> | null = null;
+            let musicAccum: Record<string, unknown> | null = null;
+
+            const buildCtx = (): CommandContext => ({
+                project,
+                playerState: { ...ps, variables: { ...ps.variables, ...(varAccum || {}) } },
+                assetResolver,
+                getAssetMetadata: getAssetMetadata as any,
+                musicAudioRef,
+                fadeAudio,
+                playSound,
+                playVoice,
+                stopAllSfx,
+                stopSfx,
+                settings,
+                advance: () => {},
+                setPlayerState: updatePlayerState,
+                activeEffectTimeoutsRef,
+                evaluateConditions,
+                notify,
+            });
+
+            // Run a CALLED Common Event's background-safe commands inline (parallel context).
+            // No command stack / param scoping / Wait blocking here — calls are flattened and
+            // depth+cycle guarded. Presentation commands are skipped, same as the top level.
+            const resolveCe = (idOrName: string): VNCommonEvent | undefined => {
+                const ces = project.commonEvents || {};
+                return (ces[idOrName] as VNCommonEvent) || (Object.values(ces) as VNCommonEvent[]).find(e => e.name?.toLowerCase() === String(idOrName).toLowerCase());
+            };
+            const runCalledCe = (idOrName: string, depth: number, chain: Set<string>) => {
+                if (depth > PARALLEL_CALL_MAX_DEPTH) return;
+                const target = resolveCe(idOrName);
+                if (!target || !target.enabled || chain.has(target.id)) return; // disabled / cycle guard
+                const nextChain = new Set(chain); nextChain.add(target.id);
+                for (const c of (target.commands || []) as any[]) {
+                    if (c.type === CommandType.Wait) continue;            // can't block inline
+                    if (c.type === CommandType.CallCommonEvent) { runCalledCe(c.commonEventId, depth + 1, nextChain); continue; }
+                    if (!ALLOWED.has(c.type)) continue;
+                    try {
+                        const ctx = buildCtx();
+                        let r: CommandResult | null = null;
+                        switch (c.type) {
+                            case CommandType.SetVariable: r = handleSetVariable(c, ctx); break;
+                            case CommandType.RunScript:
+                                handleRunScript(c, ctx).then(rr => { if (rr.updates?.variables) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...rr.updates!.variables } } : null); }).catch(() => {});
+                                break;
+                            case CommandType.PlayMusic: r = handlePlayMusic(c, ctx); break;
+                            case CommandType.StopMusic: r = handleStopMusic(c, ctx); break;
+                            case CommandType.PlaySoundEffect: r = handlePlaySoundEffect(c, ctx); break;
+                            case CommandType.StopSoundEffect: r = handleStopSoundEffect(c, ctx); break;
+                        }
+                        if (r?.updates?.variables) varAccum = { ...(varAccum || {}), ...r.updates.variables };
+                        if (r?.updates?.musicState) musicAccum = { ...(musicAccum || {}), ...r.updates.musicState };
+                    } catch (e) { console.error('[Parallel CE call] command error:', e); }
+                }
+            };
+
+            for (const ce of active) {
+                let st = parallelStateRef.current.get(ce.id);
+                if (!st) { st = { index: 0 }; parallelStateRef.current.set(ce.id, st); }
+                if (st.waitUntil && now < st.waitUntil) continue;
+                st.waitUntil = undefined;
+                const cmds = ce.commands;
+                if (st.index >= cmds.length) st.index = 0;
+                const cmd = cmds[st.index] as any;
+                st.index = (st.index + 1) % cmds.length; // advance PC (looping)
+                if (!cmd) continue;
+
+                if (cmd.type === CommandType.Wait) {
+                    const secs = typeof cmd.duration === 'number' ? cmd.duration : 0;
+                    st.waitUntil = now + Math.max(0, secs) * 1000;
+                    continue;
+                }
+                if (!ALLOWED.has(cmd.type)) {
+                    const key = `${ce.id}:${cmd.type}`;
+                    if (!parallelWarnedRef.current.has(key)) {
+                        parallelWarnedRef.current.add(key);
+                        console.warn(`[Parallel CE "${ce.name}"] command "${cmd.type}" skipped (not background-safe).`);
+                    }
+                    continue;
+                }
+                try {
+                    const ctx = buildCtx();
+                    let result: CommandResult | null = null;
+                    switch (cmd.type) {
+                        case CommandType.SetVariable: result = handleSetVariable(cmd, ctx); break;
+                        case CommandType.RunScript:
+                            // Scripts are async — run in the background and apply var changes on resolve
+                            // (the parallel tick stays synchronous).
+                            handleRunScript(cmd, ctx)
+                                .then(r => { if (r.updates?.variables) updatePlayerState(p => p ? { ...p, variables: { ...p.variables, ...r.updates!.variables } } : null); })
+                                .catch(e => console.error(`[Parallel CE "${ce.name}"] script error:`, e));
+                            break;
+                        case CommandType.PlayMusic: result = handlePlayMusic(cmd, ctx); break;
+                        case CommandType.StopMusic: result = handleStopMusic(cmd, ctx); break;
+                        case CommandType.PlaySoundEffect: result = handlePlaySoundEffect(cmd, ctx); break;
+                        case CommandType.StopSoundEffect: result = handleStopSoundEffect(cmd, ctx); break;
+                        case CommandType.CallCommonEvent: runCalledCe(cmd.commonEventId, 1, new Set([ce.id])); break;
+                    }
+                    if (result?.updates?.variables) varAccum = { ...(varAccum || {}), ...result.updates.variables };
+                    if (result?.updates?.musicState) musicAccum = { ...(musicAccum || {}), ...result.updates.musicState };
+                } catch (e) {
+                    console.error(`[Parallel CE "${ce.name}"] command error:`, e);
+                }
+            }
+
+            if (varAccum || musicAccum) {
+                updatePlayerState(p => p ? {
+                    ...p,
+                    ...(varAccum ? { variables: { ...p.variables, ...varAccum } } : {}),
+                    ...(musicAccum ? { musicState: { ...p.musicState, ...(musicAccum as any) } } : {}),
+                } : null);
+            }
+        };
+
+        const interval = window.setInterval(tick, 120);
+        return () => window.clearInterval(interval);
+    }, [project, assetResolver, getAssetMetadata, fadeAudio, playSound, playVoice, stopAllSfx, stopSfx, settings, updatePlayerState, evaluateConditions, notify]);
+
+    // ── Plugin runtime bridge ─────────────────────────────────────────────────
+    // While LivePreview is mounted, plugins' api.getVariable/setVariable read & write the
+    // LIVE game variable store (resolving by name or id), and api.notify shows toasts.
+    // Enabled plugins are loaded and onRuntimeInit fired once. Cleared on unmount so the
+    // editor falls back to project defaults.
+    useEffect(() => {
+        const resolveVarId = (nameOrId: string): VNID => {
+            const p = projectRef.current;
+            if (p.variables[nameOrId]) return nameOrId;
+            const lower = nameOrId.toLowerCase();
+            for (const [id, v] of Object.entries(p.variables)) if ((v as { name: string }).name.toLowerCase() === lower) return id;
+            return nameOrId;
+        };
+        pluginManager.setRuntime({
+            getVariable: (nameOrId) => {
+                const id = resolveVarId(nameOrId);
+                const store = variableStoreRef.current;
+                const v = store ? store.get(id) : playerStateRef.current?.variables[id];
+                return (v === null ? undefined : v) as string | number | boolean | undefined;
+            },
+            setVariable: (nameOrId, value) => {
+                const id = resolveVarId(nameOrId);
+                const old = playerStateRef.current?.variables[id];
+                variableStoreRef.current?.applyWrites([{ variableId: id, value, scope: 'global', sourceCommandId: 'plugin' }]);
+                updatePlayerState(p => p ? { ...p, variables: { ...p.variables, [id]: value } } : null);
+                if (old !== value) { try { pluginManager.invokeHook('onVariableChange', id, old, value); } catch { /* isolated */ } }
+            },
+            notify: (message, type) => notify(message, type),
+        });
+        pluginManager.ensureLoaded(projectRef.current);
+        try { pluginManager.invokeHook('onRuntimeInit'); } catch { /* isolated */ }
+        return () => pluginManager.setRuntime(null);
+    }, [updatePlayerState, notify]);
+
+    useEffect(() => {
+        const scheduler = commandSchedulerRef.current;
+        const diagnostics = runtimeDiagnosticsRef.current;
+
+        if (!playerState || playerState.mode !== 'playing') {
+            scheduler.reset();
+            variableStoreRef.current = null;
+            return;
+        }
+
+        if (playerState.uiState.isWaitingForInput || playerState.uiState.isTransitioning || playerState.uiState.choices) {
+            return;
+        }
+
+        // A pausing overlay is open — freeze command processing until it closes (this effect
+        // re-runs when `scenePaused` flips back to false and resumes from where it left off).
+        if (scenePaused) {
+            return;
+        }
+
+        // Pause command execution while any HUD screen is shown
+        if (hudStack.length > 0) {
+            return;
+        }
+
+    // Merge any dirty UI variables into the base variables BEFORE creating the runtime snapshot
+    // This ensures conditions are evaluated with the most up-to-date variable values
+    const baseVariables = mergeDirtyUiVariables(playerState.variables);
+    const variableStore = new RuntimeVariableStore({ globals: { ...baseVariables } });
+    variableStoreRef.current = variableStore;
+    const getRuntimeVariables = () => variableStore.snapshot().globals as Record<VNID, string | number | boolean>;
+
+        // ── 'auto' Common Events: run once at scene start, before the scene's own commands ──
+        // Injected here (top of the command loop, before reading the next command) so there is
+        // no race with the scene's command 0. Guarded to the top scene level (empty stack) and
+        // to once per scene entry. Re-entering a scene after visiting another one re-runs them.
+        if (playerState.currentIndex === 0 && playerState.commandStack.length === 0 && autoRanSceneRef.current !== playerState.currentSceneId) {
+            autoRanSceneRef.current = playerState.currentSceneId;
+            const autoVars = getRuntimeVariables();
+            const isTruthy = (v: unknown) => !(v === undefined || v === null || v === false || v === 0 || v === '' || v === 'false');
+            const autoCmds = (Object.values(project.commonEvents || {}) as VNCommonEvent[])
+                .filter(ce => ce.enabled && ce.trigger === 'auto' && (!ce.conditionVariableId || isTruthy(autoVars[ce.conditionVariableId])))
+                .flatMap(ce => ce.commands || []);
+            if (autoCmds.length > 0) {
+                updatePlayerState(p => {
+                    if (!p) return null;
+                    // Push the scene to return to (at index 0) and run the auto commands first.
+                    const newStack = [...p.commandStack, { sceneId: p.currentSceneId, commands: p.currentCommands, index: 0 }];
+                    return { ...p, commandStack: newStack, currentCommands: autoCmds, currentIndex: 0 };
+                });
+                return;
+            }
+        }
+
+        const command = playerState.currentCommands[playerState.currentIndex];
+        if (!command) { 
+            if (playerState.commandStack.length > 0) {
+                updatePlayerState(p => {
+                    if (!p || p.commandStack.length === 0) return p;
+                    const frame = p.commandStack[p.commandStack.length - 1];
+                    const newStack = p.commandStack.slice(0, -1);
+                    // Restore parameter variables to their pre-call state (true local scope).
+                    let variables = p.variables;
+                    if (frame.savedVariables || frame.clearedVariables) {
+                        variables = { ...p.variables };
+                        if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+                        if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+                    }
+                    return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
+                });
+            } else {
+                runtimeDebugLog('End of scene - trying to advance to next scene');
+                // Try to find the next scene in the list
+                const sceneIds = Object.keys(project.scenes);
+                const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
+                
+                if (currentSceneIndex !== -1 && currentSceneIndex < sceneIds.length - 1) {
+                    // There are more scenes after this one
+                    const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], playerState.variables);
+                    const nextScene = project.scenes[nextSceneId];
+                    
+                    if (nextScene) {
+                        runtimeDebugLog(`Advancing to next scene: ${nextSceneId}`);
+                        
+                        startSceneExitTransition(playerState.currentSceneId, () => {
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                currentSceneId: nextSceneId,
+                                currentCommands: nextScene.commands,
+                                currentIndex: 0,
+                                stageState: {
+                                    backgroundUrl: null,
+                                    characters: {},
+                                    textOverlays: [],
+                                    imageOverlays: [],
+                                    buttonOverlays: [],
+                                    movieOverlays: [],
+                                    screen: {
+                                        shake: { active: false, intensity: 0 },
+                                        tint: 'transparent',
+                                        zoom: 1,
+                                        panX: 0,
+                                        panY: 0,
+                                        transitionDuration: 0.5,
+                                        overlayEffects: []
+                                    },
+                                    particleEffects: {}
+                                },
+                                uiState: {
+                                    dialogue: null,
+                                    choices: null,
+                                    textInput: null,
+                                    movieUrl: null,
+                                    movieLoop: false,
+                                    isWaitingForInput: false,
+                                    isTransitioning: false,
+                                    transitionElement: null,
+                                    flash: null,
+                                    showHistory: false,
+                                    screenSceneId: null
+                                }
+                            } : null);
+                        });
+                    } else {
+                        // No valid next scene found, return to title
+                        runtimeDebugLog('No valid next scene - returning to title');
+                        
+                        // Stop game music and SFX immediately
+                        const audio = musicAudioRef.current;
+                        if (audio) {
+                            audio.pause();
+                            audio.currentTime = 0;
+                            audio.src = '';
+                        }
+                        stopAllSfx();
+                        
+                        // Clear player state and return to title screen
+                        updatePlayerState(null);
+                        if (project.ui.titleScreenId) {
+                            setScreenStack([project.ui.titleScreenId]);
+                        }
+                    }
+                } else {
+                    // This is the last scene or scene not found in list
+                    runtimeDebugLog('Last scene completed - returning to title');
+                    
+                    // Stop game music and SFX immediately
+                    const audio = musicAudioRef.current;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.src = '';
+                    }
+                    stopAllSfx();
+                    
+                    // Clear player state and return to title screen
+                    updatePlayerState(null);
+                    if (project.ui.titleScreenId) {
+                        setScreenStack([project.ui.titleScreenId]);
+                    }
+                }
+            }
+            scheduler.reset();
+            return; 
+        }
+
+        const commandSignature = {
+            sceneId: playerState.currentSceneId,
+            index: playerState.currentIndex,
+            commandId: command.id,
+        };
+        if (!scheduler.shouldProcess(commandSignature)) {
+            return;
+        }
+        scheduler.markProcessed(commandSignature);
+        diagnostics.emit('command-start', {
+            sceneId: commandSignature.sceneId,
+            commandId: commandSignature.commandId,
+            index: commandSignature.index,
+        });
+
+        // Special handling for BranchStart — walk the If / Otherwise-if / Otherwise chain and
+        // land on the FIRST segment whose conditions match (or just past BranchEnd if none do).
+        // A plain branch (no else markers) collapses to the original "run body or skip" behavior,
+        // so projects saved before else/else-if existed run identically.
+        if (command.type === CommandType.BranchStart) {
+            const cmds = playerState.currentCommands;
+            const startIdx = playerState.currentIndex;
+            const branchId = (command as BranchStartCommand).branchId;
+            const vars = getRuntimeVariables();
+            const endIdx = cmds.findIndex((c, i) =>
+                i > startIdx && c.type === CommandType.BranchEnd && (c as BranchEndCommand).branchId === branchId
+            );
+            // Next segment boundary (else-if / else / end) for THIS branch, after `from`.
+            // Filtering by branchId naturally skips any nested branch's markers (unique ids).
+            const nextMarker = (from: number) => cmds.findIndex((c, i) =>
+                i > from &&
+                (c as { branchId?: string }).branchId === branchId &&
+                (c.type === CommandType.BranchElseIf || c.type === CommandType.BranchElse || c.type === CommandType.BranchEnd)
+            );
+            let segIdx = startIdx;
+            let target: number;
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                const seg = cmds[segIdx];
+                const segMet = seg.type === CommandType.BranchElse
+                    ? true
+                    : evaluateConditions((seg as { conditions?: VNCondition[] }).conditions, vars);
+                if (segMet) { target = segIdx + 1; break; }       // enter this segment's body
+                const nm = nextMarker(segIdx);
+                if (nm === -1) { target = endIdx !== -1 ? endIdx + 1 : startIdx + 1; break; }
+                if (cmds[nm].type === CommandType.BranchEnd) { target = nm + 1; break; }
+                segIdx = nm;                                       // evaluate the next Otherwise-if / Otherwise
+            }
+            updatePlayerState(p => p ? { ...p, currentIndex: target } : null);
+            return;
+        }
+
+        // Check conditions for all other commands
+    const conditionsMet = evaluateConditions(command.conditions, getRuntimeVariables());
+    // Live commands are NEVER skipped on a false condition — they register/create their
+    // reactive state and let the renderer (visuals) or the live-SFX manager re-check the
+    // condition as variables change (show/hide or play/stop live). Without this, a live
+    // command reached while its condition is false would be skipped and never react.
+    const isLiveReactive = !!(command as any).liveConditions
+        && (REACTIVE_VISUAL_TYPES.has(command.type) || command.type === CommandType.PlaySoundEffect);
+    runtimeDebugLog('[DEBUG] Command:', command.type, 'Index:', playerState.currentIndex, 'Conditions met:', conditionsMet, 'live:', isLiveReactive, 'Variables:', getRuntimeVariables());
+        if (!conditionsMet && !isLiveReactive) {
+            runtimeDebugLog('[DEBUG] Skipping command due to failed conditions');
+            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+            return;
+        }
+
+        const advance = () => {
+            runtimeDebugLog('[DEBUG advance()] Called from command:', command.type, 'Current index:', playerState.currentIndex);
+            // Guard: Don't advance if we've already moved past this command
+            if (scheduler.alreadyAdvancedPast(playerState.currentIndex)) {
+                const last = scheduler.getLastProcessed();
+                if (last) {
+                    runtimeDebugLog('[DEBUG advance()] Skipping - already advanced to', last.index);
+                }
+                return;
+            }
+            const nextIndex = playerState.currentIndex + 1;
+            if (nextIndex >= playerState.currentCommands.length) {
+                if (playerState.commandStack.length > 0) {
+                    updatePlayerState(p => {
+                        if (!p || p.commandStack.length === 0) return p;
+                        const frame = p.commandStack[p.commandStack.length - 1];
+                        const newStack = p.commandStack.slice(0, -1);
+                        // Restore parameter variables to their pre-call state (true local scope).
+                        let variables = p.variables;
+                        if (frame.savedVariables || frame.clearedVariables) {
+                            variables = { ...p.variables };
+                            if (frame.savedVariables) Object.assign(variables, frame.savedVariables);
+                            if (frame.clearedVariables) for (const k of frame.clearedVariables) delete variables[k];
+                        }
+                        return { ...p, currentSceneId: frame.sceneId, currentCommands: frame.commands, currentIndex: frame.index, commandStack: newStack, variables };
+                    });
+                } else {
+                    // Scene ended, try to advance to next scene
+                    const sceneIds = Object.keys(project.scenes);
+                    const currentSceneIndex = sceneIds.indexOf(playerState.currentSceneId);
+                    
+                    if (currentSceneIndex !== -1 && currentSceneIndex < sceneIds.length - 1) {
+                        const nextSceneId = navigateToScene(sceneIds[currentSceneIndex + 1], getRuntimeVariables());
+                        const nextScene = project.scenes[nextSceneId];
+                        
+                        if (nextScene) {
+                            startSceneExitTransition(playerState.currentSceneId, () => {
+                                updatePlayerState(p => p ? {
+                                    ...p,
+                                    currentSceneId: nextSceneId,
+                                    currentCommands: nextScene.commands,
+                                    currentIndex: 0,
+                                    stageState: {
+                                        backgroundUrl: null,
+                                        characters: {},
+                                        textOverlays: [],
+                                        imageOverlays: [],
+                                        buttonOverlays: [],
+                                        movieOverlays: [],
+                                        screen: {
+                                            shake: { active: false, intensity: 0 },
+                                            tint: 'transparent',
+                                            zoom: 1,
+                                            panX: 0,
+                                            panY: 0,
+                                            transitionDuration: 0.5,
+                                            overlayEffects: []
+                                        },
+                                        particleEffects: {}
+                                    },
+                                    uiState: {
+                                        dialogue: null,
+                                        choices: null,
+                                        textInput: null,
+                                        movieUrl: null,
+                                        movieLoop: false,
+                                        isWaitingForInput: false,
+                                        isTransitioning: false,
+                                        transitionElement: null,
+                                        flash: null,
+                                        showHistory: false,
+                                        screenSceneId: null
+                                    }
+                                } : null);
+                            });
+                            return;
+                        }
+                    }
+                    
+                    // No more scenes, return to title
+                    // Stop game music and SFX immediately
+                    const audio = musicAudioRef.current;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.src = '';
+                    }
+                    stopAllSfx();
+                    
+                    // Clear player state and return to title screen
+                    updatePlayerState(null);
+                    if (project.ui.titleScreenId) {
+                        setScreenStack([project.ui.titleScreenId]);
+                    }
+                    scheduler.reset();
+                }
+            } else {
+                updatePlayerState(p => p ? { ...p, currentIndex: nextIndex } : null);
+            }
+        };
+
+        // Check if this command should run asynchronously (in parallel with subsequent commands)
+        const shouldRunAsync = command.modifiers?.runAsync === true;
+        
+        // Build CommandContext for handlers
+        const commandContext: CommandContext = {
+            project,
+            playerState,
+            assetResolver,
+            getAssetMetadata,
+            musicAudioRef,
+            fadeAudio,
+            playSound,
+            playVoice,
+            stopAllSfx,
+            stopSfx,
+            settings,
+            advance,
+            setPlayerState: updatePlayerState,
+            activeEffectTimeoutsRef,
+            evaluateConditions,
+            notify,
+        };
+        
+        let instantAdvance = true;
+        (async () => {
+            try {
+            // Helper function to apply command result
+            const applyResult = (result: CommandResult) => {
+                const variableStore = variableStoreRef.current;
+                const previousSceneId = playerState?.currentSceneId;
+                if (result.updates?.variables && variableStore) {
+                    const writes = Object.entries(result.updates.variables).map(([variableId, value]) => ({
+                        variableId,
+                        value,
+                        scope: 'global' as const,
+                        sourceCommandId: command.id,
+                    }));
+                    variableStore.applyWrites(writes);
+                }
+                // Plugin hook: notify of any variable that actually changed value.
+                if (result.updates?.variables) {
+                    const prevVars = playerState?.variables || {};
+                    for (const [vid, val] of Object.entries(result.updates.variables)) {
+                        if (prevVars[vid] !== val) {
+                            try { pluginManager.invokeHook('onVariableChange', vid, prevVars[vid], val); } catch { /* isolated */ }
+                        }
+                    }
+                }
+                if (result.updates || result.stagePatch) {
+                    const isSceneChange = result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId;
+                    updatePlayerState(p => {
+                        if (!p) return null;
+                        let mergedVariables = result.updates?.variables && variableStore ? variableStore.snapshot().globals : { ...p.variables, ...(result.updates?.variables ?? {}) };
+                        // Reset local-scope variables to defaults on scene change
+                        if (isSceneChange) {
+                            const localDefaults = getLocalVariableDefaults(project.variables);
+                            mergedVariables = { ...mergedVariables, ...localDefaults };
+                            runtimeDebugLog('[Variable Scope] Reset local variables on scene change:', Object.keys(localDefaults));
+                        }
+                        // Compute the next stage state. `stagePatch` runs against the LATEST `p.stageState`
+                        // (not the handler's stale closure), so stacked/parallel stage commands compose.
+                        let nextStage: typeof p.stageState | undefined =
+                            result.updates?.stageState !== undefined ? { ...p.stageState, ...result.updates.stageState } : undefined;
+                        if (result.stagePatch) {
+                            nextStage = { ...(nextStage ?? p.stageState), ...result.stagePatch(p.stageState) };
+                        }
+                        return {
+                            ...p,
+                            ...(result.updates?.currentSceneId !== undefined ? { currentSceneId: result.updates.currentSceneId } : {}),
+                            ...(result.updates?.currentCommands !== undefined ? { currentCommands: result.updates.currentCommands } : {}),
+                            ...(result.updates?.currentIndex !== undefined ? { currentIndex: result.updates.currentIndex } : {}),
+                            ...(result.updates?.commandStack !== undefined ? { commandStack: result.updates.commandStack } : {}),
+                            ...(result.updates?.variables !== undefined || isSceneChange ? { variables: mergedVariables } : {}),
+                            ...(nextStage !== undefined ? { stageState: nextStage } : {}),
+                            ...(result.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {}),
+                            ...(result.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}),
+                        };
+                    });
+                    
+                    // If scene changed, clear UI screens (scene cleanup)
+                    if (result.updates?.currentSceneId !== undefined && result.updates.currentSceneId !== previousSceneId) {
+                        runtimeDebugLog('[Scene Cleanup] Scene changed from', previousSceneId, 'to', result.updates.currentSceneId, '- clearing UI stacks');
+                        setScreenStack([]);
+                        setHudStack([]);
+                        
+                        // Clear all active effect timeouts
+                        activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+                        activeEffectTimeoutsRef.current = [];
+                        
+                        // Clear active visual effects
+                        activeFlashRef.current = null;
+                        setFlashTrigger(0);
+                        activeLightningRef.current = null;
+                        activeFireworksRef.current = null;
+                        setFlashlight(null);
+                        activeShakeRef.current = null;
+                        scheduler.reset();
+                        variableStoreRef.current = null;
+                    }
+                }
+                instantAdvance = result.advance;
+                
+                // Handle delay and callback
+                if (result.delay && result.callback) {
+                    const timeoutId = window.setTimeout(result.callback, result.delay);
+                    activeEffectTimeoutsRef.current.push(timeoutId);
+                } else if (result.callback) {
+                    result.callback();
+                }
+                diagnostics.emit('command-finish', {
+                    commandId: command.id,
+                    sceneId: playerState.currentSceneId,
+                    index: playerState.currentIndex,
+                    advance: result.advance,
+                });
+            };
+            
+            // --- Auto-replay saved inputs from backward skip ---
+            // When the player goes backward and then advances forward again, previously-
+            // entered choices and text inputs are replayed automatically instead of
+            // re-prompting the player.
+            const savedInputKey = `${playerState.currentSceneId}:${playerState.currentIndex}`;
+            const savedInput = playerState.savedInputs[savedInputKey];
+
+            if (savedInput && command.type === CommandType.Choice && savedInput.type === 'choice') {
+                runtimeDebugLog('[BACKWARD REPLAY] Auto-replaying saved choice:', savedInput.choice.text);
+                handleChoiceSelect(savedInput.choice);
+                return;
+            }
+
+            if (savedInput && command.type === CommandType.TextInput && savedInput.type === 'textInput') {
+                runtimeDebugLog('[BACKWARD REPLAY] Auto-replaying saved text input:', savedInput.value);
+                const cmd = command as TextInputCommand;
+                updatePlayerState(p => {
+                    if (!p) return p;
+                    const historyEntry: HistoryEntry = {
+                        timestamp: Date.now(),
+                        type: 'textInput',
+                        text: `Input: ${savedInput.value}`,
+                        inputValue: savedInput.value,
+                        variableId: cmd.variableId,
+                        sceneId: p.currentSceneId,
+                        commandIndex: p.currentIndex,
+                        stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                        variablesSnapshot: { ...p.variables },
+                        musicSnapshot: { ...p.musicState },
+                    };
+                    const newHistory = [...p.history, historyEntry];
+                    if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
+                    return {
+                        ...p,
+                        currentIndex: p.currentIndex + 1,
+                        variables: { ...p.variables, [cmd.variableId]: savedInput.value },
+                        history: newHistory,
+                        uiState: { ...p.uiState, isWaitingForInput: false, textInput: null }
+                    };
+                });
+                return;
+            }
+
+            // Plugin hook: before a command executes (observe-only in this version).
+            try { pluginManager.invokeHook('onBeforeCommand', command); } catch { /* isolated in service */ }
+
+            switch (command.type) {
+                case CommandType.Group: {
+                    const result = handleGroup();
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.BranchStart: {
+                    const result = handleBranchStart();
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.BranchElseIf: {
+                    const result = handleBranchElseIf(command as BranchElseIfCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.BranchElse: {
+                    const result = handleBranchElse(command as BranchElseCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.BranchEnd: {
+                    const result = handleBranchEnd();
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.Dialogue: {
+                    const result = handleDialogue(command as DialogueCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.SetBackground: {
+                    const result = await handleSetBackground(command as SetBackgroundCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.ShowCharacter: {
+                    const result = handleShowCharacter(command as ShowCharacterCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.HideCharacter: {
+                    const result = handleHideCharacter(command as HideCharacterCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.Choice: {
+                    const result = handleChoice(command as ChoiceCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.SetVariable: {
+                    const result = handleSetVariable(command as SetVariableCommand, commandContext);
+                    applyResult(result);
+                    // Auto-save persistent-scope variables to storage
+                    const setVarCmd = command as SetVariableCommand;
+                    const varDef = project.variables[setVarCmd.variableId];
+                    if (varDef && (varDef as any).scope === 'persistent' && result.updates?.variables) {
+                        const persistentSnapshot: Record<string, string | number | boolean> = {};
+                        Object.values(project.variables).forEach((v: any) => {
+                            if ((v.scope || 'global') === 'persistent' && result.updates!.variables![v.id] !== undefined) {
+                                persistentSnapshot[v.id] = result.updates!.variables![v.id];
+                            }
+                        });
+                        savePersistentVariables(project.id, { ...loadPersistentVariables(project.id), ...persistentSnapshot });
+                        runtimeDebugLog('[Variable Scope] Saved persistent variable:', varDef.name);
+                    }
+                    break;
+                }
+                case CommandType.TextInput: {
+                    const result = handleTextInput(command as TextInputCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.GiveItem:
+                case CommandType.UseItem:
+                case CommandType.DestroyItem: {
+                    applyResult(handleItemCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.RestockCollection: {
+                    applyResult(handleRestockCollectionCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.BuyItem: {
+                    applyResult(handleBuyItemCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.SellItem: {
+                    applyResult(handleSellItemCommand(command as any, commandContext));
+                    break;
+                }
+                case CommandType.Jump: {
+                    // Stop skip-forward on scene change
+                    if (playerState.uiState.isSkipping) {
+                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+                    }
+                    startSceneExitTransition(playerState.currentSceneId, () => {
+                        const result = handleJump(command as JumpCommand, commandContext);
+                        applyResult(result);
+                    });
+                    break;
+                }
+                case CommandType.PlayMusic: {
+                    const result = handlePlayMusic(command as PlayMusicCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                 case CommandType.StopMusic: {
+                    const result = handleStopMusic(command as StopMusicCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.PlaySoundEffect: {
+                    const sfxCmd = command as PlaySoundEffectCommand;
+                    if (sfxCmd.liveConditions) {
+                        // Register as a live (reactive) sound — the effect below plays/stops it as
+                        // its conditions change, instead of firing once here.
+                        liveSfxRef.current.set(sfxCmd.id, {
+                            audioId: sfxCmd.audioId,
+                            conditions: sfxCmd.conditions,
+                            loop: !!sfxCmd.loop,
+                            volume: sfxCmd.volume,
+                            audio: null,
+                            lastMet: false,
+                        });
+                        setLiveSfxTick(t => t + 1); // kick the manager effect to evaluate now
+                        applyResult({ advance: true });
+                    } else {
+                        const result = handlePlaySoundEffect(sfxCmd, commandContext);
+                        applyResult(result);
+                    }
+                    break;
+                }
+                case CommandType.StopSoundEffect: {
+                    const result = handleStopSoundEffect(command as StopSoundEffectCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.PlayMovie: {
+                    const movieCmd = command as PlayMovieCommand;
+                    const movieUrl = assetResolver(movieCmd.videoId, 'video');
+                    const isOverlay = movieCmd.displayMode === 'overlay';
+                    const shouldLoop = movieCmd.loop ?? false;
+                    const holdLastFrame = movieCmd.holdLastFrame ?? false;
+                    const movieTransition = movieCmd.transition;
+                    const movieTransitionDuration = movieCmd.transitionDuration;
+
+                    if (isOverlay) {
+                        // Overlay mode: add to stageState.movieOverlays (behind characters, above background)
+                        updatePlayerState(p => {
+                            if (!p) return null;
+                            const existing = p.stageState.movieOverlays || [];
+                            return {
+                                ...p,
+                                stageState: {
+                                    ...p.stageState,
+                                    movieOverlays: [...existing, {
+                                        url: movieUrl || '',
+                                        loop: shouldLoop,
+                                        holdLastFrame,
+                                        transition: movieTransition,
+                                        transitionDuration: movieTransitionDuration,
+                                        commandId: movieCmd.id,
+                                        parallaxDepth: movieCmd.parallaxDepth,
+                                        x: movieCmd.x,
+                                        y: movieCmd.y,
+                                        width: movieCmd.width,
+                                        height: movieCmd.height,
+                                        opacity: movieCmd.opacity,
+                                        objectFit: movieCmd.objectFit,
+                                    }],
+                                },
+                            };
+                        });
+                        // Overlay movies never block — always advance immediately
+                    } else {
+                        // Fullscreen mode: show over black background
+                        if (movieCmd.waitsForCompletion) {
+                            instantAdvance = false;
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                uiState: { ...p.uiState, isWaitingForInput: true, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
+                            } : null);
+                        } else {
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                uiState: { ...p.uiState, movieUrl, movieLoop: shouldLoop, movieHoldLastFrame: holdLastFrame, movieTransition, movieTransitionDuration, movieExiting: false },
+                            } : null);
+                        }
+                    }
+                    break;
+                }
+                case CommandType.StopMovie: {
+                    // Clear all overlay movies
+                    updatePlayerState(p => {
+                        if (!p) return null;
+                        return {
+                            ...p,
+                            stageState: {
+                                ...p.stageState,
+                                movieOverlays: [],
+                            },
+                            uiState: {
+                                ...p.uiState,
+                                movieUrl: null,
+                                movieLoop: false,
+                            },
+                        };
+                    });
+                    break;
+                }
+                case CommandType.Wait: {
+                    instantAdvance = false;
+                    const cmd = command as any;
+                    const durationMs = ((cmd.duration ?? 1) * 1000);
+
+                    // Wait until the player has collected the target item(s), then advance. Items are
+                    // owned when their count variable is >= 1; polled so Show Item / button pickups during
+                    // the wait release it. Indefinite (no duration), like waitIndefinitelyForInput.
+                    if (cmd.waitForItems) {
+                        const targets: VNID[] = Array.isArray(cmd.targetItemIds) ? cmd.targetItemIds.filter(Boolean) : [];
+                        const mode: 'all' | 'any' = cmd.itemsMode === 'any' ? 'any' : 'all';
+                        const isCollected = (itemId: VNID): boolean => {
+                            const item = project.items?.[itemId];
+                            if (!item) return true; // unknown item → satisfied, so we never deadlock on a stale id
+                            const c = Number((playerStateRef.current?.variables ?? {})[item.countVariableId] ?? 0);
+                            return c >= 1;
+                        };
+                        const conditionMet = (): boolean =>
+                            targets.length === 0 ? true : (mode === 'any' ? targets.some(isCollected) : targets.every(isCollected));
+
+                        if (conditionMet()) {
+                            advance();
+                        } else {
+                            // Recursive timeout (not setInterval) so each pending poll lives in
+                            // activeEffectTimeoutsRef and is cleared on scene jump / unmount.
+                            const poll = () => {
+                                if (conditionMet()) { advance(); return; }
+                                const tid = window.setTimeout(poll, 150);
+                                activeEffectTimeoutsRef.current.push(tid);
+                            };
+                            const tid = window.setTimeout(poll, 150);
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                    }
+                    // If waitIndefinitelyForInput is enabled, wait only for user input (ignore duration)
+                    else if (cmd.waitIndefinitelyForInput) {
+                        let hasAdvanced = false;
+
+                        const onUserAdvance = () => {
+                            if (hasAdvanced) return;
+                            hasAdvanced = true;
+                            advance();
+                            removeListeners();
+                        };
+
+                        const keyHandler = (e: KeyboardEvent) => {
+                            if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onUserAdvance();
+                            }
+                        };
+                        const clickHandler = (e: MouseEvent) => {
+                            // Quick-menu buttons fire their own actions and must not advance the story.
+                            if ((e.target as Element)?.closest?.('[data-vn-no-advance]')) return;
+                            // Only respond to clicks within the game stage area
+                            if (stageRef.current && stageRef.current.contains(e.target as Node)) {
+                                onUserAdvance();
+                            }
+                        };
+
+                        const removeListeners = () => {
+                            window.removeEventListener('keydown', keyHandler, true);
+                            window.removeEventListener('click', clickHandler, true);
+                        };
+
+                        // Use capture phase to get events before other handlers
+                        window.addEventListener('keydown', keyHandler, true);
+                        window.addEventListener('click', clickHandler, true);
+                    } else if (cmd.waitForInput) {
+                        // If waitForInput is enabled, allow user input (click or key) to advance early, but still respect duration
+                        let hasAdvanced = false;
+                        let timeoutId: number | null = window.setTimeout(() => {
+                            // timeout elapsed, advance
+                            if (!hasAdvanced) {
+                                hasAdvanced = true;
+                                advance();
+                            }
+                            removeListeners();
+                        }, durationMs);
+
+                        const onUserAdvance = () => {
+                            if (hasAdvanced) return; // Prevent double-advance
+                            hasAdvanced = true;
+
+                            if (timeoutId) {
+                                clearTimeout(timeoutId);
+                                timeoutId = null;
+                            }
+                            advance();
+                            removeListeners();
+                        };
+
+                        const keyHandler = (e: KeyboardEvent) => {
+                            if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onUserAdvance();
+                            }
+                        };
+                        const clickHandler = (e: MouseEvent) => {
+                            // Quick-menu buttons fire their own actions and must not advance the story.
+                            if ((e.target as Element)?.closest?.('[data-vn-no-advance]')) return;
+                            // Only respond to clicks within the game stage area
+                            if (stageRef.current && stageRef.current.contains(e.target as Node)) {
+                                onUserAdvance();
+                            }
+                        };
+
+                        const removeListeners = () => {
+                            window.removeEventListener('keydown', keyHandler, true);
+                            window.removeEventListener('click', clickHandler, true);
+                        };
+
+                        // Use capture phase to get events before other handlers
+                        window.addEventListener('keydown', keyHandler, true);
+                        window.addEventListener('click', clickHandler, true);
+                    } else {
+                        // No user input allowed, just wait for duration
+                        setTimeout(() => advance(), durationMs);
+                    }
+                    break;
+                }
+                case CommandType.ShakeScreen: {
+                    const cmd = command as ShakeScreenCommand;
+                    
+                    // Set shake in ref and force a render so the CSS class is applied
+                    activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                    setShakeTrigger(prev => prev + 1);
+                    
+                    // Duration 0 = persistent (shake runs until manually cleared / scene change)
+                    if (cmd.duration > 0) {
+                        const timeoutId = window.setTimeout(() => {
+                            activeShakeRef.current = null;
+                            setShakeTrigger(prev => prev + 1); // Force re-render to remove CSS class
+                            activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== timeoutId);
+                        }, cmd.duration * 1000);
+                        activeEffectTimeoutsRef.current.push(timeoutId);
+                    }
+                    
+                    // Let the normal advance() function handle index progression
+                    break;
+                }
+                case CommandType.TintScreen: {
+                    const cmd = command as TintScreenCommand;
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration }}} : null);
+                    break;
+                }
+                case CommandType.PanZoomScreen: {
+                     const cmd = command as PanZoomScreenCommand;
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration }}} : null);
+                    break;
+                }
+                case CommandType.ResetScreenEffects: {
+                    const cmd = command as ResetScreenEffectsCommand;
+                    updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] }}} : null);
+                    break;
+                }
+                case CommandType.FlashScreen: {
+                    const cmd = command as FlashScreenCommand;
+
+                    // Set flash in ref with unique key and trigger re-render
+                    activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+                    setFlashTrigger(prev => prev + 1);
+
+                    // Let the normal advance() function handle index progression
+                    break;
+                }
+                case CommandType.Lightning: {
+                    const cmd = command as LightningCommand;
+                    activeLightningRef.current = {
+                        color: cmd.color || '#EAF2FF',
+                        intensity: cmd.intensity ?? 0.9,
+                        duration: cmd.duration ?? 0.7,
+                        flashes: cmd.flashes ?? 2,
+                        affectsDialogue: cmd.affectsDialogue !== false,
+                        key: Date.now(),
+                    };
+                    setLightningTrigger(prev => prev + 1);
+                    // Sync thunder: play the SFX after the configured delay (light travels faster than sound).
+                    if (cmd.thunderSfxId) {
+                        const tid = window.setTimeout(() => {
+                            playSound(cmd.thunderSfxId!, cmd.thunderVolume);
+                        }, Math.max(0, (cmd.thunderDelay ?? 0.6) * 1000));
+                        activeEffectTimeoutsRef.current.push(tid);
+                    }
+                    break;
+                }
+                case CommandType.Fireworks: {
+                    const cmd = command as FireworksCommand;
+                    activeFireworksRef.current = {
+                        colors: (cmd.colors && cmd.colors.length) ? cmd.colors : [],
+                        intensity: cmd.intensity ?? 1,
+                        bursts: Math.max(1, cmd.bursts ?? 3),
+                        duration: cmd.duration ?? 2.5,
+                        burstHeight: cmd.burstHeight ?? 0.7,
+                        affectsDialogue: cmd.affectsDialogue !== false,
+                        sfxId: cmd.sfxId ?? null,
+                        sfxVolume: cmd.sfxVolume,
+                        sfxPerBurst: !!cmd.sfxPerBurst,
+                        key: Date.now(),
+                    };
+                    setFireworksTrigger(prev => prev + 1);
+                    // One synced boom at the configured delay (unless playing a boom per burst, which the
+                    // burst canvas handles via onExplode).
+                    if (cmd.sfxId && !cmd.sfxPerBurst) {
+                        const tid = window.setTimeout(() => {
+                            playSound(cmd.sfxId!, cmd.sfxVolume);
+                        }, Math.max(0, (cmd.sfxDelay ?? 0.3) * 1000));
+                        activeEffectTimeoutsRef.current.push(tid);
+                    }
+                    break;
+                }
+                case CommandType.PlaceLights: {
+                    const cmd = command as PlaceLightsCommand;
+                    applyResult({ advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) });
+                    break;
+                }
+                case CommandType.ClearLights: {
+                    applyResult({ advance: true, stagePatch: () => ({ lights: [] }) });
+                    break;
+                }
+                case CommandType.Flashlight: {
+                    const cmd = command as FlashlightCommand;
+                    if (cmd.enabled) {
+                        setFlashlight({
+                            radius: cmd.radius ?? 22,
+                            softness: cmd.softness ?? 0.6,
+                            darkness: cmd.darkness ?? 0.85,
+                            color: cmd.color || '#000000',
+                            toggleKey: cmd.toggleKey,
+                            affectsDialogue: cmd.affectsDialogue !== false,
+                            darkWhenOff: cmd.darkWhenOff === true,
+                            on: true,
+                        });
+                        if (cmd.sfxId) playSound(cmd.sfxId);
+                    } else {
+                        setFlashlight(null);
+                    }
+                    break;
+                }
+                case CommandType.SetScreenOverlayEffect: {
+                    const cmd = command as SetScreenOverlayEffectCommand;
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            screen: {
+                                ...p.stageState.screen,
+                                overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                                    type: cmd.effectType,
+                                    intensity: cmd.intensity,
+                                    variant: cmd.variant,
+                                    color: (cmd as any).color,
+                                    params: (cmd as any).params,
+                                }),
+                            }
+                        }
+                    } : null);
+                    
+                    // Auto-remove overlay effect after duration (duration 0 = persistent)
+                    const effectDuration = cmd.duration ?? 0;
+                    if (effectDuration > 0) {
+                        const effectType = cmd.effectType;
+                        const overlayTimeoutId = window.setTimeout(() => {
+                            updatePlayerState(p => p ? {
+                                ...p,
+                                stageState: {
+                                    ...p.stageState,
+                                    screen: {
+                                        ...p.stageState.screen,
+                                        overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, {
+                                            type: effectType,
+                                            intensity: 0,
+                                        }),
+                                    }
+                                }
+                            } : null);
+                            activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== overlayTimeoutId);
+                        }, effectDuration * 1000);
+                        activeEffectTimeoutsRef.current.push(overlayTimeoutId);
+                    }
+                    break;
+                }
+                case CommandType.ShowScreen: {
+                    instantAdvance = false; // Pause execution when showing a screen/menu
+                    const cmd = command as any;
+                    // Store the current scene ID so UI actions can reference it later
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        uiState: {
+                            ...p.uiState,
+                            screenSceneId: p.currentSceneId
+                        }
+                    } : null);
+                    // If we're in-playing, treat this as a HUD/in-game overlay
+                    if (playerState && playerState.mode === 'playing') {
+                        setHudStack(s => [...s, cmd.screenId]);
+                    } else {
+                        // Otherwise push onto the normal screen stack (menus/title/pause)
+                        setScreenStack(s => [...s, cmd.screenId]);
+                    }
+                    break;
+                }
+                case CommandType.ShowText: {
+                    const result = handleShowText(command as ShowTextCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.ShowImage: {
+                    const result = handleShowImage(command as ShowImageCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.Label: {
+                    const result = handleLabel(command as LabelCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.JumpToLabel: {
+                    const result = handleJumpToLabel(command as JumpToLabelCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.HideText: {
+                    const result = handleHideText(command as HideTextCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.HideImage: {
+                    const result = handleHideImage(command as HideImageCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.ShowButton: {
+                    const result = handleShowButton(command as ShowButtonCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.HideButton: {
+                    const result = handleHideButton(command as HideButtonCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.ShowItem: {
+                    const result = handleShowItem(command as ShowItemCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.ShowHotSpot: {
+                    const cmd = command as ShowHotSpotCommand;
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            hotSpotOverlays: [
+                                ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
+                                {
+                                    id: cmd.id, commandId: cmd.id, name: cmd.name,
+                                    x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
+                                    shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions,
+                                    conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
+                                    highlightColor: cmd.highlightColor, visible: cmd.visible,
+                                    advanceOnTrigger: cmd.advanceOnTrigger,
+                                },
+                            ],
+                        },
+                    } : null);
+                    break;
+                }
+                case CommandType.HideHotSpot: {
+                    const cmd = command as HideHotSpotCommand;
+                    updatePlayerState(p => p ? {
+                        ...p,
+                        stageState: {
+                            ...p.stageState,
+                            hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.targetCommandId),
+                        },
+                    } : null);
+                    break;
+                }
+                case CommandType.CreditRoll: {
+                    const cmd = command as CreditRollCommand;
+                    setActiveCreditRoll(cmd);
+                    const result = handleCreditRoll(cmd, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.RunScript: {
+                    const runScriptCmd = command as RunScriptCommand;
+                    // Default true (commandFactory). When set, the scene waits for the script to fully
+                    // finish — including any `await game.wait(...)` inside it — before advancing.
+                    const waitForScript = runScriptCmd.waitForCompletion !== false;
+                    if (waitForScript) {
+                        const result = await handleRunScript(runScriptCmd, commandContext);
+                        applyResult(result);
+                    } else {
+                        // Fire-and-forget: don't block the scene. Variable writes land when the script
+                        // resolves; scene/CommonEvent navigation from a non-waiting script is not honored.
+                        instantAdvance = true;
+                        handleRunScript(runScriptCmd, commandContext)
+                            .then(result => { if (result.updates) applyResult({ advance: true, updates: result.updates }); })
+                            .catch(err => console.error('[RunScript] background script error:', err));
+                    }
+                    break;
+                }
+                case CommandType.SpawnParticles: {
+                    const result = handleSpawnParticles(command as SpawnParticlesCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.StopParticles: {
+                    const result = handleStopParticles(command as StopParticlesCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.CallCommonEvent: {
+                    const result = handleCallCommonEvent(command as CallCommonEventCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.TweenElement: {
+                    const result = handleTweenElement(command as TweenElementCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                default: {
+                    // Custom command registered by a plugin (type = "pluginId.command").
+                    const customDef = pluginManager.getCommand(command.type as string);
+                    if (customDef) {
+                        const ownerId = pluginManager.getCommandOwner(command.type as string);
+                        const api = ownerId ? pluginManager.getApi(ownerId) : undefined;
+                        if (api) {
+                            try {
+                                const params = (command as any).params || (command as any).parameters || {};
+                                const ret = customDef.handler(params, api);
+                                if (ret && typeof (ret as any).then === 'function') {
+                                    (ret as Promise<any>).catch(e => console.error(`[Custom command ${command.type}] handler error:`, e));
+                                } else if (ret && (ret as any).advance === false) {
+                                    instantAdvance = false;
+                                }
+                            } catch (e) {
+                                console.error(`[Custom command ${command.type}] handler error:`, e);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // Plugin hook: after a command executes.
+            try { pluginManager.invokeHook('onAfterCommand', command, null); } catch { /* isolated in service */ }
+
+            // Handle command advancement based on async modifier
+            runtimeDebugLog('[DEBUG] Command execution complete:', command.type, '| shouldRunAsync:', shouldRunAsync, '| instantAdvance:', instantAdvance);
+            if (shouldRunAsync) {
+                // Run async: advance immediately, let command complete in background
+                runtimeDebugLog('[DEBUG] Running async - advancing immediately');
+                advance();
+            } else if (instantAdvance) {
+                // Normal: advance only if command was instant
+                runtimeDebugLog('[DEBUG] Instant advance - advancing now');
+                advance();
+            } else {
+                runtimeDebugLog('[DEBUG] Waiting for command to handle advancement (callback/user input)');
+            }
+            // If !shouldRunAsync && !instantAdvance, command will handle advancement itself (e.g., setTimeout)
+            } catch (error) {
+                console.error('[CRITICAL ERROR] Command execution failed:', {
+                    commandType: command.type,
+                    commandId: command.id,
+                    index: playerState.currentIndex,
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                });
+                // Try to advance past the broken command
+                advance();
+            }
+        })();
+    }, [playerState, project, assetResolver, playSound, playVoice, evaluateConditions, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
+
+    // --- Input & Action Handlers ---
+    const handleDialogueAdvance = () => {
+        // Frozen behind a pausing overlay — ignore all advance attempts (click/key/auto/skip).
+        if (scenePaused) return;
+        // Advancing past a line cuts off its voice clip so it doesn't bleed into the next line.
+        stopVoice();
+        updatePlayerState(p => {
+            if (!p || !p.uiState.dialogue) return p;
+
+            // Check if the current dialogue has keepOpenDuringChoices flag
+            // and the next command is a Choice command
+            const scene = project.scenes[p.currentSceneId];
+            const currentCmd = scene?.commands[p.currentIndex];
+            const nextCmd = scene?.commands[p.currentIndex + 1];
+            const shouldKeepDialogueDuringChoices = (currentCmd as DialogueCommand)?.keepOpenDuringChoices 
+                && (nextCmd?.type === CommandType.Choice);
+            
+            // If flag is set and next is a choice, don't clear dialogue yet
+            if (shouldKeepDialogueDuringChoices) {
+                return {
+                    ...p,
+                    currentIndex: p.currentIndex + 1,
+                    uiState: { ...p.uiState, isWaitingForInput: false, isSkipping: false }
+                    // Keep dialogue open!
+                };
+            }
+            
+            // Add dialogue to history with full state snapshot for skip-backward
+            const historyEntry: HistoryEntry = {
+                timestamp: Date.now(),
+                type: 'dialogue',
+                characterName: p.uiState.dialogue.characterName,
+                characterColor: p.uiState.dialogue.characterColor,
+                text: p.uiState.dialogue.text,
+                sceneId: p.currentSceneId,
+                commandIndex: p.currentIndex,
+                // Full state snapshots for backward navigation
+                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                variablesSnapshot: { ...p.variables },
+                musicSnapshot: { ...p.musicState },
+            };
+            
+            // Cap history at 200 entries to prevent unbounded memory growth
+            const newHistory = [...p.history, historyEntry];
+            if (newHistory.length > 200) newHistory.splice(0, newHistory.length - 200);
+            
+            return {
+                ...p,
+                currentIndex: p.currentIndex + 1,
+                history: newHistory,
+                uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false }
+            };
+        });
+    };
+    const handleChoiceSelect = (choice: ChoiceOption) => {
+        runtimeDebugLog('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
+        // Full action list (+ legacy targetSceneId fallback). The inline handling below covers
+        // SetVariable / JumpToScene / JumpToLabel / OpenURL; EVERY other action type is delegated to
+        // handleUIAction (the same pipeline buttons use) after the state update — giving choices the
+        // full action set, incl. Call Common Event, Go To Screen, Play Sound, Exit Game, etc.
+        const allActions: VNUIAction[] = [...(choice.actions || [])];
+        if (!choice.actions && (choice as any).targetSceneId) {
+            allActions.push({ type: UIActionType.JumpToScene, targetSceneId: (choice as any).targetSceneId } as VNUIAction);
+        }
+        const INLINE_CHOICE_ACTIONS = new Set<string>([UIActionType.SetVariable, UIActionType.JumpToScene, UIActionType.JumpToLabel, UIActionType.OpenURL]);
+        updatePlayerState(p => {
+            if (!p) return null;
+            let newState = { ...p };
+            
+            // Add choice to history with full state snapshot (BEFORE actions modify state)
+            const historyEntry: HistoryEntry = {
+                timestamp: Date.now(),
+                type: 'choice',
+                text: `Choice: ${choice.text}`,
+                choiceText: choice.text,
+                choiceOption: choice,
+                sceneId: p.currentSceneId,
+                commandIndex: p.currentIndex,
+                // Full state snapshots for backward navigation
+                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                variablesSnapshot: { ...p.variables },
+                musicSnapshot: { ...p.musicState },
+            };
+            newState.history = [...newState.history, historyEntry];
+            if (newState.history.length > 200) newState.history.splice(0, newState.history.length - 200);
+            
+            // Save this choice for skip-backward replay
+            const inputKey = `${p.currentSceneId}:${p.currentIndex}`;
+            newState.savedInputs = { ...newState.savedInputs, [inputKey]: { type: 'choice', choice } };
+            
+            // Clear dialogue and choices after selection
+            newState.uiState = { ...newState.uiState, dialogue: null, choices: null };
+            
+            const actions = allActions;
+
+            for (const action of actions) {
+                runtimeDebugLog('[CHOICE] Processing action:', action.type, action);
+                if (action.type === UIActionType.SetVariable) {
+                    const setVarAction = action as SetVariableAction;
+                    const variable = project.variables[setVarAction.variableId];
+                    if (!variable) {
+                        runtimeDebugWarn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
+                        continue; // Skip this action
+                    }
+
+                    const originalOperator = setVarAction.operator;
+                    const effectiveOperator = normalizeOperator(variable.type, variable.name, originalOperator);
+                    const wasCoercedOperator = originalOperator !== effectiveOperator;
+                    const currentVal = newState.variables[setVarAction.variableId];
+                    
+                    // Use consolidated calculateVariableValue for all value computations
+                    const newVal = calculateVariableValue(
+                        effectiveOperator,
+                        variable.type,
+                        currentVal,
+                        setVarAction.value,
+                        setVarAction.randomMin,
+                        setVarAction.randomMax,
+                        wasCoercedOperator ? originalOperator : undefined,
+                        (variable as any).min,
+                        (variable as any).max
+                    );
+
+                    newState.variables = { ...newState.variables, [setVarAction.variableId]: newVal };
+                    runtimeDebugLog(
+                        '[CHOICE] Set variable result:',
+                        setVarAction.variableId,
+                        '=>',
+                        newVal,
+                        '(type:',
+                        typeof newVal,
+                        '| operator:',
+                        `${setVarAction.operator} => ${effectiveOperator}`,
+                        ')'
+                    );
+                    // Auto-save persistent-scope variables
+                    if ((variable as any).scope === 'persistent') {
+                        const prevPersistent = loadPersistentVariables(project.id);
+                        savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: newVal });
+                        runtimeDebugLog('[Variable Scope] Saved persistent variable from choice:', variable.name);
+                    }
+                }
+            }
+            runtimeDebugLog('[CHOICE] Variables after actions:', JSON.stringify(newState.variables, null, 2));
+            
+            newState.uiState = { ...newState.uiState, choices: null };
+    
+            // Handle jump actions (JumpToScene or JumpToLabel) last
+            const jumpAction = actions.find(a => a.type === UIActionType.JumpToScene) as JumpToSceneAction | undefined;
+            const labelAction = actions.find(a => a.type === UIActionType.JumpToLabel) as JumpToLabelAction | undefined;
+
+            // Handle OpenURL actions (fire-and-forget, runs alongside other actions)
+            const openUrlActions = actions.filter(a => a.type === UIActionType.OpenURL) as OpenURLAction[];
+            openUrlActions.forEach(urlAction => {
+                if (urlAction.url) {
+                    if (urlAction.newTab !== false) {
+                        window.open(urlAction.url, '_blank', 'noopener,noreferrer');
+                    } else {
+                        window.location.href = urlAction.url;
+                    }
+                }
+            });
+
+            if (labelAction) {
+                // JumpToLabel - go to a specific label within the current scene
+                const targetLabel = labelAction.targetLabel;
+                const targetSceneId = newState.currentSceneId;
+                const targetScene = project.scenes[targetSceneId];
+                
+                if (targetScene) {
+                    const labelIndex = targetScene.commands.findIndex((cmd) => 
+                        cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
+                    );
+                    
+                    if (labelIndex !== -1) {
+                        runtimeDebugLog(`[CHOICE] JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex}`);
+                        newState.currentSceneId = targetSceneId;
+                        newState.currentCommands = targetScene.commands;
+                        newState.currentIndex = labelIndex;
+                        // Clear overlays when jumping to label
+                        newState.stageState = {
+                            ...newState.stageState,
+                            buttonOverlays: [],
+                            imageOverlays: [],
+                            textOverlays: []
+                        };
+                    } else {
+                        runtimeDebugWarn(`[CHOICE] JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
+                        newState.currentIndex = newState.currentIndex + 1;
+                    }
+                } else {
+                    console.error(`[CHOICE] Scene not found for JumpToLabel: ${targetSceneId}`);
+                    newState.currentIndex = newState.currentIndex + 1;
+                }
+            } else if (jumpAction) {
+                const actualSceneId = navigateToScene(jumpAction.targetSceneId, newState.variables);
+                const newScene = project.scenes[actualSceneId];
+                if (newScene) {
+                    // Reset local-scope variables on scene jump from choice
+                    const localDefaults = getLocalVariableDefaults(project.variables);
+                    newState.variables = { ...newState.variables, ...localDefaults };
+                    runtimeDebugLog('[Variable Scope] Reset local variables on choice/button scene jump:', Object.keys(localDefaults));
+                    newState.currentSceneId = actualSceneId;
+                    newState.currentCommands = newScene.commands;
+                    newState.currentIndex = 0;
+                } else {
+                     console.error(`Scene not found for choice jump: ${actualSceneId}`);
+                     newState.currentIndex = newState.currentIndex + 1;
+                }
+            } else {
+                // If no jump, just advance to next command in current scene
+                newState.currentIndex = newState.currentIndex + 1;
+            }
+
+            return newState;
+        });
+
+        // Run every non-inline action through the shared UI-action pipeline (same as buttons), so
+        // choices support the full action set (Call Common Event, Go To Screen, Play Sound, toggles,
+        // Exit Game, …). SetVariable/Jump/Label/OpenURL were already handled inline above.
+        // CallCommonEvent gets resumeAtCurrent: the state update above ALREADY advanced
+        // currentIndex past the Choice to the next un-run command, so the common event must
+        // return to currentIndex itself — +1 would skip the command right after the choice.
+        for (const action of allActions) {
+            if (!INLINE_CHOICE_ACTIONS.has(action.type)) {
+                handleUIAction(action, action.type === UIActionType.CallCommonEvent ? { resumeAtCurrent: true } : undefined);
+            }
+        }
+    };
+
+    const handleTextInputSubmit = (value: string) => {
+        updatePlayerState(p => {
+            if (!p || !p.uiState.textInput) return p;
+            
+            // Add text input to history with full state snapshot (BEFORE input modifies state)
+            const historyEntry: HistoryEntry = {
+                timestamp: Date.now(),
+                type: 'textInput',
+                text: `Input: ${value}`,
+                inputValue: value,
+                variableId: p.uiState.textInput.variableId,
+                sceneId: p.currentSceneId,
+                commandIndex: p.currentIndex,
+                // Full state snapshots for backward navigation
+                stageSnapshot: JSON.parse(JSON.stringify(p.stageState)),
+                variablesSnapshot: { ...p.variables },
+                musicSnapshot: { ...p.musicState },
+            };
+
+            // Save this input for skip-backward replay
+            const inputKey = `${p.currentSceneId}:${p.currentIndex}`;
+            
+            return {
+                ...p,
+                currentIndex: p.currentIndex + 1,
+                variables: { ...p.variables, [p.uiState.textInput.variableId]: value },
+                history: (() => { const h = [...p.history, historyEntry]; if (h.length > 200) h.splice(0, h.length - 200); return h; })(),
+                savedInputs: { ...p.savedInputs, [inputKey]: { type: 'textInput', value } },
+                uiState: { ...p.uiState, isWaitingForInput: false, textInput: null }
+            };
+        });
+    };
+
+    /** Skip backward: navigate to the previous dialogue entry in history.
+     *  - Fully restores visual state (background, characters, overlays) from snapshots.
+     *  - Saved choices/inputs are replayed automatically when advancing forward again.
+     *  - Properly handles cross-scene navigation, restoring the target scene's state.
+     */
+    const handleSkipBackward = useCallback(() => {
+        updatePlayerState(p => {
+            if (!p || p.history.length === 0) return p;
+
+            // The CURRENT dialogue lives in `uiState.dialogue`, NOT in history — entries
+            // are pushed to history only when the user advances past them. So the most
+            // recent history entry is already the "previous" dialogue we want to step
+            // back to. Walk backward from the end looking for the most recent
+            // dialogue-type entry (we skip choice / textInput entries).
+            let targetIdx = p.history.length - 1;
+            while (targetIdx >= 0 && p.history[targetIdx].type !== 'dialogue') {
+                targetIdx--;
+            }
+
+            if (targetIdx < 0) return p; // No previous dialogue to go back to
+            
+            const target = p.history[targetIdx];
+            
+            // Restore scene navigation
+            let newSceneId = target.sceneId || p.currentSceneId;
+            let newCommands = p.currentCommands;
+            let newCommandIndex = target.commandIndex ?? p.currentIndex;
+            
+            // Always load commands from the target scene (even same scene - ensures consistency)
+            const targetScene = project.scenes[newSceneId];
+            if (targetScene) {
+                newCommands = targetScene.commands;
+            } else if (target.sceneId && target.sceneId !== p.currentSceneId) {
+                return p; // Target scene not found, can't navigate
+            }
+            
+            // Trim history to the target entry (remove everything after it)
+            const trimmedHistory = p.history.slice(0, targetIdx);
+            
+            // Restore full visual state from snapshot if available
+            const restoredStage = target.stageSnapshot
+                ? JSON.parse(JSON.stringify(target.stageSnapshot))
+                : p.stageState;
+            const restoredVariables = target.variablesSnapshot
+                ? { ...target.variablesSnapshot }
+                : p.variables;
+            const restoredMusic = target.musicSnapshot
+                ? { ...target.musicSnapshot }
+                : p.musicState;
+            
+            return {
+                ...p,
+                currentSceneId: newSceneId,
+                currentCommands: newCommands,
+                currentIndex: newCommandIndex,
+                history: trimmedHistory,
+                // Restore full visual/audio state from snapshot
+                stageState: restoredStage,
+                variables: restoredVariables,
+                musicState: restoredMusic,
+                uiState: {
+                    ...p.uiState,
+                    dialogue: {
+                        characterName: target.characterName || 'Narrator',
+                        characterColor: target.characterColor || '#FFFFFF',
+                        characterId: null,
+                        text: target.text,
+                    },
+                    choices: null,
+                    textInput: null,
+                    isWaitingForInput: true,
+                    isSkipping: false,
+                    showHistory: false,
+                    movieUrl: null,
+                    movieLoop: false,
+                }
+            };
+        });
+        // Rewinding to an earlier command index leaves the scheduler's `lastProcessed`
+        // ahead of where we are now — its `alreadyAdvancedPast` guard can then block
+        // commands from running when the user advances forward again. Reset both the
+        // scheduler and the variable cache, mirroring what JumpToScene does.
+        commandSchedulerRef.current.reset();
+        variableStoreRef.current = null;
+    }, [project.scenes]);
+
+    // opts.resumeAtCurrent (CallCommonEvent only): the caller has ALREADY advanced currentIndex
+    // to the next un-run command (choice selection does this before running its actions), so the
+    // common event must return to currentIndex itself, not currentIndex + 1 — otherwise the
+    // command immediately after the choice is skipped.
+    const handleUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
+        runtimeDebugLog('handleUIAction called with:', action.type, action);
+
+        // Per-action conditions: skip this action if its conditions aren't currently met.
+        // Evaluate against the freshest variables (merged uncommitted UI edits), so a button
+        // can branch — e.g. several actions each gated on `selected_item == "key"`.
+        if (action.conditions && action.conditions.length > 0) {
+            const vars = playerState ? mergeDirtyUiVariables(playerState.variables) : menuVariables;
+            if (!evaluateConditions(action.conditions, vars)) {
+                runtimeDebugLog('[UIAction] Skipped — conditions not met:', action.type, action.conditions);
+                return;
+            }
+        }
+
+        // Intercept actions that need confirmation dialogs
+        if (action.type === UIActionType.QuitToTitle && playerState) {
+            // Show quit confirmation when a game is in progress
+            setConfirmDialog({ type: 'quit', pendingAction: action });
+            return;
+        }
+        if (action.type === UIActionType.StartNewGame && (playerState || gameSaves[0])) {
+            // Show new game confirmation when a game is in progress OR an auto-save exists
+            setConfirmDialog({ type: 'newGame', pendingAction: action });
+            return;
+        }
+
+        executeUIAction(action, opts);
+    };
+
+    const executeUIAction = (action: VNUIAction, opts?: { resumeAtCurrent?: boolean }) => {
+        if (action.type === UIActionType.StartNewGame) {
+            // Always start fresh — `startNewGame` rebuilds playerState and clears every screen/HUD
+            // stack, so it works from the title OR from an in-game menu (a menu opened over a running
+            // game via Go To Screen / Toggle Screen leaves playerState non-null). The old `!playerState`
+            // gate made New Game silently do nothing whenever a game was still running underneath —
+            // and the confirm dialog already guards the "lose progress?" case before we get here.
+            startNewGameWithFade();
+        } else if (!playerState && action.type === UIActionType.ContinueGame) {
+            // Continue from title screen: load auto-save (slot 0), fallback to new game
+            const doLoad = async () => {
+                const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+                if (saves[0]) {
+                    loadGame(0);
+                } else {
+                    runtimeDebugLog('[ContinueGame] No auto-save found, starting new game instead');
+                    startNewGameWithFade();
+                }
+            };
+            void doLoad();
+        } else if (playerState && action.type === UIActionType.ReturnToGame) {
+             // Return to gameplay from ANY screen layered over the game — the pause menu
+             // (mode 'paused', screenStack) OR a screen opened during play via GoToScreen
+             // (mode 'playing', hudStack). Previously this was gated on mode === 'paused',
+             // so a Return-to-Game button on a non-pause screen silently did nothing.
+             const wasPaused = playerState.mode === 'paused';
+             // Play the closing screen's transitionOut before tearing the stacks down — otherwise
+             // the screen vanishes instantly (it "fades in but not out"). ReturnToPreviousScreen
+             // already does this; ReturnToGame used to clear the stacks immediately.
+             const closingId = screenStack.length > 0 ? screenStack[screenStack.length - 1]
+                 : (hudStack.length > 0 ? hudStack[hudStack.length - 1] : null);
+             const closingScreen = closingId ? project.uiScreens[closingId] : null;
+             const transOut = closingScreen?.transitionOut || 'fade';
+             const transDur = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+             const finishReturn = () => {
+                 updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                 setScreenStack([]);
+                 setHudStack([]);
+                 // Resume music if it was paused while the menu was open
+                 if (wasPaused && musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
+                     musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
+                 }
+                 // Honor the closing screen's on-close behavior.
+                 if (closingScreen?.onCloseBehavior === 'runActions') {
+                     (closingScreen.onCloseActions || []).forEach(a => executeUIAction(a));
+                 } else if (closingScreen?.onCloseBehavior === 'advance') {
+                     updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                 }
+             };
+             if (closingId && transOut !== 'none') {
+                 // Keep the screen mounted + flagged closing so its out-animation plays, then tear down.
+                 setClosingScreens(prev => new Set(prev).add(closingId));
+                 setTimeout(() => {
+                     setClosingScreens(prev => { const next = new Set(prev); next.delete(closingId); return next; });
+                     finishReturn();
+                 }, transDur + 50);
+             } else {
+                 finishReturn();
+             }
+        } else if (action.type === UIActionType.OpenPauseMenu) {
+            // Pause the game exactly like the Esc key does — needed for touch/mobile builds
+            // that have no keyboard. Sets paused mode, pauses scene music, and opens the
+            // configured pause screen. Resuming goes through ReturnToGame (which detects the
+            // paused mode and resumes the music).
+            if (playerState && playerState.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                if (musicAudioRef.current && !musicAudioRef.current.paused) {
+                    musicAudioRef.current.pause();
+                }
+                if (project.ui.pauseScreenId) {
+                    setScreenStack([project.ui.pauseScreenId]);
+                }
+            }
+        } else if (action.type === UIActionType.ToggleScreen) {
+            // Toggle a screen open/closed (e.g. an inventory overlay). During gameplay it
+            // lives on the HUD stack (so it overlays the scene); otherwise the screen stack.
+            const targetId = (action as ToggleScreenAction).targetScreenId;
+            if (!targetId || !project.uiScreens[targetId]) {
+                runtimeDebugWarn(`ToggleScreen failed: Screen with ID ${targetId} not found`);
+                return;
+            }
+            // Toggling the configured PAUSE screen open should genuinely pause (freeze + stop
+            // scene music), like Open Pause Menu. (Closing/resume is handled by Return To Game.)
+            if (project.ui.pauseScreenId && targetId === project.ui.pauseScreenId && playerState?.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                if (musicAudioRef.current && !musicAudioRef.current.paused) musicAudioRef.current.pause();
+                setScreenStack([targetId]);
+                return;
+            }
+            if (playerState && playerState.mode === 'playing') {
+                const isClosing = hudStack.includes(targetId);
+                setHudStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
+                if (isClosing) {
+                    // Closing an overlay via toggle: honor its on-close behavior (default = nothing).
+                    const cs = project.uiScreens[targetId];
+                    const b = cs?.onCloseBehavior || 'default';
+                    if (b === 'advance') updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+                    else if (b === 'runActions') (cs?.onCloseActions || []).forEach(a => executeUIAction(a));
+                }
+            } else {
+                setScreenStack(s => s.includes(targetId) ? s.filter(id => id !== targetId) : [...s, targetId]);
+            }
+        } else if (action.type === UIActionType.GoToScreen) {
+            const targetId = (action as GoToScreenAction).targetScreenId;
+            const targetScreen = project.uiScreens[targetId];
+
+            if (!targetScreen) {
+                runtimeDebugWarn(`GoToScreen failed: Screen with ID ${targetId} not found`);
+                return;
+            }
+
+            // If this navigates to the project's configured PAUSE screen, actually pause the
+            // game (freeze the scene + stop its music) exactly like Open Pause Menu / Esc —
+            // instead of opening it as a non-pausing HUD overlay (which leaves scene music
+            // playing). This makes ANY "pause" button work whether the author used Open Pause
+            // Menu, Go To Screen, or Toggle Screen. Resume via Return To Game restores music.
+            if (project.ui.pauseScreenId && targetId === project.ui.pauseScreenId && playerState?.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                if (musicAudioRef.current && !musicAudioRef.current.paused) musicAudioRef.current.pause();
+                setScreenStack([targetId]);
+                return;
+            }
+
+            // Handle music transition when going to screen
+            if (playerState && playerState.mode === 'playing') {
+                const screenMusicInfo = targetScreen.music;
+                const hasMusicChange = screenMusicInfo && screenMusicInfo.audioId;
+                
+                if (hasMusicChange) {
+                    const audio = musicAudioRef.current;
+                    const newMusicUrl = screenMusicInfo.audioId ? assetResolver(screenMusicInfo.audioId, 'audio') : null;
+                    const currentMusic = audio.src;
+                    const normalize = (value: string | null): string | null => {
+                        if (!value) return null;
+                        try {
+                            return new URL(value, window.location.href).href;
+                        } catch (e) {
+                            return value;
+                        }
+                    };
+                    const currentNormalized = currentMusic ? normalize(currentMusic) : null;
+                    const newNormalized = normalize(newMusicUrl);
+                    
+                    // Only transition if music is different
+                    if (currentNormalized !== newNormalized && newMusicUrl) {
+                        // Fade out current music
+                        fadeAudio(audio, 0, 0.5, () => {
+                            // Load and play new music
+                            audio.src = newMusicUrl;
+                            audio.load();
+                            audio.loop = true;
+                            audio.play().then(() => {
+                                fadeAudio(audio, settings.musicVolume, 0.5);
+                            }).catch(e => {
+                                console.error('Screen music play failed:', e);
+                            });
+                        });
+                    }
+                }
+                
+                setHudStack(s => {
+                    // Mark the departing screen as closing so its transitionOut plays under the new screen.
+                    // Skip only when transitionOut is explicitly 'none'. The departing screen STAYS in
+                    // the stack so ReturnToPreviousScreen can pop back to it — only `closingScreens` is
+                    // cleared once the visual transition has finished.
+                    const departingId = s.length > 0 ? s[s.length - 1] : null;
+                    if (departingId) {
+                        const departingScreen = project.uiScreens[departingId];
+                        const depTransOut = departingScreen?.transitionOut || 'fade';
+                        if (depTransOut !== 'none') {
+                            const duration = departingScreen?.transitionOutDuration ?? departingScreen?.transitionDuration ?? 300;
+                            setClosingScreens(prev => new Set(prev).add(departingId));
+                            setTimeout(() => {
+                                setClosingScreens(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(departingId);
+                                    return next;
+                                });
+                            }, duration + 100);
+                        }
+                    }
+                    return [...s, targetId];
+                });
+            } else {
+                setScreenStack(stack => {
+                    // Same rule as the hudStack branch: keep the departing screen in the stack so
+                    // ReturnToPreviousScreen can pop back to it. Only `closingScreens` is cleared
+                    // once the visual transition has finished.
+                    const departingId = stack.length > 0 ? stack[stack.length - 1] : null;
+                    if (departingId) {
+                        const departingScreen = project.uiScreens[departingId];
+                        const depTransOut = departingScreen?.transitionOut || 'fade';
+                        if (depTransOut !== 'none') {
+                            const duration = departingScreen?.transitionOutDuration ?? departingScreen?.transitionDuration ?? 300;
+                            setClosingScreens(prev => new Set(prev).add(departingId));
+                            setTimeout(() => {
+                                setClosingScreens(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(departingId);
+                                    return next;
+                                });
+                            }, duration + 100);
+                        }
+                    }
+                    return [...stack, targetId];
+                });
+            }
+        } else if (action.type === UIActionType.ReturnToPreviousScreen) {
+            if (playerState && playerState.mode === 'playing') {
+                if (hudStack.length > 0) {
+                    const closingScreenId = hudStack[hudStack.length - 1];
+                    const closingScreen = project.uiScreens[closingScreenId];
+                    const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+                    const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
+                    const hasTransition = effectiveTransitionOut !== 'none';
+                    // Configurable on-close behavior (default preserves today's "advance on last hud").
+                    const closeBehavior = closingScreen?.onCloseBehavior || 'default';
+                    const advanceOnClose = closeBehavior === 'default' || closeBehavior === 'advance';
+                    const runCloseActions = () => { if (closeBehavior === 'runActions') (closingScreen?.onCloseActions || []).forEach(a => executeUIAction(a)); };
+
+                    if (hasTransition) {
+                        // Mark screen as closing
+                        setClosingScreens(prev => new Set(prev).add(closingScreenId));
+
+                        // Wait for transition to complete before removing from stack
+                        setTimeout(() => {
+                            setHudStack(s => s.slice(0, -1));
+                            runCloseActions();
+                            setClosingScreens(prev => {
+                                const next = new Set(prev);
+                                next.delete(closingScreenId);
+                                return next;
+                            });
+                            
+                            // If we're closing the last HUD screen, advance to next command
+                            if (hudStack.length === 1) {
+                                flushSync(() => {
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                                        runtimeDebugLog('ReturnToPreviousScreen (transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                                        return {
+                                            ...p,
+                                            variables: mergedVariables, // Merge UI variables into game variables
+                                            currentIndex: advanceOnClose ? p.currentIndex + 1 : p.currentIndex,
+                                            // Explicit "advance" clears the waiting-dialogue gate so the next command actually runs
+                                            // (a bare index bump does nothing while the loop is paused on isWaitingForInput/dialogue).
+                                            ...(closeBehavior === 'advance' ? { uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : {}),
+                                            stageState: {
+                                                ...p.stageState,
+                                                buttonOverlays: [],
+                                                imageOverlays: []
+                                            }
+                                        };
+                                    });
+                                });
+                                runtimeDebugLog('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (with transition)');
+                                uiDirtyVariableIdsRef.current.clear();
+                            }
+                        }, transitionDuration);
+                    } else {
+                        // No transition, close immediately
+                        setHudStack(s => s.slice(0, -1));
+                        runCloseActions();
+                        if (hudStack.length === 1) {
+                            // Delay advancement to ensure any SetVariable actions from button clicks are processed first
+                            setTimeout(() => {
+                                flushSync(() => {
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                                        runtimeDebugLog('ReturnToPreviousScreen (no transition): AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                                        return {
+                                            ...p,
+                                            variables: mergedVariables, // Merge UI variables into game variables
+                                            currentIndex: advanceOnClose ? p.currentIndex + 1 : p.currentIndex,
+                                            // Explicit "advance" clears the waiting-dialogue gate so the next command actually runs
+                                            // (a bare index bump does nothing while the loop is paused on isWaitingForInput/dialogue).
+                                            ...(closeBehavior === 'advance' ? { uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : {}),
+                                            stageState: {
+                                                ...p.stageState,
+                                                buttonOverlays: [],
+                                                imageOverlays: []
+                                            }
+                                        };
+                                    });
+                                });
+                                runtimeDebugLog('[CLEAR] Dirty set cleared after ReturnToPreviousScreen (no transition)');
+                                uiDirtyVariableIdsRef.current.clear();
+                            }, 0);
+                        }
+                    }
+                }
+            } else {
+                if (screenStack.length > 1) {
+                    const closingScreenId = screenStack[screenStack.length - 1];
+                    const closingScreen = project.uiScreens[closingScreenId];
+                    const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+                    const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
+                    const hasTransition = effectiveTransitionOut !== 'none';
+
+                    if (hasTransition) {
+                        // Mark screen as closing
+                        setClosingScreens(prev => new Set(prev).add(closingScreenId));
+
+                        // Wait for transition to complete before removing from stack
+                        setTimeout(() => {
+                            setScreenStack(stack => stack.slice(0, -1));
+                            setClosingScreens(prev => {
+                                const next = new Set(prev);
+                                next.delete(closingScreenId);
+                                return next;
+                            });
+                        }, transitionDuration);
+                    } else {
+                        // No transition, close immediately
+                        setScreenStack(stack => stack.slice(0, -1));
+                    }
+                } else if (screenStack.length === 1 && playerState?.mode === 'paused') {
+                    // Closing the LAST screen while paused (e.g. a Pause Menu "Back" button using
+                    // Return To Previous Screen) must resume gameplay + music — otherwise the player
+                    // is stuck paused. Mirrors Return To Game's finish step. (Previously this did
+                    // nothing because it only handled length > 1.)
+                    const closingScreenId = screenStack[0];
+                    const closingScreen = project.uiScreens[closingScreenId];
+                    const transitionDuration = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+                    const hasTransition = (closingScreen?.transitionOut || 'fade') !== 'none';
+                    const wasPlaying = !!playerState?.musicState?.isPlaying;
+                    const finishResume = () => {
+                        updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                        setScreenStack([]);
+                        if (wasPlaying && musicAudioRef.current && musicAudioRef.current.src && musicAudioRef.current.paused) {
+                            musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
+                        }
+                    };
+                    if (hasTransition) {
+                        setClosingScreens(prev => new Set(prev).add(closingScreenId));
+                        setTimeout(() => {
+                            setClosingScreens(prev => { const next = new Set(prev); next.delete(closingScreenId); return next; });
+                            finishResume();
+                        }, transitionDuration + 50);
+                    } else {
+                        finishResume();
+                    }
+                }
+            }
+        } else if (action.type === UIActionType.QuitToTitle) {
+            // Auto-save to slot 0 before quitting so Continue can restore the session
+            if (playerState) {
+                saveGame(0);
+            }
+            // Stop game music and SFX immediately
+            const audio = musicAudioRef.current;
+            if (audio) {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.src = '';
+            }
+            stopAllSfx();
+
+            const performQuit = () => {
+                // Clear player state, uiVariables, and return to title screen
+                updatePlayerState(null);
+                setHudStack([]);
+                // Reset variables to defaults + persistent overrides when quitting to title
+                // This ensures CG unlock status (persistent vars) is still visible on menu screens
+                const resetVars = getInitialVariablesWithPersistent(project.variables, project.id);
+                setUiVariables(resetVars);
+                uiVariablesRef.current = resetVars;
+                setMenuVariables(resetVars);
+                runtimeDebugLog('[CLEAR] Dirty set cleared after QuitToTitle');
+                uiDirtyVariableIdsRef.current.clear();
+                if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+                // Clear any lingering "closing" (fade-out) flags. Quit is usually triggered FROM
+                // the pause menu, which marks the pause screen as closing for its exit animation —
+                // if that flag survived, the pause screen would render mid-fade-out (→ blank/black)
+                // the next time it's opened in a new game / loaded save.
+                setClosingScreens(new Set());
+            };
+
+            // Mark topmost screen(s) as closing so the transitionOut plays before the quit
+            const quitClosingIds: VNID[] = [];
+            const topScreenForQuit = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+            const topHudForQuit = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            if (topScreenForQuit) quitClosingIds.push(topScreenForQuit);
+            if (topHudForQuit) quitClosingIds.push(topHudForQuit);
+            let quitScreenOutDuration = 0;
+            if (quitClosingIds.length > 0) {
+                setClosingScreens(prev => {
+                    const next = new Set(prev);
+                    quitClosingIds.forEach(id => next.add(id));
+                    return next;
+                });
+                for (const id of quitClosingIds) {
+                    const s = project.uiScreens[id];
+                    if (s && s.transitionOut !== 'none') {
+                        const dur = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                        quitScreenOutDuration = Math.max(quitScreenOutDuration, dur);
+                    }
+                }
+            }
+            if (quitScreenOutDuration > 0) {
+                setTimeout(performQuit, quitScreenOutDuration);
+            } else {
+                performQuit();
+            }
+        } else if (action.type === UIActionType.ExitGame) {
+            // Stop game music + SFX so nothing keeps playing once we leave the game.
+            const audio = musicAudioRef.current;
+            if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ''; }
+            stopAllSfx();
+            if (isStandalone) {
+                // A genuine built/exported game. Desktop (Electron): quit the whole app.
+                const electronAPI = (window as any).electronAPI;
+                if (electronAPI?.quitApp) { electronAPI.quitApp(); return; }
+                // Web export: browsers BLOCK window.close() for any tab the script didn't itself
+                // open (the overwhelmingly common case for a hosted game on itch.io/web), so it
+                // silently does nothing — players reported "Exit Game does nothing". Try it for the
+                // rare openable case, then fall back to returning to the title screen so the button
+                // is never dead. The fallback fires next tick; if the tab actually closed, it's moot.
+                try { window.close(); } catch { /* blocked */ }
+                window.setTimeout(() => {
+                    if (typeof document !== 'undefined' && !document.hidden) {
+                        executeUIAction({ type: UIActionType.QuitToTitle } as VNUIAction);
+                    }
+                }, 60);
+                return;
+            }
+            // Editor test-play: ONLY close the preview overlay back to the editor — never quit the
+            // editor itself (window.close()/app.quit() here would kill the whole editor window).
+            onClose();
+        } else if (action.type === UIActionType.ContinueGame) {
+            // Continue = load the auto-save from slot 0
+            const doLoad = async () => {
+                const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+                if (saves[0]) {
+                    loadGame(0);
+                } else {
+                    runtimeDebugLog('[ContinueGame] No auto-save found, starting new game instead');
+                    startNewGameWithFade();
+                }
+            };
+            void doLoad();
+        } else if (action.type === UIActionType.SaveGame) {
+            saveGame((action as SaveGameAction).slotNumber);
+        } else if (action.type === UIActionType.LoadGame) {
+            loadGame((action as LoadGameAction).slotNumber);
+        } else if (action.type === UIActionType.JumpToScene) {
+            runtimeDebugLog('[JumpToScene] Action triggered');
+            const jumpAction = action as JumpToSceneAction;
+            const targetScene = project.scenes[jumpAction.targetSceneId];
+            runtimeDebugLog('JumpToScene handler triggered:', {
+                targetSceneId: jumpAction.targetSceneId,
+                sceneExists: !!targetScene,
+                sceneName: targetScene?.name,
+                currentSceneId: playerState?.currentSceneId,
+                hasPlayerState: !!playerState
+            });
+            if (!targetScene) {
+                runtimeDebugWarn(`JumpToScene action failed: Scene with ID ${jumpAction.targetSceneId} not found.`);
+                return;
+            }
+
+            const executeJump = () => {
+                runtimeDebugLog('[JumpToScene] Clearing screen and HUD stacks');
+                // Clear screen and HUD stacks when jumping to a scene
+                setScreenStack([]);
+                setHudStack([]);
+                
+                // Clear all active effect timeouts (FlashScreen, ShakeScreen, etc.)
+                activeEffectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+                activeEffectTimeoutsRef.current = [];
+                
+                // Clear active visual effects
+                activeFlashRef.current = null;
+                setFlashTrigger(0);
+                activeLightningRef.current = null;
+                activeFireworksRef.current = null;
+                setFlashlight(null);
+                activeShakeRef.current = null;
+
+                // Reset scheduler and variable cache before executing the new scene
+                commandSchedulerRef.current.reset();
+                variableStoreRef.current = null;
+                
+                // If playerState is null (jumping from title screen), initialize it
+                if (!playerState) {
+                    runtimeDebugLog('Initializing playerState for scene jump from title');
+                    const initialVariables: Record<VNID, string | number | boolean> = {};
+                    for (const varId in project.variables) {
+                        const v = project.variables[varId];
+                        const customizedValue = menuVariables[v.id];
+                        initialVariables[v.id] = customizedValue !== undefined ? customizedValue : v.defaultValue;
+                    }
+                    
+                    updatePlayerState({
+                        mode: 'playing',
+                        currentSceneId: jumpAction.targetSceneId,
+                        currentCommands: targetScene.commands,
+                        currentIndex: 0,
+                        commandStack: [],
+                        variables: initialVariables,
+                        history: [],
+                        stageState: { 
+                            backgroundUrl: null, 
+                            characters: {}, 
+                            textOverlays: [], 
+                            imageOverlays: [], 
+                            buttonOverlays: [], 
+                            movieOverlays: [],
+                            screen: { 
+                                shake: { active: false, intensity: 0 }, 
+                                tint: 'transparent', 
+                                zoom: 1, 
+                                panX: 0, 
+                                panY: 0, 
+                                transitionDuration: 0.5,
+                                overlayEffects: []
+                            },
+                            particleEffects: {}
+                        },
+                        uiState: {
+                            dialogue: null,
+                            choices: null,
+                            textInput: null,
+                            movieUrl: null,
+                            movieLoop: false,
+                            isWaitingForInput: false,
+                            isTransitioning: false,
+                            transitionElement: null,
+                            flash: null,
+                        },
+                        musicState: {
+                            audioId: null,
+                            isPlaying: false,
+                            loop: false,
+                            currentTime: 0,
+                        }
+                    });
+                    runtimeDebugLog('[CLEAR] Dirty set cleared after title screen jump');
+                    uiDirtyVariableIdsRef.current.clear();
+                } else {
+                    // Jump to the target scene and reset stage state
+                    runtimeDebugLog('Jumping to new scene from existing game state');
+                    runtimeDebugLog('[DEBUG Jump] Current variables before jump:', playerState.variables);
+                    
+                    // Check if we're jumping to the same scene (should preserve currentIndex)
+                    const isSameScene = playerState.currentSceneId === jumpAction.targetSceneId;
+                    runtimeDebugLog('[DEBUG Jump] Same scene?', isSameScene, 'Current:', playerState.currentSceneId, 'Target:', jumpAction.targetSceneId);
+                    
+                    flushSync(() => {
+                        updatePlayerState(p => {
+                            if (!p) return null;
+                            runtimeDebugLog('Setting new scene:', {
+                                targetSceneId: jumpAction.targetSceneId,
+                                commandCount: targetScene.commands.length,
+                                commands: targetScene.commands.map(c => ({ type: c.type, id: c.id }))
+                            });
+                            runtimeDebugLog('[DEBUG Jump] Variables being carried over:', p.variables);
+                            runtimeDebugLog('[DEBUG Jump] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+                            runtimeDebugLog('[DEBUG Jump] dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                            const mergedVariables = mergeDirtyUiVariables(p.variables);
+                            runtimeDebugLog('[DEBUG Jump] Variables after merge with uiVariables:', mergedVariables);
+                            
+                            // If jumping to the same scene, preserve currentIndex and advance by 1
+                            // If jumping to a different scene, reset to 0
+                            const newIndex = isSameScene ? p.currentIndex + 1 : 0;
+                            runtimeDebugLog('[DEBUG Jump] Setting currentIndex to:', newIndex, '(was:', p.currentIndex, ')');
+                            
+                            return {
+                                ...p,
+                                currentSceneId: jumpAction.targetSceneId,
+                                currentCommands: targetScene.commands,
+                                currentIndex: newIndex,
+                                // Reset stage state to clean slate
+                                stageState: { 
+                                    backgroundUrl: null, 
+                                    characters: {}, 
+                                    textOverlays: [], 
+                                    imageOverlays: [], 
+                                    buttonOverlays: [], 
+                                    movieOverlays: [],
+                                    screen: { 
+                                        shake: { active: false, intensity: 0 }, 
+                                        tint: 'transparent', 
+                                        zoom: 1, 
+                                        panX: 0, 
+                                        panY: 0, 
+                                        transitionDuration: 0.5,
+                                        overlayEffects: []
+                                    },
+                                    particleEffects: {}
+                                },
+                                // Clear any active UI state (dialogue, choices, etc.)
+                                uiState: {
+                                    dialogue: null,
+                                    choices: null,
+                                    textInput: null,
+                                    movieUrl: null,
+                                    movieLoop: false,
+                                    isWaitingForInput: false,
+                                    isTransitioning: false,
+                                    transitionElement: null,
+                                    flash: null,
+                                },
+                                variables: mergedVariables
+                            };
+                        });
+                    });
+                    // Clear dirty set after state update completes
+                    runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToScene');
+                    uiDirtyVariableIdsRef.current.clear();
+                }
+            };
+
+            // Mark topmost screens as closing so their transitionOut plays while the scene transition runs
+            const jumpClosingIds: VNID[] = [];
+            const topScreenForJump = screenStack.length > 0 ? screenStack[screenStack.length - 1] : null;
+            const topHudForJump = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            if (topScreenForJump) jumpClosingIds.push(topScreenForJump);
+            if (topHudForJump) jumpClosingIds.push(topHudForJump);
+            let jumpScreenOutDuration = 0;
+            if (jumpClosingIds.length > 0) {
+                setClosingScreens(prev => {
+                    const next = new Set(prev);
+                    jumpClosingIds.forEach(id => next.add(id));
+                    return next;
+                });
+                for (const id of jumpClosingIds) {
+                    const s = project.uiScreens[id];
+                    if (s && s.transitionOut !== 'none') {
+                        const dur = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                        jumpScreenOutDuration = Math.max(jumpScreenOutDuration, dur);
+                    }
+                }
+            }
+
+            // Use scene exit transition if we're in an active scene, otherwise honour the screen's own transitionOut
+            if (playerState?.currentSceneId) {
+                startSceneExitTransition(playerState.currentSceneId, executeJump);
+            } else if (jumpScreenOutDuration > 0) {
+                setTimeout(executeJump, jumpScreenOutDuration);
+            } else {
+                executeJump();
+            }
+        } else if (action.type === UIActionType.SetVariable) {
+            const setVarAction = action as SetVariableAction;
+            const variable = project.variables[setVarAction.variableId];
+            if (!variable) {
+                runtimeDebugWarn(`SetVariable action failed: Variable with ID ${setVarAction.variableId} not found.`);
+                return;
+            }
+
+            runtimeDebugLog('[SetVariable] RAW ACTION:', {
+                variableId: setVarAction.variableId,
+                variableName: variable.name,
+                variableType: variable.type,
+                actionValue: setVarAction.value,
+                actionValueType: typeof setVarAction.value,
+                operator: setVarAction.operator
+            });
+
+            const originalOperator = setVarAction.operator;
+            const effectiveOperator = normalizeOperator(variable.type, variable.name, originalOperator);
+            const wasCoercedOperator = originalOperator !== effectiveOperator;
+
+            const computeNewValue = (currentVal: string | number | boolean | undefined): string | number | boolean => {
+                // Use consolidated calculateVariableValue for all value computations
+                return calculateVariableValue(
+                    effectiveOperator,
+                    variable.type,
+                    currentVal,
+                    setVarAction.value,
+                    setVarAction.randomMin,
+                    setVarAction.randomMax,
+                    wasCoercedOperator ? originalOperator : undefined,
+                    (variable as any).min,
+                    (variable as any).max
+                );
+            };
+
+            // Use flushSync to ensure variable updates are applied immediately and synchronously
+            // This prevents race conditions where navigation happens before variables are updated
+            flushSync(() => {
+                if (playerState) {
+                    // UI screens during gameplay: update uiVariables (separate from game variables)
+                    uiDirtyVariableIdsRef.current.add(setVarAction.variableId);
+                    setUiVariables(prev => {
+                        const currentVal = prev[setVarAction.variableId];
+                        const newVal = computeNewValue(currentVal);
+                        runtimeDebugLog('[SetVariable] Details (uiVariables):', {
+                            variable: variable.name,
+                            variableId: setVarAction.variableId,
+                            rawValue: setVarAction.value,
+                            operator: `${setVarAction.operator} => ${effectiveOperator}`,
+                            previousValue: currentVal,
+                            nextValue: newVal,
+                            type: variable.type
+                        });
+                        const next = { ...prev, [setVarAction.variableId]: newVal };
+                        uiVariablesRef.current = next;
+                        return next;
+                    });
+                } else {
+                    setMenuVariables(prev => {
+                        const currentVal = prev[setVarAction.variableId] ?? variable.defaultValue;
+                        const newVal = computeNewValue(currentVal);
+                        runtimeDebugLog('[SetVariable] Details (menu):', {
+                            variable: variable.name,
+                            variableId: setVarAction.variableId,
+                            rawValue: setVarAction.value,
+                            operator: `${setVarAction.operator} => ${effectiveOperator}`,
+                            previousValue: currentVal,
+                            nextValue: newVal,
+                            type: variable.type
+                        });
+                        return { ...prev, [setVarAction.variableId]: newVal };
+                    });
+                }
+            });
+            // Auto-save persistent-scope variables from UI action
+            if ((variable as any).scope === 'persistent') {
+                const currentVars = playerState ? uiVariablesRef.current : menuVariables;
+                const prevPersistent = loadPersistentVariables(project.id);
+                savePersistentVariables(project.id, { ...prevPersistent, [setVarAction.variableId]: currentVars[setVarAction.variableId] });
+                runtimeDebugLog('[Variable Scope] Saved persistent variable from UI action:', variable.name);
+            }
+        } else if (action.type === UIActionType.ResetVariable) {
+            const resetAction = action as ResetVariableAction;
+            const targetIds: VNID[] = resetAction.variableId === RESET_ALL_VARIABLES
+                ? (Object.keys(project.variables) as VNID[])
+                : [resetAction.variableId];
+            const validTargets = targetIds.filter(id => !!project.variables[id]);
+            if (validTargets.length === 0) {
+                runtimeDebugWarn(`ResetVariable action: no valid variables to reset (${resetAction.variableId}).`);
+                return;
+            }
+            runtimeDebugLog('[ResetVariable] Resetting to defaults:', validTargets);
+            flushSync(() => {
+                if (playerState) {
+                    // In-game UI screens: reset uiVariables (separate from game variables)
+                    setUiVariables(prev => {
+                        const next = { ...prev };
+                        for (const id of validTargets) {
+                            uiDirtyVariableIdsRef.current.add(id);
+                            next[id] = project.variables[id].defaultValue;
+                        }
+                        uiVariablesRef.current = next;
+                        return next;
+                    });
+                } else {
+                    setMenuVariables(prev => {
+                        const next = { ...prev };
+                        for (const id of validTargets) {
+                            next[id] = project.variables[id].defaultValue;
+                        }
+                        return next;
+                    });
+                }
+            });
+            // Persist any persistent-scope variables (default values are known, so write them directly)
+            const persistentTargets = validTargets.filter(id => (project.variables[id] as any).scope === 'persistent');
+            if (persistentTargets.length > 0) {
+                const prevPersistent = loadPersistentVariables(project.id);
+                const merged = { ...prevPersistent };
+                for (const id of persistentTargets) merged[id] = project.variables[id].defaultValue;
+                savePersistentVariables(project.id, merged);
+                runtimeDebugLog('[Variable Scope] Saved reset persistent variables:', persistentTargets);
+            }
+        } else if (action.type === UIActionType.PlaySound) {
+            const soundAction = action as PlaySoundAction;
+            if (soundAction.audioId) {
+                runtimeDebugLog('[PlaySound] action triggered:', soundAction.audioId, 'volume:', soundAction.volume, 'loop:', soundAction.loop);
+                playSound(soundAction.audioId, soundAction.volume, soundAction.loop);
+            }
+        } else if (action.type === UIActionType.CycleLayerAsset) {
+            runtimeDebugLog('CycleLayerAsset handler triggered, playerState exists:', !!playerState);
+            
+            const cycleAction = action as CycleLayerAssetAction;
+            runtimeDebugLog('CycleLayerAsset action details:', {
+                characterId: cycleAction.characterId,
+                layerId: cycleAction.layerId,
+                variableId: cycleAction.variableId,
+                direction: cycleAction.direction
+            });
+            
+            const character = project.characters[cycleAction.characterId];
+            if (!character) {
+                runtimeDebugWarn(`CycleLayerAsset action failed: Character with ID ${cycleAction.characterId} not found.`);
+                return;
+            }
+            runtimeDebugLog('Character found:', character.name);
+            
+            const layer = character.layers[cycleAction.layerId];
+            if (!layer) {
+                runtimeDebugWarn(`CycleLayerAsset action failed: Layer with ID ${cycleAction.layerId} not found.`);
+                return;
+            }
+            runtimeDebugLog('Layer found:', layer.name);
+            
+            const assetsCount = Object.keys(layer.assets || {}).length;
+            runtimeDebugLog('Assets count:', assetsCount);
+            if (assetsCount === 0) {
+                runtimeDebugWarn(`CycleLayerAsset action failed: Layer "${layer.name}" has no assets.`);
+                return;
+            }
+            
+            // Use playerState variables if in-game, otherwise use menuVariables
+            if (playerState) {
+                // In-game: update playerState variables
+                updatePlayerState(p => {
+                    if (!p) return null;
+                    
+                    const currentIndex = Number(p.variables[cycleAction.variableId]) || 0;
+                    let newIndex: number;
+                    if (cycleAction.direction === 'next') {
+                        newIndex = (currentIndex + 1) % assetsCount;
+                    } else {
+                        newIndex = (currentIndex - 1 + assetsCount) % assetsCount;
+                    }
+                    
+                    runtimeDebugLog(`CycleLayerAsset (in-game): ${character.name} layer "${layer.name}" from index ${currentIndex} to ${newIndex} (${cycleAction.direction}), total assets: ${assetsCount}`);
+                    
+                    return { 
+                        ...p, 
+                        variables: { ...p.variables, [cycleAction.variableId]: newIndex }
+                    };
+                });
+            } else {
+                // Pre-game menu: update menuVariables
+                const currentIndex = Number(menuVariables[cycleAction.variableId]) || 0;
+                let newIndex: number;
+                if (cycleAction.direction === 'next') {
+                    newIndex = (currentIndex + 1) % assetsCount;
+                } else {
+                    newIndex = (currentIndex - 1 + assetsCount) % assetsCount;
+                }
+                
+                runtimeDebugLog(`CycleLayerAsset (menu): ${character.name} layer "${layer.name}" from index ${currentIndex} to ${newIndex} (${cycleAction.direction}), total assets: ${assetsCount}`);
+                
+                setMenuVariables(vars => ({
+                    ...vars,
+                    [cycleAction.variableId]: newIndex
+                }));
+            }
+        } else if (action.type === UIActionType.JumpToLabel && playerState) {
+            const jumpToLabelAction = action as JumpToLabelAction;
+            const targetLabel = jumpToLabelAction.targetLabel;
+            
+            // Use the screen's original scene ID if available, otherwise use current scene
+            const targetSceneId = playerState.uiState.screenSceneId || playerState.currentSceneId;
+            
+            runtimeDebugLog('JumpToLabel handler triggered:', { 
+                targetLabel, 
+                currentSceneId: playerState.currentSceneId,
+                currentSceneName: project.scenes[playerState.currentSceneId]?.name,
+                screenSceneId: playerState.uiState.screenSceneId,
+                targetSceneId: targetSceneId,
+                targetSceneName: project.scenes[targetSceneId]?.name
+            });
+            
+            // Find the label in the target scene's commands
+            const targetScene = project.scenes[targetSceneId];
+            if (!targetScene) {
+                runtimeDebugWarn('JumpToLabel failed: Target scene not found');
+                return;
+            }
+            
+            // Log all labels in the target scene
+            const allLabels = targetScene.commands
+                .filter(cmd => cmd.type === CommandType.Label)
+                .map(cmd => (cmd as LabelCommand).labelId);
+            runtimeDebugLog('JumpToLabel: Available labels in target scene:', allLabels);
+            
+            const labelIndex = targetScene.commands.findIndex((cmd) => 
+                cmd.type === CommandType.Label && (cmd as LabelCommand).labelId === targetLabel
+            );
+            
+            if (labelIndex === -1) {
+                runtimeDebugWarn(`JumpToLabel failed: Label "${targetLabel}" not found in scene "${targetScene.name}"`);
+                runtimeDebugWarn('Looking for label:', targetLabel);
+                runtimeDebugWarn('Available labels:', allLabels);
+                return;
+            }
+            
+            runtimeDebugLog(`JumpToLabel: Jumping to label "${targetLabel}" at index ${labelIndex} in scene "${targetScene.name}"`);
+            runtimeDebugLog('JumpToLabel: Label command at that index:', targetScene.commands[labelIndex]);
+
+            const performJumpToLabel = () => {
+                // Close any open HUD screens
+                setHudStack([]);
+
+                // Jump to the label by updating the current index and clearing overlays
+                // Also switch back to the target scene if we've moved to a different scene
+                flushSync(() => {
+                    updatePlayerState(p => {
+                        if (!p) return null;
+                        runtimeDebugLog('JumpToLabel: Setting new state - currentIndex from', p.currentIndex, 'to', labelIndex);
+                        runtimeDebugLog('JumpToLabel: BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                        runtimeDebugLog('JumpToLabel: uiVariables to merge:', JSON.stringify(uiVariablesRef.current, null, 2));
+                        runtimeDebugLog('JumpToLabel: dirty variable IDs:', Array.from(uiDirtyVariableIdsRef.current));
+                        const mergedVariables = mergeDirtyUiVariables(p.variables);
+                        runtimeDebugLog('JumpToLabel: AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                        return {
+                            ...p,
+                            currentSceneId: targetSceneId,
+                            currentCommands: targetScene.commands,
+                            currentIndex: labelIndex,
+                            variables: mergedVariables, // Merge UI variables into game variables
+                            stageState: {
+                                ...p.stageState,
+                                buttonOverlays: [],
+                                imageOverlays: [],
+                                textOverlays: []
+                            },
+                            uiState: {
+                                ...p.uiState,
+                                dialogue: null,
+                                choices: null,
+                                isWaitingForInput: false,
+                                screenSceneId: null, // Clear the stored scene ID after jumping
+                            }
+                        };
+                    });
+                });
+                runtimeDebugLog('[CLEAR] Dirty set cleared after JumpToLabel');
+                uiDirtyVariableIdsRef.current.clear();
+            };
+
+            // Mark topmost HUD screen as closing so its transitionOut plays before the jump completes
+            const topHudForJTL = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+            let jtlScreenOutDuration = 0;
+            if (topHudForJTL) {
+                const s = project.uiScreens[topHudForJTL];
+                if (s && s.transitionOut !== 'none') {
+                    jtlScreenOutDuration = s.transitionOutDuration ?? s.transitionDuration ?? 300;
+                    setClosingScreens(prev => new Set(prev).add(topHudForJTL));
+                }
+            }
+            if (jtlScreenOutDuration > 0) {
+                setTimeout(performJumpToLabel, jtlScreenOutDuration);
+            } else {
+                performJumpToLabel();
+            }
+        } else if (action.type === UIActionType.OpenURL) {
+            const openUrlAction = action as OpenURLAction;
+            if (openUrlAction.url) {
+                runtimeDebugLog('OpenURL action triggered:', openUrlAction.url, 'newTab:', openUrlAction.newTab);
+                if (openUrlAction.newTab !== false) {
+                    window.open(openUrlAction.url, '_blank', 'noopener,noreferrer');
+                } else {
+                    window.location.href = openUrlAction.url;
+                }
+            }
+        } else if (action.type === UIActionType.CallCommonEvent) {
+            // Invoke a Common Event from a button/choice — pushes the current position onto
+            // the command stack and switches to the CE's commands; returns to the next command
+            // when the CE finishes (parameter variables are restored on return).
+            const ccAction = action as CallCommonEventAction;
+            const ce = (project.commonEvents || {})[ccAction.commonEventId];
+            if (!ce || !ce.enabled || !ce.commands || ce.commands.length === 0) {
+                runtimeDebugWarn('[CallCommonEvent action] event not found / disabled / empty');
+                // Visible warning: a waiting button suppresses its own advance when it calls a
+                // common event, so a broken/disabled reference would otherwise stall silently.
+                notify('A "Call Common Event" action points to a missing, disabled, or empty event.', 'warning');
+                return;
+            }
+            if (!playerState || playerState.mode !== 'playing') {
+                notify('Call Common Event only works during gameplay', 'warning');
+                return;
+            }
+            if (playerState.commandStack.length >= MAX_CALL_DEPTH || playerState.commandStack.some(f => f.commonEventId === ce.id)) {
+                notify(`Common Event call blocked (depth/cycle): "${ce.name}"`, 'error');
+                return;
+            }
+            const overrides: Record<VNID, string | number | boolean> = {};
+            const savedVariables: Record<VNID, string | number | boolean> = {};
+            const clearedVariables: VNID[] = [];
+            for (const param of ce.parameters || []) {
+                const raw = ccAction.arguments?.[param.id];
+                overrides[param.id] = raw !== undefined ? coerceParam(raw, param.type) : param.defaultValue;
+                if (Object.prototype.hasOwnProperty.call(playerState.variables, param.id)) savedVariables[param.id] = playerState.variables[param.id];
+                else clearedVariables.push(param.id);
+            }
+            updatePlayerState(p => {
+                if (!p) return null;
+                const newStack = [...p.commandStack, {
+                    sceneId: p.currentSceneId,
+                    commands: p.currentCommands,
+                    // Return point: normally the command AFTER the current (waiting) one. When the
+                    // caller already advanced the index to the next un-run command (choice flow),
+                    // resume AT it — +1 here would skip the command right after the choice.
+                    index: opts?.resumeAtCurrent ? p.currentIndex : p.currentIndex + 1,
+                    commonEventId: ce.id,
+                    ...(Object.keys(savedVariables).length > 0 ? { savedVariables } : {}),
+                    ...(clearedVariables.length > 0 ? { clearedVariables } : {}),
+                }];
+                return { ...p, currentCommands: ce.commands, currentIndex: 0, commandStack: newStack, variables: { ...p.variables, ...overrides } };
+            });
+        } else if (action.type === UIActionType.GiveItem) {
+            // Items are sugar over their count variable — translate to SetVariable (clamped via min:0).
+            const a = action as any;
+            const item = project.items?.[a.itemId];
+            if (item) executeUIAction(item.unique
+                ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'set', value: 1 } as VNUIAction
+                : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'add', value: a.quantity ?? 1 } as VNUIAction);
+        } else if (action.type === UIActionType.UseItem) {
+            const a = action as any;
+            const item = project.items?.[a.itemId];
+            if (item) {
+                if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
+                (item.useEffect || []).forEach((eff: VNUIAction) => executeUIAction(eff));
+            }
+        } else if (action.type === UIActionType.DestroyItem) {
+            const a = action as any;
+            const item = project.items?.[a.itemId];
+            if (item) executeUIAction(a.all
+                ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'set', value: 0 } as VNUIAction
+                : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: a.quantity ?? 1 } as VNUIAction);
+        } else if (action.type === UIActionType.UseSelectedItem) {
+            // Use whichever item the player has selected in an inventory grid. Falls back to no-op
+            // if nothing is selected or the item is no longer usable / owned.
+            const selId = playerStateRef.current?.selectedItemId;
+            const item = selId ? project.items?.[selId] : undefined;
+            if (item && item.usable) {
+                if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
+                (item.useEffect || []).forEach((eff: VNUIAction) => executeUIAction(eff));
+            }
+        } else if (action.type === UIActionType.RestockCollection) {
+            // Refill an item list's stock to its configured amounts (each entry → a SetVariable 'set').
+            const a = action as any;
+            const collection = project.itemCollections?.[a.collectionId];
+            if (collection) {
+                const restocked = computeCollectionRestock(collection, project.variables);
+                Object.entries(restocked).forEach(([varId, val]) => {
+                    executeUIAction({ type: UIActionType.SetVariable, variableId: varId, operator: 'set', value: val } as VNUIAction);
+                });
+            }
+        } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
+            // Buy/sell move stock + currency between a shop list and the player. The *Selected variants
+            // act on whichever grid item the player has highlighted; the fixed variants carry an itemId.
+            // Compute against the latest committed variables, then apply each new value as a SetVariable
+            // 'set' (so the button-flow commit picks them up). No-op when blocked (can't afford / out of
+            // stock / not owned / nothing selected).
+            const a = action as any;
+            const collection = project.itemCollections?.[a.collectionId];
+            const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
+            const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
+            const itemId = isSelected ? playerStateRef.current?.selectedItemId : a.itemId;
+            if (collection && itemId) {
+                const curVars = playerStateRef.current?.variables || {};
+                const res = isBuy
+                    ? computeBuy(itemId, collection, project, curVars)
+                    : computeSell(itemId, collection, project, curVars);
+                if (!('blocked' in res)) {
+                    Object.entries(res.updates).forEach(([varId, val]) => {
+                        executeUIAction({ type: UIActionType.SetVariable, variableId: varId, operator: 'set', value: val } as VNUIAction);
+                    });
+                }
+            }
+        } else if (action.type === UIActionType.ShowLog) {
+            // Open the text history overlay (same as the built-in quick menu's "Log" button).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: true } } : null);
+        } else if (action.type === UIActionType.ToggleAutoAdvance) {
+            // Toggle auto-advance on/off (same as the built-in quick menu's "Auto" button).
+            setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance }));
+        } else if (action.type === UIActionType.ToggleSkip) {
+            // Toggle fast-forward / skip mode (same as the built-in quick menu's "Skip" button).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: !p.uiState.isSkipping } } : null);
+        } else if (action.type === UIActionType.SkipBackward) {
+            // Rewind to the previous entry (same as the built-in quick menu's "Back" button).
+            handleSkipBackward();
+        }
+    };
+
+    // Persist the player's drag-rearranged inventory slot layout (saved with the game).
+    const reorderSlots = (slots: (VNID | null)[]) => {
+        updatePlayerState(p => p ? { ...p, inventorySlots: slots } : null);
+    };
+    // Persist the player's selected inventory item (for a "Use selected item" button).
+    const selectItem = (itemId: VNID | null, elementId: VNID) => {
+        // Track which grid owns the selection so two grids showing the same item don't both highlight.
+        updatePlayerState(p => p ? { ...p, selectedItemId: itemId, selectedElementId: itemId ? elementId : null } : null);
+    };
+
+    const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
+        runtimeDebugLog('[handleVariableChange] Called with:', { variableId, value, hasPlayerState: !!playerState });
+        if (playerState) {
+            // In-game UI screens: update uiVariables (separate from game variables)
+            runtimeDebugLog('[handleVariableChange] Updating uiVariables');
+            uiDirtyVariableIdsRef.current.add(variableId);
+            runtimeDebugLog('[handleVariableChange] ✓ Added to dirty set. Size now:', uiDirtyVariableIdsRef.current.size, 'IDs:', Array.from(uiDirtyVariableIdsRef.current));
+            setUiVariables(prev => {
+                const newVars = {
+                    ...prev,
+                    [variableId]: value
+                };
+                runtimeDebugLog('[handleVariableChange] uiVariables BEFORE:', JSON.stringify(prev, null, 2));
+                runtimeDebugLog('[handleVariableChange] uiVariables AFTER:', JSON.stringify(newVars, null, 2));
+                uiVariablesRef.current = newVars;
+                return newVars;
+            });
+        } else {
+            // Pre-game menu: update menuVariables
+            runtimeDebugLog('[handleVariableChange] Updating menuVariables');
+            setMenuVariables(prev => {
+                const newVars = {
+                    ...prev,
+                    [variableId]: value
+                };
+                runtimeDebugLog('[handleVariableChange] New menuVariables:', JSON.stringify(newVars, null, 2));
+                return newVars;
+            });
+        }
+    };
+
+    const mergeDirtyUiVariables = useCallback((base: PlayerState['variables']) => {
+        const dirtyIds = uiDirtyVariableIdsRef.current;
+        if (dirtyIds.size === 0) {
+            return base;
+        }
+        const sourceVariables = uiVariablesRef.current;
+        const merged = { ...base };
+        dirtyIds.forEach(id => {
+            if (Object.prototype.hasOwnProperty.call(sourceVariables, id)) {
+                merged[id] = sourceVariables[id];
+            }
+        });
+        return merged;
+    }, []);
+
+    const commitUiVariablesToPlayerState = useCallback(() => {
+        if (uiDirtyVariableIdsRef.current.size === 0) {
+            runtimeDebugLog('[commitUiVariables] No dirty variables to commit');
+            return;
+        }
+        
+        runtimeDebugLog('[commitUiVariables] Committing dirty variables:', Array.from(uiDirtyVariableIdsRef.current));
+        runtimeDebugLog('[commitUiVariables] uiVariables snapshot:', JSON.stringify(uiVariablesRef.current, null, 2));
+        
+        flushSync(() => {
+            updatePlayerState(p => {
+                if (!p) {
+                    runtimeDebugLog('[commitUiVariables] No playerState, skipping commit');
+                    return null;
+                }
+                runtimeDebugLog('[commitUiVariables] BEFORE merge - playerState.variables:', JSON.stringify(p.variables, null, 2));
+                const mergedVariables = mergeDirtyUiVariables(p.variables);
+                runtimeDebugLog('[commitUiVariables] AFTER merge - merged variables:', JSON.stringify(mergedVariables, null, 2));
+                return {
+                    ...p,
+                    variables: mergedVariables,
+                };
+            });
+        });
+        runtimeDebugLog('[commitUiVariables] Clearing dirty set after successful commit');
+        uiDirtyVariableIdsRef.current.clear();
+    }, [mergeDirtyUiVariables]);
+
+    // Compute the variables that UI screens should see: canonical playerState.variables
+    // with any dirty (uncommitted) UI-only changes layered on top. This ensures that
+    // in-game SetVariable commands (e.g. CG unlock flags) are visible to screens
+    // immediately, while keeping UI-screen-originated edits intact until committed.
+    const screenVariables = useMemo(() => {
+        if (!playerState) return menuVariables;
+        const base = { ...playerState.variables };
+        // Overlay any dirty UI edits that haven't been committed yet
+        uiDirtyVariableIdsRef.current.forEach(id => {
+            if (Object.prototype.hasOwnProperty.call(uiVariablesRef.current, id)) {
+                base[id] = uiVariablesRef.current[id];
+            }
+        });
+        return base;
+    }, [playerState, playerState?.variables, menuVariables, uiVariables]);
+
+    // ── Live (reactive) sound effects manager ──────────────────────────────────────────────
+    // Re-evaluates each registered live SFX as variables change: looping sounds play while their
+    // conditions hold and stop when they fail; non-looping live sounds fire once on a false→true edge.
+    useEffect(() => {
+        if (!playerState) return;
+        liveSfxRef.current.forEach((entry) => {
+            const met = !entry.conditions || entry.conditions.length === 0 || evaluateConditions(entry.conditions, screenVariables);
+            if (entry.loop) {
+                if (met && !entry.audio) {
+                    entry.audio = (playSound(entry.audioId, entry.volume, true) as HTMLAudioElement | null) || null;
+                } else if (!met && entry.audio) {
+                    try { entry.audio.pause(); entry.audio.currentTime = 0; entry.audio.src = ''; } catch (e) {}
+                    sfxPoolRef.current = sfxPoolRef.current.filter(e => e.audio !== entry.audio);
+                    entry.audio = null;
+                }
+            } else if (met && !entry.lastMet) {
+                // One-shot: fire once each time the condition transitions to true.
+                playSound(entry.audioId, entry.volume, false);
+            }
+            entry.lastMet = met;
+        });
+    }, [screenVariables, liveSfxTick, evaluateConditions, playSound, playerState]);
+
+    // Stop & clear live SFX on scene change (the new scene re-registers its own when reached).
+    useEffect(() => {
+        return () => {
+            liveSfxRef.current.forEach(entry => {
+                if (entry.audio) { try { entry.audio.pause(); entry.audio.src = ''; } catch (e) {} }
+            });
+            liveSfxRef.current.clear();
+        };
+    }, [playerState?.currentSceneId]);
+
+    // Keep a live ref to the action handler so the global keydown listener can call the latest version
+    // (e.g. for per-screen open hotkeys) without stale closures or re-registering every render.
+    const handleUIActionRef = useRef(handleUIAction);
+    handleUIActionRef.current = handleUIAction;
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!playerState) return;
+            
+            // Spacebar or Enter to advance dialogue
+            if ((e.key === ' ' || e.key === 'Enter') && playerState.mode === 'playing' && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput) {
+                e.preventDefault();
+                handleDialogueAdvance();
+                return;
+            }
+            
+            // H key to toggle history
+            if ((e.key === 'h' || e.key === 'H') && playerState.mode === 'playing' && !playerState.uiState.textInput) {
+                e.preventDefault();
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: !p.uiState.showHistory } } : null);
+                return;
+            }
+            
+            // Ctrl key to toggle skip forward
+            if (e.key === 'Control' && playerState.mode === 'playing' && !playerState.uiState.showHistory && settings.enableSkip) {
+                e.preventDefault();
+                updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: !p.uiState.isSkipping } } : null);
+                return;
+            }
+            
+            // Arrow Up / Page Up to skip backward
+            if ((e.key === 'ArrowUp' || e.key === 'PageUp') && playerState.mode === 'playing' && !playerState.uiState.showHistory && !playerState.uiState.choices && !playerState.uiState.textInput) {
+                e.preventDefault();
+                handleSkipBackward();
+                return;
+            }
+            
+            // Mouse scroll up to skip backward (handled via wheel event separately)
+
+            // Per-screen open hotkeys (e.g. press 'I' to toggle the inventory). Plain keys only, in-game,
+            // not while typing or with the history / text-input overlay open. Built-in shortcuts above win.
+            if (playerState.mode === 'playing' && !playerState.uiState.textInput && !playerState.uiState.showHistory
+                && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const ae = document.activeElement as HTMLElement | null;
+                const typing = !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+                if (!typing) {
+                    const pressed = e.key.toLowerCase();
+                    const target = (Object.values(project.uiScreens) as VNUIScreen[]).find(s => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
+                    if (target) {
+                        e.preventDefault();
+                        handleUIActionRef.current({ type: UIActionType.ToggleScreen, targetScreenId: target.id });
+                        return;
+                    }
+                }
+            }
+
+            if (e.key === 'Escape') {
+                // Close history if open
+                if (playerState.uiState.showHistory) {
+                    updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null);
+                    return;
+                }
+                
+                if (playerState.mode === 'playing') {
+                    // PAUSE THE GAME
+                    updatePlayerState(p => p ? { ...p, mode: 'paused' } : null);
+                    // Always pause the game music when entering pause mode
+                    if (musicAudioRef.current && !musicAudioRef.current.paused) {
+                        musicAudioRef.current.pause();
+                    }
+                    if (project.ui.pauseScreenId) {
+                        setScreenStack([project.ui.pauseScreenId]);
+                    }
+                } else if (playerState.mode === 'paused') {
+                    // HANDLE UNPAUSE OR BACK IN MENU
+                    if (screenStack.length > 1) {
+                        setScreenStack(s => s.slice(0, -1));
+                    } else {
+                        updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
+                        // Resume music when unpausing
+                        if (musicAudioRef.current && musicAudioRef.current.src && playerState.musicState.isPlaying) {
+                            musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
+                        }
+                        setScreenStack([]);
+                    }
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [playerState, project.ui.pauseScreenId, project.uiScreens, screenStack, handleDialogueAdvance, handleSkipBackward, settings.enableSkip]);
+
+    // Auto-advance effect. On a VOICED line, Auto mode waits for the voice clip to finish (plus a
+    // short grace) instead of the fixed timer, so spoken lines aren't cut off or left hanging.
+    // Unvoiced lines (or a voice that already ended) use the normal autoAdvanceDelay.
+    useEffect(() => {
+        if (!settings.autoAdvance || !playerState || playerState.mode !== 'playing' || scenePaused) return;
+        if (!playerState.uiState.dialogue || playerState.uiState.choices || playerState.uiState.textInput) return;
+
+        const voice = currentVoiceRef.current;
+        if (voice && !voice.ended) {
+            let advanced = false;
+            let graceTimer = 0;
+            const doAdvance = () => { if (advanced) return; advanced = true; handleDialogueAdvance(); };
+            // ~0.4s grace after the voice ends feels natural before moving on.
+            const onEnded = () => { graceTimer = window.setTimeout(doAdvance, 400); };
+            voice.addEventListener('ended', onEnded, { once: true });
+            // Safety fallback: if the clip errors / never fires 'ended', don't hang auto-advance.
+            const fallbackMs = ((Number.isFinite(voice.duration) && voice.duration > 0) ? voice.duration : settings.autoAdvanceDelay) * 1000 + 2000;
+            const fallback = window.setTimeout(doAdvance, fallbackMs);
+            return () => { voice.removeEventListener('ended', onEnded); clearTimeout(fallback); if (graceTimer) clearTimeout(graceTimer); };
+        }
+
+        const timer = window.setTimeout(() => {
+            handleDialogueAdvance();
+        }, settings.autoAdvanceDelay * 1000);
+
+        return () => clearTimeout(timer);
+    }, [settings.autoAdvance, settings.autoAdvanceDelay, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, scenePaused, handleDialogueAdvance]);
+
+    // Skip-forward effect: rapidly advance through dialogue when skipping is active
+    // Stops at choices, text inputs, and scene changes (handled by command execution)
+    useEffect(() => {
+        if (!playerState || playerState.mode !== 'playing' || !playerState.uiState.isSkipping || scenePaused) return;
+        if (!settings.enableSkip) {
+            // If skip is disabled in settings, cancel skip mode
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+            return;
+        }
+        
+        // Stop skipping at choices, text inputs
+        if (playerState.uiState.choices || playerState.uiState.textInput) {
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, isSkipping: false } } : null);
+            return;
+        }
+        
+        // If dialogue is showing, auto-advance it quickly
+        if (playerState.uiState.dialogue) {
+            const timer = setTimeout(() => {
+                handleDialogueAdvance();
+            }, 50); // Very fast skip speed
+            return () => clearTimeout(timer);
+        }
+    }, [playerState?.uiState.isSkipping, playerState?.uiState.dialogue, playerState?.uiState.choices, playerState?.uiState.textInput, playerState?.mode, scenePaused, settings.enableSkip, handleDialogueAdvance]);
+
+    // --- Stage Rendering ---
+    const renderStage = () => {
+        if (!playerState) return null;
+        const state = playerState.stageState;
+        // Reactive scene visuals (live overlays, hot spots, backgrounds) must evaluate
+        // against the SAME variables that HUD/screen actions write to. During gameplay
+        // those actions update `uiVariables` (separate from the committed game variables),
+        // so merge them here — otherwise a HUD click/drop that sets a variable wouldn't
+        // affect the live scene until a navigation event flushed it.
+        const liveVars = mergeDirtyUiVariables(playerState.variables);
+        // Reactive background: a live Set Background registers conditional layers; the last
+        // layer whose conditions currently match overrides the base background.
+        const matchedBgLayer = (state.backgroundLayers || [])
+            .filter(l => !l.conditions || evaluateConditions(l.conditions, liveVars))
+            .slice(-1)[0];
+        const effBgUrl = matchedBgLayer ? matchedBgLayer.url : state.backgroundUrl;
+        const effBgColor = matchedBgLayer ? matchedBgLayer.color : state.backgroundColor;
+        const effBgIsVideo = matchedBgLayer ? matchedBgLayer.isVideo : state.backgroundIsVideo;
+        const effBgLoop = matchedBgLayer ? matchedBgLayer.loop : state.backgroundLoop;
+        const effBgDepth = (matchedBgLayer ? matchedBgLayer.parallaxDepth : state.backgroundParallaxDepth) ?? 0;
+        // Over-scale a parallaxed background just enough that its max drift never reveals the
+        // edges. Max shift (px) = depth × PARALLAX_MAX_PX × intensity; the margin each side is
+        // (scale-1)/2 × the smaller stage dimension, so scale-1 = 2 × maxShift / minDim (+safety).
+        const sceneParallaxIntensity = project.scenes[playerState.currentSceneId]?.parallax?.intensity ?? 1;
+        const bgParallaxScale = (depth: number): number => {
+            if (!depth) return 1;
+            const maxShiftPx = depth * PARALLAX_MAX_PX * Math.max(1, sceneParallaxIntensity) * 1.1;
+            const minDim = Math.min(stageSize?.width || 1280, stageSize?.height || 720);
+            return 1 + (2 * maxShiftPx) / minDim;
+        };
+        const getPositionStyle = (position: VNPosition): React.CSSProperties => {
+            if (typeof position === 'object') {
+                // Custom coordinates
+                return {
+                    left: `${position.x}%`,
+                    top: `${position.y}%`,
+                };
+            } else {
+                // Preset positions - all use centering transform
+                const presetStyles: Record<VNPositionPreset, React.CSSProperties> = {
+                    'left': { top: '10%', left: '25%' },
+                    'center': { top: '10%', left: '50%' },
+                    'right': { top: '10%', left: '75%' },
+                    'off-left': { top: '10%', left: '-25%' },
+                    'off-right': { top: '10%', left: '125%' },
+                };
+                return presetStyles[position];
+            }
+        };
+        const shakeClass = activeShakeRef.current ? 'shake' : '';
+        const intensityPx = activeShakeRef.current ? activeShakeRef.current.intensity * 1.5 : 0;
+        const screenTween = TweenManager.getCurrentValues('__screen__', 'screen');
+        const tweenedZoom = screenTween?.scaleX ?? state.screen.zoom;
+        const tweenedPanX = screenTween?.x ?? state.screen.panX;
+        const tweenedPanY = screenTween?.y ?? state.screen.panY;
+        const panZoomStyle: React.CSSProperties = { transform: `scale(${tweenedZoom}) translate(${tweenedPanX}%, ${tweenedPanY}%)`, transition: screenTween ? 'none' : `transform ${state.screen.transitionDuration}s ease-in-out`, width: '100%', height: '100%' };
+        const shakeIntensityStyle = (activeShakeRef.current ? { '--shake-intensity-x': `${intensityPx}px`, '--shake-intensity-y': `${intensityPx * 0.7}px`, } : {}) as React.CSSProperties;
+        const tintStyle: React.CSSProperties = { backgroundColor: state.screen.tint, transition: `background-color ${state.screen.transitionDuration}s ease-in-out`, };
+
+        const handleStageClick = () => {
+            // Only advance if dialogue is showing and not waiting for choice or text input
+            if (playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+                handleDialogueAdvance();
+            }
+        };
+
+        const handleWheel = (e: React.WheelEvent) => {
+            // Scroll up to skip backward when dialogue is showing
+            if (e.deltaY < 0 && playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput && !playerState.uiState.showHistory) {
+                e.preventDefault();
+                handleSkipBackward();
+            }
+        };
+
+        return (
+            <div 
+                ref={stageRef}
+                className="w-full h-full relative overflow-hidden bg-black"
+                onClick={handleStageClick}
+                onWheel={handleWheel}
+                style={{
+                    cursor: playerState.uiState.dialogue && !playerState.uiState.choices && !playerState.uiState.textInput ? 'pointer' : 'default',
+                    // Overlay design-reference scale (stageW / 1280) — mirrors the editor's
+                    // scaleFontSize/scaledBorderRadius so ShowButton/ShowText overlays render
+                    // identically in the built game and on the scene canvas, at any stage size.
+                    ['--ovl-scale' as any]: stageSize?.width ? stageSize.width / 1280 : 1,
+                }}
+            >
+                <div style={panZoomStyle}>
+                    <div className={`w-full h-full ${shakeClass} z-10`} style={{ ...shakeIntensityStyle, backgroundColor: effBgColor }}>
+                        {effBgUrl && (() => {
+                            const bgMedia = effBgIsVideo ? (
+                                <video
+                                    src={effBgUrl}
+                                    autoPlay
+                                    muted
+                                    loop={effBgLoop}
+                                    playsInline
+                                    className="absolute w-full h-full object-cover"
+                                />
+                            ) : (
+                                <img src={effBgUrl} alt="background" className="absolute w-full h-full object-cover"/>
+                            );
+                            // Parallax: over-scale so the drift never reveals the backdrop's edges.
+                            const inner = effBgDepth
+                                ? <div className="absolute inset-0" style={{ transform: `scale(${bgParallaxScale(effBgDepth)})${parallaxTransform(effBgDepth)}`, transformOrigin: 'center' }}>{bgMedia}</div>
+                                : bgMedia;
+                            // The base background stays at the back (zIndex 0) so the transition
+                            // overlays (rendered just below at z0, later in DOM) always sit above it
+                            // — multi-plane LAYERING is done via stacked backgrounds (below), which
+                            // keeps fades working regardless of any stack layers.
+                            return <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>{inner}</div>;
+                        })()}
+                        {/* render background transition visuals here so characters render above them */}
+                        {playerState?.uiState.transitionElement}
+                        {/* Stacked background planes (SetBackground `stack`): each its own backdrop at
+                            its layer/parallaxDepth, on top of the base bg — for multi-plane parallax. */}
+                        {(state.backgroundStack || []).map(plane => {
+                            if (!plane.url && !plane.color) return null;
+                            const planeMedia = plane.url ? (plane.isVideo ? (
+                                <video src={plane.url} autoPlay muted loop={plane.loop} playsInline className="absolute w-full h-full object-cover" />
+                            ) : (
+                                <img src={plane.url} alt="background layer" className="absolute w-full h-full object-cover" />
+                            )) : null;
+                            const d = plane.parallaxDepth ?? 0;
+                            const planeInner = d
+                                ? <div className="absolute inset-0" style={{ transform: `scale(${bgParallaxScale(d)})${parallaxTransform(d)}`, transformOrigin: 'center' }}>{planeMedia}</div>
+                                : planeMedia;
+                            // Entry transition (plays once on mount — the plane is keyed by commandId).
+                            const dur = plane.duration ?? 1;
+                            const anim = (() => {
+                                switch (plane.transition) {
+                                    case undefined: case '': case 'instant': return undefined;
+                                    case 'slide': return `slide-in-right ${dur}s forwards`;
+                                    case 'iris-in': return `iris-in ${dur}s forwards`;
+                                    case 'wipe-right': return `wipe-right ${dur}s forwards`;
+                                    default: return `dissolve-in ${dur}s forwards`; // fade / cross-fade / dissolve
+                                }
+                            })();
+                            return <div key={plane.commandId} className="absolute inset-0 overflow-hidden" style={{ zIndex: plane.layer ?? 0, backgroundColor: plane.color, animation: anim }}>{planeInner}</div>;
+                        })}
+                        {/* Movie overlays (behind characters, above background) */}
+                        {state.movieOverlays && state.movieOverlays.length > 0 && state.movieOverlays.map((movie, idx) => {
+                            if (!movie.url) return null;
+                            const isCustom = movie.objectFit === 'custom';
+                            const movieAnim = movieEntryAnim(movie.transition, movie.transitionDuration);
+                            // Live tween values (TweenElement targeting this movie), falling back to the command's values.
+                            const mtw = movie.commandId ? TweenManager.getCurrentValues(movie.commandId, 'movie') : null;
+                            const mX = mtw?.x ?? movie.x ?? 0;
+                            const mY = mtw?.y ?? movie.y ?? 0;
+                            const mW = mtw?.width ?? movie.width ?? 100;
+                            const mH = mtw?.height ?? movie.height ?? 100;
+                            const mOpacity = mtw?.opacity ?? movie.opacity ?? 1;
+                            const mRot = mtw?.rotation ?? 0;
+                            const mSX = mtw?.scaleX ?? 1;
+                            const mSY = mtw?.scaleY ?? 1;
+                            // Parallax shift (driven by the scene's parallax mode via --ppx/--ppy).
+                            const mPx = parallaxTransform(movie.parallaxDepth);
+                            const innerTransform = `${(mRot || mSX !== 1 || mSY !== 1) ? `rotate(${mRot}deg) scale(${mSX}, ${mSY})` : ''}${mPx}`.trim() || undefined;
+                            // The entry transition lives on the WRAPPER and the tweened opacity/transform on the
+                            // inner <video>. A CSS animation with `forwards` would otherwise override inline opacity,
+                            // which is why a tweened opacity looked like it did nothing when a transition was set.
+                            const containerStyle: React.CSSProperties = isCustom
+                                ? { position: 'absolute', left: `${mX}%`, top: `${mY}%`, width: `${mW}%`, height: `${mH}%`, zIndex: 2, animation: movieAnim }
+                                : { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 2, animation: movieAnim };
+                            // 'contain' keeps the video's aspect within its box — resizing never squishes it.
+                            const videoFit = (isCustom ? 'contain' : (movie.objectFit || 'cover')) as React.CSSProperties['objectFit'];
+                            // Fade-out: when a transition is set, the video fades to transparent on end before removal.
+                            const exitDur = (movie.transition && movie.transition !== 'instant') ? (movie.transitionDuration ?? 0.5) : 0;
+                            const removeOverlay = () => updatePlayerState(p => {
+                                if (!p) return null;
+                                const overlays = (p.stageState.movieOverlays || []).filter(o => o.commandId ? o.commandId !== movie.commandId : o !== movie);
+                                return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                            });
+                            return (
+                                <div key={`movie-overlay-${idx}-${movie.url}`} className="pointer-events-none" style={containerStyle}>
+                                    <video
+                                        src={movie.url}
+                                        autoPlay
+                                        muted
+                                        loop={movie.loop}
+                                        playsInline
+                                        style={{ width: '100%', height: '100%', objectFit: videoFit, opacity: movie.exiting ? 0 : mOpacity, transform: innerTransform, transformOrigin: 'center', display: 'block', transition: movie.exiting ? `opacity ${exitDur}s ease-out` : undefined }}
+                                        onEnded={() => {
+                                            // Keep the overlay (frozen on its last frame) when looping or holding.
+                                            if (movie.loop || movie.holdLastFrame) return;
+                                            if (exitDur > 0 && !movie.exiting) {
+                                                // Mark exiting → CSS fades opacity to 0 → remove after the duration.
+                                                updatePlayerState(p => {
+                                                    if (!p) return null;
+                                                    const overlays = (p.stageState.movieOverlays || []).map(o => (o.commandId ? o.commandId === movie.commandId : o === movie) ? { ...o, exiting: true } : o);
+                                                    return { ...p, stageState: { ...p.stageState, movieOverlays: overlays } };
+                                                });
+                                                const tid = window.setTimeout(removeOverlay, exitDur * 1000);
+                                                activeEffectTimeoutsRef.current.push(tid);
+                                            } else {
+                                                removeOverlay();
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })}
+                        {(() => {
+                            // Pre-compute arranged positions when auto-arrange is on.
+                            // Live characters are hidden while their conditions aren't met.
+                            const allChars = (Object.values(state.characters) as StageCharacterState[])
+                                .filter(c => !c.live || !c.conditions || evaluateConditions(c.conditions, liveVars));
+                            const arranged = project.autoArrangeCharacters
+                                ? computeArrangedPositions(allChars.filter(c => !c.charId.startsWith('__ghost')).map(c => ({ id: c.charId, position: c.position })))
+                                : null;
+                            // Speaker emphasis: while a character is speaking, brighten them + nudge
+                            // forward and dim the others. Off by default; only when a line has a speaker.
+                            const emphasisOn = !!project.ui.speakerEmphasisEnabled;
+                            const emphasisSpeakerId = emphasisOn ? (playerState.uiState.dialogue?.characterId ?? null) : null;
+                            const emphasisDim = project.ui.speakerEmphasisDim ?? 0.5;
+                            const emphasisScale = project.ui.speakerEmphasisScale ?? 1.04;
+                            return allChars.map((char: StageCharacterState) => {
+                            let transitionClass = '';
+                            let animationDuration = '1s';
+                            let slideStyle: React.CSSProperties = {};
+                            // Apply auto-arrange offset if applicable
+                            const arrangedX = arranged?.get(char.charId);
+                            let positionStyle = arrangedX !== undefined
+                                ? { top: '10%', left: `${arrangedX}%` }
+                                : getPositionStyle(char.position);
+
+                            // Apply tween interpolated position if active
+                            const charTween = TweenManager.getCurrentValues(char.charId, 'character');
+                            const hasTweenPosition = charTween && (charTween.x !== undefined || charTween.y !== undefined);
+                            if (hasTweenPosition) {
+                                const basePos = typeof char.position === 'object'
+                                    ? char.position
+                                    : { x: arrangedX ?? (char.position === 'left' ? 25 : char.position === 'right' ? 75 : char.position === 'center' ? 50 : char.position === 'off-left' ? -25 : 125), y: 10 };
+                                positionStyle = {
+                                    left: `${charTween.x ?? basePos.x}%`,
+                                    top: `${charTween.y ?? basePos.y}%`,
+                                    transform: 'translate(-50%, 0)',
+                                };
+                            }
+                            
+                            // Add centering transform for non-slide transitions
+                            // Only apply centering for preset positions, not custom coordinates
+                            // Tween positions already include centering above
+                            const isCustomPosition = typeof char.position === 'object' || hasTweenPosition;
+                            if (!char.transition || char.transition.type !== 'slide') {
+                                if (!isCustomPosition) {
+                                    // For preset positions, center horizontally
+                                    positionStyle = { ...positionStyle, transform: 'translate3d(-50%, 0, 0)' };
+                                }
+                            }
+                            
+                            if (char.transition) {
+                                const isHideTransition = char.transition.action === 'hide';
+
+                                switch(char.transition.type) {
+                                    case 'fade': transitionClass = isHideTransition ? 'transition-fade-out' : 'transition-dissolve'; break;
+                                    case 'dissolve': transitionClass = isHideTransition ? 'transition-dissolve-out' : 'transition-dissolve'; break;
+                                    case 'slide': 
+                                        transitionClass = 'transition-slide';
+
+                                        // Calculate start and end positions for slide (percent fallbacks)
+                                        const startPos = char.transition.startPosition || char.position;
+                                        const endPos = char.transition.endPosition || char.position;
+
+                                        let startOffsetX = 0;
+                                        let startOffsetY = 0;
+
+                                        if (typeof startPos === 'object' && typeof endPos === 'object') {
+                                            startOffsetX = startPos.x - endPos.x;
+                                            startOffsetY = startPos.y - endPos.y;
+                                        } else {
+                                            // Use preset logic - calculate relative offsets from end position
+                                            const startPreset = (typeof startPos === 'string' ? startPos : 'center') as VNPositionPreset;
+                                            const endPreset = (typeof endPos === 'string' ? endPos : 'center') as VNPositionPreset;
+                                            const presetCoords: Record<VNPositionPreset, {x: number, y: number}> = {
+                                                'left': {x: 25, y: 10},
+                                                'center': {x: 50, y: 10},
+                                                'right': {x: 75, y: 10},
+                                                'off-left': {x: -25, y: 10},
+                                                'off-right': {x: 125, y: 10}
+                                            };
+                                            const startCoords = presetCoords[startPreset];
+                                            const endCoords = presetCoords[endPreset];
+                                            startOffsetX = startCoords.x - endCoords.x;
+                                            startOffsetY = startCoords.y - endCoords.y;
+                                        }
+
+                                        // If the computed start equals end, for SHOW transitions pick an off-screen start so the slide visibly animates
+                                        if (startOffsetX === 0 && char.transition?.action === 'show') {
+                                            // choose off-left if end is left-of-center, else off-right
+                                            let endX = 50;
+                                            if (typeof endPos === 'object') endX = endPos.x;
+                                            else if (typeof endPos === 'string') {
+                                                // map presets to rough x positions
+                                                const presetMap: Record<VNPositionPreset, number> = { left: 25, center: 50, right: 75, 'off-left': -25, 'off-right': 125 };
+                                                endX = presetMap[endPos as VNPositionPreset] ?? 50;
+                                            }
+                                            startOffsetX = endX <= 50 ? -60 : 60;
+                                        }
+
+                                        // Percent fallbacks
+                                        slideStyle = {
+                                            '--slide-start-x': `${startOffsetX}%`,
+                                            '--slide-start-y': `${startOffsetY}%`,
+                                            '--slide-end-x': `0%`,
+                                            '--slide-end-y': `0%`
+                                        } as React.CSSProperties;
+
+                                        // If we have stage size, compute pixel offsets for crisper motion
+                                        if (stageSize && stageSize.width > 0) {
+                                            const pxStartX = (startOffsetX / 100) * stageSize.width;
+                                            const pxStartY = (startOffsetY / 100) * stageSize.height;
+                                            slideStyle['--slide-start-px' as any] = `${pxStartX}px`;
+                                            slideStyle['--slide-end-px' as any] = `0px`;
+                                            slideStyle['--slide-start-py' as any] = `${pxStartY}px`;
+                                            slideStyle['--slide-end-py' as any] = `0px`;
+                                        }
+                                        break;
+                                    case 'iris-in': transitionClass = isHideTransition ? 'transition-iris-out' : 'transition-iris-in'; break;
+                                    case 'wipe-right': transitionClass = isHideTransition ? 'transition-wipe-out-right' : 'transition-wipe-right'; break;
+                                }
+                                animationDuration = `${char.transition.duration}s`;
+                            }
+                            
+                            // Compute per-character visual effect styles — supports multiple stacked effects
+                            // Each transform-based effect gets its own nested wrapper div to avoid transform conflicts
+                            // with the position centering transform on the outer div
+                            const effectsList = char.visualEffects || (char as any).visualEffect ? 
+                                (char.visualEffects && char.visualEffects.length > 0 
+                                    ? char.visualEffects 
+                                    : (char as any).visualEffect && (char as any).visualEffect.type !== 'none' 
+                                        ? [(char as any).visualEffect] 
+                                        : []) 
+                                : [];
+                            
+                            // Separate effects into categories:
+                            // - Transform-based: shake, bounce, float, pulse, breathing (each needs own wrapper)
+                            // - Filter-based: glow, tint, silhouette (combine into one filter string)
+                            // - Opacity-based: flicker (separate animation)
+                            const transformEffects: Array<{style: React.CSSProperties}> = [];
+                            let combinedFilter = '';
+                            let combinedFilterAnimation = '';
+                            let flickerAnimation = '';
+                            let filterVars: Record<string, string> = {};
+                            
+                            for (const eff of effectsList) {
+                                if (!eff || eff.type === 'none') continue;
+                                const speed = eff.speed ?? 1;
+                                const intensity = eff.intensity ?? 1;
+                                switch (eff.type) {
+                                    case 'shake': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharShake ${0.15 / speed}s ease-in-out infinite`;
+                                        s['--char-shake-px'] = `${2 * intensity}px`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'bounce': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharBounce ${0.6 / speed}s ease-in-out infinite`;
+                                        s['--char-bounce-h'] = `${-8 * intensity}px`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'float': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharFloat ${2 / speed}s ease-in-out infinite`;
+                                        s['--char-float-h'] = `${-10 * intensity}px`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'pulse': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharPulse ${1 / speed}s ease-in-out infinite`;
+                                        s['--char-pulse-scale'] = `${1 + 0.05 * intensity}`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'breathing': {
+                                        const s: React.CSSProperties & Record<string, any> = {};
+                                        s.animation = `vnCharBreathing ${2 / speed}s ease-in-out infinite`;
+                                        s['--char-breathe-scale'] = `${1 + 0.02 * intensity}`;
+                                        transformEffects.push({ style: s });
+                                        break;
+                                    }
+                                    case 'glow':
+                                        combinedFilter += ` drop-shadow(0 0 ${8 * intensity}px ${eff.color || '#FFFFFF'})`;
+                                        combinedFilterAnimation = `vnCharGlow ${1.5 / speed}s ease-in-out infinite`;
+                                        filterVars['--char-glow-color'] = eff.color || '#FFFFFF';
+                                        filterVars['--char-glow-size'] = `${8 * intensity}px`;
+                                        filterVars['--char-glow-size-max'] = `${14 * intensity}px`;
+                                        break;
+                                    case 'tint':
+                                        if (eff.color) {
+                                            const tintOpacity = 0.3 * intensity;
+                                            combinedFilter += ` brightness(${1 - tintOpacity * 0.3}) sepia(${tintOpacity}) hue-rotate(${getHueFromHex(eff.color)}deg) saturate(${1 + intensity})`;
+                                        }
+                                        break;
+                                    case 'silhouette':
+                                        combinedFilter += ` brightness(0)${eff.color ? ` drop-shadow(0 0 2px ${eff.color})` : ''}`;
+                                        break;
+                                    case 'flicker':
+                                        flickerAnimation = `vnCharFlicker ${0.1 / speed}s step-end infinite`;
+                                        break;
+                                }
+                            }
+
+                            // Build the filter/flicker style for the innermost content wrapper
+                            const contentEffectStyle: React.CSSProperties & Record<string, any> = {};
+                            if (combinedFilter) contentEffectStyle.filter = combinedFilter.trim();
+                            if (combinedFilterAnimation) contentEffectStyle.animation = combinedFilterAnimation;
+                            if (flickerAnimation) {
+                                contentEffectStyle.animation = contentEffectStyle.animation 
+                                    ? `${contentEffectStyle.animation}, ${flickerAnimation}` 
+                                    : flickerAnimation;
+                            }
+                            Object.assign(contentEffectStyle, filterVars);
+                            const hasContentEffect = combinedFilter || combinedFilterAnimation || flickerAnimation;
+                            
+                            // Build nested wrappers: position div > transform effect divs > filter/content div > sprites
+                            const spriteContent = (
+                                <>
+                                    {char.isVideo && char.videoUrls ? (
+                                        char.videoUrls.map((url, index) => (
+                                            <video 
+                                                key={index} 
+                                                src={url} 
+                                                autoPlay 
+                                                muted 
+                                                loop={char.videoLoop} 
+                                                playsInline
+                                                className="absolute top-0 left-0 w-full h-full object-contain" 
+                                                style={{ zIndex: index }}
+                                            />
+                                        ))
+                                    ) : (
+                                        char.imageUrls.map((url, index) => (
+                                            <img 
+                                                key={index} 
+                                                src={url} 
+                                                alt="" 
+                                                className="absolute top-0 left-0 w-full h-full object-contain" 
+                                                style={{ zIndex: index }}
+                                            />
+                                        ))
+                                    )}
+                                </>
+                            );
+
+                            // Wrap with filter/flicker effects
+                            let wrappedContent = hasContentEffect
+                                ? <div className="w-full h-full relative" style={contentEffectStyle}>{spriteContent}</div>
+                                : spriteContent;
+
+                            // Wrap with transform-based effects (each in its own div to avoid conflicts)
+                            // Reverse so the first listed effect is outermost
+                            for (let tIdx = transformEffects.length - 1; tIdx >= 0; tIdx--) {
+                                wrappedContent = (
+                                    <div className="w-full h-full relative" style={transformEffects[tIdx].style}>
+                                        {wrappedContent}
+                                    </div>
+                                );
+                            }
+
+                            // Speaker emphasis layer: dim non-speakers + slightly enlarge the speaker,
+                            // tweened so it eases as the speaker changes. Only when the feature is on.
+                            if (emphasisOn) {
+                                const isSpeaker = !!emphasisSpeakerId && char.charId === emphasisSpeakerId;
+                                const active = !!emphasisSpeakerId;
+                                const brightness = active ? (isSpeaker ? 1 : emphasisDim) : 1;
+                                const eScale = active && isSpeaker ? emphasisScale : 1;
+                                wrappedContent = (
+                                    <div className="w-full h-full relative" style={{
+                                        filter: brightness !== 1 ? `brightness(${brightness})` : undefined,
+                                        transform: eScale !== 1 ? `scale(${eScale})` : undefined,
+                                        transformOrigin: 'center bottom',
+                                        transition: 'filter 250ms ease, transform 250ms ease',
+                                    }}>
+                                        {wrappedContent}
+                                    </div>
+                                );
+                            }
+
+                            // Apply tween scale and opacity to character container
+                            const charScale = charTween?.scale ?? (char as any).scale ?? 1;
+                            const charOpacity = charTween?.opacity;
+                            const charInverted = (char as any).inverted ?? false;
+                            const charFlipY = (char as any).flipY ?? false;
+                            const charRotation = (char as any).rotation ?? 0;
+
+                            // Build transform: combine position, rotation, scale, and flips
+                            let transformStr = positionStyle.transform || '';
+                            if (charRotation) {
+                                transformStr = `${transformStr} rotate(${charRotation}deg)`.trim();
+                            }
+                            if (charScale !== 1 || charInverted || charFlipY) {
+                                const scaleX = (charInverted ? -1 : 1) * charScale;
+                                const scaleY = (charFlipY ? -1 : 1) * charScale;
+                                transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
+                            }
+                            transformStr = (transformStr + parallaxTransform(char.parallaxDepth)).trim();
+
+                            return (
+                                <div
+                                    // With a transition, the key includes the pose/action so React remounts and
+                                    // replays the entrance/crossfade animation. With NO transition (instant/none)
+                                    // the key is stable (just charId) so the SAME element persists and only swaps
+                                    // its image — remounting on every instant change caused a blank-frame flash.
+                                    key={char.transition
+                                        ? `${char.charId}-${char.expressionId}-${char.imageUrls.join(',')}-${char.transition.action}`
+                                        : char.charId}
+                                    className={`absolute h-[90%] w-auto aspect-[3/4] ${transitionClass} transition-base`}
+                                    style={{
+                                        ...positionStyle, animationDuration, ...slideStyle, zIndex: 5 + (char.layer ?? 0) * 100,
+                                        ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}),
+                                        // A running/forwards-filled entrance animation animates opacity and would
+                                        // override inline opacity, so disable it when a tween controls opacity.
+                                        ...(charOpacity !== undefined ? { opacity: charOpacity, animationName: 'none' } : {}),
+                                    }}
+                                >
+                                    {wrappedContent}
+                                </div>
+                            );
+                        });
+                        })()}
+                        {/* Particle System - above characters (z-5), below overlays */}
+                        {(() => {
+                            const pEffects = state.particleEffects;
+                            const hasParticles = pEffects && Object.keys(pEffects).length > 0;
+                            if (hasParticles) {
+                                console.log('[LivePreview] Rendering ParticleSystem:', Object.keys(pEffects), 'stageSize:', stageSize.width, 'x', stageSize.height);
+                                return (
+                                    <ParticleSystem
+                                        effects={pEffects}
+                                        width={stageSize.width}
+                                        height={stageSize.height}
+                                    />
+                                );
+                            }
+                            return null;
+                        })()}
+                        {/* Placed twinkling lights (PlaceLights) — behind characters by default, or in front if set. */}
+                        {state.lights && state.lights.length > 0 && (
+                            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: state.lightsAbove ? 40 : 4 }}>
+                                <LightsLayer lights={state.lights} stageW={stageSize.width} stageH={stageSize.height} />
+                            </div>
+                        )}
+                        {state.textOverlays.filter((o: TextOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: TextOverlay) => {
+                            // Live text re-interpolates its {variable} tokens against current
+                            // variables each render, so values shown in the text update live.
+                            const liveText = (overlay.live && overlay.rawText !== undefined)
+                                ? interpolateVariables(overlay.rawText, liveVars, project)
+                                : overlay.text;
+                            return (
+                                <TextOverlayElement
+                                    key={overlay.id}
+                                    overlay={liveText !== overlay.text ? { ...overlay, text: liveText } : overlay}
+                                    stageSize={stageSize}
+                                />
+                            );
+                        })}
+                        {state.imageOverlays.filter((o: ImageOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ImageOverlay) => (
+                            <ImageOverlayElement
+                                key={overlay.id}
+                                overlay={overlay}
+                                stageSize={stageSize}
+                            />
+                        ))}
+                        {state.buttonOverlays.filter((o: ButtonOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ButtonOverlay) => (
+                            <ButtonOverlayElement
+                                key={overlay.id}
+                                overlay={overlay} 
+                                onAction={handleUIAction} 
+                                playSound={playSound} 
+                                onCommitVariables={commitUiVariablesToPlayerState}
+                                onAdvance={overlay.waitForClick ? () => {
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        return {
+                                            ...p,
+                                            currentIndex: p.currentIndex + 1,
+                                            uiState: { ...p.uiState, isWaitingForInput: false }
+                                        };
+                                    });
+                                } : undefined}
+                                onPickup={(ov) => {
+                                    // Apply the give + removal + pick-up-once record in ONE atomic playerState
+                                    // update. The give goes straight to playerState.variables (the item's count
+                                    // variable, clamped), bypassing the UI-variable buffer so it always persists.
+                                    updatePlayerState(p => {
+                                        if (!p) return null;
+                                        let variables = p.variables;
+                                        if (ov.giveItemId) {
+                                            const item = project.items?.[ov.giveItemId];
+                                            // Give even if the count variable isn't registered (a dangling
+                                            // reference): write straight to the count var id, defaulting min 0.
+                                            // The load migration also re-registers it, but this keeps the
+                                            // pickup working immediately without a reload.
+                                            if (item && item.countVariableId) {
+                                                const countVar = project.variables[item.countVariableId] as any;
+                                                const min = countVar?.min ?? 0;
+                                                const max = countVar?.max;
+                                                const cur = Number(p.variables[item.countVariableId] ?? 0);
+                                                let next = item.unique ? 1 : cur + (ov.giveQuantity ?? 1);
+                                                next = Math.max(min, next);
+                                                if (max !== undefined) next = Math.min(max, next);
+                                                variables = { ...variables, [item.countVariableId]: next };
+                                            }
+                                        }
+                                        return {
+                                            ...p,
+                                            variables,
+                                            stageState: ov.removeAfterClick
+                                                ? { ...p.stageState, buttonOverlays: p.stageState.buttonOverlays.filter(b => b.id !== ov.id) }
+                                                : p.stageState,
+                                            pickedUpItems: ov.pickUpOnceId ? [...(p.pickedUpItems || []), ov.pickUpOnceId] : p.pickedUpItems,
+                                        };
+                                    });
+                                }}
+                            />
+                        ))}
+                        {(state.hotSpotOverlays || []).map((overlay: HotSpotOverlay) => (
+                            <HotSpotOverlayElement
+                                key={overlay.id}
+                                overlay={overlay}
+                                onAction={handleUIAction}
+                                evaluateConditions={evaluateConditions}
+                                variables={liveVars}
+                                editTime={!hideCloseButton}
+                                onAdvance={() => updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null)}
+                            />
+                        ))}
+                    </div>
+                </div>
+                <div className="absolute inset-0 pointer-events-none" style={tintStyle}></div>
+            </div>
+        );
+    };
+
+    // Credit scroll content — measures its own height to compute proper scroll distance
+    const CreditScrollContent: React.FC<{
+        command: CreditRollCommand;
+        hasBgs: boolean;
+        hasMedia: boolean;
+        onFinish: () => void;
+    }> = ({ command, hasBgs, hasMedia, onFinish }) => {
+        const contentRef = useRef<HTMLDivElement>(null);
+        const containerRef = useRef<HTMLDivElement>(null);
+        const [animStyle, setAnimStyle] = useState<React.CSSProperties>({});
+        const finishedRef = useRef(false);
+
+        useEffect(() => {
+            finishedRef.current = false;
+            // Wait a frame for layout so we can measure content height
+            const raf = requestAnimationFrame(() => {
+                const content = contentRef.current;
+                const container = containerRef.current;
+                if (!content || !container) return;
+
+                const contentHeight = content.scrollHeight;
+                const containerHeight = container.clientHeight;
+                // Total distance: start below viewport (containerHeight) + scroll through all content past top
+                const totalDistance = containerHeight + contentHeight;
+                const speed = (command as any).scrollSpeed || 60; // px/sec
+                // Calculate duration from speed, but cap at the max duration
+                const calcDuration = totalDistance / speed;
+                const maxDuration = command.duration || 300;
+                const finalDuration = Math.min(calcDuration, maxDuration);
+
+                setAnimStyle({
+                    animation: `credit-scroll-dynamic ${finalDuration}s linear forwards`,
+                    // Use CSS custom properties for start and end translate values (in pixels)
+                    ['--credit-scroll-start' as any]: `${containerHeight}px`,
+                    ['--credit-scroll-end' as any]: `-${contentHeight}px`,
+                });
+            });
+            return () => cancelAnimationFrame(raf);
+        }, [command]);
+
+        const handleAnimEnd = useCallback((e: React.AnimationEvent) => {
+            if (e.target === e.currentTarget && !finishedRef.current) {
+                finishedRef.current = true;
+                onFinish();
+            }
+        }, [onFinish]);
+
+        // Fallback timer in case animationend doesn't fire
+        useEffect(() => {
+            const speed = (command as any).scrollSpeed || 60;
+            const maxDuration = command.duration || 300;
+            // Give a generous timeout (maxDuration + 5s buffer)
+            const timeout = window.setTimeout(() => {
+                if (!finishedRef.current) {
+                    finishedRef.current = true;
+                    onFinish();
+                }
+            }, (maxDuration + 5) * 1000);
+            return () => clearTimeout(timeout);
+        }, [command, onFinish]);
+
+        return (
+            <div ref={containerRef} className="absolute inset-0 overflow-hidden z-[2]">
+                <style>{`
+                    @keyframes credit-scroll-dynamic {
+                        from { transform: translateY(var(--credit-scroll-start, 100%)); }
+                        to { transform: translateY(var(--credit-scroll-end, -100%)); }
+                    }
+                `}</style>
+                <div
+                    ref={contentRef}
+                    className="text-center px-8 w-full"
+                    style={{
+                        color: command.textColor || '#FFFFFF',
+                        textShadow: (hasBgs || hasMedia) ? '0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)' : 'none',
+                        willChange: 'transform',
+                        ...animStyle,
+                    }}
+                    onAnimationEnd={handleAnimEnd}
+                >
+                    {command.entries.map((entry, i) =>
+                        entry.kind === 'heading' ? (
+                            <h2 key={i} className="text-2xl font-bold mt-8 mb-4" style={{ color: '#FFD700' }}>{entry.label}</h2>
+                        ) : (
+                            <div key={i} className="mb-2">
+                                <span className="text-sm opacity-70">{entry.label}</span>
+                                {entry.value && <><br /><span className="text-lg">{entry.value}</span></>}
+                            </div>
+                        )
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    // Credit Roll overlay component with optional CG background gallery
+    const CreditRollOverlay: React.FC<{
+        command: CreditRollCommand;
+        project: VNProject;
+        assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+        getAssetMetadata: (assetId: VNID | null, type: 'image') => { isVideo: boolean; loop: boolean };
+        onFinish: () => void;
+    }> = ({ command, project, assetResolver, getAssetMetadata, onFinish }) => {
+        const bgs = command.backgrounds || [];
+        const mediaItems = command.media || [];
+        const hasBgs = bgs.length > 0;
+        const hasMedia = mediaItems.length > 0;
+        const [bgIndex, setBgIndex] = useState(0);
+        const [prevBgIndex, setPrevBgIndex] = useState<number | null>(null);
+        const [transitioning, setTransitioning] = useState(false);
+        const bgTimerRef = useRef<number | null>(null);
+        const bgTransTimerRef = useRef<number | null>(null);
+        const [elapsed, setElapsed] = useState(0);
+        const startTimeRef = useRef(Date.now());
+
+        // Track elapsed time for timed media items
+        useEffect(() => {
+            if (!hasMedia) return;
+            startTimeRef.current = Date.now();
+            const interval = window.setInterval(() => {
+                setElapsed((Date.now() - startTimeRef.current) / 1000);
+            }, 200);
+            return () => clearInterval(interval);
+        }, [hasMedia]);
+
+        // Cycle backgrounds
+        useEffect(() => {
+            if (!hasBgs || bgs.length <= 1) return;
+            const scheduleNext = (idx: number) => {
+                const slide = bgs[idx];
+                const displayMs = (slide?.displayDuration || 5) * 1000;
+                bgTimerRef.current = window.setTimeout(() => {
+                    const nextIdx = (idx + 1) % bgs.length;
+                    const nextSlide = bgs[nextIdx];
+                    const transDur = (nextSlide?.transitionDuration || 0.5) * 1000;
+                    const transType = nextSlide?.transition || 'fade';
+
+                    if (transType === 'instant' || transDur === 0) {
+                        setBgIndex(nextIdx);
+                        scheduleNext(nextIdx);
+                    } else {
+                        setPrevBgIndex(idx);
+                        setBgIndex(nextIdx);
+                        setTransitioning(true);
+                        bgTransTimerRef.current = window.setTimeout(() => {
+                            setTransitioning(false);
+                            setPrevBgIndex(null);
+                            scheduleNext(nextIdx);
+                        }, transDur);
+                    }
+                }, displayMs);
+            };
+            scheduleNext(bgIndex);
+            return () => {
+                if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
+                if (bgTransTimerRef.current) clearTimeout(bgTransTimerRef.current);
+            };
+        }, [hasBgs, bgs.length]); // Only re-run if backgrounds change
+
+        const renderBgSlide = (slide: CreditBackground, opacity: number, transitionDuration: number) => {
+            const url = assetResolver(slide.assetId, 'image');
+            if (!url) return null;
+            const meta = getAssetMetadata(slide.assetId, 'image');
+            const isCustom = slide.objectFit === 'custom';
+            const style: React.CSSProperties = isCustom ? {
+                position: 'absolute',
+                left: `${slide.x ?? 0}%`,
+                top: `${slide.y ?? 0}%`,
+                width: `${slide.width ?? 100}%`,
+                height: `${slide.height ?? 100}%`,
+                objectFit: 'fill' as const,
+                opacity: (slide.opacity ?? 1) * opacity,
+                transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
+            } : {
+                position: 'absolute', inset: 0, width: '100%', height: '100%',
+                objectFit: (slide.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                opacity: (slide.opacity ?? 1) * opacity,
+                transition: transitionDuration > 0 ? `opacity ${transitionDuration}s ease-in-out` : 'none',
+            };
+            if (meta.isVideo) {
+                return <video src={url} autoPlay muted loop={meta.loop} playsInline style={style} />;
+            }
+            return <img src={url} alt="" style={style} />;
+        };
+
+        const currentSlide = hasBgs ? bgs[bgIndex] : null;
+        const prevSlide = prevBgIndex !== null && hasBgs ? bgs[prevBgIndex] : null;
+        const transDur = currentSlide?.transitionDuration || 0.5;
+
+        return (
+            <div
+                className="absolute inset-0 z-40 flex items-end justify-center overflow-hidden"
+                style={{ backgroundColor: command.backgroundColor || '#000000FF', cursor: command.allowSkip ? 'pointer' : 'default' }}
+                onClick={() => {
+                    if (!command.allowSkip) return;
+                    onFinish();
+                }}
+            >
+                {/* Background slides */}
+                {hasBgs && (
+                    <div className="absolute inset-0 z-0">
+                        {prevSlide && transitioning && renderBgSlide(prevSlide, 1, 0)}
+                        {currentSlide && renderBgSlide(currentSlide, transitioning ? (currentSlide.transition === 'instant' ? 1 : 1) : 1, transitioning ? transDur : 0)}
+                        {/* Use a crossfade overlay approach: the new slide fades in on top */}
+                        {transitioning && currentSlide && currentSlide.transition !== 'instant' && (
+                            <div
+                                className="absolute inset-0"
+                                style={{
+                                    backgroundColor: currentSlide.transition === 'dissolve' ? 'transparent' : command.backgroundColor || '#000000FF',
+                                    animation: `credit-bg-fade-in ${transDur}s ease-in-out both`,
+                                }}
+                            />
+                        )}
+                    </div>
+                )}
+
+                {/* Semi-transparent overlay for text readability when backgrounds are present */}
+                {hasBgs && (
+                    <div className="absolute inset-0 z-[1]" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} />
+                )}
+
+                {/* Foreground media items (images/videos with positioning and timed visibility) */}
+                {hasMedia && mediaItems.map((item, idx) => {
+                    const url = assetResolver(item.assetId, 'image');
+                    if (!url) return null;
+                    const meta = getAssetMetadata(item.assetId, 'image');
+                    const showAt = item.showAt || 0;
+                    const hideAt = item.hideAt || 0;
+                    const isVisible = elapsed >= showAt && (hideAt <= 0 || elapsed < hideAt);
+                    const isFading = item.transition === 'fade';
+                    const itemOpacity = isVisible ? (item.opacity ?? 1) : 0;
+                    const isCustomItem = item.objectFit === 'custom';
+                    const mediaStyle: React.CSSProperties = isCustomItem ? {
+                        position: 'absolute',
+                        left: `${item.x}%`,
+                        top: `${item.y}%`,
+                        width: `${item.width}%`,
+                        height: `${item.height}%`,
+                        objectFit: 'fill' as const,
+                        opacity: itemOpacity,
+                        transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
+                        zIndex: 1,
+                        pointerEvents: 'none',
+                    } : {
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: (item.objectFit || 'cover') as React.CSSProperties['objectFit'],
+                        opacity: itemOpacity,
+                        transition: isFading ? `opacity ${item.transitionDuration || 0.5}s ease-in-out` : 'none',
+                        zIndex: 1,
+                        pointerEvents: 'none',
+                    };
+                    if (meta.isVideo) {
+                        return <video key={`credit-media-${idx}`} src={url} autoPlay muted loop playsInline style={mediaStyle} />;
+                    }
+                    return <img key={`credit-media-${idx}`} src={url} alt="" style={mediaStyle} />;
+                })}
+
+                {/* Credits scroll - uses dynamic measurement for proper full scroll */}
+                <CreditScrollContent command={command} hasBgs={hasBgs} hasMedia={hasMedia} onFinish={onFinish} />
+
+                {/* Skip hint */}
+                {command.allowSkip && (
+                    <div className="absolute bottom-4 right-4 text-xs opacity-50 z-[3]" style={{ color: command.textColor || '#FFFFFF' }}>
+                        Click to skip
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // History / Backlog component
+    const HistoryPanel: React.FC<{ history: HistoryEntry[], onClose: () => void, onJumpTo?: (index: number) => void }> = ({ history, onClose, onJumpTo }) => {
+        const scrollRef = React.useRef<HTMLDivElement>(null);
+        
+        // Auto-scroll to bottom on open
+        React.useEffect(() => {
+            if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+        }, []);
+        
+        return (
+            <div className="absolute inset-0 bg-black z-50 flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/60"
+                    style={{ background: 'linear-gradient(180deg, rgb(15,23,42) 0%, rgb(15,23,42) 100%)' }}>
+                    <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h2 className="text-white text-xl font-bold tracking-wide">Text History</h2>
+                        <span className="text-slate-500 text-sm">({history.length} entries)</span>
+                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="text-slate-300 hover:text-white text-sm px-4 py-2 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/40 rounded-lg transition-colors"
+                    >
+                        Close (H / ESC)
+                    </button>
+                </div>
+                
+                {/* History content */}
+                <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+                    {history.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                            <svg className="w-12 h-12 mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <p className="text-sm">No history yet. Play through some dialogue first.</p>
+                        </div>
+                    ) : (
+                        history.map((entry, index) => (
+                            <div 
+                                key={index}
+                                className={`group p-3 rounded-lg transition-colors ${
+                                    entry.type === 'choice' 
+                                        ? 'bg-blue-900/40 border-l-3 border-blue-500/60 hover:bg-blue-900/50' 
+                                        : entry.type === 'textInput'
+                                        ? 'bg-emerald-900/40 border-l-3 border-emerald-500/60 hover:bg-emerald-900/50'
+                                        : 'bg-slate-800/50 hover:bg-slate-800/60'
+                                }`}
+                                style={{ cursor: onJumpTo ? 'pointer' : 'default' }}
+                                onClick={() => onJumpTo?.(index)}
+                            >
+                                <div className="flex items-start gap-3">
+                                    {/* Type indicator */}
+                                    <div className="mt-0.5 flex-shrink-0">
+                                        {entry.type === 'dialogue' && (
+                                            <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                            </svg>
+                                        )}
+                                        {entry.type === 'choice' && (
+                                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        )}
+                                        {entry.type === 'textInput' && (
+                                            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Content */}
+                                    <div className="flex-1 min-w-0">
+                                        {entry.type === 'dialogue' && entry.characterName && entry.characterName !== 'Narrator' && (
+                                            <div className="font-semibold text-sm mb-0.5" style={{ color: entry.characterColor || '#94a3b8' }}>
+                                                {entry.characterName}
+                                            </div>
+                                        )}
+                                        <div className="text-white/90 text-sm leading-relaxed">
+                                            {entry.type === 'choice' ? entry.choiceText || entry.text : 
+                                             entry.type === 'textInput' ? `"${entry.inputValue}"` : entry.text}
+                                        </div>
+                                        {entry.type === 'choice' && (
+                                            <div className="text-blue-400/70 text-xs mt-1 font-medium">Selected choice</div>
+                                        )}
+                                        {entry.type === 'textInput' && (
+                                            <div className="text-emerald-400/70 text-xs mt-1 font-medium">Text input</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderPlayerUI = () => {
+        if (!playerState || playerState.mode !== 'playing') return null;
+        const { uiState } = playerState;
+        
+        // Check if current HUD screen has showDialogue enabled
+        const currentHudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
+        const currentHudScreen = currentHudScreenId ? project.uiScreens[currentHudScreenId] : null;
+        // A pass-through HUD (e.g. an inventory bar) is a transparent overlay, not a full
+        // screen — it must NOT hide the dialogue box. Only an opaque HUD without showDialogue
+        // suppresses dialogue.
+        const isHudPassThrough = currentHudScreen ? (currentHudScreen.passThrough ?? (currentHudScreenId === project.ui.gameHudScreenId)) : false;
+        const shouldShowDialogueOnHud = currentHudScreen?.showDialogue || isHudPassThrough;
+        // Fullscreen movie fade-out duration (0 = no fade) — when a transition is set, the movie
+        // layer fades to transparent on end before clearing, revealing the scene beneath.
+        const movieExitDur = (uiState.movieTransition && uiState.movieTransition !== 'instant') ? (uiState.movieTransitionDuration ?? 0.5) : 0;
+
+        return <>
+            {uiState.showHistory && (
+                <HistoryPanel 
+                    history={playerState.history} 
+                    onClose={() => updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, showHistory: false } } : null)} 
+                />
+            )}
+            {uiState.movieUrl && (
+                <div
+                    className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white"
+                    style={{ opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : undefined }}
+                    onClick={() => {
+                        if (!uiState.isWaitingForInput) return;
+                        updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                    }}
+                >
+                    <video
+                        src={uiState.movieUrl}
+                        autoPlay
+                        playsInline
+                        ref={(el) => {
+                            if (!el) return;
+                            // Prefer playing WITH sound; if the browser blocks autoplay-with-audio,
+                            // fall back to muted playback so the movie never silently shows nothing.
+                            el.play().catch(() => { el.muted = true; el.play().catch(() => {}); });
+                        }}
+                        loop={uiState.movieLoop ?? false}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) }}
+                        onEnded={() => {
+                            // If looping, onEnded won't fire (browser handles loop). Just in case:
+                            if (uiState.movieLoop) return;
+                            // Hold last frame: leave the (now-ended) video frozen on its final frame.
+                            // In wait mode the player still clicks to continue; in non-wait the story
+                            // already advanced and the frame stays until a Stop Video.
+                            if (uiState.movieHoldLastFrame) return;
+                            const wasWaiting = uiState.isWaitingForInput;
+                            if (movieExitDur > 0 && !uiState.movieExiting) {
+                                // Fade the movie layer out, then clear (and advance if it was waiting).
+                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieExiting: true}} : null);
+                                const tid = window.setTimeout(() => {
+                                    updatePlayerState(p => p ? {...p, ...(wasWaiting ? { currentIndex: p.currentIndex + 1 } : {}), uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                                }, movieExitDur * 1000);
+                                activeEffectTimeoutsRef.current.push(tid);
+                            } else if (wasWaiting) {
+                                updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false}} : null);
+                            } else {
+                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false}} : null);
+                            }
+                        }}
+                    />
+                    {uiState.isWaitingForInput && (
+                        <div className="absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none">Click to skip</div>
+                    )}
+                </div>
+            )}
+            {activeCreditRoll && (
+                <CreditRollOverlay
+                    command={activeCreditRoll}
+                    project={project}
+                    assetResolver={assetResolver}
+                    getAssetMetadata={getAssetMetadata}
+                    onFinish={() => {
+                        const onComplete = activeCreditRoll.onComplete;
+                        setActiveCreditRoll(null);
+                        if (onComplete === 'title') {
+                            // Full quit-to-title: stop audio, null playerState, restore title screen
+                            const audio = musicAudioRef.current;
+                            if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ''; }
+                            stopAllSfx();
+                            updatePlayerState(null);
+                            setHudStack([]);
+                            if (project.ui.titleScreenId) setScreenStack([project.ui.titleScreenId]);
+                        } else {
+                            updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1 } : null);
+                        }
+                    }}
+                />
+            )}
+            {/* Show dialogue if: 1) dialogue exists, AND 2) either no HUD screen or HUD screen has showDialogue enabled */}
+            {uiState.dialogue && (!currentHudScreen || shouldShowDialogueOnHud) && (
+                <>
+                    {/* Quick menu buttons — Skip/Back/Auto/Log */}
+                    {(() => {
+                        const qmPosition = project.ui.quickMenuPosition ?? 'above-dialogue';
+                        if (qmPosition === 'hidden') return null;
+                        // Don't render the quick menu while a full-screen overlay (the text history/log) is
+                        // open — otherwise its buttons paint on top of that overlay.
+                        if (uiState.showHistory) return null;
+                        // Variable-reactive Quick Menu bar (whole-bar): first matching state can hide the
+                        // bar or override its color/opacity, tweened by qmReactiveMs.
+                        const qmReactive = pickReactiveTextboxState(project.ui.quickMenuReactiveStates, playerState.variables, evaluateConditions);
+                        if (qmReactive?.hide) return null;
+                        const qmReactiveMs = (project.ui.quickMenuReactiveStates || []).reduce(
+                            (m: number, s: any) => (s.transitionMs ? Math.max(m, s.transitionMs) : m), 0);
+                        const qmColor = qmReactive?.color ?? project.ui.quickMenuColor ?? '#0f172a';
+                        const qmOpacity = qmReactive?.opacity ?? project.ui.quickMenuOpacity ?? 75;
+                        const qmRadius = project.ui.quickMenuBorderRadius ?? 4;
+                        const qmBg = hexToRgba(qmColor, qmOpacity);
+                        const qmBgDisabled = hexToRgba(qmColor, Math.max(10, qmOpacity - 35));
+
+                        /* ── Percentage-based layout (matching InGameUIEditor) ── */
+                        const lpGameW = project.gameResolution?.width || 1920;
+                        const lpGameH = project.gameResolution?.height || 1080;
+                        const dlgW = project.ui.dialogueBoxWidth ?? 100;
+                        const dlgH = project.ui.dialogueBoxHeight ? (project.ui.dialogueBoxHeight * 100 / lpGameH) : 20;
+                        const dlgX = project.ui.dialogueBoxX ?? ((100 - dlgW) / 2);
+                        const dlgBm = (project.ui.dialogueBoxBottomMargin ?? 20) * 100 / lpGameH;
+                        const qmWPct = project.ui.quickMenuWidth ?? 40;
+                        const qmHPct = project.ui.quickMenuHeight ?? 4;
+                        // Mirror the reservation logic from the dialogue-box renderer:
+                        // a bottom Quick Menu preset pushes the dialogue up so the menu
+                        // can sit at the screen edge without being covered.
+                        // Skip reservation if quickMenuFloatOverDialogue is enabled.
+                        const isBottomQmPreset = qmPosition === 'bottom-right' || qmPosition === 'bottom-left';
+                        const shouldFloatQm = project.ui.quickMenuFloatOverDialogue ?? false;
+                        const qmBottomReservePct = (!shouldFloatQm && isBottomQmPreset && project.ui.quickMenuY === undefined)
+                            ? (qmHPct + 2)
+                            : 0;
+                        const dlgY = project.ui.dialogueBoxY ?? (100 - dlgH - dlgBm - qmBottomReservePct);
+
+                        const getDefaultPos = () => {
+                            if (qmPosition === 'top-right') return { x: 100 - qmWPct - 1, y: 1 };
+                            if (qmPosition === 'top-left') return { x: 1, y: 1 };
+                            if (qmPosition === 'bottom-right') return { x: 100 - qmWPct - 1, y: 100 - qmHPct - 1 };
+                            if (qmPosition === 'bottom-left') return { x: 1, y: 100 - qmHPct - 1 };
+                            return { x: dlgX, y: dlgY - qmHPct - 1 };
+                        };
+                        const defPos = getDefaultPos();
+                        const qmX = project.ui.quickMenuX ?? defPos.x;
+                        const qmY = project.ui.quickMenuY ?? defPos.y;
+
+                        // Increase z-index when float is enabled or for bottom presets to ensure visibility above dialogue
+                        const qmZIndex = shouldFloatQm || isBottomQmPreset ? 50 : 25;
+
+                        // ── Per-button descriptors (shared by grouped + independent layouts) ── //
+                        const pillBase = 'flex items-center gap-1 font-medium transition-all';
+                        const defBorder = '1px solid rgba(148,163,184,0.2)';
+                        const commonPill: React.CSSProperties = {
+                            borderRadius: scalePx(qmRadius),
+                            padding: `${scalePx(4)} ${scalePx(10)}`,
+                            fontSize: scalePx(12),
+                            backdropFilter: 'blur(4px)',
+                            ...(qmReactiveMs > 0 ? { transition: `background ${qmReactiveMs}ms ease, background-color ${qmReactiveMs}ms ease, border-color ${qmReactiveMs}ms ease` } : {}),
+                        };
+                        const hasHistory = playerState.history.length > 0;
+                        const qmButtonCfgs = project.ui.quickMenuButtons || {};
+                        const qmCustomButtons = project.ui.quickMenuCustomButtons || [];
+                        // Resolve the art/position/size config for a descriptor key: built-ins live in
+                        // quickMenuButtons (keyed by key); custom buttons carry their own config.
+                        const qmCfgFor = (key: string): QuickMenuButtonConfig | undefined =>
+                            qmButtonCfgs[key as QuickMenuButtonKey] || qmCustomButtons.find(cb => cb.id === key);
+                        // Size the icon relative to the pill's (already --font-scale'd) font size so it
+                        // scales with the window. A fixed px icon would stay big as the slot shrank and
+                        // overflow into neighbouring buttons (the independent-layout overlap bug).
+                        const iconStyle: React.CSSProperties = { width: '1.15em', height: '1.15em', flexShrink: 0 };
+                        type QmDesc = { key: string; show: boolean; onClick: (e: React.MouseEvent) => void; disabled?: boolean; title: string; label: string; icon: React.ReactNode; pillClassName: string; pillStyle: React.CSSProperties };
+                        const descriptors: QmDesc[] = [
+                            {
+                                key: 'skipBackward', show: project.ui.quickMenuShowSkipBackward !== false,
+                                onClick: (e) => { e.stopPropagation(); handleSkipBackward(); },
+                                disabled: !hasHistory, title: 'Skip Backward (Arrow Up)', label: 'Back',
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>,
+                                pillClassName: pillBase,
+                                pillStyle: { ...commonPill, background: hasHistory ? qmBg : qmBgDisabled, border: defBorder, color: hasHistory ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)', cursor: hasHistory ? 'pointer' : 'default' },
+                            },
+                            {
+                                key: 'log', show: project.ui.quickMenuShowLog !== false,
+                                onClick: (e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, showHistory: true } } : null); },
+                                title: 'Text History (H)', label: 'Log',
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'autoAdvance', show: project.ui.quickMenuShowAutoAdvance !== false,
+                                onClick: (e) => { e.stopPropagation(); setSettings(s => ({ ...s, autoAdvance: !s.autoAdvance })); },
+                                title: 'Auto-Advance', label: 'Auto',
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+                                pillClassName: pillBase,
+                                pillStyle: { ...commonPill, background: settings.autoAdvance ? 'rgba(14,165,233,0.3)' : qmBg, border: `1px solid ${settings.autoAdvance ? 'rgba(14,165,233,0.5)' : 'rgba(148,163,184,0.2)'}`, color: settings.autoAdvance ? 'rgba(125,211,252,0.95)' : 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'skipForward', show: !!settings.enableSkip && project.ui.quickMenuShowSkipForward !== false,
+                                onClick: (e) => { e.stopPropagation(); updatePlayerState(pp => pp ? { ...pp, uiState: { ...pp.uiState, isSkipping: !pp.uiState.isSkipping } } : null); },
+                                title: 'Skip Forward (Ctrl)', label: 'Skip',
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>,
+                                pillClassName: pillBase,
+                                pillStyle: { ...commonPill, background: uiState.isSkipping ? 'rgba(239,68,68,0.3)' : qmBg, border: `1px solid ${uiState.isSkipping ? 'rgba(239,68,68,0.5)' : 'rgba(148,163,184,0.2)'}`, color: uiState.isSkipping ? 'rgba(252,165,165,0.95)' : 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'save', show: project.ui.quickMenuShowSave !== false,
+                                onClick: (e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.SaveGame, slotNumber: 1 }); },
+                                title: 'Save Game', label: 'Save',
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V3" /></svg>,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            },
+                            {
+                                key: 'load', show: project.ui.quickMenuShowLoad !== false,
+                                onClick: (e) => { e.stopPropagation(); handleUIAction({ type: UIActionType.LoadGame, slotNumber: 1 }); },
+                                title: 'Load Game', label: 'Load',
+                                icon: <svg style={iconStyle} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M9 9l3 3m0 0l3-3m-3 3V1" /></svg>,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            },
+                        ];
+                        // Author-defined extra buttons: each runs its own action. Appended after the
+                        // built-ins so grouped layout shows them inline; independent layout positions
+                        // them by their own x/y/width/height (via qmCfgFor).
+                        const customDescriptors: QmDesc[] = qmCustomButtons
+                            .filter(cb => cb.show !== false)
+                            .map(cb => ({
+                                key: cb.id,
+                                show: true,
+                                onClick: (e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    if (cb.action && cb.action.type !== UIActionType.None) handleUIAction(cb.action);
+                                },
+                                title: cb.label,
+                                label: cb.label,
+                                icon: null,
+                                pillClassName: `${pillBase} hover:brightness-125`,
+                                pillStyle: { ...commonPill, background: qmBg, border: defBorder, color: 'rgba(255,255,255,0.8)' },
+                            }));
+                        const visible = [...descriptors, ...customDescriptors].filter(d => d.show);
+
+                        // A custom action on a Quick Menu button OVERRIDES its built-in behavior,
+                        // routing through the same UI-action pipeline as every other button.
+                        const qmOnClick = (d: QmDesc) => {
+                            const cfg = qmCfgFor(d.key);
+                            if (cfg?.action && cfg.action.type !== UIActionType.None) {
+                                return (e: React.MouseEvent) => { e.stopPropagation(); handleUIAction(cfg.action!); };
+                            }
+                            return d.onClick;
+                        };
+
+                        // ── Independent layout: each button placed/sized on its own ── //
+                        if (project.ui.quickMenuIndependentLayout) {
+                            const count = visible.length || 1;
+                            const slotW = qmWPct / count;
+                            return (
+                                <div className="absolute inset-0" style={{ pointerEvents: 'none', zIndex: qmZIndex }}>
+                                    {visible.map((d, i) => {
+                                        const cfg = qmCfgFor(d.key) || {};
+                                        const bx = cfg.x ?? (qmX + i * slotW);
+                                        const by = cfg.y ?? qmY;
+                                        const bw = cfg.width ?? Math.max(4, slotW - 1);
+                                        const bh = cfg.height ?? qmHPct;
+                                        // "Fit to content": the slot is just bounds — the art + clickable button shrink to
+                                        // the fitted image so empty margin is neither visible nor clickable.
+                                        const fit = !!cfg.fitToContent;
+                                        const slotStyle: React.CSSProperties = fit
+                                            ? { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+                                            // overflow:hidden keeps a button's content inside its own slot so it can't spill over a neighbour.
+                                            : { position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, pointerEvents: 'auto', overflow: 'hidden' };
+                                        return (
+                                            <div key={d.key} style={slotStyle}>
+                                                <QuickMenuButtonEl
+                                                    label={d.label} title={d.title} icon={d.icon} onClick={qmOnClick(d)} disabled={d.disabled}
+                                                    config={cfg} assetResolver={assetResolver}
+                                                    artButtonStyle={fit
+                                                        ? { maxWidth: '100%', maxHeight: '100%', pointerEvents: 'auto' }
+                                                        : { width: '100%', height: '100%' }}
+                                                    artImgStyle={fit
+                                                        ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }
+                                                        : { width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                                                    pillClassName={d.pillClassName}
+                                                    pillStyle={{ ...d.pillStyle, width: '100%', height: '100%', justifyContent: 'center', ...(fit ? { pointerEvents: 'auto' } : {}) }}
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        }
+
+                        // ── Grouped layout (default): single centered bar ── //
+                        return (
+                            <div className="flex items-center justify-center gap-2"
+                                style={{
+                                    position: 'absolute' as const,
+                                    left: `${qmX}%`,
+                                    top: `${qmY}%`,
+                                    width: `${qmWPct}%`,
+                                    height: `${qmHPct}%`,
+                                    pointerEvents: 'none',
+                                    zIndex: qmZIndex,
+                                }}
+                            >
+                                <div className="flex flex-wrap items-center justify-center gap-1.5" style={{ pointerEvents: 'auto', maxWidth: '100%' }}>
+                                    {visible.map(d => (
+                                        <QuickMenuButtonEl
+                                            key={d.key}
+                                            label={d.label} title={d.title} icon={d.icon} onClick={qmOnClick(d)} disabled={d.disabled}
+                                            config={qmCfgFor(d.key)} assetResolver={assetResolver}
+                                            artButtonStyle={{ width: 'auto', height: 'auto' }}
+                                            artImgStyle={{ height: scalePx(28), width: 'auto', objectFit: 'contain', display: 'block' }}
+                                            pillClassName={d.pillClassName}
+                                            pillStyle={d.pillStyle}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    <DialogueBox dialogue={uiState.dialogue} settings={settings} projectUI={project.ui} onFinished={handleDialogueAdvance} variables={playerState.variables} project={project} reactiveState={pickReactiveTextboxState(project.ui.dialogueReactiveStates, playerState.variables, evaluateConditions)} />
+                </>
+            )}
+            {uiState.choices && <ChoiceMenu choices={uiState.choices} projectUI={project.ui} onSelect={handleChoiceSelect} variables={playerState.variables} project={project} layout={uiState.choiceLayout} />}
+            {uiState.textInput && <TextInputForm textInput={uiState.textInput} onSubmit={handleTextInputSubmit} variables={playerState.variables} project={project} projectUI={project.ui} />}
+            {activeFlashRef.current && <div 
+                key={activeFlashRef.current.key}
+                className="absolute inset-0 z-50 pointer-events-none" 
+                style={{ backgroundColor: activeFlashRef.current.color, animation: `flash-anim ${activeFlashRef.current.duration}s ease-in-out` }}
+                onAnimationEnd={(e) => {
+                    // Only handle this animation event, not bubbled events from children
+                    if (e.target === e.currentTarget) {
+                        activeFlashRef.current = null;
+                        setFlashTrigger(prev => prev + 1);
+                    }
+                }}
+            ></div>}
+            {/* Lightning — outer div scales the peak by intensity; inner flickers via keyframes.
+                z above the dialogue box (20) when it should flash it too, else below it. */}
+            {activeLightningRef.current && (
+                <div key={activeLightningRef.current.key} className="absolute inset-0 pointer-events-none" style={{ opacity: activeLightningRef.current.intensity, zIndex: activeLightningRef.current.affectsDialogue ? 50 : 15 }}>
+                    <div
+                        className="absolute inset-0"
+                        style={{ backgroundColor: activeLightningRef.current.color, animation: `vn-lightning-${activeLightningRef.current.flashes} ${activeLightningRef.current.duration}s ease-out` }}
+                        onAnimationEnd={(e) => {
+                            if (e.target === e.currentTarget) {
+                                activeLightningRef.current = null;
+                                setLightningTrigger(prev => prev + 1);
+                            }
+                        }}
+                    />
+                </div>
+            )}
+            {/* Fireworks (one-shot volley) — canvas burst; z above the dialogue box unless told otherwise. */}
+            {activeFireworksRef.current && (
+                <div className="absolute inset-0 pointer-events-none" style={{ zIndex: activeFireworksRef.current.affectsDialogue ? 50 : 15 }}>
+                    <FireworksBurst
+                        key={activeFireworksRef.current.key}
+                        colors={activeFireworksRef.current.colors}
+                        intensity={activeFireworksRef.current.intensity}
+                        bursts={activeFireworksRef.current.bursts}
+                        duration={activeFireworksRef.current.duration}
+                        heightFrac={activeFireworksRef.current.burstHeight}
+                        width={stageSize.width}
+                        height={stageSize.height}
+                        onExplode={activeFireworksRef.current.sfxPerBurst && activeFireworksRef.current.sfxId
+                            ? () => playSound(activeFireworksRef.current!.sfxId!, activeFireworksRef.current!.sfxVolume)
+                            : undefined}
+                        onDone={() => { activeFireworksRef.current = null; setFireworksTrigger(prev => prev + 1); }}
+                    />
+                </div>
+            )}
+            {/* Flashlight — dark overlay with a soft hole that follows the cursor (updated imperatively).
+                z above the dialogue box (20) so it dims too, unless "don't affect dialogue box".
+                When toggled OFF with `darkWhenOff`, render SOLID darkness (no light hole) for dark rooms. */}
+            {flashlight && (flashlight.on || flashlight.darkWhenOff) && (
+                <div
+                    ref={flashlightOverlayRef}
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                        zIndex: flashlight.affectsDialogue ? 45 : 15,
+                        background: flashlight.on
+                            ? flashlightBg((typeof window !== 'undefined' ? window.innerWidth : 1280) / 2, (typeof window !== 'undefined' ? window.innerHeight : 720) / 2, (flashlight.radius / 100) * (typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 720), flashlight.softness, hexToRgba(flashlight.color, flashlight.darkness * 100))
+                            : hexToRgba(flashlight.color, flashlight.darkness * 100),
+                    }}
+                />
+            )}
+        </>
+    };
+
+    const currentScreenId = (!playerState || playerState.mode === 'paused')
+        ? (screenStack.length > 0 ? screenStack[screenStack.length - 1] : null)
+        : null;
+
+    const hudScreenId = playerState?.mode === 'playing'
+        ? (hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId)
+        : null;
+
+    const activeMenuScreen = currentScreenId ? project.uiScreens[currentScreenId] : null;
+    const activeHudScreen = hudScreenId ? project.uiScreens[hudScreenId] : null;
+
+    const activeOverlayEffects: VNScreenOverlayEffect[] = normalizeOverlayEffects([
+        // Scene screen-FX belong to the scene stage, which isn't rendered while paused.
+        // Including them in pause let a restored (Continue/load) effect fade in over the
+        // pause menu and black it out — so gate them to playing mode.
+        ...((playerState?.mode === 'playing' ? playerState?.stageState.screen.overlayEffects : []) ?? []),
+        ...(activeHudScreen?.effects ?? []),
+        ...(activeMenuScreen?.effects ?? []),
+    ]);
+
+    // Fog/haze/smoke render BEHIND character sprites by default (atmospheric depth) unless the
+    // author ticked "in front of characters". Every other effect (rain, snow, …) stays in the
+    // normal overlay layer above the stage.
+    const FOG_LAYER_TYPES = new Set(['fog', 'haze', 'smoke']);
+    const belowCharEffects = activeOverlayEffects.filter(e => FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters);
+    const aboveCharEffects = activeOverlayEffects.filter(e => !(FOG_LAYER_TYPES.has(e.type) && !e.params?.aboveCharacters));
+
+    // Use fallback dimensions if stageSize hasn't been measured yet (width/height are 0)
+    const overlayWidth = (stageSize?.width && stageSize.width > 0) ? stageSize.width : 1280;
+    const overlayHeight = (stageSize?.height && stageSize.height > 0) ? stageSize.height : 720;
+
+    const handleClose = () => {
+        // Immediately stop music without fade
+        const audio = musicAudioRef.current;
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.src = '';
+        }
+        // Immediately stop ambient noise
+        const ambientAudio = ambientNoiseAudioRef.current;
+        if (ambientAudio) {
+            ambientAudio.pause();
+            ambientAudio.currentTime = 0;
+            ambientAudio.src = '';
+        }
+        // Clear any fade intervals
+        if (audioFadeInterval.current) {
+            clearInterval(audioFadeInterval.current);
+            audioFadeInterval.current = null;
+        }
+        if (ambientFadeInterval.current) {
+            clearInterval(ambientFadeInterval.current);
+            ambientFadeInterval.current = null;
+        }
+        stopAllSfx();
+        
+        // Stop all videos
+        const allVideos = document.querySelectorAll('video');
+        allVideos.forEach(video => {
+            video.pause();
+            video.src = '';
+            video.load();
+        });
+        
+        onClose();
+    };
+
+    // Cleanup effect when component unmounts
+    useEffect(() => {
+        return () => {
+            // Ensure all audio stops when component unmounts
+            const audio = musicAudioRef.current;
+            if (audio) {
+                audio.pause();
+                audio.src = '';
+            }
+            const ambientAudio = ambientNoiseAudioRef.current;
+            if (ambientAudio) {
+                ambientAudio.pause();
+                ambientAudio.src = '';
+            }
+            if (audioFadeInterval.current) {
+                clearInterval(audioFadeInterval.current);
+            }
+            if (ambientFadeInterval.current) {
+                clearInterval(ambientFadeInterval.current);
+            }
+            // Stop all SFX
+            sfxSourceNodesRef.current.forEach(src => {
+                try { src.stop(); } catch (e) {}
+            });
+            sfxSourceNodesRef.current = [];
+            
+            // Clear all active effect timeouts (shake, tint, etc.)
+            activeEffectTimeoutsRef.current.forEach(timeoutId => {
+                try { clearTimeout(timeoutId); } catch (e) {}
+            });
+            activeEffectTimeoutsRef.current = [];
+            
+            // Cancel all active tweens
+            TweenManager.cancelAll();
+            
+            // Stop all videos (including background videos on screens)
+            const allVideos = document.querySelectorAll('video');
+            allVideos.forEach(video => {
+                video.pause();
+                video.src = '';
+                video.load();
+            });
+        };
+    }, []);
+
+    if (!titleScreenId) {
+        return (
+            <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white p-8 text-center">
+                <h2 className="text-2xl text-red-500 font-bold mb-4">Playback Error</h2>
+                <p className="max-w-md">Could not start the game because no valid Title Screen is set. Please ensure a Title Screen exists and is configured in the Project Settings.</p>
+                <button onClick={handleClose} className="mt-8 bg-[var(--bg-tertiary)] hover:bg-[var(--accent-purple)] px-6 py-2 rounded-lg font-bold">
+                    Return to Editor
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+            <style>{`
+                @keyframes elementTransitionfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes elementTransitionslideUp {
+                    from { opacity: 0; transform: translate(-50%, 20%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionslideDown {
+                    from { opacity: 0; transform: translate(-50%, -70%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionslideLeft {
+                    from { opacity: 0; transform: translate(-20%, -50%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionslideRight {
+                    from { opacity: 0; transform: translate(-80%, -50%); }
+                    to { opacity: 1; transform: translate(-50%, -50%); }
+                }
+                @keyframes elementTransitionscale {
+                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                }
+                /* Appearance-state image swap crossfade (new image fades in over the old) */
+                @keyframes vnImgCrossfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
+                /* Screen IN transitions */
+                @keyframes screenTransitionfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes screenTransitionslideUp {
+                    from { opacity: 0; transform: translateY(100%); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes screenTransitionslideDown {
+                    from { opacity: 0; transform: translateY(-100%); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes screenTransitionslideLeft {
+                    from { opacity: 0; transform: translateX(100%); }
+                    to { opacity: 1; transform: translateX(0); }
+                }
+                @keyframes screenTransitionslideRight {
+                    from { opacity: 0; transform: translateX(-100%); }
+                    to { opacity: 1; transform: translateX(0); }
+                }
+                @keyframes screenTransitioncrossfade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                
+                /* New-game title→scene fade (defined here so exported games have it too) */
+                @keyframes vnGameStartToBlack { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes vnGameStartFromBlack { from { opacity: 1; } to { opacity: 0; } }
+
+                /* Screen OUT transitions */
+                @keyframes screenTransitionfadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                @keyframes screenTransitioncrossfadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 1; }
+                }
+                @keyframes screenTransitionslideUpOut {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(-100%); }
+                }
+                @keyframes screenTransitionslideDownOut {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(100%); }
+                }
+                @keyframes screenTransitionslideLeftOut {
+                    from { opacity: 1; transform: translateX(0); }
+                    to { opacity: 0; transform: translateX(-100%); }
+                }
+                @keyframes screenTransitionslideRightOut {
+                    from { opacity: 1; transform: translateX(0); }
+                    to { opacity: 0; transform: translateX(100%); }
+                }
+
+                /* Runtime effects (editor + standalone) */
+                @keyframes shake {
+                    0%, 100% { transform: translate(0, 0); }
+                    25% { transform: translate(var(--shake-intensity-x, 5px), var(--shake-intensity-y, 5px)); }
+                    50% { transform: translate(calc(-1 * var(--shake-intensity-x, 5px)), calc(-1 * var(--shake-intensity-y, 5px))); }
+                    75% { transform: translate(var(--shake-intensity-x, 5px), calc(-1 * var(--shake-intensity-y, 5px))); }
+                }
+                .shake {
+                    animation: shake 0.2s ease-in-out infinite;
+                }
+
+                @keyframes flash-anim {
+                    0%, 100% { opacity: 0; }
+                    50% { opacity: 0.9; }
+                }
+                /* Lightning flicker patterns (1 = single strike, 2 = double, 3 = stormy triple). */
+                @keyframes vn-lightning-1 {
+                    0% { opacity: 0; }
+                    6% { opacity: 1; }
+                    16% { opacity: 0.15; }
+                    24% { opacity: 0.6; }
+                    45% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+                @keyframes vn-lightning-2 {
+                    0% { opacity: 0; }
+                    4% { opacity: 1; }
+                    10% { opacity: 0.1; }
+                    16% { opacity: 0.85; }
+                    24% { opacity: 0.2; }
+                    34% { opacity: 0.5; }
+                    50% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+                @keyframes vn-lightning-3 {
+                    0% { opacity: 0; }
+                    3% { opacity: 0.9; }
+                    8% { opacity: 0.1; }
+                    13% { opacity: 1; }
+                    19% { opacity: 0.15; }
+                    26% { opacity: 0.7; }
+                    33% { opacity: 0.2; }
+                    42% { opacity: 0.55; }
+                    60% { opacity: 0; }
+                    100% { opacity: 0; }
+                }
+
+                .vnfx-canvas {
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                }
+
+                /* Twinkling lights (PlaceLights) */
+                @keyframes vnfx-candle {
+                    0%   { opacity: 0.85; transform: translate(-50%, -50%) scale(0.96); }
+                    25%  { opacity: 1;    transform: translate(-50%, -51%) scale(1.04); }
+                    45%  { opacity: 0.8;  transform: translate(-50%, -50%) scale(0.98); }
+                    65%  { opacity: 0.95; transform: translate(-51%, -49%) scale(1.02); }
+                    100% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.96); }
+                }
+                @keyframes vnfx-star {
+                    0%   { opacity: 0.45; transform: translate(-50%, -50%) scale(0.85); }
+                    50%  { opacity: 1;    transform: translate(-50%, -50%) scale(1.12); }
+                    100% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.85); }
+                }
+                @keyframes vnfx-bulb-fade {
+                    0%   { opacity: 0.25; }
+                    50%  { opacity: 1; }
+                    100% { opacity: 0.25; }
+                }
+                @keyframes vnfx-bulb-blink {
+                    0%, 49%   { opacity: 1; }
+                    50%, 100% { opacity: 0.12; }
+                }
+
+                .vnfx-scanlines {
+                    position: absolute;
+                    inset: 0;
+                    background: repeating-linear-gradient(
+                        to bottom,
+                        rgba(0, 0, 0, 0.35) 0px,
+                        rgba(0, 0, 0, 0.35) 1px,
+                        rgba(0, 0, 0, 0) 3px,
+                        rgba(0, 0, 0, 0) 4px
+                    );
+                    mix-blend-mode: overlay;
+                    animation: vnfx-scanlines-scroll 6s linear infinite;
+                }
+                @keyframes vnfx-scanlines-scroll {
+                    from { background-position: 0 0; }
+                    to { background-position: 0 60px; }
+                }
+
+                .vnfx-chromatic {
+                    position: absolute;
+                    inset: -2%;
+                    background:
+                        radial-gradient(circle at 20% 40%, rgba(255, 0, 80, 0.22), transparent 40%),
+                        radial-gradient(circle at 80% 55%, rgba(0, 220, 255, 0.20), transparent 45%),
+                        repeating-linear-gradient(
+                            to bottom,
+                            rgba(255, 255, 255, 0.06),
+                            rgba(255, 255, 255, 0.06) 2px,
+                            transparent 6px,
+                            transparent 10px
+                        );
+                    mix-blend-mode: screen;
+                    filter: blur(0.6px);
+                    animation: vnfx-chromatic-jitter 0.9s steps(2, end) infinite;
+                }
+                @keyframes vnfx-chromatic-jitter {
+                    0% { transform: translate3d(0, 0, 0); }
+                    20% { transform: translate3d(1px, -1px, 0); }
+                    40% { transform: translate3d(-1px, 1px, 0); }
+                    60% { transform: translate3d(2px, 0, 0); }
+                    80% { transform: translate3d(-2px, 1px, 0); }
+                    100% { transform: translate3d(0, 0, 0); }
+                }
+
+                .vnfx-sunbeams {
+                    position: absolute;
+                    inset: -30%;
+                    background: conic-gradient(
+                        from 0deg,
+                        rgba(255, 220, 120, 0.0),
+                        rgba(255, 220, 120, 0.35),
+                        rgba(255, 220, 120, 0.0) 18%,
+                        rgba(255, 190, 90, 0.28) 25%,
+                        rgba(255, 220, 120, 0.0) 40%,
+                        rgba(255, 220, 120, 0.32) 52%,
+                        rgba(255, 220, 120, 0.0) 68%,
+                        rgba(255, 200, 100, 0.26) 78%,
+                        rgba(255, 220, 120, 0.0)
+                    );
+                    mix-blend-mode: screen;
+                    filter: blur(10px);
+                    animation: vnfx-sunbeams-spin 18s linear infinite;
+                    transform-origin: 50% 50%;
+                }
+                @keyframes vnfx-sunbeams-spin {
+                    from { transform: rotate(0deg) scale(1); }
+                    to { transform: rotate(360deg) scale(1); }
+                }
+
+                .vnfx-shimmer {
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(
+                        120deg,
+                        transparent 0%,
+                        rgba(255, 255, 255, 0.10) 14%,
+                        transparent 28%,
+                        transparent 100%
+                    );
+                    background-size: 240% 240%;
+                    mix-blend-mode: overlay;
+                    filter: blur(0.4px);
+                    animation: vnfx-shimmer-move 2.8s ease-in-out infinite;
+                }
+                @keyframes vnfx-shimmer-move {
+                    0% { background-position: 0% 0%; }
+                    50% { background-position: 100% 100%; }
+                    100% { background-position: 0% 0%; }
+                }
+            `}</style>
+            {/* Letterbox the stage to the game's aspect ratio. The parent is the full viewport
+                (fixed inset-0, flex-centered, black bg = the bars), so a pure-CSS min() fit works
+                in BOTH orientations: on a screen WIDER than the game aspect (most phones in
+                landscape) it pillarboxes; on a TALLER screen it letterboxes. The old
+                `width:100% + aspect-ratio + max-height` STRETCHED on wider-than-aspect screens,
+                which shifted every %-positioned element (e.g. the quick menu) on Android. At a
+                16:9 window this resolves to the same 1280x720 as before (desktop unchanged). */}
+            <div ref={playContainerRef} className="relative overflow-hidden" style={{ width: `min(100vw, calc(100vh * ${project.gameResolution?.width || 1920} / ${project.gameResolution?.height || 1080}))`, height: `min(100vh, calc(100vw * ${project.gameResolution?.height || 1080} / ${project.gameResolution?.width || 1920}))`, '--font-scale': playContainerSize.width > 0 ? playContainerSize.width / (project.gameResolution?.width || 1920) : 1 } as React.CSSProperties}>
+                {playerState?.mode === 'playing' ? renderStage() : null}
+                
+                {/* Render closing + current menu screens together so a screen transitioning
+                    from current → closing stays mounted (only its isClosing prop flips and the
+                    CSS animation switches). Splitting them into two separate JSX blocks used to
+                    force React to unmount the old screen and remount it under the "closing"
+                    block, causing a one-frame gap that looked like flicker during crossfades.
+
+                    GUARD: never render MENU-stack screens while the game is actively playing.
+                    Menu/title screens belong to the title or a PAUSED game; during 'playing' the
+                    scene + HUD own the view. Without this, a stale `screenStack` entry (e.g. the
+                    title left mounted because a New Game started without the stack re-rendering) can
+                    sit on top of a running scene — the reported "New Game starts but the title never
+                    clears; navigating away and back reveals the scene". This makes the title vanish
+                    the instant the game starts, independent of when `setScreenStack([])` settles. */}
+                {(!playerState || playerState.mode === 'paused') && (() => {
+                    const ordered: { id: VNID; isClosing: boolean }[] = [];
+                    const topClosingMenu = !!currentScreenId && closingScreens.has(currentScreenId);
+                    if (topClosingMenu && screenStack.length >= 2) {
+                        // Pop close (e.g. Return To Previous Screen): render the LEAVING screen below
+                        // and the revealed previous screen ON TOP, entering. This mirrors a forward
+                        // GoToScreen, so crossfade (incoming fades in over the static outgoing) works
+                        // the same in both directions instead of fading to black / not animating.
+                        ordered.push({ id: currentScreenId as VNID, isClosing: true });
+                        ordered.push({ id: screenStack[screenStack.length - 2], isClosing: false });
+                    } else {
+                        // Closing screens first (rendered below — earlier in DOM = lower stacking)
+                        for (const id of screenStack) {
+                            if (id !== currentScreenId && closingScreens.has(id)) {
+                                ordered.push({ id, isClosing: true });
+                            }
+                        }
+                        // Current screen last (rendered above)
+                        if (currentScreenId) {
+                            ordered.push({ id: currentScreenId, isClosing: closingScreens.has(currentScreenId) });
+                        }
+                    }
+                    return ordered.map(({ id, isClosing }) => (
+                        <UIScreenRenderer
+                            // Key on isClosing so a screen remounts when it starts closing — a fresh
+                            // mount reliably plays the transitionOut animation (changing the CSS
+                            // animation-name on the SAME element doesn't restart it after the IN
+                            // animation finished, which made fade-out "cut to black" instead).
+                            key={`${id}-${isClosing ? 'closing' : 'open'}`}
+                            screenId={id}
+                            onAction={handleUIAction}
+                            settings={settings}
+                            onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
+                            assetResolver={assetResolver}
+                            gameSaves={gameSaves}
+                            playSound={playSound}
+                            variables={screenVariables}
+                            onVariableChange={handleVariableChange}
+                            isClosing={isClosing}
+                            evaluateConditions={evaluateConditions}
+                            onCommitVariables={commitUiVariablesToPlayerState}
+                            inventorySlots={playerState?.inventorySlots}
+                            onReorderSlots={reorderSlots}
+                            selectedItemId={playerState?.selectedItemId}
+                            selectedElementId={playerState?.selectedElementId}
+                            onSelectItem={selectItem}
+                        />
+                    ));
+                })()}
+                {/* Render closing + current HUD screens together. Same unmount/remount fix as
+                    the menu-screen block above. */}
+                {playerState?.mode === 'playing' && (() => {
+                    const topHud = hudStack.length > 0 ? hudStack[hudStack.length - 1] : null;
+                    const activeHudId = topHud ?? project.ui.gameHudScreenId ?? null;
+                    const ordered: { id: VNID; isClosing: boolean }[] = [];
+                    const topClosingHud = !!activeHudId && closingScreens.has(activeHudId);
+                    if (topClosingHud && hudStack.length >= 2) {
+                        // Pop close: leaving HUD screen below, revealed screen on top entering
+                        // (mirrors a forward GoToScreen so crossfade works in both directions).
+                        ordered.push({ id: activeHudId as VNID, isClosing: true });
+                        ordered.push({ id: hudStack[hudStack.length - 2], isClosing: false });
+                    } else {
+                        for (const id of hudStack) {
+                            if (id !== topHud && closingScreens.has(id)) {
+                                ordered.push({ id, isClosing: true });
+                            }
+                        }
+                        if (activeHudId) {
+                            ordered.push({ id: activeHudId, isClosing: closingScreens.has(activeHudId) });
+                        }
+                    }
+                    return ordered.map(({ id, isClosing }) => (
+                        <UIScreenRenderer
+                            // Key on isClosing so a screen remounts when it starts closing — a fresh
+                            // mount reliably plays the transitionOut animation (changing the CSS
+                            // animation-name on the SAME element doesn't restart it after the IN
+                            // animation finished, which made fade-out "cut to black" instead).
+                            key={`${id}-${isClosing ? 'closing' : 'open'}`}
+                            screenId={id}
+                            onAction={handleUIAction}
+                            settings={settings}
+                            onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
+                            assetResolver={assetResolver}
+                            gameSaves={gameSaves}
+                            playSound={playSound}
+                            variables={screenVariables}
+                            onVariableChange={handleVariableChange}
+                            isClosing={isClosing}
+                            evaluateConditions={evaluateConditions}
+                            onCommitVariables={commitUiVariablesToPlayerState}
+                            inventorySlots={playerState?.inventorySlots}
+                            onReorderSlots={reorderSlots}
+                            selectedItemId={playerState?.selectedItemId}
+                            selectedElementId={playerState?.selectedElementId}
+                            onSelectItem={selectItem}
+                        />
+                    ));
+                })()}
+
+                {/* Backdrop behind a pausing overlay: optional dim + blur, and it captures pointer
+                    events so the frozen scene/dialogue beneath can't be clicked. Sits above dialogue
+                    (z≈44) and below the pausing overlay (z46). */}
+                {scenePaused && pausingOverlayScreen && (
+                    <div
+                        className="absolute inset-0"
+                        style={{
+                            zIndex: 44,
+                            background: pausingOverlayScreen.backdropOpacity ? `rgba(0,0,0,${pausingOverlayScreen.backdropOpacity})` : 'transparent',
+                            backdropFilter: pausingOverlayScreen.backdropBlur ? `blur(${pausingOverlayScreen.backdropBlur}px)` : undefined,
+                            WebkitBackdropFilter: pausingOverlayScreen.backdropBlur ? `blur(${pausingOverlayScreen.backdropBlur}px)` : undefined,
+                        } as React.CSSProperties}
+                        onClick={e => e.stopPropagation()}
+                    />
+                )}
+
+                {belowCharEffects.length > 0 && (
+                    <ScreenOverlayEffects
+                        effects={belowCharEffects}
+                        width={overlayWidth}
+                        height={overlayHeight}
+                        className="absolute inset-0 pointer-events-none z-[4]"
+                    />
+                )}
+                {aboveCharEffects.length > 0 && (
+                    <ScreenOverlayEffects
+                        effects={aboveCharEffects}
+                        width={overlayWidth}
+                        height={overlayHeight}
+                        className="absolute inset-0 pointer-events-none z-40"
+                    />
+                )}
+                {renderPlayerUI()}
+                
+                {/* New-game transition: fade to black over the title, then fade the scene in. */}
+                {gameStartFade !== 'none' && (
+                    <div
+                        className="absolute inset-0 pointer-events-none z-[60] bg-black"
+                        style={{ animation: `${gameStartFade === 'toBlack' ? 'vnGameStartToBlack' : 'vnGameStartFromBlack'} 0.4s ease-in-out forwards` }}
+                    />
+                )}
+
+                {/* Scene exit transition overlay */}
+                {sceneTransitionFading && (
+                    <div 
+                        className={`absolute inset-0 pointer-events-none z-50 ${
+                            sceneTransitionType === 'fade' ? 'bg-black transition-base transition-dissolve' :
+                            sceneTransitionType === 'dissolve' ? 'bg-black transition-base transition-dissolve' :
+                            sceneTransitionType === 'iris-out' ? 'bg-black transition-base transition-iris-out' :
+                            sceneTransitionType === 'wipe-right' ? 'bg-black transition-base transition-wipe-right' :
+                            sceneTransitionType === 'slide-left' ? 'bg-black transition-base transition-slide-out-left' :
+                            'bg-black'
+                        }`}
+                        style={{ animationDuration: `${sceneTransitionDuration}s` }}
+                    />
+                )}
+            </div>
+            {/* In-game confirmation dialog */}
+            {confirmDialog && (
+                <InGameConfirmDialog
+                    type={confirmDialog.type}
+                    settings={project.ui.confirmDialogs}
+                    assetResolver={assetResolver}
+                    onConfirm={() => {
+                        const action = confirmDialog.pendingAction;
+                        setConfirmDialog(null);
+                        executeUIAction(action);
+                    }}
+                    onCancel={() => setConfirmDialog(null)}
+                />
+            )}
+            {/* Live Variable Tracker — editor test-play only; never rendered in exported games. */}
+            {!isStandalone && (
+                <div className="absolute top-4 left-4 z-[10000] flex flex-col items-start gap-2 max-w-[18rem]">
+                    <button
+                        onClick={() => setShowVarWatcher(s => !s)}
+                        className={`flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border shadow-lg ${
+                            showVarWatcher
+                                ? 'bg-sky-500/90 border-sky-400/60 text-white'
+                                : 'bg-slate-800/80 border-slate-600/60 text-slate-100 hover:bg-slate-700/90'
+                        }`}
+                        title="Variable Tracker — watch your variables' live values change as you play. (Editor only — not shown in exported games.)"
+                    >
+                        <VariablesIcon className="w-4 h-4 flex-shrink-0" />
+                        <span>Variables</span>
+                    </button>
+                    {showVarWatcher && (() => {
+                        const defs = Object.values(project.variables) as any[];
+                        if (defs.length === 0) return (
+                            <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl">
+                                <p className="text-slate-400 italic">No variables yet — add some in the Variables tab.</p>
+                            </div>
+                        );
+                        const liveVars = playerState?.variables || {};
+                        const scopeColor: Record<string, string> = { local: 'bg-emerald-400', global: 'bg-sky-400', persistent: 'bg-amber-400' };
+                        return (
+                            <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl">
+                                <ul className="space-y-1">
+                                    {defs.map(def => {
+                                        const raw = (def.id in liveVars) ? liveVars[def.id] : def.defaultValue;
+                                        const bl = resolveBoolLabels(def, 'Yes', 'No');
+                                        const display = def.type === 'boolean' ? (raw ? bl.yes : bl.no) : String(raw);
+                                        return (
+                                            <li key={def.id} className="flex items-center justify-between gap-3">
+                                                <span className="flex items-center gap-1.5 min-w-0">
+                                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || 'global'] || 'bg-slate-400'}`} />
+                                                    <span className="text-slate-300 truncate" title={def.name}>{def.name}</span>
+                                                </span>
+                                                <span className="font-mono text-white flex-shrink-0">{display}</span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        );
+                    })()}
+                </div>
+            )}
+            {!hideCloseButton && (
+                <button onClick={handleClose} className="absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50">
+                    <XMarkIcon className="w-8 h-8"/>
+                </button>
+            )}
+        </div>
+    );
+};
+
+export default LivePreview;

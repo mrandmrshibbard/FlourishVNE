@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "内容向导",
+    "stepOf": "第 {{current}} 步，共 {{total}} 步",
+    "estimatedTime": " · 约 {{min}} 分钟",
+    "chooseWizard": "选择一个向导以开始引导式内容创作。",
+    "steps": "{{count}} 步",
+    "approxMin": "约 {{min}} 分钟",
+    "selectDefault": "选择……",
+    "noOptions": "无可用选项",
+    "enable": "启用",
+    "fileUploadHint": "文件上传（在向导完成后配置）",
+    "fieldRequired": "{{label}} 为必填项",
+    "backToWizards": "← 向导",
+    "back": "← 返回",
+    "skip": "跳过",
+    "complete": "✓ 完成",
+    "next": "下一步 →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "右键单击以弹出播放器",
+    "fabTitleStopped": "播放环境音乐（右键单击打开播放器）",
+    "rightClickPopOut": "右键单击以弹出",
+    "panelTitle": "音乐播放器",
+    "dockBack": "停靠回去",
+    "selectSong": "选择一首歌曲",
+    "pause": "暂停",
+    "play": "播放",
+    "nextSong": "下一首"
+  }
+}

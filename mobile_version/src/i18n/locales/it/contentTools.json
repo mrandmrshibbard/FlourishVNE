@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "Procedure Guidate per Contenuti",
+    "stepOf": "Passaggio {{current}} di {{total}}",
+    "estimatedTime": " · ~{{min}} min",
+    "chooseWizard": "Scegli una procedura guidata per iniziare la creazione di contenuti assistita.",
+    "steps": "{{count}} passaggi",
+    "approxMin": "~{{min}} min",
+    "selectDefault": "Seleziona...",
+    "noOptions": "Nessuna opzione disponibile",
+    "enable": "Abilita",
+    "fileUploadHint": "Caricamento file (configura dopo la procedura guidata)",
+    "fieldRequired": "{{label}} è obbligatorio",
+    "backToWizards": "← Procedure guidate",
+    "back": "← Indietro",
+    "skip": "Salta",
+    "complete": "✓ Completa",
+    "next": "Avanti →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "Clic destro per estrarre il player",
+    "fabTitleStopped": "Riproduci musica d'ambiente (clic destro per il player)",
+    "rightClickPopOut": "Clic destro per estrarre",
+    "panelTitle": "Lettore Musicale",
+    "dockBack": "Riaggancia",
+    "selectSong": "Seleziona un brano",
+    "pause": "Pausa",
+    "play": "Riproduci",
+    "nextSong": "Brano Successivo"
+  }
+}

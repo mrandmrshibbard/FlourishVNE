@@ -1,0 +1,69 @@
+{
+  "listTitle": "Variables",
+  "newVariableName": "new_variable_{{n}}",
+  "addVariable": "Add Variable",
+  "selectToInspect": "Select a variable to inspect",
+  "selectToInspectHint": "View and edit variable properties",
+  "notFound": "Variable not found",
+  "scopeLabel": "Scope",
+  "typeLabel": "Type",
+  "defaultValue": "Default Value",
+  "idLabel": "ID:",
+  "typeColon": "Type:",
+  "scopes": {
+    "local": "Local",
+    "global": "Global",
+    "persistent": "Persistent"
+  },
+  "scopeOptions": {
+    "local": "🟢 Local (scene-scoped)",
+    "global": "🔵 Global (playthrough)",
+    "persistent": "🟡 Persistent (cross-session)"
+  },
+  "scopeDesc": {
+    "local": "Reset when the scene changes. Use for temporary/scene-specific state.",
+    "global": "Persists across scenes within a playthrough. Resets on new game.",
+    "persistent": "Saved permanently across play sessions. Use for CG Gallery unlocks, achievements, etc."
+  },
+  "types": {
+    "number": "Number",
+    "string": "String",
+    "boolean": "Boolean"
+  },
+  "boolean": {
+    "true": "Yes",
+    "false": "No"
+  },
+  "boolLabels": {
+    "label": "Value labels",
+    "defaultPreset": "Yes / No (default)",
+    "custom": "Custom…",
+    "truePlaceholder": "Yes",
+    "falsePlaceholder": "No",
+    "hint": "How this variable's true/false values appear in conditions, Set Variable, and the tracker."
+  },
+  "delete": {
+    "inUseTitle": "Variable In Use",
+    "deleteTitle": "Delete Variable",
+    "deleteAnyway": "Delete Anyway",
+    "inUseBody_one": "This variable is used in {{count}} place. Deleting it may break your game!",
+    "inUseBody_other": "This variable is used in {{count}} places. Deleting it may break your game!",
+    "usagesFound": "Usages found:",
+    "andMore": "...and {{count}} more",
+    "confirmBody": "Are you sure you want to delete this variable? This action cannot be undone."
+  },
+  "usage": {
+    "scene": "Scene: {{name}}",
+    "uiScreen": "UI Screen: {{name}}",
+    "cmdSetVariable": "Command {{n}}: Set Variable",
+    "cmdTextInput": "Command {{n}}: Text Input",
+    "cmdCondition": "Command {{n}}: Has condition using variable",
+    "optCondition": "Command {{n}}, Option {{opt}}: Has condition",
+    "optSetsVariable": "Command {{n}}, Option {{opt}}: Sets variable",
+    "cmdDialogueRef": "Command {{n}}: Referenced in dialogue text",
+    "elCondition": "Element \"{{name}}\": Has condition",
+    "elSetsVariable": "Element \"{{name}}\": Sets variable",
+    "elCyclesLayer": "Element \"{{name}}\": Cycles layer asset",
+    "elTextRef": "Element \"{{name}}\": Referenced in text"
+  }
+}

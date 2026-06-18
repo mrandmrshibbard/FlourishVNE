@@ -1,0 +1,40 @@
+{
+  "name": "flourish-visual-novel-engine-mobile",
+  "private": true,
+  "version": "3.0.0",
+  "description": "Flourish Visual Novel Engine — Mobile (Android) edition",
+  "author": "Memento_Morii",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:standalone": "vite build --config vite.config.standalone.ts",
+    "generate:engine-bundle": "node scripts/generate-engine-bundle.js",
+    "build:engine": "npm run build:standalone && npm run generate:engine-bundle",
+    "build:player": "node scripts/build-player.js",
+    "build:docs": "node scripts/build-docs.mjs",
+    "build:full": "npm run build:engine && npm run build",
+    "android:sync": "node scripts/sync-android-www.cjs",
+    "android:build": "npm run build:full && npm run android:sync",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "i18next": "^26.3.0",
+    "jszip": "^3.10.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-i18next": "^17.0.8"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^28.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^4.0.18"
+  }
+}

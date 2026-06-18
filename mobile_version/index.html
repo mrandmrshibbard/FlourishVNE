@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Flourish</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat&family=Lato&family=Merriweather&family=Oswald&family=Pacifico&family=Playfair+Display&family=Poppins:ital,wght@0,400;0,700;1,400&family=Roboto&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        /* Color Palette - Background */
+        --bg-primary: #1a102c;
+        --bg-secondary: #2a1a45;
+        --bg-tertiary: #4D3273;
+        
+        /* Color Palette - Accent Colors */
+        --accent-pink: #ff00a5;
+        --accent-cyan: #00f2ea;
+        --accent-purple: #8a2be2;
+        --accent-sky: #0ea5e9;
+        --accent-blue: #3b82f6;
+        --accent-yellow: #fbbf24;
+        --accent-red: #ef4444;
+        --accent-green: #10b981;
+        
+        /* Color Palette - Text */
+        --text-primary: #f0e6ff;
+        --text-secondary: #c0b4d4;
+        --text-tertiary: #94a3b8;
+        --text-muted: #64748b;
+        
+        /* Color Palette - UI Elements */
+        --slate-900: #0f172a;
+        --slate-800: #1e293b;
+        --slate-700: #334155;
+        --slate-600: #475569;
+        --slate-500: #64748b;
+        --slate-400: #94a3b8;
+        
+        /* Typography */
+        --font-heading: 'Poppins', sans-serif;
+        --font-body: 'Poppins', sans-serif;
+        --font-mono: 'Courier New', monospace;
+        
+        /* Spacing */
+        --spacing-xs: 0.25rem;
+        --spacing-sm: 0.5rem;
+        --spacing-md: 1rem;
+        --spacing-lg: 1.5rem;
+        --spacing-xl: 2rem;
+        
+        /* Border Radius */
+        --radius-sm: 0.25rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --radius-xl: 1rem;
+        
+        /* Shadows */
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        
+        /* Transitions */
+        --transition-fast: 150ms ease-in-out;
+        --transition-base: 200ms ease-in-out;
+        --transition-slow: 300ms ease-in-out;
+      }
+      
+      body {
+        overscroll-behavior: none;
+        font-family: var(--font-body);
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      }
+
+      /* Allow text selection in input elements */
+      input, textarea, [contenteditable="true"] {
+        user-select: text;
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+      }
+
+      .font-heading {
+        font-family: var(--font-heading);
+      }
+
+      .btn-primary-gradient {
+        background-image: linear-gradient(to right, var(--accent-pink), var(--accent-purple));
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+      }
+      .btn-primary-gradient:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 15px var(--accent-pink);
+      }
+
+      .focus-glow:focus-within, .focus-glow:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-cyan);
+      }
+
+      @keyframes shake {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(var(--shake-intensity-x, 5px), var(--shake-intensity-y, 5px)); }
+        50% { transform: translate(calc(-1 * var(--shake-intensity-x, 5px)), calc(-1 * var(--shake-intensity-y, 5px))); }
+        75% { transform: translate(var(--shake-intensity-x, 5px), calc(-1 * var(--shake-intensity-y, 5px))); }
+      }
+      .shake {
+        animation: shake 0.2s ease-in-out infinite;
+      }
+
+      /* Transitions */
+      @keyframes dissolve-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+      @keyframes iris-in {
+        from { clip-path: circle(0%); }
+        to { clip-path: circle(150%); }
+      }
+
+      @keyframes iris-out {
+        from { clip-path: circle(150%); }
+        to { clip-path: circle(0%); }
+      }
+
+      @keyframes wipe-right {
+        from { clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%); }
+        to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+      }
+
+      @keyframes wipe-out-right {
+        from { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+        to { clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); }
+      }
+      
+      @keyframes slide-in-left {
+        from { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+        to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+      }
+
+      @keyframes slide-in-right {
+        from { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+        to { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+      }
+
+      @keyframes slide-out-left {
+        from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+        to { transform: translateX(var(--slide-start, -100%)) translateY(var(--slide-start-y, 0%)); }
+      }
+
+      @keyframes slide-out-right {
+        from { transform: translateX(var(--slide-end, 0)) translateY(var(--slide-end-y, 0%)); }
+        to { transform: translateX(var(--slide-start, 100%)) translateY(var(--slide-start-y, 0%)); }
+      }
+
+      @keyframes slide {
+        from { 
+          transform: translate3d(calc(-50% + var(--slide-start-px, var(--slide-start-x, 0%))), var(--slide-start-py, var(--slide-start-y, 0%)), 0); 
+        }
+        to { 
+          transform: translate3d(calc(-50% + var(--slide-end-px, var(--slide-end-x, 0%))), var(--slide-end-py, var(--slide-end-y, 0%)), 0); 
+        }
+      }
+
+      @keyframes flash-anim {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 0.9; }
+      }
+
+      .transition-base {
+        animation-duration: 1s;
+        animation-fill-mode: forwards;
+      }
+      .transition-fast {
+        animation-duration: 0.5s;
+      }
+      .transition-dissolve { animation-name: dissolve-in; }
+      .transition-dissolve-out { animation-name: fade-out; }
+      .transition-fade-out { animation-name: fade-out; }
+      .transition-iris-in { animation-name: iris-in; }
+      .transition-iris-out { animation-name: iris-out; }
+      .transition-wipe-right { animation-name: wipe-right; }
+      .transition-wipe-out-right { animation-name: wipe-out-right; }
+      .transition-slide-in-right { animation-name: slide-in-right; }
+      .transition-slide-in-left { animation-name: slide-in-left; }
+      .transition-slide-out-left { animation-name: slide-out-left; }
+      .transition-slide-out-right { animation-name: slide-out-right; }
+      .transition-slide { animation-name: slide; }
+
+      /* Character Visual Effects */
+      @keyframes vnCharShake {
+          0%, 100% { transform: translate(0, 0); }
+          10% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), calc(-1 * var(--char-shake-px, 2px))); }
+          20% { transform: translate(var(--char-shake-px, 2px), 0); }
+          30% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), var(--char-shake-px, 2px)); }
+          40% { transform: translate(var(--char-shake-px, 2px), calc(-1 * var(--char-shake-px, 2px))); }
+          50% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), 0); }
+          60% { transform: translate(var(--char-shake-px, 2px), var(--char-shake-px, 2px)); }
+          70% { transform: translate(0, calc(-1 * var(--char-shake-px, 2px))); }
+          80% { transform: translate(calc(-1 * var(--char-shake-px, 2px)), var(--char-shake-px, 2px)); }
+          90% { transform: translate(var(--char-shake-px, 2px), 0); }
+      }
+      @keyframes vnCharBounce {
+          0%, 100% { transform: translateY(0); }
+          30% { transform: translateY(var(--char-bounce-h, -8px)); }
+          50% { transform: translateY(0); }
+          70% { transform: translateY(calc(var(--char-bounce-h, -8px) / 2)); }
+      }
+      @keyframes vnCharFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(var(--char-float-h, -10px)); }
+      }
+      @keyframes vnCharPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(var(--char-pulse-scale, 1.05)); }
+      }
+      @keyframes vnCharGlow {
+          0%, 100% { filter: drop-shadow(0 0 var(--char-glow-size, 8px) var(--char-glow-color, #FFFFFF)); }
+          50% { filter: drop-shadow(0 0 var(--char-glow-size-max, 14px) var(--char-glow-color, #FFFFFF)); }
+      }
+      @keyframes vnCharBreathing {
+          0%, 100% { transform: scaleY(1); }
+          50% { transform: scaleY(var(--char-breathe-scale, 1.02)); }
+      }
+      @keyframes vnCharFlicker {
+          0% { opacity: 1; }
+          5% { opacity: 0.2; }
+          10% { opacity: 1; }
+          15% { opacity: 0.5; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          85% { opacity: 0.3; }
+          90% { opacity: 1; }
+      }
+
+      @keyframes credit-bg-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+      }
+
+      /* Custom UI styles - dialogue and choice images are applied via inline backgroundImage */
+
+      /* Custom range slider styles */
+      input[type=range] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+        width: 100%;
+      }
+      input[type=range]:focus {
+        outline: none;
+      }
+      /* Thumb - default styling */
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        margin-top: -6px;
+        background-color: var(--slider-thumb-color, var(--accent-pink));
+        height: 20px;
+        width: 20px;
+        border-radius: 99px;
+      }
+      input[type=range]::-moz-range-thumb {
+        border: none;
+        border-radius: 99px;
+        background-color: var(--slider-thumb-color, var(--accent-pink));
+        height: 20px;
+        width: 20px;
+      }
+      /* Track - default styling */
+      input[type=range]::-webkit-slider-runnable-track {
+        background-color: var(--slider-track-color, var(--bg-tertiary));
+        border-radius: 0.5rem;
+        height: 8px;
+      }
+       input[type=range]::-moz-range-track {
+        background-color: var(--slider-track-color, var(--bg-tertiary));
+        border-radius: 0.5rem;
+        height: 8px;
+      }
+
+      /* Custom slider with images */
+      input[type=range].custom-slider::-webkit-slider-thumb {
+        background-image: var(--slider-thumb-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-thumb-color, var(--accent-pink));
+      }
+      input[type=range].custom-slider::-moz-range-thumb {
+        background-image: var(--slider-thumb-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-thumb-color, var(--accent-pink));
+      }
+      input[type=range].custom-slider::-webkit-slider-runnable-track {
+        background-image: var(--slider-track-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-track-color, var(--bg-tertiary));
+      }
+      input[type=range].custom-slider::-moz-range-track {
+        background-image: var(--slider-track-bg, none);
+        background-size: cover;
+        background-position: center;
+        background-color: var(--slider-track-color, var(--bg-tertiary));
+      }
+
+      /* === UTILITY CLASSES === */
+      .panel {
+        background-color: rgba(30, 41, 59, 0.5);
+        border: 2px solid var(--slate-700);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl);
+      }
+
+      .panel-header {
+        padding: var(--spacing-md);
+        border-bottom: 2px solid var(--slate-700);
+        background-color: rgba(15, 23, 42, 0.8);
+      }
+
+      /* Scrollbar Styling */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--slate-800);
+        border-radius: var(--radius-sm);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--slate-600);
+        border-radius: var(--radius-sm);
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--slate-500);
+      }
+
+      /* Selection */
+      ::selection {
+        background-color: var(--accent-purple);
+        color: var(--text-primary);
+      }
+
+      /* Sidebar Items */
+      .sidebar-item {
+        padding: var(--spacing-sm) var(--spacing-md);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: background-color var(--transition-fast);
+      }
+
+      .sidebar-item:hover {
+        background-color: rgba(71, 85, 105, 0.7);
+      }
+
+      .sidebar-item.selected {
+        background-color: rgba(14, 165, 233, 0.2);
+        border: 1px solid rgba(14, 165, 233, 0.5);
+        box-shadow: 0 0 8px rgba(14, 165, 233, 0.3);
+      }
+
+      /* Loading States */
+      .loading-spinner {
+        border: 3px solid var(--slate-700);
+        border-top-color: var(--accent-cyan);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-slate-900 text-slate-100" style="background-color:#1a102c;color:#f0e6ff;">
+    <!-- Splash screen: visible instantly before any JS loads -->
+    <div id="flourish-splash" style="
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background-color: #1a102c;
+      font-family: 'Poppins', 'Segoe UI', sans-serif;
+      transition: opacity 0.4s ease-out;
+    ">
+      <div style="
+        font-size: 2.5rem; font-weight: 700;
+        background: linear-gradient(135deg, #ff00a5, #8a2be2, #00f2ea);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text; margin-bottom: 1.5rem;
+        letter-spacing: 0.05em;
+      ">Flourish VNE</div>
+      <div style="
+        width: 200px; height: 4px; border-radius: 4px;
+        background: rgba(255,255,255,0.1); overflow: hidden;
+        margin-bottom: 1rem;
+      ">
+        <div id="splash-progress" style="
+          height: 100%; width: 0%; border-radius: 4px;
+          background: linear-gradient(90deg, #ff00a5, #8a2be2);
+          transition: width 0.3s ease;
+        "></div>
+      </div>
+      <div id="splash-status" style="
+        color: #c0b4d4; font-size: 0.85rem;
+      ">Loading editor...</div>
+    </div>
+
+    <!-- Splash animation runs immediately – no external dependencies -->
+    <script>
+      // Animate the splash progress bar while loading
+      (function() {
+        var bar = document.getElementById('splash-progress');
+        var status = document.getElementById('splash-status');
+        var progress = 0;
+        var steps = [
+          [15, 'Loading styles...'],
+          [35, 'Loading libraries...'],
+          [55, 'Initializing engine...'],
+          [75, 'Preparing workspace...'],
+        ];
+        var stepIdx = 0;
+        var interval = setInterval(function() {
+          if (stepIdx < steps.length) {
+            progress = steps[stepIdx][0];
+            bar.style.width = progress + '%';
+            status.textContent = steps[stepIdx][1];
+            stepIdx++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 400);
+        // React will call window.__dismissSplash() when mounted
+        window.__dismissSplash = function() {
+          clearInterval(interval);
+          bar.style.width = '100%';
+          status.textContent = 'Ready!';
+          var splash = document.getElementById('flourish-splash');
+          setTimeout(function() {
+            splash.style.opacity = '0';
+            setTimeout(function() { splash.remove(); }, 400);
+          }, 200);
+        };
+      })();
+    </script>
+
+    <!-- CDN scripts moved from <head> so the splash renders before they download -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                400: 'var(--slate-400)',
+                500: 'var(--slate-500)',
+                600: 'var(--slate-600)',
+                700: 'var(--slate-700)',
+                800: 'var(--slate-800)',
+                900: 'var(--slate-900)',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <div id="root"></div>
+
+    <script type="module" src="/src/index.tsx"></script>
+    <script>
+        // Prevent default context menu (right-click menu)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>

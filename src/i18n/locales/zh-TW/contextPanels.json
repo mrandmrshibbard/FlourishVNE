@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "正在載入情境面板……",
+    "emptyTitle": "沒有可用的情境專屬面板",
+    "emptyHint": "選取項目以查看相關工具與建議",
+    "suggestionsHeading": "建議",
+    "panelSuggestionsHeading": "建議：",
+    "collapse": "收合",
+    "expand": "展開",
+    "moveUp": "上移",
+    "moveDown": "下移"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "新增對話",
+      "addDialogueTip": "新增對話命令（Alt+D）",
+      "addChoice": "新增選項",
+      "addChoiceTip": "新增選項命令（Alt+C）",
+      "setVariable": "設定變數",
+      "setVariableTip": "新增變數命令（Alt+V）",
+      "preview": "預覽",
+      "previewTip": "預覽場景（F5）"
+    },
+    "characterEditing": {
+      "addExpression": "新增表情",
+      "addExpressionTip": "新增表情",
+      "addOutfit": "新增服裝",
+      "addOutfitTip": "新增服裝變體",
+      "duplicate": "複製",
+      "duplicateTip": "複製角色（Ctrl+D）"
+    },
+    "uiEditing": {
+      "addButton": "新增按鈕",
+      "addButtonTip": "新增按鈕元素",
+      "addText": "新增文字",
+      "addTextTip": "新增文字元素",
+      "addImage": "新增圖片",
+      "addImageTip": "新增圖片元素",
+      "preview": "預覽",
+      "previewTip": "預覽 UI 畫面（F5）"
+    },
+    "templateBrowsing": {
+      "filter": "篩選",
+      "filterTip": "篩選範本",
+      "sort": "排序",
+      "sortTip": "排序範本",
+      "favorites": "最愛",
+      "favoritesTip": "僅顯示最愛"
+    },
+    "logicBuilding": {
+      "addCondition": "新增條件",
+      "addConditionTip": "新增條件節點",
+      "addAction": "新增動作",
+      "addActionTip": "新增動作節點",
+      "validate": "驗證",
+      "validateTip": "驗證邏輯流程"
+    },
+    "variableManagement": {
+      "addVariable": "新增變數",
+      "addVariableTip": "新增變數（Alt+N）",
+      "debug": "偵錯",
+      "debugTip": "開啟變數偵錯工具",
+      "export": "匯出",
+      "exportTip": "匯出變數定義"
+    },
+    "assetManagement": {
+      "import": "匯入",
+      "importTip": "匯入素材",
+      "organize": "整理",
+      "organizeTip": "整理素材",
+      "findUnused": "尋找未使用項目",
+      "findUnusedTip": "尋找未使用的素材"
+    },
+    "wizardFlow": {
+      "back": "返回",
+      "backTip": "上一步",
+      "next": "下一步",
+      "nextTip": "下一步",
+      "cancel": "取消",
+      "cancelTip": "取消精靈"
+    }
+  },
+  "localizationPanel": {
+    "title": "在地化管理員",
+    "stringCount_one": "{{count}} 個字串",
+    "stringCount_other": "{{count}} 個字串",
+    "addLanguage": "新增語言",
+    "removeLanguageTip": "移除 {{name}}",
+    "searchPlaceholder": "依索引鍵或文字搜尋……",
+    "filterAll": "全部",
+    "filterDialogue": "對話",
+    "filterChoice": "選項",
+    "colKey": "索引鍵",
+    "colContext": "情境",
+    "colDefaultText": "預設文字",
+    "emptyNoStrings": "找不到字串",
+    "emptyNoStringsHintScan": "在場景中加入對話或選項命令，即可看到可翻譯的字串。",
+    "emptyNoStringsHintFilter": "沒有符合目前篩選條件的字串。",
+    "translationPlaceholder": "輸入翻譯……",
+    "exportCsv": "匯出 CSV",
+    "importCsv": "匯入 CSV",
+    "importSuccess_one": "已匯入 {{count}} 筆翻譯。",
+    "importSuccess_other": "已匯入 {{count}} 筆翻譯。",
+    "importErrors_one": "{{count}} 個錯誤：",
+    "importErrors_other": "{{count}} 個錯誤：",
+    "showingCount": "顯示 {{total}} 個字串中的 {{filtered}} 個"
+  }
+}

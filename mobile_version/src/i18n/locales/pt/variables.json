@@ -1,0 +1,69 @@
+{
+  "listTitle": "Variáveis",
+  "newVariableName": "nova_variavel_{{n}}",
+  "addVariable": "Adicionar Variável",
+  "selectToInspect": "Selecione uma variável para inspecionar",
+  "selectToInspectHint": "Visualize e edite as propriedades da variável",
+  "notFound": "Variável não encontrada",
+  "scopeLabel": "Escopo",
+  "typeLabel": "Tipo",
+  "defaultValue": "Valor Padrão",
+  "idLabel": "ID:",
+  "typeColon": "Tipo:",
+  "scopes": {
+    "local": "Local",
+    "global": "Global",
+    "persistent": "Persistente"
+  },
+  "scopeOptions": {
+    "local": "🟢 Local (escopo de cena)",
+    "global": "🔵 Global (jogada)",
+    "persistent": "🟡 Persistente (entre sessões)"
+  },
+  "scopeDesc": {
+    "local": "Redefinida quando a cena muda. Use para estado temporário/específico da cena.",
+    "global": "Persiste entre cenas durante uma jogada. Redefinida em um novo jogo.",
+    "persistent": "Salva permanentemente entre sessões de jogo. Use para desbloqueios da Galeria de CG, conquistas, etc."
+  },
+  "types": {
+    "number": "Número",
+    "string": "Texto",
+    "boolean": "Booleano"
+  },
+  "boolean": {
+    "true": "Sim",
+    "false": "Não"
+  },
+  "boolLabels": {
+    "label": "Rótulos de valor",
+    "defaultPreset": "Sim / Não (padrão)",
+    "custom": "Personalizado…",
+    "truePlaceholder": "Sim",
+    "falsePlaceholder": "Não",
+    "hint": "Como os valores verdadeiro/falso desta variável aparecem em condições, Definir Variável e no rastreador."
+  },
+  "delete": {
+    "inUseTitle": "Variável Em Uso",
+    "deleteTitle": "Excluir Variável",
+    "deleteAnyway": "Excluir Mesmo Assim",
+    "inUseBody_one": "Esta variável é usada em {{count}} lugar. Excluí-la pode quebrar seu jogo!",
+    "inUseBody_other": "Esta variável é usada em {{count}} lugares. Excluí-la pode quebrar seu jogo!",
+    "usagesFound": "Usos encontrados:",
+    "andMore": "...e mais {{count}}",
+    "confirmBody": "Tem certeza de que deseja excluir esta variável? Esta ação não pode ser desfeita."
+  },
+  "usage": {
+    "scene": "Cena: {{name}}",
+    "uiScreen": "Tela de UI: {{name}}",
+    "cmdSetVariable": "Comando {{n}}: Definir Variável",
+    "cmdTextInput": "Comando {{n}}: Entrada de Texto",
+    "cmdCondition": "Comando {{n}}: Possui condição usando a variável",
+    "optCondition": "Comando {{n}}, Opção {{opt}}: Possui condição",
+    "optSetsVariable": "Comando {{n}}, Opção {{opt}}: Define a variável",
+    "cmdDialogueRef": "Comando {{n}}: Referenciada no texto do diálogo",
+    "elCondition": "Elemento \"{{name}}\": Possui condição",
+    "elSetsVariable": "Elemento \"{{name}}\": Define a variável",
+    "elCyclesLayer": "Elemento \"{{name}}\": Alterna recurso de camada",
+    "elTextRef": "Elemento \"{{name}}\": Referenciada no texto"
+  }
+}

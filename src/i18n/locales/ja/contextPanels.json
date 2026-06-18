@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "コンテキストパネルを読み込み中...",
+    "emptyTitle": "利用可能なコンテキスト固有のパネルはありません",
+    "emptyHint": "項目を選択すると、関連するツールと提案が表示されます",
+    "suggestionsHeading": "提案",
+    "panelSuggestionsHeading": "提案:",
+    "collapse": "折りたたむ",
+    "expand": "展開する",
+    "moveUp": "上に移動",
+    "moveDown": "下に移動"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "台詞を追加",
+      "addDialogueTip": "台詞コマンドを追加（Alt+D）",
+      "addChoice": "選択肢を追加",
+      "addChoiceTip": "選択肢コマンドを追加（Alt+C）",
+      "setVariable": "変数を設定",
+      "setVariableTip": "変数コマンドを追加（Alt+V）",
+      "preview": "プレビュー",
+      "previewTip": "シーンをプレビュー（F5）"
+    },
+    "characterEditing": {
+      "addExpression": "表情を追加",
+      "addExpressionTip": "新しい表情を追加",
+      "addOutfit": "衣装を追加",
+      "addOutfitTip": "衣装バリエーションを追加",
+      "duplicate": "複製",
+      "duplicateTip": "キャラクターを複製（Ctrl+D）"
+    },
+    "uiEditing": {
+      "addButton": "ボタンを追加",
+      "addButtonTip": "ボタン要素を追加",
+      "addText": "テキストを追加",
+      "addTextTip": "テキスト要素を追加",
+      "addImage": "画像を追加",
+      "addImageTip": "画像要素を追加",
+      "preview": "プレビュー",
+      "previewTip": "UI画面をプレビュー（F5）"
+    },
+    "templateBrowsing": {
+      "filter": "フィルター",
+      "filterTip": "テンプレートをフィルター",
+      "sort": "並べ替え",
+      "sortTip": "テンプレートを並べ替え",
+      "favorites": "お気に入り",
+      "favoritesTip": "お気に入りのみ表示"
+    },
+    "logicBuilding": {
+      "addCondition": "条件を追加",
+      "addConditionTip": "条件ノードを追加",
+      "addAction": "アクションを追加",
+      "addActionTip": "アクションノードを追加",
+      "validate": "検証",
+      "validateTip": "ロジックフローを検証"
+    },
+    "variableManagement": {
+      "addVariable": "変数を追加",
+      "addVariableTip": "新しい変数を追加（Alt+N）",
+      "debug": "デバッグ",
+      "debugTip": "変数デバッガーを開く",
+      "export": "エクスポート",
+      "exportTip": "変数定義をエクスポート"
+    },
+    "assetManagement": {
+      "import": "インポート",
+      "importTip": "アセットをインポート",
+      "organize": "整理",
+      "organizeTip": "アセットを整理",
+      "findUnused": "未使用を検索",
+      "findUnusedTip": "未使用のアセットを検索"
+    },
+    "wizardFlow": {
+      "back": "戻る",
+      "backTip": "前のステップ",
+      "next": "次へ",
+      "nextTip": "次のステップ",
+      "cancel": "キャンセル",
+      "cancelTip": "ウィザードをキャンセル"
+    }
+  },
+  "localizationPanel": {
+    "title": "ローカライズマネージャー",
+    "stringCount_one": "{{count}}件の文字列",
+    "stringCount_other": "{{count}}件の文字列",
+    "addLanguage": "言語を追加",
+    "removeLanguageTip": "{{name}}を削除",
+    "searchPlaceholder": "キーまたはテキストで検索...",
+    "filterAll": "すべて",
+    "filterDialogue": "台詞",
+    "filterChoice": "選択肢",
+    "colKey": "キー",
+    "colContext": "コンテキスト",
+    "colDefaultText": "デフォルトテキスト",
+    "emptyNoStrings": "文字列が見つかりません",
+    "emptyNoStringsHintScan": "翻訳可能な文字列を表示するには、シーンに台詞や選択肢コマンドを追加してください。",
+    "emptyNoStringsHintFilter": "現在のフィルターに一致する文字列はありません。",
+    "translationPlaceholder": "翻訳を入力...",
+    "exportCsv": "CSVをエクスポート",
+    "importCsv": "CSVをインポート",
+    "importSuccess_one": "{{count}}件の翻訳をインポートしました。",
+    "importSuccess_other": "{{count}}件の翻訳をインポートしました。",
+    "importErrors_one": "{{count}}件のエラー:",
+    "importErrors_other": "{{count}}件のエラー:",
+    "showingCount": "{{total}}件中{{filtered}}件の文字列を表示中"
+  }
+}

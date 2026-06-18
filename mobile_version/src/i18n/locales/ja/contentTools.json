@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "コンテンツウィザード",
+    "stepOf": "ステップ{{current}}/{{total}}",
+    "estimatedTime": " · 約{{min}}分",
+    "chooseWizard": "ウィザードを選択して、ガイド付きのコンテンツ作成を始めましょう。",
+    "steps": "{{count}}ステップ",
+    "approxMin": "約{{min}}分",
+    "selectDefault": "選択...",
+    "noOptions": "利用可能なオプションはありません",
+    "enable": "有効化",
+    "fileUploadHint": "ファイルアップロード(ウィザード後に構成)",
+    "fieldRequired": "{{label}}は必須です",
+    "backToWizards": "← ウィザード",
+    "back": "← 戻る",
+    "skip": "スキップ",
+    "complete": "✓ 完了",
+    "next": "次へ →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "右クリックでプレーヤーをポップアウト",
+    "fabTitleStopped": "アンビエント音楽を再生(右クリックでプレーヤー)",
+    "rightClickPopOut": "右クリックでポップアウト",
+    "panelTitle": "ミュージックプレーヤー",
+    "dockBack": "ドックに戻す",
+    "selectSong": "曲を選択",
+    "pause": "一時停止",
+    "play": "再生",
+    "nextSong": "次の曲"
+  }
+}

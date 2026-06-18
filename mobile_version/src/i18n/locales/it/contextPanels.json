@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "Caricamento pannelli contestuali...",
+    "emptyTitle": "Nessun pannello contestuale disponibile",
+    "emptyHint": "Seleziona un elemento per vedere strumenti e suggerimenti pertinenti",
+    "suggestionsHeading": "Suggerimenti",
+    "panelSuggestionsHeading": "Suggerimenti:",
+    "collapse": "Comprimi",
+    "expand": "Espandi",
+    "moveUp": "Sposta su",
+    "moveDown": "Sposta giù"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Aggiungi dialogo",
+      "addDialogueTip": "Aggiungi comando dialogo (Alt+D)",
+      "addChoice": "Aggiungi scelta",
+      "addChoiceTip": "Aggiungi comando scelta (Alt+C)",
+      "setVariable": "Imposta variabile",
+      "setVariableTip": "Aggiungi comando variabile (Alt+V)",
+      "preview": "Anteprima",
+      "previewTip": "Anteprima scena (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Aggiungi espressione",
+      "addExpressionTip": "Aggiungi nuova espressione",
+      "addOutfit": "Aggiungi outfit",
+      "addOutfitTip": "Aggiungi variante outfit",
+      "duplicate": "Duplica",
+      "duplicateTip": "Duplica personaggio (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Aggiungi pulsante",
+      "addButtonTip": "Aggiungi elemento pulsante",
+      "addText": "Aggiungi testo",
+      "addTextTip": "Aggiungi elemento testo",
+      "addImage": "Aggiungi immagine",
+      "addImageTip": "Aggiungi elemento immagine",
+      "preview": "Anteprima",
+      "previewTip": "Anteprima schermata UI (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Filtra",
+      "filterTip": "Filtra modelli",
+      "sort": "Ordina",
+      "sortTip": "Ordina modelli",
+      "favorites": "Preferiti",
+      "favoritesTip": "Mostra solo i preferiti"
+    },
+    "logicBuilding": {
+      "addCondition": "Aggiungi condizione",
+      "addConditionTip": "Aggiungi nodo condizione",
+      "addAction": "Aggiungi azione",
+      "addActionTip": "Aggiungi nodo azione",
+      "validate": "Valida",
+      "validateTip": "Valida il flusso logico"
+    },
+    "variableManagement": {
+      "addVariable": "Aggiungi variabile",
+      "addVariableTip": "Aggiungi nuova variabile (Alt+N)",
+      "debug": "Debug",
+      "debugTip": "Apri il debugger delle variabili",
+      "export": "Esporta",
+      "exportTip": "Esporta le definizioni delle variabili"
+    },
+    "assetManagement": {
+      "import": "Importa",
+      "importTip": "Importa risorse",
+      "organize": "Organizza",
+      "organizeTip": "Organizza risorse",
+      "findUnused": "Trova inutilizzate",
+      "findUnusedTip": "Trova risorse inutilizzate"
+    },
+    "wizardFlow": {
+      "back": "Indietro",
+      "backTip": "Passaggio precedente",
+      "next": "Avanti",
+      "nextTip": "Passaggio successivo",
+      "cancel": "Annulla",
+      "cancelTip": "Annulla procedura guidata"
+    }
+  },
+  "localizationPanel": {
+    "title": "Gestione localizzazione",
+    "stringCount_one": "{{count}} stringa",
+    "stringCount_other": "{{count}} stringhe",
+    "addLanguage": "Aggiungi lingua",
+    "removeLanguageTip": "Rimuovi {{name}}",
+    "searchPlaceholder": "Cerca per chiave o testo...",
+    "filterAll": "Tutte",
+    "filterDialogue": "Dialogo",
+    "filterChoice": "Scelta",
+    "colKey": "Chiave",
+    "colContext": "Contesto",
+    "colDefaultText": "Testo predefinito",
+    "emptyNoStrings": "Nessuna stringa trovata",
+    "emptyNoStringsHintScan": "Aggiungi comandi di dialogo o scelta alle tue scene per vedere le stringhe traducibili.",
+    "emptyNoStringsHintFilter": "Nessuna stringa corrisponde ai filtri attuali.",
+    "translationPlaceholder": "Inserisci traduzione...",
+    "exportCsv": "Esporta CSV",
+    "importCsv": "Importa CSV",
+    "importSuccess_one": "{{count}} traduzione importata.",
+    "importSuccess_other": "{{count}} traduzioni importate.",
+    "importErrors_one": "{{count}} errore:",
+    "importErrors_other": "{{count}} errori:",
+    "showingCount": "Mostrate {{filtered}} di {{total}} stringhe"
+  }
+}

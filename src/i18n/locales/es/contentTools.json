@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "Asistentes de Contenido",
+    "stepOf": "Paso {{current}} de {{total}}",
+    "estimatedTime": " · ~{{min}} min",
+    "chooseWizard": "Elige un asistente para empezar con la creación guiada de contenido.",
+    "steps": "{{count}} pasos",
+    "approxMin": "~{{min}} min",
+    "selectDefault": "Seleccionar...",
+    "noOptions": "No hay opciones disponibles",
+    "enable": "Activar",
+    "fileUploadHint": "Subida de archivos (configúrala tras el asistente)",
+    "fieldRequired": "{{label}} es obligatorio",
+    "backToWizards": "← Asistentes",
+    "back": "← Atrás",
+    "skip": "Omitir",
+    "complete": "✓ Completar",
+    "next": "Siguiente →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "Clic derecho para abrir el reproductor",
+    "fabTitleStopped": "Reproducir música ambiental (clic derecho para el reproductor)",
+    "rightClickPopOut": "Clic derecho para abrir",
+    "panelTitle": "Reproductor de Música",
+    "dockBack": "Volver a acoplar",
+    "selectSong": "Selecciona una canción",
+    "pause": "Pausar",
+    "play": "Reproducir",
+    "nextSong": "Siguiente Canción"
+  }
+}

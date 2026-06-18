@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "Carregando painéis contextuais...",
+    "emptyTitle": "Nenhum painel específico disponível",
+    "emptyHint": "Selecione um item para ver ferramentas e sugestões relevantes",
+    "suggestionsHeading": "Sugestões",
+    "panelSuggestionsHeading": "Sugestões:",
+    "collapse": "Recolher",
+    "expand": "Expandir",
+    "moveUp": "Mover para cima",
+    "moveDown": "Mover para baixo"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Adicionar Diálogo",
+      "addDialogueTip": "Adicionar comando de diálogo (Alt+D)",
+      "addChoice": "Adicionar Escolha",
+      "addChoiceTip": "Adicionar comando de escolha (Alt+C)",
+      "setVariable": "Definir Variável",
+      "setVariableTip": "Adicionar comando de variável (Alt+V)",
+      "preview": "Visualizar",
+      "previewTip": "Visualizar cena (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Adicionar Expressão",
+      "addExpressionTip": "Adicionar nova expressão",
+      "addOutfit": "Adicionar Traje",
+      "addOutfitTip": "Adicionar variante de traje",
+      "duplicate": "Duplicar",
+      "duplicateTip": "Duplicar personagem (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Adicionar Botão",
+      "addButtonTip": "Adicionar elemento de botão",
+      "addText": "Adicionar Texto",
+      "addTextTip": "Adicionar elemento de texto",
+      "addImage": "Adicionar Imagem",
+      "addImageTip": "Adicionar elemento de imagem",
+      "preview": "Visualizar",
+      "previewTip": "Visualizar tela de UI (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Filtrar",
+      "filterTip": "Filtrar modelos",
+      "sort": "Ordenar",
+      "sortTip": "Ordenar modelos",
+      "favorites": "Favoritos",
+      "favoritesTip": "Mostrar apenas favoritos"
+    },
+    "logicBuilding": {
+      "addCondition": "Adicionar Condição",
+      "addConditionTip": "Adicionar nó de condição",
+      "addAction": "Adicionar Ação",
+      "addActionTip": "Adicionar nó de ação",
+      "validate": "Validar",
+      "validateTip": "Validar fluxo lógico"
+    },
+    "variableManagement": {
+      "addVariable": "Adicionar Variável",
+      "addVariableTip": "Adicionar nova variável (Alt+N)",
+      "debug": "Depurar",
+      "debugTip": "Abrir depurador de variáveis",
+      "export": "Exportar",
+      "exportTip": "Exportar definições de variáveis"
+    },
+    "assetManagement": {
+      "import": "Importar",
+      "importTip": "Importar ativos",
+      "organize": "Organizar",
+      "organizeTip": "Organizar ativos",
+      "findUnused": "Localizar Não Usados",
+      "findUnusedTip": "Localizar ativos não utilizados"
+    },
+    "wizardFlow": {
+      "back": "Voltar",
+      "backTip": "Etapa anterior",
+      "next": "Avançar",
+      "nextTip": "Próxima etapa",
+      "cancel": "Cancelar",
+      "cancelTip": "Cancelar assistente"
+    }
+  },
+  "localizationPanel": {
+    "title": "Gerenciador de Localização",
+    "stringCount_one": "{{count}} string",
+    "stringCount_other": "{{count}} strings",
+    "addLanguage": "Adicionar Idioma",
+    "removeLanguageTip": "Remover {{name}}",
+    "searchPlaceholder": "Buscar por chave ou texto...",
+    "filterAll": "Todos",
+    "filterDialogue": "Diálogo",
+    "filterChoice": "Escolha",
+    "colKey": "Chave",
+    "colContext": "Contexto",
+    "colDefaultText": "Texto Padrão",
+    "emptyNoStrings": "Nenhuma string encontrada",
+    "emptyNoStringsHintScan": "Adicione comandos de diálogo ou escolha às suas cenas para ver as strings traduzíveis.",
+    "emptyNoStringsHintFilter": "Nenhuma string corresponde aos filtros atuais.",
+    "translationPlaceholder": "Inserir tradução...",
+    "exportCsv": "Exportar CSV",
+    "importCsv": "Importar CSV",
+    "importSuccess_one": "{{count}} tradução importada.",
+    "importSuccess_other": "{{count}} traduções importadas.",
+    "importErrors_one": "{{count}} erro:",
+    "importErrors_other": "{{count}} erros:",
+    "showingCount": "Exibindo {{filtered}} de {{total}} strings"
+  }
+}

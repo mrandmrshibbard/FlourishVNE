@@ -1,0 +1,232 @@
+{
+  "title": "建置獨立遊戲",
+  "chooseBuildType": "選擇建置類型：",
+  "ready": "準備建置……",
+  "iconError": "請選擇一個圖片檔案（建議 PNG，256×256 或更大）。",
+  "webBuild": {
+    "name": "網頁建置",
+    "desc": "在瀏覽器中遊玩 • 可直接用於 itch.io • 進度不會保存",
+    "infoTitle": "網頁建置",
+    "intro": "這將建立一個以瀏覽器為基礎的遊戲，你可以：",
+    "item1": "✅ 上傳到 itch.io（最簡單！）",
+    "item2": "✅ 在任意網頁主機上分享（Netlify、GitHub Pages 等）",
+    "item3": "✅ 作為 ZIP 檔案傳送給朋友",
+    "item4": "✅ 在任意瀏覽器中離線遊玩",
+    "item5": "⚠️ 注意：進度不會保存（瀏覽器限制）"
+  },
+  "desktopBuild": {
+    "name": "桌面建置",
+    "desc": "Windows/Mac/Linux • 保存進度 • 離線遊玩",
+    "infoTitle": "桌面建置",
+    "intro": "這將建立一個獨立的桌面軟體，具備：",
+    "item1": "💾 完整的存檔/讀檔系統（10 個存檔欄位）",
+    "item2": "🔄 自動存檔功能",
+    "item3": "📁 永久保存的進度儲存",
+    "item4": "🖥️ 可在 Windows、Mac 和 Linux 上執行",
+    "item5": "📦 需要 Electron（已包含在建置中）",
+    "installerWarning": "⚡ 安裝程式建置編譯更快，安裝後可立即啟動——安裝時會提前解壓縮所有檔案",
+    "standaloneWarning": "⏱ 獨立建置編譯耗時更長且啟動更慢——exe 必須在每次啟動時將自身解壓縮到暫存資料夾"
+  },
+  "noCodingRequired": "無需寫程式！只需下載並散布。",
+  "iconPicker": {
+    "label": "應用程式圖示",
+    "clickToChoose": "點按以選擇圖示",
+    "altText": "應用程式圖示",
+    "changeIcon": "更換圖示",
+    "chooseIcon": "選擇圖示",
+    "remove": "移除",
+    "hint": "建議：256×256 PNG"
+  },
+  "formatPicker": {
+    "title": "建置格式",
+    "standaloneName": "📦 獨立 .exe",
+    "standaloneDesc": "單一可攜式執行檔——無需安裝，直接執行",
+    "standaloneNote": "⏱ 建置與啟動更慢——exe 必須在每次啟動時解壓縮",
+    "installerName": "🔧 安裝程式（Setup）",
+    "installerDesc": "帶有捷徑、安裝目錄、解除安裝程式和遊戲存檔資料夾的安裝精靈",
+    "installerNote": "⚡ 建置與啟動更快——檔案在安裝時已預先解壓縮"
+  },
+  "stats": {
+    "estimatedSize": "預估大小：",
+    "scenes": "場景：",
+    "characters": "角色："
+  },
+  "validation": {
+    "errors": "⛔ {{count}} 個錯誤",
+    "warnings": "⚠️ {{count}} 個警告",
+    "separator": " • "
+  },
+  "buildBtn": {
+    "fixErrors": "建置前請先修正錯誤",
+    "buildWeb": "建置網頁遊戲",
+    "buildInstaller": "建置安裝程式",
+    "buildStandalone": "建置獨立 EXE",
+    "buildAndroid": "建置 Android 應用程式",
+    "buildAndroidAab": "建置 App Bundle（.aab）"
+  },
+  "helpBox": {
+    "firstTime": "第一次使用？",
+    "before": "建置後，你將得到一個 ZIP 檔案。把它上傳到",
+    "after": "就完成了！無需命令列。"
+  },
+  "progress": {
+    "web": {
+      "prepare": "📋 準備中",
+      "generate": "⚙️ 產生中",
+      "assets": "🎨 打包素材",
+      "finalize": "📦 收尾中"
+    },
+    "desktop": {
+      "prepare": "📋 準備",
+      "generate": "⚙️ 產生",
+      "assets": "🎨 素材",
+      "install": "📥 相依套件",
+      "build": "🔨 建置 EXE",
+      "save": "💾 儲存",
+      "working": "桌面建置需要幾分鐘——軟體正在背景作業。"
+    },
+    "android": {
+      "setup": "設定",
+      "prepare": "準備",
+      "assets": "素材",
+      "build": "建置",
+      "save": "儲存",
+      "working": "首次執行可能需要幾分鐘——請保持 Flourish 處於開啟狀態。"
+    }
+  },
+  "success": {
+    "webTitle": "網頁遊戲建置成功！",
+    "installerTitle": "安裝程式建置成功！",
+    "desktopTitle": "桌面軟體建置成功！",
+    "webText": "你的遊戲已準備好在網路上分享！",
+    "installerText": "你的安裝程式已就緒，帶有捷徑和遊戲存檔目錄！",
+    "desktopText": "你的獨立桌面遊戲已就緒！",
+    "fileSize": "檔案大小：",
+    "format": "格式：",
+    "formatValue": "HTML5（ZIP）",
+    "downloadBtn": "下載網頁遊戲 ZIP",
+    "execSaved": "執行檔儲存成功！",
+    "execLocation": "請查看你所選擇的位置，以找到遊戲的執行檔。",
+    "buildAnotherVersion": "建置另一個版本",
+    "androidTitle": "你的 Android 應用程式已就緒！",
+    "androidText": "Flourish 建置了一個已簽署、可安裝的 .apk。",
+    "apkSaved": "APK 已儲存到你的 Android 建置資料夾。",
+    "apkLocation": "可在「文件 → Flourish VNE → Builds → Android」中找到它。",
+    "androidSideloadHeadsUp": "提示：安裝時，Android 會就「不明來源」/不明應用程式發出警告——這對於直接安裝是正常的，只需點按允許即可。該警告僅對發布在 Play Store 上的應用程式才會消失（這需要額外的進階步驟）。",
+    "androidAabTitle": "你的 app bundle 已就緒！",
+    "androidAabText": "Flourish 為 Google Play Store 建置了一個已簽署的 .aab。",
+    "aabSaved": "AAB 已儲存到你的 Android 建置資料夾——並附帶一份發布指南和你的簽署金鑰。",
+    "aabNextTitle": "📄 下一步：自行發布",
+    "aabNextBody": "開啟儲存在你 .aab 旁邊的 _PLAY_STORE_GUIDE.txt 查看分步說明，並備份 _upload-key.keystore 檔案——日後發布更新時你需要這把完全相同的金鑰。"
+  },
+  "nextSteps": {
+    "title": "接下來做什麼？",
+    "web": {
+      "step1Title": "上傳到 itch.io（建議）：",
+      "step1GoTo": "前往",
+      "step1ChooseHtml": "選擇「HTML」作為上傳類型",
+      "step1Upload": "上傳你剛剛下載的 ZIP 檔案",
+      "step1Check": "勾選「This file will be played in the browser」",
+      "step1Publish": "發布！",
+      "step2Title": "或自行架設：",
+      "step2Desc": "解壓縮並將內容上傳到任意網頁主機",
+      "step3Title": "或離線分享：",
+      "step3Desc": "把 ZIP 傳送給朋友——他們可以解壓縮並開啟 index.html"
+    },
+    "desktop": {
+      "step1Title": "測試你的遊戲：",
+      "step1Installer": "執行 Setup 安裝程式以安裝你的遊戲",
+      "step1Standalone": "按兩下執行檔以測試你的遊戲",
+      "step1Windows": "• Windows：.exe 檔案",
+      "step1Mac": "• Mac：.app 或 .dmg 檔案",
+      "step1Linux": "• Linux：.AppImage 檔案",
+      "step2Title": "散布：",
+      "step2ShareInstaller": "把安裝程式分享給玩家！",
+      "step2ShareStandalone": "把執行檔分享給玩家！",
+      "step2InstallerDesc": "安裝程式將建立桌面/開始功能表捷徑、一個安裝目錄和一個遊戲存檔資料夾",
+      "step2StandaloneDesc": "他們只需下載並執行——無需安裝",
+      "step3Title": "存檔系統：",
+      "step3Desc": "你的遊戲包含：",
+      "step3Item1": "• 以檔案為基礎的自動存檔（在工作階段之間永久保留）",
+      "step3Item2": "• 玩家的進度保存到他們的電腦上",
+      "step3Item3": "• 離線執行，無需伺服器",
+      "step4InstallerTitle": "安裝程式功能：",
+      "step4Item1": "• 自訂安裝目錄選擇",
+      "step4Item2": "• 桌面和開始功能表捷徑",
+      "step4Item3": "• 包含乾淨的解除安裝程式",
+      "step4Item4": "• 遊戲存檔存放在使用者資料資料夾中",
+      "step5NoteTitle": "注意：",
+      "step5NoteInstaller": "安裝程式是特定於平台的",
+      "step5NoteStandalone": "執行檔是特定於平台的",
+      "step5Platform": "在 Windows 上建置得到 .exe，在 Mac 上得到 .app，在 Linux 上得到 .AppImage"
+    },
+    "android": {
+      "step1Title": "把它傳到你的手機上：",
+      "step1Desc": "將 .apk 複製到你的 Android 裝置（USB 傳輸線、雲端硬碟或電子郵件）。",
+      "step2Title": "允許安裝：",
+      "step2Desc": "當你點按該檔案時，Android 可能會請求允許從此來源安裝——請允許它。",
+      "step3Title": "安裝並遊玩：",
+      "step3Desc": "點按 .apk 進行安裝，然後開啟你的遊戲。",
+      "note": "未來的更新中將提供更多自動化發布選項。"
+    }
+  },
+  "error": {
+    "title": "建置失敗",
+    "unknown": "發生未知錯誤",
+    "commonFixes": "常見修正方法：",
+    "fix1": "確保你的專案至少有一個場景",
+    "fix2": "檢查所有素材是否已正確載入",
+    "fix3": "嘗試關閉並重新開啟軟體",
+    "tryAgain": "重試"
+  },
+  "androidBuild": {
+    "name": "Android",
+    "desc": "適用於 Android 手機和平板的可安裝應用程式（.apk）",
+    "infoTitle": "Android 應用程式（.apk）",
+    "intro": "將你的遊戲打包為原生 Android 應用程式，可在手機和平板上安裝執行——以點按代替滑鼠點擊，存檔保存在裝置上，就和桌面建置一樣。",
+    "item1": "安裝後可完全離線執行",
+    "item2": "存檔與進度保留在裝置上（無瀏覽器大小限制）",
+    "item3": "橫向或直向——由你選擇",
+    "item4": "直接把 .apk 檔案分享給玩家",
+    "publishingLater": "未來的更新中將提供更多自動化發布選項。",
+    "sideloadTitle": "📲 安裝應用程式（請閱讀）",
+    "sideloadNotice": "當你或玩家安裝此 .apk 時，Android 會顯示「不明應用程式」/Play Protect 警告，並要求你允許安裝。對於任何在 Google Play Store 之外安裝的應用程式來說，這都是完全正常的——這並不代表你的遊戲不安全。只需點按允許即可。",
+    "playStoreTitle": "🏪 將其上架到 Google Play Store",
+    "playStoreNotice": "Play Store 需要這種一鍵建置尚未完成的額外進階步驟：一種不同的檔案格式（Android App Bundle / .aab）、一把由你自己建立、擁有並備份的簽署金鑰，以及一個 Google Play Console 帳戶（一次性 $25 費用）。你無法將這個已完成的 .apk 轉換為可上傳到 Play Store 的檔案——它必須用你自己的金鑰重新建置為 .aab（例如在 Android Studio 中）。一鍵式 Play Store 建置計畫在未來的 Flourish 更新中推出。",
+    "desktopOnly": "Android 建置僅在 Flourish 的桌面版本中可用。"
+  },
+  "androidConfig": {
+    "title": "應用程式詳細資料",
+    "appName": "應用程式名稱",
+    "packageName": "套件名稱",
+    "packageHint": "一個唯一 id，如 com.yourname.gamename",
+    "packageInvalid": "請使用唯一 id，如 com.yourname.game（小寫字母和點）",
+    "version": "版本",
+    "orientation": "方向",
+    "orientationLandscape": "橫向",
+    "orientationPortrait": "直向",
+    "orientationAuto": "自動（旋轉）"
+  },
+  "androidFormat": {
+    "title": "建置格式",
+    "apkName": "APK — 直接安裝",
+    "apkDesc": "可在任意位置分享與側載（itch.io、直接下載）。Play Store 不接受。",
+    "aabName": "AAB — Google Play",
+    "aabDesc": "用於自行在 Google Play Store 上發布的 App Bundle。"
+  },
+  "androidPlayStore": {
+    "yourJobTitle": "⚠️ 這一步由你來發布——而非 Flourish",
+    "yourJobBody": "Flourish 會建置並簽署 .aab，但真正把它上傳到 Google Play Store 是你自己要完成的一步——它需要一個 Google Play Console 帳戶和一次性 $25 費用。建置完成後，我們會在 .aab 旁邊儲存一份分步指南以及你的簽署金鑰，讓你擁有所需的一切。",
+    "guide": "如何將你的遊戲發布到 GOOGLE PLAY STORE\n=================================================\n\nFlourish 已為你建置並簽署了一個 Android App Bundle（.aab）。Flourish 不會\n將它上傳到 Play Store——那最後一步由你完成，並且需要一個\nGoogle Play 開發者帳戶。以下是你需要做的確切步驟。\n\n此資料夾中包含什麼\n  - 你的 .aab 檔案 ................. 上傳到 Google Play 的 bundle\n  - ..._upload-key.keystore ........ 你的簽署金鑰（請備份它！）\n  - ..._SIGNING_KEY_BACKUP.txt ..... 該金鑰的別名 + 密碼\n\n步驟 1 - 建立 Google Play 開發者帳戶\n  前往 https://play.google.com/console 並註冊。有一次性\n  $25 USD 的註冊費（你只需支付一次，永久有效）。\n\n步驟 2 - 建立你的應用程式\n  在 Play Console 中點按「建立應用程式」，輸入你遊戲的名稱，選擇\n  應用程式類型和免費/付費，並接受相關聲明。\n\n步驟 3 - 上傳 .aab\n  開啟「發布」。如需先私下試用，選擇「測試 > 內部\n  測試」；如需正式上線，選擇「正式版」。建立一個版本並上傳你的\n  .aab 檔案。\n\n步驟 4 - Play 應用程式簽署（重要）\n  Google 會安全地管理為玩家簽署你應用程式的金鑰。Flourish\n  建立的金鑰是你的「上傳金鑰」——你用它為每次上傳簽署。請妥善\n  保管它（參見簽署金鑰檔案）。如果它遺失，你可以請求 Google\n  重設它，但妥善保管要容易得多。\n\n步驟 5 - 完善商店資訊\n  加入螢幕截圖、圖示、說明、隱私權政策連結、\n  內容分級問卷和目標客群。Console 會逐項\n  引導你完成。\n\n步驟 6 - 提交審查\n  提交審查。首次審查可能需要幾天時間。\n\n日後的更新\n  在 Flourish 中建置一個版本號更高的新 .aab，用\n  相同的上傳金鑰簽署，並作為新版本上傳。\n\n須知\n  人們直接安裝 .apk 時看到的「不明來源」警告\n  對於從 Play Store 安裝的應用程式不會出現。\n\nGoogle 官方說明（比我們這裡能提供的更詳細）：\n  https://support.google.com/googleplay/android-developer\n",
+    "keyReadme": "你的 ANDROID 簽署金鑰 - 請妥善保管\n=========================================\n\n此資料夾包含你應用程式的上傳金鑰：\n\n  金鑰檔案 : {{keyFile}}\n  別名     : {{alias}}\n  密碼     : {{password}}\n  （金鑰密碼與 store 密碼相同）\n\n為什麼它很重要\n  你用此金鑰為每次 Google Play 上傳簽署，並且日後發布遊戲的\n  更新時必須使用這把相同的金鑰。如果你遺失了它，可以請求 Google\n  重設你的上傳金鑰（Play Console > 你的應用程式 > 設定 > 應用程式完整性），\n  但那很麻煩——還是保管好它吧。\n\n該怎麼做\n  - 把這個金鑰檔案和這份說明複製到安全的地方：密碼管理器、\n    備份硬碟或雲端儲存空間。\n  - 不要公開分享它們。任何擁有金鑰檔案 + 密碼的人都能以你的身分\n    為上傳簽署，所以請把它們當作密碼一樣對待。\n\n這與 Flourish 在這台電腦上每次建置所重複使用的金鑰相同，所以你的\n.apk 和 .aab 建置已經共用它了。\n"
+  },
+  "androidGate": {
+    "title": "一次性 Android 設定",
+    "body": "為 Android 建置需要 Android 工具鏈（Java、Android SDK 和 Gradle）。Flourish 會自動為你設定好——但這是一次性下載，約 {{size}} GB（解壓縮後約 {{disk}} GB）。",
+    "installerLite": "我們現在下載它而非將其打包進來，是為了讓 Flourish 的安裝程式保持小巧快速。",
+    "oneTime": "你只需做一次。此後的每次 Android 建置都可離線進行。",
+    "downloading": "正在設定 Android 工具（一次性）……",
+    "continue": "下載並繼續",
+    "cancel": "取消"
+  }
+}

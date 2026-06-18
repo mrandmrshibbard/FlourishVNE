@@ -1,0 +1,232 @@
+{
+  "title": "単体ゲームをビルド",
+  "chooseBuildType": "ビルドタイプを選択：",
+  "ready": "ビルドの準備完了...",
+  "iconError": "画像ファイルを選択してください（PNG推奨、256×256以上）。",
+  "webBuild": {
+    "name": "Webビルド",
+    "desc": "ブラウザで再生 • itch.io対応 • 進行状況は保存されません",
+    "infoTitle": "Webビルド",
+    "intro": "これは次のことができるブラウザベースのゲームを作成します：",
+    "item1": "✅ itch.ioにアップロード（最も簡単！）",
+    "item2": "✅ 任意のWebホストで共有（Netlify、GitHub Pagesなど）",
+    "item3": "✅ ZIPファイルとして友達に送信",
+    "item4": "✅ どのブラウザでもオフラインで再生",
+    "item5": "⚠️ 注意：進行状況は保存されません（ブラウザの制限）"
+  },
+  "desktopBuild": {
+    "name": "デスクトップビルド",
+    "desc": "Windows/Mac/Linux • 進行状況を保存 • オフライン再生",
+    "infoTitle": "デスクトップビルド",
+    "intro": "これは次の機能を備えた単体のデスクトップアプリを作成します：",
+    "item1": "💾 完全なセーブ／ロードシステム（10個のセーブスロット）",
+    "item2": "🔄 オートセーブ機能",
+    "item3": "📁 進行状況の永続的な保存",
+    "item4": "🖥️ Windows、Mac、Linuxで動作",
+    "item5": "📦 Electronが必要（ビルドに同梱）",
+    "installerWarning": "⚡ インストーラービルドはビルドが速く、インストール後すぐに起動します — セットアップが事前にすべてのファイルを展開します",
+    "standaloneWarning": "⏱ 単体ビルドはビルドに時間がかかり、起動も遅くなります — exeは起動のたびに一時フォルダーに自身を展開する必要があります"
+  },
+  "noCodingRequired": "プログラミングは不要！ダウンロードして配布するだけです。",
+  "iconPicker": {
+    "label": "アプリケーションアイコン",
+    "clickToChoose": "クリックしてアイコンを選択",
+    "altText": "アプリアイコン",
+    "changeIcon": "アイコンを変更",
+    "chooseIcon": "アイコンを選択",
+    "remove": "削除",
+    "hint": "推奨：256×256のPNG"
+  },
+  "formatPicker": {
+    "title": "ビルド形式",
+    "standaloneName": "📦 単体.exe",
+    "standaloneDesc": "単一のポータブル実行ファイル — インストール不要、実行するだけ",
+    "standaloneNote": "⏱ ビルドと起動が遅い — exeは起動のたびに展開が必要",
+    "installerName": "🔧 インストーラー（セットアップ）",
+    "installerDesc": "ショートカット、インストール先、アンインストーラー、ゲームセーブフォルダー付きのセットアップウィザード",
+    "installerNote": "⚡ ビルドと起動が速い — ファイルはインストール時に事前展開されます"
+  },
+  "stats": {
+    "estimatedSize": "推定サイズ：",
+    "scenes": "シーン：",
+    "characters": "キャラクター："
+  },
+  "validation": {
+    "errors": "⛔ {{count}}件のエラー",
+    "warnings": "⚠️ {{count}}件の警告",
+    "separator": " • "
+  },
+  "buildBtn": {
+    "fixErrors": "ビルド前にエラーを修正してください",
+    "buildWeb": "Webゲームをビルド",
+    "buildInstaller": "インストーラーをビルド",
+    "buildStandalone": "単体EXEをビルド",
+    "buildAndroid": "Androidアプリをビルド",
+    "buildAndroidAab": "App Bundle（.aab）をビルド"
+  },
+  "helpBox": {
+    "firstTime": "初めてですか？",
+    "before": "ビルド後にZIPファイルが得られます。次にアップロードしてください：",
+    "after": "それで完了です！コマンドラインは不要です。"
+  },
+  "progress": {
+    "web": {
+      "prepare": "📋 準備中",
+      "generate": "⚙️ 生成中",
+      "assets": "🎨 アセットをまとめています",
+      "finalize": "📦 仕上げ中"
+    },
+    "desktop": {
+      "prepare": "📋 準備",
+      "generate": "⚙️ 生成",
+      "assets": "🎨 アセット",
+      "install": "📥 依存関係",
+      "build": "🔨 EXEをビルド",
+      "save": "💾 保存",
+      "working": "デスクトップビルドには数分かかります — アプリはバックグラウンドで動作しています。"
+    },
+    "android": {
+      "setup": "セットアップ",
+      "prepare": "準備",
+      "assets": "アセット",
+      "build": "ビルド",
+      "save": "保存",
+      "working": "初回は数分かかることがあります — Flourishを開いたままにしてください。"
+    }
+  },
+  "success": {
+    "webTitle": "Webゲームのビルドに成功しました！",
+    "installerTitle": "インストーラーのビルドに成功しました！",
+    "desktopTitle": "デスクトップアプリのビルドに成功しました！",
+    "webText": "ゲームをWebで共有する準備ができました！",
+    "installerText": "ショートカットとゲームセーブディレクトリ付きのインストーラーの準備ができました！",
+    "desktopText": "単体のデスクトップゲームの準備ができました！",
+    "fileSize": "ファイルサイズ：",
+    "format": "形式：",
+    "formatValue": "HTML5（ZIP）",
+    "downloadBtn": "WebゲームのZIPをダウンロード",
+    "execSaved": "実行ファイルの保存に成功しました！",
+    "execLocation": "選択した場所を確認して、ゲームの実行ファイルを見つけてください。",
+    "buildAnotherVersion": "別のバージョンをビルド",
+    "androidTitle": "Androidアプリの準備ができました！",
+    "androidText": "Flourishが署名済みでインストール可能な.apkをビルドしました。",
+    "apkSaved": "APKはAndroidビルドフォルダーに保存されました。",
+    "apkLocation": "Documents → Flourish VNE → Builds → Android で見つかります。",
+    "androidSideloadHeadsUp": "ご注意：インストール時、Androidは「提供元不明」／不明なアプリについて警告します — 直接インストールでは想定どおりなので、タップして許可してください。この警告はPlay Storeで公開されたアプリでのみ消えます（それには追加の高度な手順が必要です）。",
+    "androidAabTitle": "app bundleの準備ができました！",
+    "androidAabText": "FlourishがGoogle Play Store向けに署名済みの.aabをビルドしました。",
+    "aabSaved": "AABはAndroidビルドフォルダーに保存されました — 公開ガイドと署名鍵も一緒に保存されています。",
+    "aabNextTitle": "📄 次に：自分で公開する",
+    "aabNextBody": ".aabの隣に保存された_PLAY_STORE_GUIDE.txtを開いて手順を確認し、_upload-key.keystoreファイルをバックアップしてください — 後で更新を配信するには、まさにその鍵が必要になります。"
+  },
+  "nextSteps": {
+    "title": "次は？",
+    "web": {
+      "step1Title": "itch.ioにアップロード（推奨）：",
+      "step1GoTo": "次にアクセス：",
+      "step1ChooseHtml": "アップロードの種類として「HTML」を選択",
+      "step1Upload": "ダウンロードしたばかりのZIPファイルをアップロード",
+      "step1Check": "「This file will be played in the browser」にチェック",
+      "step1Publish": "公開！",
+      "step2Title": "または自分でホストする：",
+      "step2Desc": "解凍して、その中身を任意のWebホストにアップロード",
+      "step3Title": "またはオフラインで共有する：",
+      "step3Desc": "ZIPを友達に送ります — 解凍してindex.htmlを開けます"
+    },
+    "desktop": {
+      "step1Title": "ゲームをテストする：",
+      "step1Installer": "セットアップインストーラーを実行してゲームをインストール",
+      "step1Standalone": "実行ファイルをダブルクリックしてゲームをテスト",
+      "step1Windows": "• Windows：.exeファイル",
+      "step1Mac": "• Mac：.appまたは.dmgファイル",
+      "step1Linux": "• Linux：.AppImageファイル",
+      "step2Title": "配布する：",
+      "step2ShareInstaller": "インストーラーをプレイヤーと共有しましょう！",
+      "step2ShareStandalone": "実行ファイルをプレイヤーと共有しましょう！",
+      "step2InstallerDesc": "インストーラーはデスクトップ／スタートメニューのショートカット、インストール先、ゲームセーブフォルダーを作成します",
+      "step2StandaloneDesc": "ダウンロードして実行するだけ — インストール不要です",
+      "step3Title": "セーブシステム：",
+      "step3Desc": "ゲームには次の機能が含まれます：",
+      "step3Item1": "• 自動的なファイルベースのセーブ（セッション間で永続）",
+      "step3Item2": "• プレイヤーの進行状況は本人のコンピューターに保存されます",
+      "step3Item3": "• サーバー不要でオフライン動作",
+      "step4InstallerTitle": "インストーラーの機能：",
+      "step4Item1": "• カスタムなインストール先の選択",
+      "step4Item2": "• デスクトップとスタートメニューのショートカット",
+      "step4Item3": "• クリーンなアンインストーラーを同梱",
+      "step4Item4": "• ゲームセーブはユーザーデータフォルダーに保存",
+      "step5NoteTitle": "注意：",
+      "step5NoteInstaller": "インストーラーはプラットフォーム固有です",
+      "step5NoteStandalone": "実行ファイルはプラットフォーム固有です",
+      "step5Platform": ".exeはWindowsで、.appはMacで、.AppImageはLinuxでビルドしてください"
+    },
+    "android": {
+      "step1Title": "スマートフォンに入れる：",
+      "step1Desc": ".apkをAndroid端末にコピーします（USBケーブル、クラウドドライブ、またはメール）。",
+      "step2Title": "インストールを許可する：",
+      "step2Desc": "ファイルをタップすると、Androidはこの提供元からのインストール許可を求めることがあります — 許可してください。",
+      "step3Title": "インストールして遊ぶ：",
+      "step3Desc": ".apkをタップしてインストールし、ゲームを開きます。",
+      "note": "より自動化された公開オプションは今後のアップデートで提供予定です。"
+    }
+  },
+  "error": {
+    "title": "ビルドに失敗しました",
+    "unknown": "不明なエラーが発生しました",
+    "commonFixes": "よくある対処法：",
+    "fix1": "プロジェクトに少なくとも1つのシーンがあることを確認してください",
+    "fix2": "すべてのアセットが正しく読み込まれているか確認してください",
+    "fix3": "アプリを閉じて開き直してみてください",
+    "tryAgain": "再試行"
+  },
+  "androidBuild": {
+    "name": "Android",
+    "desc": "Androidスマートフォン・タブレット向けのインストール可能なアプリ（.apk）",
+    "infoTitle": "Androidアプリ（.apk）",
+    "intro": "ゲームをネイティブのAndroidアプリとしてパッケージ化し、スマートフォンやタブレットにインストールして実行できます — クリックの代わりにタップで操作し、デスクトップビルドと同じようにセーブは端末に保存されます。",
+    "item1": "インストール後は完全にオフラインで動作",
+    "item2": "セーブと進行状況は端末に保持されます（ブラウザのサイズ制限なし）",
+    "item3": "横向きか縦向きか — あなたが選べます",
+    "item4": ".apkファイルを直接プレイヤーと共有",
+    "publishingLater": "より自動化された公開オプションは今後のアップデートで提供予定です。",
+    "sideloadTitle": "📲 アプリのインストール（必ずお読みください）",
+    "sideloadNotice": "あなたまたはプレイヤーがこの.apkをインストールすると、Androidは「不明なアプリ」／Play Protectの警告を表示し、インストールの許可を求めます。これはGoogle Play Store以外でインストールされるどのアプリでも完全に通常のことで、ゲームが安全でないという意味ではありません。タップして許可するだけです。",
+    "playStoreTitle": "🏪 Google Play Storeに掲載する",
+    "playStoreNotice": "Play Storeには、このワンクリックビルドがまだ行わない追加の高度な手順が必要です：異なるファイル形式（Android App Bundle／.aab）、あなた自身が作成・所有・バックアップする署名鍵、そしてGoogle Play Consoleアカウント（一度きりの25ドルの料金）です。この完成した.apkをPlay Store用のアップロードに変換することはできません — あなた自身の鍵で.aabとして（例えばAndroid Studioで）再ビルドする必要があります。Play Store向けのワンクリックビルドは今後のFlourishのアップデートで予定されています。",
+    "desktopOnly": "Androidビルドはデスクトップ版のFlourishでのみ利用できます。"
+  },
+  "androidConfig": {
+    "title": "アプリの詳細",
+    "appName": "アプリ名",
+    "packageName": "パッケージ名",
+    "packageHint": "com.yourname.gamename のような一意のID",
+    "packageInvalid": "com.yourname.game のような一意のIDを使用してください（小文字とドット）",
+    "version": "バージョン",
+    "orientation": "画面の向き",
+    "orientationLandscape": "横向き",
+    "orientationPortrait": "縦向き",
+    "orientationAuto": "自動（回転）"
+  },
+  "androidFormat": {
+    "title": "ビルド形式",
+    "apkName": "APK — 直接インストール",
+    "apkDesc": "どこでも共有・サイドロード可能（itch.io、直接ダウンロード）。Play Storeでは受け付けられません。",
+    "aabName": "AAB — Google Play",
+    "aabDesc": "自分でGoogle Play Storeに公開するためのApp Bundle。"
+  },
+  "androidPlayStore": {
+    "yourJobTitle": "⚠️ これを公開するのはあなたです — Flourishではありません",
+    "yourJobBody": "Flourishは.aabをビルドして署名しますが、実際にGoogle Play Storeへアップロードするのはあなた自身が行う手順です — Google Play Consoleアカウントと一度きりの25ドルの料金が必要です。ビルドが完了すると、手順を追ったガイドとあなたの署名鍵を.aabのすぐ隣に保存するので、必要なものがすべて揃います。",
+    "guide": "GOOGLE PLAY STOREでゲームを公開する方法\n=================================================\n\nFlourishはあなたのためにAndroid App Bundle（.aab）をビルドして署名しました。Flourishは\nそれをPlay Storeにアップロードしません — その最後の手順はあなたのもので、\nGoogle Playデベロッパーアカウントが必要です。以下がまさに行うべきことです。\n\nこのフォルダーの中身\n  - .aabファイル ................. Google Playにアップロードするバンドル\n  - ..._upload-key.keystore ........ あなたの署名鍵（必ずバックアップを！）\n  - ..._SIGNING_KEY_BACKUP.txt ..... その鍵のエイリアス＋パスワード\n\nステップ1 - Google Playデベロッパーアカウントを作成\n  https://play.google.com/console にアクセスして登録します。一度きりの\n  25 USDの登録料があります（生涯に一度だけの支払いです）。\n\nステップ2 - アプリを作成\n  Play Consoleで「アプリを作成」をクリックし、ゲームの名前を入力し、\n  アプリの種類と無料／有料を選び、宣言事項に同意します。\n\nステップ3 - .aabをアップロード\n  リリースを開きます。まず非公開で試すにはテスト > 内部テストを、\n  公開するにはプロダクションを選びます。リリースを作成して\n  .aabファイルをアップロードします。\n\nステップ4 - Play アプリ署名（重要）\n  Googleはプレイヤー向けにアプリへ署名する鍵を安全に管理します。Flourishが\n  作成した鍵はあなたの「アップロード鍵」です — すべてのアップロードにこれで署名します。\n  安全に保管してください（署名鍵ファイルを参照）。万一失っても、Googleに\n  リセットを依頼できますが、保管しておく方がはるかに簡単です。\n\nステップ5 - ストア掲載情報を完成させる\n  スクリーンショット、アイコン、説明、プライバシーポリシーのリンク、\n  コンテンツのレーティングに関する質問、対象ユーザーを追加します。コンソールが\n  各項目を案内してくれます。\n\nステップ6 - 審査に提出\n  審査に提出します。最初の審査には数日かかることがあります。\n\n後で更新するには\n  Flourishでより大きいバージョン番号の新しい.aabをビルドし、同じアップロード鍵で\n  署名して、新しいリリースとしてアップロードします。\n\n知っておくとよいこと\n  .apkを直接インストールするときに表示される「提供元不明」の警告は、\n  Play Storeからインストールしたアプリでは発生しません。\n\nGoogleの公式ヘルプ（ここで説明できる以上の詳細）：\n  https://support.google.com/googleplay/android-developer\n",
+    "keyReadme": "あなたのANDROID署名鍵 - 安全に保管してください\n=========================================\n\nこのフォルダーにはあなたのアプリのアップロード鍵が含まれています：\n\n  鍵ファイル : {{keyFile}}\n  エイリアス  : {{alias}}\n  パスワード  : {{password}}\n  （鍵のパスワードはストアのパスワードと同じです）\n\nなぜ重要か\n  すべてのGoogle Playへのアップロードにこの鍵で署名し、後でゲームの更新を\n  公開するにも、この同じ鍵を使う必要があります。失った場合はGoogleに\n  アップロード鍵のリセットを依頼できますが（Play Console > あなたのアプリ > 設定 > アプリの完全性）、\n  それは面倒です — 保管しておきましょう。\n\nやるべきこと\n  - この鍵ファイルとこのメモを安全な場所にコピーしてください：パスワード\n    マネージャー、バックアップドライブ、またはクラウドストレージ。\n  - 公開で共有しないでください。鍵ファイル＋パスワードを持つ人は誰でもあなたとして\n    アップロードに署名できるので、パスワードと同じように扱ってください。\n\nこれはFlourishがこのコンピューターでのすべてのビルドに再利用する同じ鍵なので、\nあなたの.apkと.aabのビルドはすでにこれを共有しています。\n"
+  },
+  "androidGate": {
+    "title": "Androidの初回セットアップ",
+    "body": "Android向けのビルドにはAndroidツールチェーン（Java、Android SDK、Gradle）が必要です。Flourishが自動でこれを設定します — ただし、これは約{{size}} GBの一度きりのダウンロードです（展開後は約{{disk}} GB）。",
+    "installerLite": "Flourishのインストーラーを小さく高速に保つため、同梱する代わりに今ダウンロードします。",
+    "oneTime": "これは一度だけです。これ以降のAndroidビルドはすべてオフラインで動作します。",
+    "downloading": "Androidツールをセットアップ中（一度きり）…",
+    "continue": "ダウンロードして続行",
+    "cancel": "キャンセル"
+  }
+}

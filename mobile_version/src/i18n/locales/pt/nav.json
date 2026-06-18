@@ -1,0 +1,24 @@
+{
+  "tabs": {
+    "scenes": "Cenas",
+    "characters": "Personagens",
+    "ui": "UI / Telas",
+    "assets": "Recursos",
+    "variables": "Variáveis",
+    "commonEvents": "Eventos",
+    "systems": "Sistemas",
+    "settings": "Configurações"
+  },
+  "desc": {
+    "scenes": "Crie e edite cenas da história com diálogos, escolhas e comandos",
+    "characters": "Crie personagens com sprites em camadas e expressões",
+    "ui": "Crie elementos de UI do jogo e telas de menu",
+    "assets": "Gerencie arquivos de imagem, áudio e vídeo",
+    "variables": "Crie e gerencie variáveis da história e o estado do jogo",
+    "commonEvents": "Sequências de comandos reutilizáveis acionadas pelas cenas",
+    "systems": "Sistemas de jogabilidade opcionais como Inventário, e o registro de itens",
+    "settings": "Configure as preferências e configurações do projeto"
+  },
+  "rightClickHint": " | Clique com o botão direito para focar a janela do gerenciador",
+  "openInWindow": "Abrir ou focar {{label}} em uma janela separada"
+}

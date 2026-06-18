@@ -1,0 +1,76 @@
+/* ===================================================================
+   FLOURISH — MOBILE EDITION OVERRIDES
+   Loaded only in the mobile fork (imported from src/index.tsx).
+   Scaffold pass: top-level shell ergonomics + narrow-screen layout.
+   Deeper per-editor touch polish lands in later rounds.
+   =================================================================== */
+
+/* Honor device safe areas (notches / gesture bars) at the app root. */
+html, body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* ── Touch ergonomics: anything that's a tap target gets a comfortable
+   minimum hit area. Scoped to coarse pointers so mouse preview is unaffected. ── */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  .nav-tab {
+    touch-action: manipulation;
+  }
+
+  /* Inputs at >=16px font prevent iOS/Android auto-zoom on focus. */
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* ── Narrow screens (phones / small tablets): reclaim horizontal space ── */
+@media (max-width: 820px) {
+  :root {
+    /* Side inspectors/sidebars were sized for desktop; shrink so the main
+       working area stays usable. Per-editor stacking comes later. */
+    --inspector-width: 248px;
+    --sidebar-width: 200px;
+  }
+
+  /* The top navigation tab strip scrolls horizontally instead of clipping
+     under the toolbar buttons. */
+  header nav,
+  header [data-nav-tabs],
+  .nav-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  header nav::-webkit-scrollbar,
+  .nav-tabs::-webkit-scrollbar { display: none; }
+
+  /* Editor body: if a manager still lays out side-by-side panels wider than the
+     viewport, allow horizontal scroll so nothing becomes unreachable (safety net
+     until each manager gets a dedicated mobile layout). */
+  main.flex-grow {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Very small screens: tighten paddings a touch ── */
+@media (max-width: 560px) {
+  :root {
+    --inspector-width: 220px;
+    --sidebar-width: 176px;
+  }
+}

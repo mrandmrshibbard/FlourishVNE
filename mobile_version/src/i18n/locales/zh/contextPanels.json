@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "正在加载上下文面板……",
+    "emptyTitle": "无可用的上下文专属面板",
+    "emptyHint": "选择一个项目以查看相关工具和建议",
+    "suggestionsHeading": "建议",
+    "panelSuggestionsHeading": "建议：",
+    "collapse": "折叠",
+    "expand": "展开",
+    "moveUp": "上移",
+    "moveDown": "下移"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "添加对话",
+      "addDialogueTip": "添加对话命令（Alt+D）",
+      "addChoice": "添加选择",
+      "addChoiceTip": "添加选择命令（Alt+C）",
+      "setVariable": "设置变量",
+      "setVariableTip": "添加变量命令（Alt+V）",
+      "preview": "预览",
+      "previewTip": "预览场景（F5）"
+    },
+    "characterEditing": {
+      "addExpression": "添加表情",
+      "addExpressionTip": "添加新表情",
+      "addOutfit": "添加服装",
+      "addOutfitTip": "添加服装变体",
+      "duplicate": "复制",
+      "duplicateTip": "复制角色（Ctrl+D）"
+    },
+    "uiEditing": {
+      "addButton": "添加按钮",
+      "addButtonTip": "添加按钮元素",
+      "addText": "添加文本",
+      "addTextTip": "添加文本元素",
+      "addImage": "添加图像",
+      "addImageTip": "添加图像元素",
+      "preview": "预览",
+      "previewTip": "预览 UI 屏幕（F5）"
+    },
+    "templateBrowsing": {
+      "filter": "筛选",
+      "filterTip": "筛选模板",
+      "sort": "排序",
+      "sortTip": "排序模板",
+      "favorites": "收藏",
+      "favoritesTip": "仅显示收藏"
+    },
+    "logicBuilding": {
+      "addCondition": "添加条件",
+      "addConditionTip": "添加条件节点",
+      "addAction": "添加动作",
+      "addActionTip": "添加动作节点",
+      "validate": "验证",
+      "validateTip": "验证逻辑流程"
+    },
+    "variableManagement": {
+      "addVariable": "添加变量",
+      "addVariableTip": "添加新变量（Alt+N）",
+      "debug": "调试",
+      "debugTip": "打开变量调试器",
+      "export": "导出",
+      "exportTip": "导出变量定义"
+    },
+    "assetManagement": {
+      "import": "导入",
+      "importTip": "导入资源",
+      "organize": "整理",
+      "organizeTip": "整理资源",
+      "findUnused": "查找未使用",
+      "findUnusedTip": "查找未使用的资源"
+    },
+    "wizardFlow": {
+      "back": "上一步",
+      "backTip": "上一步",
+      "next": "下一步",
+      "nextTip": "下一步",
+      "cancel": "取消",
+      "cancelTip": "取消向导"
+    }
+  },
+  "localizationPanel": {
+    "title": "本地化管理器",
+    "stringCount_one": "{{count}} 个字符串",
+    "stringCount_other": "{{count}} 个字符串",
+    "addLanguage": "添加语言",
+    "removeLanguageTip": "移除 {{name}}",
+    "searchPlaceholder": "按键名或文本搜索……",
+    "filterAll": "全部",
+    "filterDialogue": "对话",
+    "filterChoice": "选择",
+    "colKey": "键名",
+    "colContext": "上下文",
+    "colDefaultText": "默认文本",
+    "emptyNoStrings": "未找到字符串",
+    "emptyNoStringsHintScan": "向场景中添加对话或选择命令以查看可翻译的字符串。",
+    "emptyNoStringsHintFilter": "没有字符串符合你当前的筛选条件。",
+    "translationPlaceholder": "输入翻译……",
+    "exportCsv": "导出 CSV",
+    "importCsv": "导入 CSV",
+    "importSuccess_one": "已导入 {{count}} 条翻译。",
+    "importSuccess_other": "已导入 {{count}} 条翻译。",
+    "importErrors_one": "{{count}} 个错误：",
+    "importErrors_other": "{{count}} 个错误：",
+    "showingCount": "正在显示 {{total}} 个字符串中的 {{filtered}} 个"
+  }
+}

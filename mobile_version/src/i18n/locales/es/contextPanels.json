@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "Cargando paneles de contexto...",
+    "emptyTitle": "No hay paneles específicos de contexto disponibles",
+    "emptyHint": "Selecciona un elemento para ver herramientas y sugerencias relevantes",
+    "suggestionsHeading": "Sugerencias",
+    "panelSuggestionsHeading": "Sugerencias:",
+    "collapse": "Contraer",
+    "expand": "Expandir",
+    "moveUp": "Mover arriba",
+    "moveDown": "Mover abajo"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Añadir diálogo",
+      "addDialogueTip": "Añadir comando de diálogo (Alt+D)",
+      "addChoice": "Añadir elección",
+      "addChoiceTip": "Añadir comando de elección (Alt+C)",
+      "setVariable": "Establecer variable",
+      "setVariableTip": "Añadir comando de variable (Alt+V)",
+      "preview": "Vista previa",
+      "previewTip": "Previsualizar escena (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Añadir expresión",
+      "addExpressionTip": "Añadir nueva expresión",
+      "addOutfit": "Añadir atuendo",
+      "addOutfitTip": "Añadir variante de atuendo",
+      "duplicate": "Duplicar",
+      "duplicateTip": "Duplicar personaje (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Añadir botón",
+      "addButtonTip": "Añadir elemento de botón",
+      "addText": "Añadir texto",
+      "addTextTip": "Añadir elemento de texto",
+      "addImage": "Añadir imagen",
+      "addImageTip": "Añadir elemento de imagen",
+      "preview": "Vista previa",
+      "previewTip": "Previsualizar pantalla de IU (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Filtrar",
+      "filterTip": "Filtrar plantillas",
+      "sort": "Ordenar",
+      "sortTip": "Ordenar plantillas",
+      "favorites": "Favoritos",
+      "favoritesTip": "Mostrar solo favoritos"
+    },
+    "logicBuilding": {
+      "addCondition": "Añadir condición",
+      "addConditionTip": "Añadir nodo de condición",
+      "addAction": "Añadir acción",
+      "addActionTip": "Añadir nodo de acción",
+      "validate": "Validar",
+      "validateTip": "Validar el flujo lógico"
+    },
+    "variableManagement": {
+      "addVariable": "Añadir variable",
+      "addVariableTip": "Añadir nueva variable (Alt+N)",
+      "debug": "Depurar",
+      "debugTip": "Abrir el depurador de variables",
+      "export": "Exportar",
+      "exportTip": "Exportar definiciones de variables"
+    },
+    "assetManagement": {
+      "import": "Importar",
+      "importTip": "Importar recursos",
+      "organize": "Organizar",
+      "organizeTip": "Organizar recursos",
+      "findUnused": "Buscar sin usar",
+      "findUnusedTip": "Buscar recursos sin usar"
+    },
+    "wizardFlow": {
+      "back": "Atrás",
+      "backTip": "Paso anterior",
+      "next": "Siguiente",
+      "nextTip": "Paso siguiente",
+      "cancel": "Cancelar",
+      "cancelTip": "Cancelar asistente"
+    }
+  },
+  "localizationPanel": {
+    "title": "Gestor de localización",
+    "stringCount_one": "{{count}} cadena",
+    "stringCount_other": "{{count}} cadenas",
+    "addLanguage": "Añadir idioma",
+    "removeLanguageTip": "Quitar {{name}}",
+    "searchPlaceholder": "Buscar por clave o texto...",
+    "filterAll": "Todo",
+    "filterDialogue": "Diálogo",
+    "filterChoice": "Elección",
+    "colKey": "Clave",
+    "colContext": "Contexto",
+    "colDefaultText": "Texto predeterminado",
+    "emptyNoStrings": "No se encontraron cadenas",
+    "emptyNoStringsHintScan": "Añade comandos de diálogo o de elección a tus escenas para ver cadenas traducibles.",
+    "emptyNoStringsHintFilter": "Ninguna cadena coincide con tus filtros actuales.",
+    "translationPlaceholder": "Escribe la traducción...",
+    "exportCsv": "Exportar CSV",
+    "importCsv": "Importar CSV",
+    "importSuccess_one": "{{count}} traducción importada.",
+    "importSuccess_other": "{{count}} traducciones importadas.",
+    "importErrors_one": "{{count}} error:",
+    "importErrors_other": "{{count}} errores:",
+    "showingCount": "Mostrando {{filtered}} de {{total}} cadenas"
+  }
+}

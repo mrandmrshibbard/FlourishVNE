@@ -1,0 +1,1221 @@
+{
+  "id": "proj-1761446285975",
+  "title": "New Visual Novel",
+  "startSceneId": "scene-319gzed",
+  "scenes": {
+    "scene-319gzed": {
+      "id": "scene-319gzed",
+      "name": "hub",
+      "commands": [
+        {
+          "id": "cmd-zhcbn9s",
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "For example, the demo variable contains: {Demo Variable}"
+        },
+        {
+          "type": "Group",
+          "name": "New Group",
+          "commandIds": [
+            "cmd-zhcbn9s",
+            "cmd-pzt9x91",
+            "cmd-v3uaew6",
+            "cmd-v1eitut"
+          ],
+          "collapsed": true,
+          "id": "cmd-pdqv2ax"
+        },
+        {
+          "id": "cmd-v1eitut",
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "Variables can be referenced in text using {variableName} or {variableId} syntax."
+        },
+        {
+          "id": "cmd-pzt9x91",
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "You can edit this scene in the Scene Editor, or create new scenes, characters, and menus in the Project Resources panel."
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-8qdhp4y",
+          "expressionId": "expr-n7681im",
+          "position": "left",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-62bqcbo",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-5z02zpn",
+            "stackOrder": 0
+          }
+        },
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-8qdhp4y",
+          "expressionId": "expr-qp0qsqq",
+          "position": "right",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-ikuvr4r",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-5z02zpn",
+            "stackOrder": 1
+          }
+        },
+        {
+          "type": "FlashScreen",
+          "color": "#FFFFFF",
+          "duration": 0.5,
+          "id": "cmd-hff1jfb"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "Let's see.... one.... two....",
+          "id": "cmd-vh345ia"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "Oh no we lost someone!",
+          "id": "cmd-iix5q94"
+        },
+        {
+          "type": "ShowButton",
+          "text": "Friend 1",
+          "x": 30,
+          "y": 80,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "backgroundColor": "#6366f1",
+          "textColor": "#ffffff",
+          "fontSize": 18,
+          "fontWeight": "normal",
+          "borderRadius": 8,
+          "image": null,
+          "hoverImage": null,
+          "onClick": {
+            "type": "JumpToScene",
+            "targetSceneId": "scene-6n4635r"
+          },
+          "clickSound": null,
+          "waitForClick": false,
+          "transition": "fade",
+          "duration": 0.3,
+          "id": "cmd-b84ctei",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-lp36exx",
+            "stackOrder": 0
+          }
+        },
+        {
+          "type": "ShowButton",
+          "text": "friend 2",
+          "x": 70,
+          "y": 80,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "backgroundColor": "#6366f1",
+          "textColor": "#ffffff",
+          "fontSize": 18,
+          "fontWeight": "normal",
+          "borderRadius": 8,
+          "image": null,
+          "hoverImage": null,
+          "onClick": {
+            "type": "None"
+          },
+          "clickSound": null,
+          "waitForClick": true,
+          "transition": "fade",
+          "duration": 0.3,
+          "id": "cmd-rh400hw",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-lp36exx",
+            "stackOrder": 1
+          }
+        },
+        {
+          "type": "HideCharacter",
+          "characterId": "char-8qdhp4y",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-wz58j3r",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-1vdat4d",
+            "stackOrder": 0
+          }
+        },
+        {
+          "type": "HideCharacter",
+          "characterId": "char-8qdhp4y",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-71oipab",
+          "modifiers": {
+            "runAsync": true,
+            "stackId": "stack-1vdat4d",
+            "stackOrder": 1
+          }
+        }
+      ]
+    },
+    "scene-6n4635r": {
+      "id": "scene-6n4635r",
+      "name": "fr1",
+      "commands": [
+        {
+          "type": "ShowCharacter",
+          "characterId": "char-8qdhp4y",
+          "expressionId": "expr-n7681im",
+          "position": "center",
+          "transition": "fade",
+          "duration": 1,
+          "id": "cmd-9g6x57h"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-8qdhp4y",
+          "text": "Hey!!! wanna be friends?",
+          "id": "cmd-o2svzh2"
+        },
+        {
+          "type": "Choice",
+          "options": [
+            {
+              "id": "opt-7ox9qig",
+              "text": "Heck no",
+              "actions": []
+            },
+            {
+              "id": "opt-q1t5hte",
+              "text": "Sure!",
+              "actions": []
+            }
+          ],
+          "id": "cmd-5oq9czf"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": "char-8qdhp4y",
+          "text": "Ew... go away",
+          "id": "cmd-t4yvj4b"
+        },
+        {
+          "type": "Dialogue",
+          "characterId": null,
+          "text": "Yay! Besties!",
+          "id": "cmd-hc1br4p"
+        },
+        {
+          "type": "ShowButton",
+          "text": "Go Back To Hub",
+          "x": 50,
+          "y": 80,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "backgroundColor": "#6366f1",
+          "textColor": "#ffffff",
+          "fontSize": 18,
+          "fontWeight": "normal",
+          "borderRadius": 8,
+          "image": null,
+          "hoverImage": null,
+          "onClick": {
+            "type": "JumpToScene",
+            "targetSceneId": "scene-319gzed"
+          },
+          "clickSound": null,
+          "waitForClick": true,
+          "transition": "fade",
+          "duration": 0.3,
+          "showConditions": [],
+          "id": "cmd-12zekhj"
+        }
+      ],
+      "conditions": [
+        {
+          "variableId": "var-or2ad1r",
+          "operator": "is false",
+          "value": ""
+        }
+      ]
+    },
+    "scene-wlorcc3": {
+      "id": "scene-wlorcc3",
+      "name": "fr2",
+      "commands": []
+    }
+  },
+  "characters": {
+    "char-8qdhp4y": {
+      "id": "char-8qdhp4y",
+      "name": "playercharacter",
+      "color": "#FFFFFF",
+      "baseImageUrl": "",
+      "layers": {
+        "layer-i4pjhr6": {
+          "id": "layer-i4pjhr6",
+          "name": "bodytype",
+          "assets": {
+            "asset-xkve7rv": {
+              "id": "asset-xkve7rv",
+              "name": "body_fem_brown",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-xkve7rv_body_fem_brown.png"
+            },
+            "asset-oy40fy9": {
+              "id": "asset-oy40fy9",
+              "name": "body_fem_mixed",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-oy40fy9_body_fem_mixed.png"
+            },
+            "asset-ks9smox": {
+              "id": "asset-ks9smox",
+              "name": "body_fem_tan",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-ks9smox_body_fem_tan.png"
+            },
+            "asset-3tb1he0": {
+              "id": "asset-3tb1he0",
+              "name": "body_fem_white",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-3tb1he0_body_fem_white.png"
+            },
+            "asset-kv2bkvy": {
+              "id": "asset-kv2bkvy",
+              "name": "body_masc_brown",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-kv2bkvy_body_masc_brown.png"
+            },
+            "asset-qzkp5f5": {
+              "id": "asset-qzkp5f5",
+              "name": "body_masc_mixed",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-qzkp5f5_body_masc_mixed.png"
+            },
+            "asset-jhokp5a": {
+              "id": "asset-jhokp5a",
+              "name": "body_masc_tan",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-jhokp5a_body_masc_tan.png"
+            },
+            "asset-crfu45j": {
+              "id": "asset-crfu45j",
+              "name": "body_masc_white",
+              "imageUrl": "assets/characters/char-8qdhp4y/layer-i4pjhr6/asset-crfu45j_body_masc_white.png"
+            }
+          }
+        }
+      },
+      "expressions": {
+        "expr-n7681im": {
+          "id": "expr-n7681im",
+          "name": "Default",
+          "layerConfiguration": {
+            "layer-i4pjhr6": "asset-ks9smox"
+          }
+        }
+      }
+    },
+    "char-j49jwaz": {
+      "id": "char-j49jwaz",
+      "name": "New Character 2",
+      "color": "#FFFFFF",
+      "baseImageUrl": "",
+      "layers": {},
+      "expressions": {
+        "expr-oh7difx": {
+          "id": "expr-oh7difx",
+          "name": "Default",
+          "layerConfiguration": {}
+        }
+      }
+    }
+  },
+  "backgrounds": {
+    "back-kqf4x34": {
+      "id": "back-kqf4x34",
+      "name": "download (1)2",
+      "imageUrl": "assets/backgrounds/back-kqf4x34_download_1_2.png"
+    },
+    "back-ymh0are": {
+      "id": "back-ymh0are",
+      "name": "download (1)",
+      "imageUrl": "assets/backgrounds/back-ymh0are_download_1_.png"
+    }
+  },
+  "images": {},
+  "audio": {},
+  "videos": {},
+  "variables": {
+    "var-zv064zs": {
+      "id": "var-zv064zs",
+      "name": "hair_style",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-nmwh0kf": {
+      "id": "var-nmwh0kf",
+      "name": "hair_full",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-1qryp70": {
+      "id": "var-1qryp70",
+      "name": "skin_color",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-dteoes5": {
+      "id": "var-dteoes5",
+      "name": "body_type",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "var-c1rnh30": {
+      "id": "var-c1rnh30",
+      "name": "body_full",
+      "type": "string",
+      "defaultValue": ""
+    }
+  },
+  "ui": {
+    "titleScreenId": "screen-uala0t1",
+    "saveScreenId": "screen-94hplem",
+    "loadScreenId": "screen-ppyrmln",
+    "settingsScreenId": "screen-f1v9zk2",
+    "pauseScreenId": "screen-inxbucb",
+    "gameHudScreenId": null,
+    "dialogueBoxImage": null,
+    "choiceButtonImage": null,
+    "dialogueNameFont": {
+      "family": "Poppins, sans-serif",
+      "size": 22,
+      "color": "#FFFFFF",
+      "weight": "bold",
+      "italic": false
+    },
+    "dialogueTextFont": {
+      "family": "Poppins, sans-serif",
+      "size": 20,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    },
+    "choiceTextFont": {
+      "family": "Poppins, sans-serif",
+      "size": 18,
+      "color": "#FFFFFF",
+      "weight": "normal",
+      "italic": false
+    }
+  },
+  "uiScreens": {
+    "screen-uala0t1": {
+      "id": "screen-uala0t1",
+      "name": "Title Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-gwljxa0": {
+          "id": "el-gwljxa0",
+          "name": "Title Text",
+          "type": "Text",
+          "text": "My Visual Novel",
+          "x": 50,
+          "y": 30,
+          "width": 60,
+          "height": 15,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 64,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-y7s5jjz": {
+          "id": "el-y7s5jjz",
+          "name": "New Game Button",
+          "type": "Button",
+          "text": "New Game",
+          "x": 50,
+          "y": 55,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-l4eei8z"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-aytrvv3": {
+          "id": "el-aytrvv3",
+          "name": "Load Game Button",
+          "type": "Button",
+          "text": "Load Game",
+          "x": 50,
+          "y": 65,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-ppyrmln"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-fx9y4wu": {
+          "id": "el-fx9y4wu",
+          "name": "Settings Button",
+          "type": "Button",
+          "text": "Settings",
+          "x": 50,
+          "y": 75,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-f1v9zk2"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-94hplem": {
+      "id": "screen-94hplem",
+      "name": "Save Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-x1inipo": {
+          "id": "el-x1inipo",
+          "name": "Header",
+          "type": "Text",
+          "text": "Save Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-a4uvvzr": {
+          "id": "el-a4uvvzr",
+          "name": "Save Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-4lopafw": {
+          "id": "el-4lopafw",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-ppyrmln": {
+      "id": "screen-ppyrmln",
+      "name": "Load Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-l1740je": {
+          "id": "el-l1740je",
+          "name": "Header",
+          "type": "Text",
+          "text": "Load Game",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-ta8dvq0": {
+          "id": "el-ta8dvq0",
+          "name": "Load Slots",
+          "type": "SaveSlotGrid",
+          "slotCount": 8,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "emptySlotText": "[ Empty Slot ]",
+          "x": 50,
+          "y": 50,
+          "width": 80,
+          "height": 65,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-kozyr4z": {
+          "id": "el-kozyr4z",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 90,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-f1v9zk2": {
+      "id": "screen-f1v9zk2",
+      "name": "Settings Screen",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-seyr05r": {
+          "id": "el-seyr05r",
+          "name": "Header",
+          "type": "Text",
+          "text": "Settings",
+          "x": 50,
+          "y": 10,
+          "width": 60,
+          "height": 10,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 48,
+            "color": "#f0e6ff",
+            "weight": "bold",
+            "italic": false
+          },
+          "textAlign": "center",
+          "verticalAlign": "middle"
+        },
+        "el-vxa2a2x": {
+          "id": "el-vxa2a2x",
+          "name": "Music Volume Label",
+          "type": "Text",
+          "text": "Music Volume",
+          "x": 35,
+          "y": 30,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-w8spbvr": {
+          "id": "el-w8spbvr",
+          "name": "Music Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "musicVolume",
+          "x": 65,
+          "y": 30,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-ze81d7c": {
+          "id": "el-ze81d7c",
+          "name": "SFX Volume Label",
+          "type": "Text",
+          "text": "Sound FX Volume",
+          "x": 35,
+          "y": 40,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-qbg9uhw": {
+          "id": "el-qbg9uhw",
+          "name": "SFX Volume Slider",
+          "type": "SettingsSlider",
+          "setting": "sfxVolume",
+          "x": 65,
+          "y": 40,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-3p02hes": {
+          "id": "el-3p02hes",
+          "name": "Text Speed Label",
+          "type": "Text",
+          "text": "Text Speed",
+          "x": 35,
+          "y": 50,
+          "width": 20,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "textAlign": "left",
+          "verticalAlign": "middle"
+        },
+        "el-6ni3ecx": {
+          "id": "el-6ni3ecx",
+          "name": "Text Speed Slider",
+          "type": "SettingsSlider",
+          "setting": "textSpeed",
+          "x": 65,
+          "y": 50,
+          "width": 40,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5
+        },
+        "el-08gn7l6": {
+          "id": "el-08gn7l6",
+          "name": "Enable Skip Toggle",
+          "type": "SettingsToggle",
+          "setting": "enableSkip",
+          "text": "Enable Skip",
+          "x": 50,
+          "y": 60,
+          "width": 30,
+          "height": 5,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          }
+        },
+        "el-isqjc89": {
+          "id": "el-isqjc89",
+          "name": "Back Button",
+          "type": "Button",
+          "text": "Back",
+          "x": 50,
+          "y": 85,
+          "width": 20,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToPreviousScreen"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-inxbucb": {
+      "id": "screen-inxbucb",
+      "name": "Pause Menu",
+      "background": {
+        "type": "color",
+        "value": "#1a102c"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "el-fn5zdo6": {
+          "id": "el-fn5zdo6",
+          "name": "Return Button",
+          "type": "Button",
+          "text": "Return to Game",
+          "x": 50,
+          "y": 30,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "ReturnToGame"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-i7qs7bf": {
+          "id": "el-i7qs7bf",
+          "name": "Save Game Button",
+          "type": "Button",
+          "text": "Save Game",
+          "x": 50,
+          "y": 40,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-94hplem"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-4rmm8hr": {
+          "id": "el-4rmm8hr",
+          "name": "Load Game Button",
+          "type": "Button",
+          "text": "Load Game",
+          "x": 50,
+          "y": 50,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-ppyrmln"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-hni6ibs": {
+          "id": "el-hni6ibs",
+          "name": "Settings Button",
+          "type": "Button",
+          "text": "Settings",
+          "x": 50,
+          "y": 60,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "GoToScreen",
+            "targetScreenId": "screen-f1v9zk2"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        },
+        "el-3rhd3da": {
+          "id": "el-3rhd3da",
+          "name": "Quit Button",
+          "type": "Button",
+          "text": "Quit to Title",
+          "x": 50,
+          "y": 70,
+          "width": 30,
+          "height": 8,
+          "anchorX": 0.5,
+          "anchorY": 0.5,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 24,
+            "color": "#f0e6ff",
+            "weight": "normal",
+            "italic": false
+          },
+          "action": {
+            "type": "QuitToTitle"
+          },
+          "image": null,
+          "hoverImage": null,
+          "clickSoundId": null,
+          "hoverSoundId": null
+        }
+      }
+    },
+    "screen-l4eei8z": {
+      "id": "screen-l4eei8z",
+      "name": "New Screen 6",
+      "background": {
+        "type": "color",
+        "value": "#0f172a"
+      },
+      "music": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "ambientNoise": {
+        "audioId": null,
+        "policy": "continue"
+      },
+      "elements": {
+        "elem-8o7fpq6": {
+          "id": "elem-8o7fpq6",
+          "name": "Asset Cycler",
+          "x": 2.336664988004436,
+          "y": 29.55847331420072,
+          "width": 40,
+          "height": 7.791169466284015,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-8qdhp4y",
+          "layerId": "layer-i4pjhr6",
+          "variableId": "var-dteoes5",
+          "assetIds": [
+            "asset-ks9smox",
+            "asset-crfu45j"
+          ],
+          "label": "Body Type",
+          "showAssetName": false,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)"
+        },
+        "elem-5y8ydxh": {
+          "id": "elem-5y8ydxh",
+          "name": "Asset Cycler",
+          "x": 2.4711768987615588,
+          "y": 18.281624493537514,
+          "width": 40,
+          "height": 8,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-8qdhp4y",
+          "layerId": "layer-i4pjhr6",
+          "variableId": "var-1qryp70",
+          "assetIds": [
+            "asset-xkve7rv",
+            "asset-oy40fy9",
+            "asset-ks9smox",
+            "asset-3tb1he0"
+          ],
+          "label": "SKin Color",
+          "showAssetName": false,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)",
+          "filterPattern": ""
+        },
+        "elem-lmsmdg9": {
+          "id": "elem-lmsmdg9",
+          "name": "Asset Cycler",
+          "x": 60.84934616735469,
+          "y": 104.31980438452351,
+          "width": 40,
+          "height": 8,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-8qdhp4y",
+          "layerId": "layer-i4pjhr6",
+          "variableId": "var-1qryp70",
+          "assetIds": [
+            "asset-xkve7rv",
+            "asset-oy40fy9",
+            "asset-ks9smox",
+            "asset-3tb1he0",
+            "asset-kv2bkvy",
+            "asset-qzkp5f5",
+            "asset-jhokp5a",
+            "asset-crfu45j"
+          ],
+          "label": "body_{skin_color}_",
+          "showAssetName": false,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)",
+          "filterVariableId": "var-dteoes5"
+        },
+        "elem-fpo3lv2": {
+          "id": "elem-fpo3lv2",
+          "name": "Character Preview",
+          "x": 49.9538813960274,
+          "y": 4.916470335714455,
+          "width": 30,
+          "height": 60,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "CharacterPreview",
+          "characterId": "char-8qdhp4y",
+          "expressionId": "expr-n7681im",
+          "layerVariableMap": {
+            "layer-i4pjhr6": "var-c1rnh30"
+          }
+        },
+        "elem-9s5rrfr": {
+          "id": "elem-9s5rrfr",
+          "name": "Asset Cycler",
+          "x": 2.605688809518693,
+          "y": 40.83532213486394,
+          "width": 40,
+          "height": 8,
+          "anchorX": 0,
+          "anchorY": 0,
+          "type": "AssetCycler",
+          "characterId": "char-8qdhp4y",
+          "layerId": "layer-i4pjhr6",
+          "variableId": "var-c1rnh30",
+          "assetIds": [
+            "asset-xkve7rv",
+            "asset-oy40fy9",
+            "asset-ks9smox",
+            "asset-3tb1he0",
+            "asset-kv2bkvy",
+            "asset-qzkp5f5",
+            "asset-jhokp5a",
+            "asset-crfu45j"
+          ],
+          "label": "Full Body",
+          "showAssetName": false,
+          "font": {
+            "family": "Poppins, sans-serif",
+            "size": 20,
+            "color": "#FFFFFF",
+            "weight": "normal",
+            "italic": false
+          },
+          "arrowColor": "#a855f7",
+          "arrowSize": 24,
+          "backgroundColor": "rgba(30, 41, 59, 0.8)",
+          "filterVariableIds": [
+            "var-1qryp70",
+            "var-dteoes5"
+          ],
+          "filterPattern": "{body_type}_{skin_color}"
+        }
+      }
+    }
+  }
+}

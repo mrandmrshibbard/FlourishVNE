@@ -1,0 +1,24 @@
+{
+  "tabs": {
+    "scenes": "場景",
+    "characters": "角色",
+    "ui": "UI／螢幕",
+    "assets": "素材",
+    "variables": "變數",
+    "commonEvents": "事件",
+    "systems": "系統",
+    "settings": "設定"
+  },
+  "desc": {
+    "scenes": "建立並編輯包含對話、選項與指令的故事場景",
+    "characters": "設計具有分層立繪與表情的角色",
+    "ui": "設計遊戲內 UI 元素與選單螢幕",
+    "assets": "管理圖片、音訊與影片檔案",
+    "variables": "建立並管理故事變數與遊戲狀態",
+    "commonEvents": "可從場景觸發的可重複使用指令序列",
+    "systems": "選用的遊玩系統，例如物品欄與物品登錄表",
+    "settings": "設定專案設定與偏好"
+  },
+  "rightClickHint": " | 按右鍵以聚焦管理視窗",
+  "openInWindow": "在獨立視窗中開啟或聚焦 {{label}}"
+}
