@@ -17140,7 +17140,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         showVarWatcher && (() => {
           const defs = Object.values(project.variables);
           if (defs.length === 0) return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-slate-400 italic", children: "No variables yet — add some in the Variables tab." }) });
-          const liveVars = (playerState == null ? void 0 : playerState.variables) || {};
+          const liveVars = screenVariables;
           const scopeColor = { local: "bg-emerald-400", global: "bg-sky-400", persistent: "bg-amber-400" };
           return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("ul", { className: "space-y-1", children: defs.map((def) => {
             const raw = def.id in liveVars ? liveVars[def.id] : def.defaultValue;
@@ -17297,7 +17297,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.0.2",
+    version: "3.0.6",
     /**
      * Check if the engine is ready
      */

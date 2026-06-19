@@ -485,7 +485,8 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                 break;
         }
 
-        onUpdate({ type, defaultValue });
+        // min/max only apply to number variables — drop any stale bounds when leaving that type.
+        onUpdate({ type, defaultValue, ...(type !== 'number' ? { min: undefined, max: undefined } : {}) });
     };
 
     const handleDefaultValueChange = (value: any) => {
@@ -554,6 +555,29 @@ const VariableInspector: React.FC<VariableInspectorProps> = ({ variableId, proje
                         />
                     )}
                 </div>
+
+                {variable.type === 'number' && (
+                    <div>
+                        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{t('valueBounds', 'Value range (optional)')}</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <input
+                                type="number"
+                                placeholder={t('noMin', 'No minimum')}
+                                value={variable.min ?? ''}
+                                onChange={(e) => onUpdate({ min: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })}
+                                className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                            />
+                            <input
+                                type="number"
+                                placeholder={t('noMax', 'No maximum')}
+                                value={variable.max ?? ''}
+                                onChange={(e) => onUpdate({ max: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })}
+                                className="w-full bg-[var(--bg-primary)] text-white p-2 rounded-md border border-[var(--border-default)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-lavender)]"
+                            />
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">{t('valueBoundsHint', 'Every change (Set Variable from commands, buttons, or choices) is clamped to this range, so a value can never overshoot what you intend (e.g. keep affection between 0 and 100).')}</p>
+                    </div>
+                )}
 
                 {variable.type === 'boolean' && (
                     <BooleanLabelEditor trueLabel={variable.trueLabel} falseLabel={variable.falseLabel}

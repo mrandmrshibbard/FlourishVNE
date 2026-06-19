@@ -11337,7 +11337,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 <p className="text-slate-400 italic">No variables yet — add some in the Variables tab.</p>
                             </div>
                         );
-                        const liveVars = playerState?.variables || {};
+                        // Use the SAME effective variable set the screens evaluate against
+                        // (screenVariables = menuVariables before the game starts, else playerState.variables
+                        // PLUS uncommitted dirty UI edits). Reading raw playerState.variables missed live
+                        // changes made on a screen (e.g. a button's Set Variable) — the tracker looked frozen
+                        // even though conditions/Show-Hide reacted correctly.
+                        const liveVars = screenVariables as Record<VNID, string | number | boolean>;
                         const scopeColor: Record<string, string> = { local: 'bg-emerald-400', global: 'bg-sky-400', persistent: 'bg-amber-400' };
                         return (
                             <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl">
