@@ -9,7 +9,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNTransition, VNPosition, VNPositionPreset } from '../../types';
-import { FormField, Select, TextInput } from '../ui/Form';
+import { FormField, Select, TextInput, RangeInput } from '../ui/Form';
 import TransitionPreview from '../ui/TransitionPreview';
 
 /**
@@ -27,8 +27,7 @@ export const OrientationFields: React.FC<{
     <div className="space-y-1 pt-1 border-t border-[var(--border-subtle)] mt-2">
         <FormField label={`Rotation: ${rotation ?? 0}°`}>
             <div className="flex items-center gap-2">
-                <input
-                    type="range" min={-180} max={180} step={1} value={rotation ?? 0}
+                <RangeInput min={-180} max={180} step={1} value={rotation ?? 0}
                     onChange={e => onChange({ rotation: parseInt(e.target.value, 10) })}
                     className="w-full cursor-pointer"
                 />
@@ -167,12 +166,12 @@ export const CharacterVisualEffectsEditor: React.FC<{
                 </div>
                 <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.speed')}</span>
-                    <input type="range" min="0.1" max="5" step="0.1" value={eff.speed ?? 1} onChange={e => updateEffect(idx, { speed: parseFloat(e.target.value) })} className="flex-1" />
+                    <RangeInput min="0.1" max="5" step="0.1" value={eff.speed ?? 1} onChange={e => updateEffect(idx, { speed: parseFloat(e.target.value) })} className="flex-1" />
                     <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.speed ?? 1).toFixed(1)}x</span>
                 </div>
                 <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.power')}</span>
-                    <input type="range" min="0.1" max="3" step="0.1" value={eff.intensity ?? 1} onChange={e => updateEffect(idx, { intensity: parseFloat(e.target.value) })} className="flex-1" />
+                    <RangeInput min="0.1" max="3" step="0.1" value={eff.intensity ?? 1} onChange={e => updateEffect(idx, { intensity: parseFloat(e.target.value) })} className="flex-1" />
                     <span className="text-xs w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{(eff.intensity ?? 1).toFixed(1)}x</span>
                 </div>
                 {(eff.type === 'glow' || eff.type === 'tint' || eff.type === 'silhouette') && (

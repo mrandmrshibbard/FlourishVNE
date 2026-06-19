@@ -1,5 +1,5 @@
 import React from 'react';
-import { FormField, TextInput } from '../ui/Form';
+import { FormField, TextInput, RangeInput } from '../ui/Form';
 
 /**
  * Stage/screen stacking-order control for the Transform group. A raw layer number plus
@@ -40,7 +40,7 @@ export const ParallaxDepthControl: React.FC<{
     return (
         <FormField label="Parallax depth">
             <div className="flex items-center gap-2">
-                <input type="range" min="0" max="2" step="0.05" value={v} onChange={e => onChange(parseFloat(e.target.value) || 0)} className="flex-1" />
+                <RangeInput min="0" max="2" step="0.05" value={v} onChange={e => onChange(parseFloat(e.target.value) || 0)} className="flex-1" />
                 <span className="text-[11px] text-[var(--text-secondary)] w-9 text-right">{v.toFixed(2)}</span>
             </div>
         </FormField>

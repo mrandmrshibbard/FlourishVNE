@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "Assistants de contenu",
+    "stepOf": "Étape {{current}} sur {{total}}",
+    "estimatedTime": " · ~{{min}} min",
+    "chooseWizard": "Choisissez un assistant pour démarrer la création de contenu guidée.",
+    "steps": "{{count}} étapes",
+    "approxMin": "~{{min}} min",
+    "selectDefault": "Sélectionner...",
+    "noOptions": "Aucune option disponible",
+    "enable": "Activer",
+    "fileUploadHint": "Téléversement de fichier (à configurer après l'assistant)",
+    "fieldRequired": "{{label}} est requis",
+    "backToWizards": "← Assistants",
+    "back": "← Retour",
+    "skip": "Ignorer",
+    "complete": "✓ Terminer",
+    "next": "Suivant →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "Clic droit pour détacher le lecteur",
+    "fabTitleStopped": "Lire la musique d'ambiance (clic droit pour le lecteur)",
+    "rightClickPopOut": "Clic droit pour détacher",
+    "panelTitle": "Lecteur de musique",
+    "dockBack": "Réancrer",
+    "selectSong": "Sélectionner un morceau",
+    "pause": "Pause",
+    "play": "Lecture",
+    "nextSong": "Morceau suivant"
+  }
+}

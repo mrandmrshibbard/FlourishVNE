@@ -36,10 +36,17 @@ export function saveRecentProject(project: VNProject, filePath?: string): void {
     try {
         const stored = localStorage.getItem(RECENT_PROJECTS_KEY);
         let recents: RecentProject[] = stored ? JSON.parse(stored) : [];
-        
+
+        // PRESERVE the previously-known on-disk path when this call doesn't supply one.
+        // Callers like auto-recovery restore and project import pass no path; without this
+        // they'd WIPE the saved file location, so the next Save couldn't write straight to
+        // the file (it would re-prompt / lose its target). Save/recovery integrity depends
+        // on remembering where the project lives. See [[feedback_never_break_saveload]].
+        const existing = recents.find(r => r.id === project.id);
+
         // Remove existing entry for this project
         recents = recents.filter(r => r.id !== project.id);
-        
+
         // Add to front
         recents.unshift({
             id: project.id,
@@ -47,7 +54,7 @@ export function saveRecentProject(project: VNProject, filePath?: string): void {
             lastOpened: Date.now(),
             sceneCount: Object.keys(project.scenes || {}).length,
             characterCount: Object.keys(project.characters || {}).length,
-            filePath: filePath || undefined,
+            filePath: filePath || existing?.filePath || undefined,
         });
         
         // Trim to max

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { RangeInput } from './ui/Form';
 import { useTranslation } from 'react-i18next';
 import { ContentWizardService } from '../features/content-wizards/ContentWizardService';
 import { ContentWizard, WizardStep, StepInputField } from '../types/wizard';
@@ -237,8 +238,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
                 )}
 
                 {field.type === 'range' && (
-                    <input
-                        type="range"
+                    <RangeInput
                         value={value || 0}
                         onChange={(e) => handleFieldChange(field.id, parseFloat(e.target.value))}
                         className="w-full accent-[var(--accent-lavender)]"

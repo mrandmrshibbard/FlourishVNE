@@ -40,6 +40,12 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
     const [isResizing, setIsResizing] = useState<string | null>(null);
     const [shiftHeld, setShiftHeld] = useState(false);
     const startPos = useRef({ x: 0, y: 0, width: 0, height: 0, mouseX: 0, mouseY: 0 });
+    // Live geometry during an active drag/resize. Driven by mousemove and rendered locally so
+    // ONLY this element re-renders per move — onUpdate (a full project dispatch that re-renders
+    // the whole editor) fires once, on release. Without this every mousemove dispatched globally,
+    // which made dragging/resizing elements (and meters) lag. Also collapses a drag into ONE undo step.
+    const [liveRect, setLiveRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+    const liveRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
     // Track shift key state globally while interacting
     useEffect(() => {
@@ -104,14 +110,21 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
             }
         }
 
-        onUpdate({ x: newX, y: newY, width: Math.max(2, newWidth), height: Math.max(2, newHeight) });
+        const next = { x: newX, y: newY, width: Math.max(2, newWidth), height: Math.max(2, newHeight) };
+        liveRectRef.current = next;
+        setLiveRect(next);
 
-    }, [isDragging, isResizing, parentSize, onUpdate, snapGrid]);
+    }, [isDragging, isResizing, parentSize, snapGrid]);
 
     const handleMouseUp = useCallback(() => {
         setIsDragging(false);
         setIsResizing(null);
-    }, []);
+        // Commit the final geometry once (single dispatch + single undo step).
+        const final = liveRectRef.current;
+        liveRectRef.current = null;
+        setLiveRect(null);
+        if (final) onUpdate(final);
+    }, [onUpdate]);
 
     useEffect(() => {
         if (isDragging || isResizing) {
@@ -124,11 +137,13 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
         };
     }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
+    // During an active drag/resize, render from the local live geometry (no global dispatch yet).
+    const eff = liveRect ?? { x, y, width, height };
     // Safely handle potential NaN values
-    const safeX = Number.isFinite(x) ? x : 0;
-    const safeY = Number.isFinite(y) ? y : 0;
-    const safeWidth = Number.isFinite(width) && width > 0 ? width : 10;
-    const safeHeight = Number.isFinite(height) && height > 0 ? height : 10;
+    const safeX = Number.isFinite(eff.x) ? eff.x : 0;
+    const safeY = Number.isFinite(eff.y) ? eff.y : 0;
+    const safeWidth = Number.isFinite(eff.width) && eff.width > 0 ? eff.width : 10;
+    const safeHeight = Number.isFinite(eff.height) && eff.height > 0 ? eff.height : 10;
     const safeAnchorX = Number.isFinite(anchorX) ? anchorX : 0;
     const safeAnchorY = Number.isFinite(anchorY) ? anchorY : 0;
 
@@ -164,7 +179,7 @@ const ResizableDraggable: React.FC<ResizableDraggableProps> = ({
                 {/* Position / size label */}
                 {isSelected && isInteracting && (
                     <div className="absolute -top-6 left-0 text-[10px] text-sky-300 bg-slate-900/80 px-1.5 py-0.5 rounded whitespace-nowrap z-50 pointer-events-none">
-                        {Math.round(x * 10) / 10}%, {Math.round(y * 10) / 10}% &mdash; {Math.round(width * 10) / 10}% × {Math.round(height * 10) / 10}%
+                        {Math.round(eff.x * 10) / 10}%, {Math.round(eff.y * 10) / 10}% &mdash; {Math.round(eff.width * 10) / 10}% × {Math.round(eff.height * 10) / 10}%
                         {shiftHeld && <span className="ml-1 text-amber-300">[SNAP]</span>}
                     </div>
                 )}

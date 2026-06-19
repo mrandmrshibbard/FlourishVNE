@@ -39,6 +39,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["OpenURL"] = "OpenURL";
     UIActionType2["PlayAnimation"] = "PlayAnimation";
     UIActionType2["ChangeImage"] = "ChangeImage";
+    UIActionType2["ShowElement"] = "ShowElement";
+    UIActionType2["HideElement"] = "HideElement";
     UIActionType2["ContinueGame"] = "ContinueGame";
     UIActionType2["ShowLog"] = "ShowLog";
     UIActionType2["ToggleAutoAdvance"] = "ToggleAutoAdvance";
@@ -10225,7 +10227,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     );
   };
-  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility }) => {
     var _a, _b;
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
@@ -10387,6 +10389,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ...stateTransition ? { transition: stateTransition } : {},
         ...transitionStyle
       };
+      {
+        const visOverride = elementVisibility == null ? void 0 : elementVisibility[element.id];
+        if (element.startHidden || visOverride !== void 0) {
+          const isHidden = visOverride !== void 0 ? !visOverride : !!element.startHidden;
+          const fadeMs = element.transitionDuration ?? 300;
+          style.transition = style.transition ? `${style.transition}, opacity ${fadeMs}ms ease` : `opacity ${fadeMs}ms ease`;
+          if (isHidden) {
+            style.opacity = 0;
+            style.pointerEvents = "none";
+          }
+        }
+      }
       const getElementAssetUrl = (image) => {
         if (!image) return null;
         return assetResolver(image.id, image.type);
@@ -11175,6 +11189,31 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const titleScreenId = getValidTitleScreenId();
     const [screenStack, setScreenStack] = React2.useState(titleScreenId ? [titleScreenId] : []);
     const [hudStack, setHudStack] = React2.useState([]);
+    const [elementVisibility, setElementVisibility] = React2.useState({});
+    const prevOpenScreensRef = React2.useRef(/* @__PURE__ */ new Set());
+    React2.useEffect(() => {
+      const open = /* @__PURE__ */ new Set([...screenStack, ...hudStack]);
+      const newlyOpened = [];
+      open.forEach((id) => {
+        if (!prevOpenScreensRef.current.has(id)) newlyOpened.push(id);
+      });
+      prevOpenScreensRef.current = open;
+      if (newlyOpened.length === 0) return;
+      setElementVisibility((prev) => {
+        let next = prev;
+        for (const sid of newlyOpened) {
+          const scr = project.uiScreens[sid];
+          if (!scr || scr.resetElementVisibilityOnOpen === false) continue;
+          for (const elId of Object.keys(scr.elements || {})) {
+            if (next[elId] !== void 0) {
+              if (next === prev) next = { ...prev };
+              delete next[elId];
+            }
+          }
+        }
+        return next;
+      });
+    }, [screenStack, hudStack, project.uiScreens]);
     const [closingScreens, setClosingScreens] = React2.useState(/* @__PURE__ */ new Set());
     const [confirmDialog, setConfirmDialog] = React2.useState(null);
     const [sceneTransitionFading, setSceneTransitionFading] = React2.useState(false);
@@ -14306,6 +14345,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             setScreenStack([project.ui.pauseScreenId]);
           }
         }
+      } else if (action.type === UIActionType.ShowElement || action.type === UIActionType.HideElement) {
+        const targetId = action.targetElementId;
+        if (targetId) {
+          const visible = action.type === UIActionType.ShowElement;
+          setElementVisibility((prev) => prev[targetId] === visible ? prev : { ...prev, [targetId]: visible });
+        }
       } else if (action.type === UIActionType.ToggleScreen) {
         const targetId = action.targetScreenId;
         if (!targetId || !project.uiScreens[targetId]) {
@@ -16955,6 +17000,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             {
               screenId: id,
               onAction: handleUIAction,
+              elementVisibility,
               settings,
               onSettingsChange: (key, value) => setSettings((s) => ({ ...s, [key]: value })),
               assetResolver,
@@ -16997,6 +17043,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             {
               screenId: id,
               onAction: handleUIAction,
+              elementVisibility,
               settings,
               onSettingsChange: (key, value) => setSettings((s) => ({ ...s, [key]: value })),
               assetResolver,
@@ -17250,7 +17297,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.0.0",
+    version: "3.0.2",
     /**
      * Check if the engine is ready
      */

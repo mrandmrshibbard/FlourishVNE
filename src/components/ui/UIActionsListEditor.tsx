@@ -7,6 +7,7 @@
  * other places that edit action lists.
  */
 import React from 'react';
+import { RangeInput } from './Form';
 import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
@@ -148,7 +149,7 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                         </select>
                         <div className="flex items-center gap-1">
                             <span className="text-[10px] text-[var(--text-secondary)]">{t('actionsList.volume')}</span>
-                            <input type="range" min={0} max={1} step={0.01} value={a.volume ?? 1}
+                            <RangeInput min={0} max={1} step={0.01} value={a.volume ?? 1}
                                 onChange={e => updateAction(index, { volume: parseFloat(e.target.value) } as any)} className="flex-1 accent-[var(--accent-lavender)]" />
                         </div>
                         <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">

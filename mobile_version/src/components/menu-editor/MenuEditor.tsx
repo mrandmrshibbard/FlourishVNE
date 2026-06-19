@@ -25,9 +25,17 @@ import { useElementRadial } from './ElementRadialContext';
 const SafeUIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> = ({ element, project }) => {
     const { t } = useTranslation('ui');
     try {
+        // Start-hidden elements stay fully visible/selectable in the editor (so authors can place
+        // and edit them), but render dimmed with a badge so it's obvious they begin hidden at runtime.
+        const startsHidden = !!element.startHidden;
         return (
-            <div style={{ opacity: element.opacity ?? 1, width: '100%', height: '100%', overflow: 'hidden' }}>
+            <div style={{ opacity: (element.opacity ?? 1) * (startsHidden ? 0.45 : 1), width: '100%', height: '100%', overflow: 'hidden' }}>
                 <UIElementRenderer element={element} project={project} />
+                {startsHidden && (
+                    <div style={{ position: 'absolute', top: 2, left: 2, zIndex: 10, background: 'rgba(2,6,23,0.8)', color: '#fbbf24', fontSize: 9, lineHeight: '12px', padding: '1px 4px', borderRadius: 3, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+                        {t('menuEditor.startsHiddenBadge', '◌ hidden')}
+                    </div>
+                )}
             </div>
         );
     } catch (err) {

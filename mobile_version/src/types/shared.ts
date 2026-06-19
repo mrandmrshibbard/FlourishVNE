@@ -55,6 +55,12 @@ export enum UIActionType {
     OpenURL = 'OpenURL',
     PlayAnimation = 'PlayAnimation',
     ChangeImage = 'ChangeImage',
+    /** Reveals a target element (overrides its current/`startHidden` state). Pairs with HideElement
+     *  so one button can show the next "page" while hiding the previous — multi-page documents,
+     *  before/after reveals, layered maps, etc. Honors the element's own fade transition. */
+    ShowElement = 'ShowElement',
+    /** Hides a target element (fades it out + makes it click-through). Counterpart to ShowElement. */
+    HideElement = 'HideElement',
     ContinueGame = 'ContinueGame',
     // ─── Quick-menu equivalents (let any user-designed button drive these features) ─── //
     /** Opens the text history / log overlay. */
@@ -114,6 +120,8 @@ export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.To
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
 export interface PlayAnimationAction extends BaseUIAction { type: UIActionType.PlayAnimation; targetElementId: VNID; animation: string; duration?: number; }
 export interface ChangeImageAction extends BaseUIAction { type: UIActionType.ChangeImage; targetElementId: VNID; newImageId: VNID; }
+export interface ShowElementAction extends BaseUIAction { type: UIActionType.ShowElement; targetElementId: VNID; }
+export interface HideElementAction extends BaseUIAction { type: UIActionType.HideElement; targetElementId: VNID; }
 export interface CallCommonEventAction extends BaseUIAction { type: UIActionType.CallCommonEvent; commonEventId: VNID; arguments?: Record<VNID, string | number | boolean>; }
 export interface GiveItemAction extends BaseUIAction { type: UIActionType.GiveItem; itemId: VNID; quantity?: number; }
 export interface UseItemAction extends BaseUIAction { type: UIActionType.UseItem; itemId: VNID; }
@@ -125,4 +133,4 @@ export interface SellItemAction extends BaseUIAction { type: UIActionType.SellIt
 export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType.BuySelectedItem; collectionId: VNID; }
 export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction;

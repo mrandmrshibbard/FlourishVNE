@@ -1,0 +1,24 @@
+{
+  "tabs": {
+    "scenes": "Scènes",
+    "characters": "Personnages",
+    "ui": "Interface / Écrans",
+    "assets": "Ressources",
+    "variables": "Variables",
+    "commonEvents": "Événements",
+    "systems": "Systèmes",
+    "settings": "Paramètres"
+  },
+  "desc": {
+    "scenes": "Créez et modifiez des scènes d'histoire avec des dialogues, des choix et des commandes",
+    "characters": "Concevez des personnages avec des sprites en calques et des expressions",
+    "ui": "Concevez les éléments d'interface en jeu et les écrans de menu",
+    "assets": "Gérez les fichiers d'images, d'audio et de vidéo",
+    "variables": "Créez et gérez les variables d'histoire et l'état du jeu",
+    "commonEvents": "Séquences de commandes réutilisables déclenchées depuis les scènes",
+    "systems": "Systèmes de gameplay optionnels comme l'Inventaire et le registre d'objets",
+    "settings": "Configurez les paramètres et préférences du projet"
+  },
+  "rightClickHint": " | Clic droit pour mettre au premier plan la fenêtre du gestionnaire",
+  "openInWindow": "Ouvrir ou mettre au premier plan {{label}} dans une fenêtre séparée"
+}

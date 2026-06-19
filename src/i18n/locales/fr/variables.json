@@ -1,0 +1,69 @@
+{
+  "listTitle": "Variables",
+  "newVariableName": "nouvelle_variable_{{n}}",
+  "addVariable": "Ajouter une variable",
+  "selectToInspect": "Sélectionnez une variable à inspecter",
+  "selectToInspectHint": "Afficher et modifier les propriétés de la variable",
+  "notFound": "Variable introuvable",
+  "scopeLabel": "Portée",
+  "typeLabel": "Type",
+  "defaultValue": "Valeur par défaut",
+  "idLabel": "ID :",
+  "typeColon": "Type :",
+  "scopes": {
+    "local": "Locale",
+    "global": "Globale",
+    "persistent": "Persistante"
+  },
+  "scopeOptions": {
+    "local": "🟢 Locale (portée de scène)",
+    "global": "🔵 Globale (partie en cours)",
+    "persistent": "🟡 Persistante (entre sessions)"
+  },
+  "scopeDesc": {
+    "local": "Réinitialisée au changement de scène. À utiliser pour un état temporaire ou propre à une scène.",
+    "global": "Persiste entre les scènes au sein d'une partie. Réinitialisée à chaque nouvelle partie.",
+    "persistent": "Enregistrée définitivement entre les sessions de jeu. À utiliser pour les déblocages de la galerie de CG, les succès, etc."
+  },
+  "types": {
+    "number": "Nombre",
+    "string": "Chaîne",
+    "boolean": "Booléen"
+  },
+  "boolean": {
+    "true": "Oui",
+    "false": "Non"
+  },
+  "boolLabels": {
+    "label": "Libellés des valeurs",
+    "defaultPreset": "Oui / Non (par défaut)",
+    "custom": "Personnalisé…",
+    "truePlaceholder": "Oui",
+    "falsePlaceholder": "Non",
+    "hint": "Comment les valeurs vrai/faux de cette variable apparaissent dans les conditions, Définir une variable et le suivi."
+  },
+  "delete": {
+    "inUseTitle": "Variable utilisée",
+    "deleteTitle": "Supprimer la variable",
+    "deleteAnyway": "Supprimer quand même",
+    "inUseBody_one": "Cette variable est utilisée à {{count}} endroit. La supprimer pourrait casser votre jeu !",
+    "inUseBody_other": "Cette variable est utilisée à {{count}} endroits. La supprimer pourrait casser votre jeu !",
+    "usagesFound": "Utilisations trouvées :",
+    "andMore": "...et {{count}} de plus",
+    "confirmBody": "Voulez-vous vraiment supprimer cette variable ? Cette action est irréversible."
+  },
+  "usage": {
+    "scene": "Scène : {{name}}",
+    "uiScreen": "Écran d'interface : {{name}}",
+    "cmdSetVariable": "Commande {{n}} : Définir une variable",
+    "cmdTextInput": "Commande {{n}} : Saisie de texte",
+    "cmdCondition": "Commande {{n}} : Possède une condition utilisant la variable",
+    "optCondition": "Commande {{n}}, Option {{opt}} : Possède une condition",
+    "optSetsVariable": "Commande {{n}}, Option {{opt}} : Définit la variable",
+    "cmdDialogueRef": "Commande {{n}} : Référencée dans le texte du dialogue",
+    "elCondition": "Élément « {{name}} » : Possède une condition",
+    "elSetsVariable": "Élément « {{name}} » : Définit la variable",
+    "elCyclesLayer": "Élément « {{name}} » : Fait défiler la ressource du calque",
+    "elTextRef": "Élément « {{name}} » : Référencée dans le texte"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "panelManager": {
+    "loading": "Завантаження контекстних панелей...",
+    "emptyTitle": "Немає доступних контекстних панелей",
+    "emptyHint": "Виберіть елемент, щоб побачити відповідні інструменти та підказки",
+    "suggestionsHeading": "Підказки",
+    "panelSuggestionsHeading": "Підказки:",
+    "collapse": "Згорнути",
+    "expand": "Розгорнути",
+    "moveUp": "Перемістити вгору",
+    "moveDown": "Перемістити вниз"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Додати діалог",
+      "addDialogueTip": "Додати команду діалогу (Alt+D)",
+      "addChoice": "Додати вибір",
+      "addChoiceTip": "Додати команду вибору (Alt+C)",
+      "setVariable": "Задати змінну",
+      "setVariableTip": "Додати команду змінної (Alt+V)",
+      "preview": "Перегляд",
+      "previewTip": "Перегляд сцени (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Додати вираз",
+      "addExpressionTip": "Додати новий вираз",
+      "addOutfit": "Додати вбрання",
+      "addOutfitTip": "Додати варіант вбрання",
+      "duplicate": "Дублювати",
+      "duplicateTip": "Дублювати персонажа (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Додати кнопку",
+      "addButtonTip": "Додати елемент кнопки",
+      "addText": "Додати текст",
+      "addTextTip": "Додати елемент тексту",
+      "addImage": "Додати зображення",
+      "addImageTip": "Додати елемент зображення",
+      "preview": "Перегляд",
+      "previewTip": "Перегляд екрана інтерфейсу (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Фільтр",
+      "filterTip": "Фільтрувати шаблони",
+      "sort": "Сортувати",
+      "sortTip": "Сортувати шаблони",
+      "favorites": "Обране",
+      "favoritesTip": "Показати лише обране"
+    },
+    "logicBuilding": {
+      "addCondition": "Додати умову",
+      "addConditionTip": "Додати вузол умови",
+      "addAction": "Додати дію",
+      "addActionTip": "Додати вузол дії",
+      "validate": "Перевірити",
+      "validateTip": "Перевірити логічний потік"
+    },
+    "variableManagement": {
+      "addVariable": "Додати змінну",
+      "addVariableTip": "Додати нову змінну (Alt+N)",
+      "debug": "Налагодження",
+      "debugTip": "Відкрити налагоджувач змінних",
+      "export": "Експорт",
+      "exportTip": "Експортувати визначення змінних"
+    },
+    "assetManagement": {
+      "import": "Імпорт",
+      "importTip": "Імпортувати ресурси",
+      "organize": "Упорядкувати",
+      "organizeTip": "Упорядкувати ресурси",
+      "findUnused": "Знайти невикористані",
+      "findUnusedTip": "Знайти невикористані ресурси"
+    },
+    "wizardFlow": {
+      "back": "Назад",
+      "backTip": "Попередній крок",
+      "next": "Далі",
+      "nextTip": "Наступний крок",
+      "cancel": "Скасувати",
+      "cancelTip": "Скасувати майстер"
+    }
+  },
+  "localizationPanel": {
+    "title": "Менеджер локалізації",
+    "stringCount_one": "{{count}} рядок",
+    "stringCount_few": "{{count}} рядки",
+    "stringCount_many": "{{count}} рядків",
+    "stringCount_other": "{{count}} рядка",
+    "addLanguage": "Додати мову",
+    "removeLanguageTip": "Видалити {{name}}",
+    "searchPlaceholder": "Пошук за ключем або текстом...",
+    "filterAll": "Усі",
+    "filterDialogue": "Діалог",
+    "filterChoice": "Вибір",
+    "colKey": "Ключ",
+    "colContext": "Контекст",
+    "colDefaultText": "Стандартний текст",
+    "emptyNoStrings": "Рядків не знайдено",
+    "emptyNoStringsHintScan": "Додайте команди діалогу або вибору до своїх сцен, щоб побачити рядки для перекладу.",
+    "emptyNoStringsHintFilter": "Жоден рядок не відповідає поточним фільтрам.",
+    "translationPlaceholder": "Введіть переклад...",
+    "exportCsv": "Експорт CSV",
+    "importCsv": "Імпорт CSV",
+    "importSuccess_one": "Імпортовано {{count}} переклад.",
+    "importSuccess_few": "Імпортовано {{count}} переклади.",
+    "importSuccess_many": "Імпортовано {{count}} перекладів.",
+    "importSuccess_other": "Імпортовано {{count}} перекладу.",
+    "importErrors_one": "{{count}} помилка:",
+    "importErrors_few": "{{count}} помилки:",
+    "importErrors_many": "{{count}} помилок:",
+    "importErrors_other": "{{count}} помилки:",
+    "showingCount": "Показано {{filtered}} з {{total}} рядків"
+  }
+}

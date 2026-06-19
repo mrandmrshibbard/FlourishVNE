@@ -15,6 +15,7 @@ import LocalizationPanel from './LocalizationPanel';
 import HelpPanel from './HelpPanel';
 import ScriptEditor from './ScriptEditor';
 import PluginManagerUI from './PluginManagerUI';
+import CompareMergeModal from './collab/CompareMergeModal';
 
 
 function isEditorDebugEnabled(): boolean {
@@ -47,6 +48,7 @@ const Header: React.FC<{
     const [showToolsMenu, setShowToolsMenu] = useState(false);
     const [showScriptEditor, setShowScriptEditor] = useState(false);
     const [showPluginManager, setShowPluginManager] = useState(false);
+    const [showCompareMerge, setShowCompareMerge] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -120,6 +122,9 @@ const Header: React.FC<{
                 // Save to recent projects now that we have a saved file
                 saveRecentProject(project, result.filePath);
                 markSaved();
+                // Visible confirmation — silent overwrites (2nd+ save to a known path) otherwise
+                // give no feedback, which reads as "save didn't do anything".
+                toast.success(t('toast.saved', 'Project saved'));
             }
         } catch (error) {
             console.error("Export failed:", error);
@@ -358,6 +363,14 @@ const Header: React.FC<{
                                         </button>
                                         <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
                                         <button
+                                            onClick={() => { setShowCompareMerge(true); setShowToolsMenu(false); }}
+                                            className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-pink)]"
+                                        >
+                                            <span className="w-4 h-4 flex items-center justify-center text-[13px]">🤝</span>
+                                            {t('compareMerge', 'Compare & Merge')}
+                                        </button>
+                                        <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                        <button
                                             onClick={() => { setShowHelpPanel(true); setShowToolsMenu(false); }}
                                             className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--accent-cyan)]"
                                         >
@@ -398,6 +411,7 @@ const Header: React.FC<{
             )}
         </header>
         {!isChildWindow && showBuilder && <GameBuilder project={project} onClose={() => setShowBuilder(false)} />}
+        {!isChildWindow && showCompareMerge && <CompareMergeModal project={project} onClose={() => setShowCompareMerge(false)} />}
         
         {/* Exit Confirmation Modal */}
         {showExitModal && ReactDOM.createPortal(

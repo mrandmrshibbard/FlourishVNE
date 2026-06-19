@@ -56,8 +56,9 @@ export const ColorInput: React.FC<{
     className?: string;
 }> = ({ value, onChange, className }) => {
     const [localValue, setLocalValue] = useState(value);
-    const rafRef = useRef<number | null>(null);
     const latestValueRef = useRef(value);
+    const lastDispatchRef = useRef(0);
+    const timeoutRef = useRef<number | null>(null);
 
     // Sync from parent when external value changes (e.g. undo/redo)
     useEffect(() => {
@@ -65,32 +66,113 @@ export const ColorInput: React.FC<{
         setLocalValue(value);
     }, [value]);
 
+    // The native colour input fires a continuous stream of `input` events while the user drags
+    // in the picker. Each upstream onChange is a full project dispatch that re-renders the whole
+    // editor, so firing one per event (or even per animation frame) makes colour-picking — and
+    // editing elements with many colour fields like a health-bar Meter — lag. We keep the swatch
+    // live via local state but THROTTLE the upstream commit to ~10/sec, then flush the final value.
+    const THROTTLE_MS = 100;
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const newVal = e.target.value;
         setLocalValue(newVal);
-        // Throttle the upstream callback to animation frames
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current);
-        }
-        rafRef.current = requestAnimationFrame(() => {
+        latestValueRef.current = newVal;
+        const now = performance.now();
+        if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        const elapsed = now - lastDispatchRef.current;
+        if (elapsed >= THROTTLE_MS) {
+            lastDispatchRef.current = now;
             onChange(newVal);
-            rafRef.current = null;
-        });
+        } else {
+            timeoutRef.current = window.setTimeout(() => {
+                lastDispatchRef.current = performance.now();
+                timeoutRef.current = null;
+                onChange(latestValueRef.current);
+            }, THROTTLE_MS - elapsed);
+        }
     }, [onChange]);
+
+    // Guarantee the final picked colour lands (e.g. if the last event came mid-throttle window).
+    const flush = useCallback(() => {
+        if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        if (latestValueRef.current !== value) onChange(latestValueRef.current);
+    }, [onChange, value]);
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+            if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
         };
     }, []);
 
     return (
-        <input 
+        <input
             type="color"
             value={localValue || '#000000'}
             onChange={handleChange}
+            onBlur={flush}
             className={`${inputBaseStyles} ${className || ''}`}
+        />
+    );
+};
+
+/**
+ * Throttled range slider — a DROP-IN replacement for `<input type="range">`. A native range
+ * fires onChange continuously while dragging; when that handler dispatches a full project update
+ * (the inspector pattern) every tick re-renders the whole editor → lag. RangeInput keeps the thumb
+ * live via local state but throttles the upstream onChange to ~12/sec + flushes the final value on
+ * release. Same `onChange(e)` signature as a native input (handlers read `e.target.value`), so a
+ * swap is just renaming the tag — all other props (value/min/max/step/className/disabled…) pass
+ * through unchanged.
+ */
+export const RangeInput: React.FC<any> = ({ value, onChange, ...rest }) => {
+    const [local, setLocal] = useState(value);
+    const latestRef = useRef(value);
+    const lastDispatchRef = useRef(0);
+    const timeoutRef = useRef<number | null>(null);
+
+    useEffect(() => { latestRef.current = value; setLocal(value); }, [value]);
+
+    // Call the parent's native-style onChange with a minimal synthetic event carrying the value.
+    const emit = useCallback((v: any) => {
+        if (onChange) onChange({ target: { value: String(v) }, currentTarget: { value: String(v) } });
+    }, [onChange]);
+
+    const THROTTLE_MS = 80;
+    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = e.target.value;
+        setLocal(v);
+        latestRef.current = v;
+        const now = performance.now();
+        if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        const elapsed = now - lastDispatchRef.current;
+        if (elapsed >= THROTTLE_MS) {
+            lastDispatchRef.current = now;
+            emit(v);
+        } else {
+            timeoutRef.current = window.setTimeout(() => {
+                lastDispatchRef.current = performance.now();
+                timeoutRef.current = null;
+                emit(latestRef.current);
+            }, THROTTLE_MS - elapsed);
+        }
+    }, [emit]);
+
+    // Commit the final value immediately on release (snappier than waiting out the throttle window).
+    const flush = useCallback(() => {
+        if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        if (String(latestRef.current) !== String(value)) emit(latestRef.current);
+    }, [emit, value]);
+
+    useEffect(() => () => { if (timeoutRef.current !== null) clearTimeout(timeoutRef.current); }, []);
+
+    return (
+        <input
+            {...rest}
+            type="range"
+            value={local}
+            onChange={handleChange}
+            onMouseUp={flush}
+            onBlur={flush}
         />
     );
 };

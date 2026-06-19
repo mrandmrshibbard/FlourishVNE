@@ -153,6 +153,66 @@ import zhTwEditorTools from './locales/zh-TW/editorTools.json';
 import zhTwTemplates from './locales/zh-TW/templates.json';
 import zhTwContentTools from './locales/zh-TW/contentTools.json';
 import zhTwContextPanels from './locales/zh-TW/contextPanels.json';
+import ruCommon from './locales/ru/common.json';
+import ruHeader from './locales/ru/header.json';
+import ruSettings from './locales/ru/settings.json';
+import ruHub from './locales/ru/hub.json';
+import ruNav from './locales/ru/nav.json';
+import ruScenes from './locales/ru/scenes.json';
+import ruCharacters from './locales/ru/characters.json';
+import ruVariables from './locales/ru/variables.json';
+import ruCommonEvents from './locales/ru/commonEvents.json';
+import ruCommands from './locales/ru/commands.json';
+import ruProperties from './locales/ru/properties.json';
+import ruAssets from './locales/ru/assets.json';
+import ruUi from './locales/ru/ui.json';
+import ruComponents from './locales/ru/components.json';
+import ruStaging from './locales/ru/staging.json';
+import ruGameBuilder from './locales/ru/gameBuilder.json';
+import ruEditorTools from './locales/ru/editorTools.json';
+import ruTemplates from './locales/ru/templates.json';
+import ruContentTools from './locales/ru/contentTools.json';
+import ruContextPanels from './locales/ru/contextPanels.json';
+import ukCommon from './locales/uk/common.json';
+import ukHeader from './locales/uk/header.json';
+import ukSettings from './locales/uk/settings.json';
+import ukHub from './locales/uk/hub.json';
+import ukNav from './locales/uk/nav.json';
+import ukScenes from './locales/uk/scenes.json';
+import ukCharacters from './locales/uk/characters.json';
+import ukVariables from './locales/uk/variables.json';
+import ukCommonEvents from './locales/uk/commonEvents.json';
+import ukCommands from './locales/uk/commands.json';
+import ukProperties from './locales/uk/properties.json';
+import ukAssets from './locales/uk/assets.json';
+import ukUi from './locales/uk/ui.json';
+import ukComponents from './locales/uk/components.json';
+import ukStaging from './locales/uk/staging.json';
+import ukGameBuilder from './locales/uk/gameBuilder.json';
+import ukEditorTools from './locales/uk/editorTools.json';
+import ukTemplates from './locales/uk/templates.json';
+import ukContentTools from './locales/uk/contentTools.json';
+import ukContextPanels from './locales/uk/contextPanels.json';
+import frCommon from './locales/fr/common.json';
+import frHeader from './locales/fr/header.json';
+import frSettings from './locales/fr/settings.json';
+import frHub from './locales/fr/hub.json';
+import frNav from './locales/fr/nav.json';
+import frScenes from './locales/fr/scenes.json';
+import frCharacters from './locales/fr/characters.json';
+import frVariables from './locales/fr/variables.json';
+import frCommonEvents from './locales/fr/commonEvents.json';
+import frCommands from './locales/fr/commands.json';
+import frProperties from './locales/fr/properties.json';
+import frAssets from './locales/fr/assets.json';
+import frUi from './locales/fr/ui.json';
+import frComponents from './locales/fr/components.json';
+import frStaging from './locales/fr/staging.json';
+import frGameBuilder from './locales/fr/gameBuilder.json';
+import frEditorTools from './locales/fr/editorTools.json';
+import frTemplates from './locales/fr/templates.json';
+import frContentTools from './locales/fr/contentTools.json';
+import frContextPanels from './locales/fr/contextPanels.json';
 
 /** Languages offered in the editor's Language selector. `en` is the source of truth. */
 export const SUPPORTED_LANGUAGES = [
@@ -163,6 +223,9 @@ export const SUPPORTED_LANGUAGES = [
     { code: 'zh', label: '简体中文' },
     { code: 'zh-TW', label: '繁體中文' },
     { code: 'ja', label: '日本語' },
+    { code: 'ru', label: 'Русский' },
+    { code: 'uk', label: 'Українська' },
+    { code: 'fr', label: 'Français' },
 ] as const;
 
 export type LanguageCode = typeof SUPPORTED_LANGUAGES[number]['code'];
@@ -177,6 +240,9 @@ const resources = {
     zh: { common: zhCommon, header: zhHeader, settings: zhSettings, hub: zhHub, nav: zhNav, scenes: zhScenes, characters: zhCharacters, variables: zhVariables, commonEvents: zhCommonEvents, commands: zhCommands, properties: zhProperties, assets: zhAssets, ui: zhUi, components: zhComponents, staging: zhStaging, gameBuilder: zhGameBuilder, editorTools: zhEditorTools, templates: zhTemplates, contentTools: zhContentTools, contextPanels: zhContextPanels },
     ja: { common: jaCommon, header: jaHeader, settings: jaSettings, hub: jaHub, nav: jaNav, scenes: jaScenes, characters: jaCharacters, variables: jaVariables, commonEvents: jaCommonEvents, commands: jaCommands, properties: jaProperties, assets: jaAssets, ui: jaUi, components: jaComponents, staging: jaStaging, gameBuilder: jaGameBuilder, editorTools: jaEditorTools, templates: jaTemplates, contentTools: jaContentTools, contextPanels: jaContextPanels },
     'zh-TW': { common: zhTwCommon, header: zhTwHeader, settings: zhTwSettings, hub: zhTwHub, nav: zhTwNav, scenes: zhTwScenes, characters: zhTwCharacters, variables: zhTwVariables, commonEvents: zhTwCommonEvents, commands: zhTwCommands, properties: zhTwProperties, assets: zhTwAssets, ui: zhTwUi, components: zhTwComponents, staging: zhTwStaging, gameBuilder: zhTwGameBuilder, editorTools: zhTwEditorTools, templates: zhTwTemplates, contentTools: zhTwContentTools, contextPanels: zhTwContextPanels },
+    ru: { common: ruCommon, header: ruHeader, settings: ruSettings, hub: ruHub, nav: ruNav, scenes: ruScenes, characters: ruCharacters, variables: ruVariables, commonEvents: ruCommonEvents, commands: ruCommands, properties: ruProperties, assets: ruAssets, ui: ruUi, components: ruComponents, staging: ruStaging, gameBuilder: ruGameBuilder, editorTools: ruEditorTools, templates: ruTemplates, contentTools: ruContentTools, contextPanels: ruContextPanels },
+    uk: { common: ukCommon, header: ukHeader, settings: ukSettings, hub: ukHub, nav: ukNav, scenes: ukScenes, characters: ukCharacters, variables: ukVariables, commonEvents: ukCommonEvents, commands: ukCommands, properties: ukProperties, assets: ukAssets, ui: ukUi, components: ukComponents, staging: ukStaging, gameBuilder: ukGameBuilder, editorTools: ukEditorTools, templates: ukTemplates, contentTools: ukContentTools, contextPanels: ukContextPanels },
+    fr: { common: frCommon, header: frHeader, settings: frSettings, hub: frHub, nav: frNav, scenes: frScenes, characters: frCharacters, variables: frVariables, commonEvents: frCommonEvents, commands: frCommands, properties: frProperties, assets: frAssets, ui: frUi, components: frComponents, staging: frStaging, gameBuilder: frGameBuilder, editorTools: frEditorTools, templates: frTemplates, contentTools: frContentTools, contextPanels: frContextPanels },
 } as const;
 
 function getInitialLanguage(): string {

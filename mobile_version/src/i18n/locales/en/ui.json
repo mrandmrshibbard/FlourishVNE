@@ -29,6 +29,8 @@
     "openURL": "Open URL",
     "playAnimation": "Play Animation",
     "changeImage": "Change Image",
+    "showElement": "Show Element",
+    "hideElement": "Hide Element",
     "showLog": "Show Log / History",
     "toggleAutoAdvance": "Toggle Auto-Advance",
     "toggleSkip": "Toggle Skip",

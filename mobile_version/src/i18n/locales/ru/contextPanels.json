@@ -1,0 +1,114 @@
+{
+  "panelManager": {
+    "loading": "Загрузка контекстных панелей...",
+    "emptyTitle": "Контекстные панели недоступны",
+    "emptyHint": "Выберите элемент, чтобы увидеть подходящие инструменты и подсказки",
+    "suggestionsHeading": "Подсказки",
+    "panelSuggestionsHeading": "Подсказки:",
+    "collapse": "Свернуть",
+    "expand": "Развернуть",
+    "moveUp": "Переместить вверх",
+    "moveDown": "Переместить вниз"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Добавить диалог",
+      "addDialogueTip": "Добавить команду диалога (Alt+D)",
+      "addChoice": "Добавить выбор",
+      "addChoiceTip": "Добавить команду выбора (Alt+C)",
+      "setVariable": "Задать переменную",
+      "setVariableTip": "Добавить команду переменной (Alt+V)",
+      "preview": "Предпросмотр",
+      "previewTip": "Предпросмотр сцены (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Добавить выражение",
+      "addExpressionTip": "Добавить новое выражение",
+      "addOutfit": "Добавить наряд",
+      "addOutfitTip": "Добавить вариант наряда",
+      "duplicate": "Дублировать",
+      "duplicateTip": "Дублировать персонажа (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Добавить кнопку",
+      "addButtonTip": "Добавить элемент-кнопку",
+      "addText": "Добавить текст",
+      "addTextTip": "Добавить текстовый элемент",
+      "addImage": "Добавить изображение",
+      "addImageTip": "Добавить элемент-изображение",
+      "preview": "Предпросмотр",
+      "previewTip": "Предпросмотр экрана UI (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Фильтр",
+      "filterTip": "Фильтровать шаблоны",
+      "sort": "Сортировка",
+      "sortTip": "Сортировать шаблоны",
+      "favorites": "Избранное",
+      "favoritesTip": "Показать только избранное"
+    },
+    "logicBuilding": {
+      "addCondition": "Добавить условие",
+      "addConditionTip": "Добавить узел условия",
+      "addAction": "Добавить действие",
+      "addActionTip": "Добавить узел действия",
+      "validate": "Проверить",
+      "validateTip": "Проверить логический поток"
+    },
+    "variableManagement": {
+      "addVariable": "Добавить переменную",
+      "addVariableTip": "Добавить новую переменную (Alt+N)",
+      "debug": "Отладка",
+      "debugTip": "Открыть отладчик переменных",
+      "export": "Экспорт",
+      "exportTip": "Экспортировать определения переменных"
+    },
+    "assetManagement": {
+      "import": "Импорт",
+      "importTip": "Импортировать ресурсы",
+      "organize": "Упорядочить",
+      "organizeTip": "Упорядочить ресурсы",
+      "findUnused": "Найти неиспользуемые",
+      "findUnusedTip": "Найти неиспользуемые ресурсы"
+    },
+    "wizardFlow": {
+      "back": "Назад",
+      "backTip": "Предыдущий шаг",
+      "next": "Далее",
+      "nextTip": "Следующий шаг",
+      "cancel": "Отмена",
+      "cancelTip": "Отменить мастер"
+    }
+  },
+  "localizationPanel": {
+    "title": "Менеджер локализации",
+    "stringCount_one": "{{count}} строка",
+    "stringCount_few": "{{count}} строки",
+    "stringCount_many": "{{count}} строк",
+    "stringCount_other": "{{count}} строки",
+    "addLanguage": "Добавить язык",
+    "removeLanguageTip": "Удалить {{name}}",
+    "searchPlaceholder": "Поиск по ключу или тексту...",
+    "filterAll": "Все",
+    "filterDialogue": "Диалог",
+    "filterChoice": "Выбор",
+    "colKey": "Ключ",
+    "colContext": "Контекст",
+    "colDefaultText": "Текст по умолчанию",
+    "emptyNoStrings": "Строки не найдены",
+    "emptyNoStringsHintScan": "Добавьте команды диалога или выбора в свои сцены, чтобы увидеть переводимые строки.",
+    "emptyNoStringsHintFilter": "Нет строк, соответствующих текущим фильтрам.",
+    "translationPlaceholder": "Введите перевод...",
+    "exportCsv": "Экспорт CSV",
+    "importCsv": "Импорт CSV",
+    "importSuccess_one": "Импортирован {{count}} перевод.",
+    "importSuccess_few": "Импортировано {{count}} перевода.",
+    "importSuccess_many": "Импортировано {{count}} переводов.",
+    "importSuccess_other": "Импортировано {{count}} перевода.",
+    "importErrors_one": "{{count}} ошибка:",
+    "importErrors_few": "{{count}} ошибки:",
+    "importErrors_many": "{{count}} ошибок:",
+    "importErrors_other": "{{count}} ошибки:",
+    "showingCount": "Показано {{filtered}} из {{total}} строк"
+  }
+}

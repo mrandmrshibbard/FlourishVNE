@@ -38,10 +38,15 @@ export function saveRecentProject(project: VNProject, filePath?: string): void {
     try {
         const stored = localStorage.getItem(RECENT_PROJECTS_KEY);
         let recents: RecentProject[] = stored ? JSON.parse(stored) : [];
-        
+
+        // PRESERVE the previously-known on-disk path when this call doesn't supply one.
+        // Auto-recovery restore and import call this WITHOUT a path; wiping it here would
+        // make the editor forget where the file lives, so the next (silent) save loses its
+        // target — the root cause of "2nd save doesn't work, only auto-recovery saves me".
+        const existing = recents.find(r => r.id === project.id);
         // Remove existing entry for this project
         recents = recents.filter(r => r.id !== project.id);
-        
+
         // Add to front
         recents.unshift({
             id: project.id,
@@ -49,7 +54,7 @@ export function saveRecentProject(project: VNProject, filePath?: string): void {
             lastOpened: Date.now(),
             sceneCount: Object.keys(project.scenes || {}).length,
             characterCount: Object.keys(project.characters || {}).length,
-            filePath: filePath || undefined,
+            filePath: filePath || existing?.filePath || undefined,
         });
         
         // Trim to max

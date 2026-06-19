@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { RangeInput } from './ui/Form';
 import { useTranslation, Trans } from 'react-i18next';
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
@@ -324,8 +325,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.textSpeed', { value: project.ui?.defaultGameSettings?.textSpeed ?? 50 })}</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="1"
                                 max="100"
                                 value={project.ui?.defaultGameSettings?.textSpeed ?? 50}
@@ -338,8 +338,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.musicVolume', { value: Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100) })}</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.musicVolume ?? 0.8) * 100)}
@@ -349,8 +348,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.sfxVolume', { value: Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100) })}</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.sfxVolume ?? 0.8) * 100)}
@@ -360,8 +358,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.voiceVolume', { value: Math.round((project.ui?.defaultGameSettings?.voiceVolume ?? 0.8) * 100) })}</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.voiceVolume ?? 0.8) * 100)}
@@ -371,8 +368,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.ambientVolume', { value: Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100) })}</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="100"
                                 value={Math.round((project.ui?.defaultGameSettings?.ambientVolume ?? 0.8) * 100)}
@@ -382,8 +378,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ project, onUpdate, on
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('general.autoAdvanceDelay', { value: project.ui?.defaultGameSettings?.autoAdvanceDelay ?? 3 })}</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="1"
                                 max="10"
                                 step="0.5"
@@ -573,8 +568,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         <span className="text-xs text-[var(--text-secondary)]">Opacity</span>
                         <span className="text-xs text-[var(--text-secondary)]">{opacityValue}%</span>
                     </div>
-                    <input
-                        type="range"
+                    <RangeInput
                         min="0"
                         max="100"
                         value={opacityValue}
@@ -694,8 +688,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 {(project.ui.dialogueBoxImage || project.ui.dialogueBoxBorderImage) && (
                     <div>
                         <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Dialogue Border Thickness ({project.ui.dialogueBorderPadding ?? 12}px)</label>
-                        <input
-                            type="range"
+                        <RangeInput
                             min="0"
                             max="40"
                             value={project.ui.dialogueBorderPadding ?? 12}
@@ -710,8 +703,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Width ({project.ui.dialogueBoxWidth ?? 100}%)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="30"
                                 max="100"
                                 value={project.ui.dialogueBoxWidth ?? 100}
@@ -733,8 +725,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Bottom Margin ({project.ui.dialogueBoxBottomMargin ?? 20}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="200"
                                 value={project.ui.dialogueBoxBottomMargin ?? 20}
@@ -744,8 +735,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Inner Padding ({project.ui.dialogueBoxPadding ?? 20}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="60"
                                 value={project.ui.dialogueBoxPadding ?? 20}
@@ -769,8 +759,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         {project.ui.dialogueBoxImage && (project.ui.dialogueBoxSizeMode ?? 'stretch') === 'nine-slice' && (
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">9-Slice Border Size ({project.ui.dialogueBoxSlice ?? 30}px)</label>
-                                <input
-                                    type="range"
+                                <RangeInput
                                     min="5"
                                     max="100"
                                     value={project.ui.dialogueBoxSlice ?? 30}
@@ -789,8 +778,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.dialogueBoxBorderRadius ?? 8}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="30"
                                 value={project.ui.dialogueBoxBorderRadius ?? 8}
@@ -853,8 +841,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Vertical Padding ({project.ui.nameboxPadding ?? 8}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="30"
                                 value={project.ui.nameboxPadding ?? 8}
@@ -864,8 +851,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Horizontal Padding ({project.ui.nameboxHorizontalPadding ?? 14}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="40"
                                 value={project.ui.nameboxHorizontalPadding ?? 14}
@@ -875,8 +861,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.nameboxBorderRadius ?? 6}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="20"
                                 value={project.ui.nameboxBorderRadius ?? 6}
@@ -886,8 +871,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Horizontal Offset ({project.ui.nameboxOffsetX ?? 20}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="200"
                                 value={project.ui.nameboxOffsetX ?? 20}
@@ -897,8 +881,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Gap Above Dialogue Box ({project.ui.nameboxOffsetY ?? 0}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="30"
                                 value={project.ui.nameboxOffsetY ?? 0}
@@ -978,8 +961,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                 {(project.ui.choiceButtonImage || project.ui.choiceButtonBorderImage) && (
                     <div>
                         <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Choice Border Thickness ({project.ui.choiceBorderPadding ?? 8}px)</label>
-                        <input
-                            type="range"
+                        <RangeInput
                             min="0"
                             max="30"
                             value={project.ui.choiceBorderPadding ?? 8}
@@ -1018,8 +1000,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Inner Padding ({project.ui.choiceButtonPadding ?? 16}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="60"
                                 value={project.ui.choiceButtonPadding ?? 16}
@@ -1043,8 +1024,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         {project.ui.choiceButtonImage && (project.ui.choiceButtonSizeMode ?? 'stretch') === 'nine-slice' && (
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">9-Slice Border Size ({project.ui.choiceButtonSlice ?? 15}px)</label>
-                                <input
-                                    type="range"
+                                <RangeInput
                                     min="2"
                                     max="60"
                                     value={project.ui.choiceButtonSlice ?? 15}
@@ -1062,8 +1042,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.choiceButtonBorderRadius ?? 8}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="30"
                                 value={project.ui.choiceButtonBorderRadius ?? 8}
@@ -1176,8 +1155,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         {(project.ui.inputBoxImage || project.ui.inputBoxBorderImage) && (
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Input Border Thickness ({project.ui.inputBorderPadding ?? 8}px)</label>
-                                <input
-                                    type="range"
+                                <RangeInput
                                     min="0"
                                     max="30"
                                     value={project.ui.inputBorderPadding ?? 8}
@@ -1202,8 +1180,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
 
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Inner Padding ({project.ui.inputBoxPadding ?? 24}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="60"
                                 value={project.ui.inputBoxPadding ?? 24}
@@ -1227,8 +1204,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         {project.ui.inputBoxImage && (project.ui.inputBoxSizeMode ?? 'stretch') === 'nine-slice' && (
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">9-Slice Border Size ({project.ui.inputBoxSlice ?? 20}px)</label>
-                                <input
-                                    type="range"
+                                <RangeInput
                                     min="2"
                                     max="60"
                                     value={project.ui.inputBoxSlice ?? 20}
@@ -1246,8 +1222,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         />
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Corner Radius ({project.ui.inputBoxBorderRadius ?? 8}px)</label>
-                            <input
-                                type="range"
+                            <RangeInput
                                 min="0"
                                 max="30"
                                 value={project.ui.inputBoxBorderRadius ?? 8}
@@ -1307,8 +1282,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                                 />
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Button Corner Radius ({project.ui.quickMenuBorderRadius ?? 4}px)</label>
-                                    <input
-                                        type="range"
+                                    <RangeInput
                                         min="0"
                                         max="16"
                                         value={project.ui.quickMenuBorderRadius ?? 4}

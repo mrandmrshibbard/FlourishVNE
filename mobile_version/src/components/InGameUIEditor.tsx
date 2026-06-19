@@ -8,6 +8,7 @@
  * Hold Shift while dragging for snap-to-grid.
  */
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import { RangeInput } from './ui/Form';
 import { VNProject } from '../types/project';
 import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton } from '../features/ui/types';
 import { VNID } from '../types';
@@ -668,7 +669,7 @@ const PropsColorField: React.FC<{ label: string; value: string; onChange: (v: st
 const PropsOpacityField: React.FC<{ label: string; value: number; onChange: (v: number) => void }> = ({ label, value, onChange }) => (
     <PropsField label={label}>
         <div className="flex items-center gap-2">
-            <input type="range" min={0} max={100} value={value} onChange={e => onChange(parseInt(e.target.value))} className="flex-1 accent-sky-500" />
+            <RangeInput min={0} max={100} value={value} onChange={e => onChange(parseInt(e.target.value))} className="flex-1 accent-sky-500" />
             <span className="text-xs text-[var(--text-secondary)] w-8 text-right">{value}%</span>
         </div>
     </PropsField>

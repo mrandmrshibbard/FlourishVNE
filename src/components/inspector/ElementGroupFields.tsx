@@ -21,7 +21,7 @@ import {
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
-import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
+import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
 import { TrashIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
 import ActionEditor from '../menu-editor/ActionEditor';
@@ -169,9 +169,15 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
         </>
     );
     const renderOpacityField = () => (
-        <FormField label={t('elementInspector.opacity', { pct: Math.round((element.opacity ?? 1) * 100) })}>
-            <input type="range" min="0" max="1" step="0.01" value={element.opacity ?? 1} onChange={e => updateElement({ opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
-        </FormField>
+        <>
+            <FormField label={t('elementInspector.opacity', { pct: Math.round((element.opacity ?? 1) * 100) })}>
+                <RangeInput min={0} max={1} step={0.01} value={element.opacity ?? 1} onChange={e => updateElement({ opacity: parseFloat(e.target.value) })} className="w-full accent-purple-500" />
+            </FormField>
+            <label className="flex items-center gap-2 text-sm cursor-pointer mt-1">
+                <input type="checkbox" checked={!!element.startHidden} onChange={e => updateElement({ startHidden: e.target.checked || undefined })} className="cursor-pointer" />
+                {t('elementInspector.startHidden', 'Start hidden (revealed by a Show Element action)')}
+            </label>
+        </>
     );
     const renderAnimationFields = () => (
         <>

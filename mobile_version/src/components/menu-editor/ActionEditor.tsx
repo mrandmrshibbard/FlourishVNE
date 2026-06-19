@@ -20,6 +20,7 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
+    UIActionType.ShowElement, UIActionType.HideElement,
     UIActionType.CallCommonEvent,
     UIActionType.GiveItem, UIActionType.UseItem, UIActionType.DestroyItem, UIActionType.UseSelectedItem, UIActionType.RestockCollection,
     UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,
@@ -59,6 +60,15 @@ const ActionEditor: React.FC<{
     const numericVariables = React.useMemo(() => (
         Object.values(project.variables).filter((v: VNVariable) => v.type === 'number')
     ), [project.variables]);
+
+    // All screen elements (grouped by screen) for Show/Hide-Element target pickers.
+    const elementsByScreen = React.useMemo(() => (
+        Object.values(project.uiScreens).map((s: VNUIScreen) => ({
+            screenId: s.id,
+            screenName: s.name,
+            elements: Object.values(s.elements || {}).map((el: any) => ({ id: el.id as VNID, name: (el.name || el.type) as string })),
+        })).filter(g => g.elements.length > 0)
+    ), [project.uiScreens]);
 
     // Handle null/undefined action
     if (!action) {
@@ -120,6 +130,10 @@ const ActionEditor: React.FC<{
                 break;
             case UIActionType.CallCommonEvent:
                 newAction = { ...newAction, commonEventId: Object.keys(project.commonEvents || {})[0] || '' } as CallCommonEventAction;
+                break;
+            case UIActionType.ShowElement:
+            case UIActionType.HideElement:
+                newAction = { ...newAction, targetElementId: '' } as any;
                 break;
             case UIActionType.GiveItem:
             case UIActionType.DestroyItem:
@@ -263,6 +277,23 @@ const ActionEditor: React.FC<{
                             <option value="">{t('actionEditor.selectScreen')}</option>
                             {Object.values(project.uiScreens).map((s: VNUIScreen) => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </Select>
+                    </FormField>
+                );
+            }
+            case UIActionType.ShowElement:
+            case UIActionType.HideElement: {
+                const a = action as any;
+                const verb = action.type === UIActionType.ShowElement ? t('actionEditor.elementToShow', 'Element to show') : t('actionEditor.elementToHide', 'Element to hide');
+                return (
+                    <FormField label={verb}>
+                        <Select value={a.targetElementId || ''} onChange={e => onActionChange({ ...a, targetElementId: e.target.value })}>
+                            <option value="">{t('actionEditor.selectElement', 'Select an element…')}</option>
+                            {elementsByScreen.map(g => (
+                                <optgroup key={g.screenId} label={g.screenName}>
+                                    {g.elements.map(el => <option key={el.id} value={el.id}>{el.name}</option>)}
+                                </optgroup>
                             ))}
                         </Select>
                     </FormField>

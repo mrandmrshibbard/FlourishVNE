@@ -3,7 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
 const androidToolchain = require('./androidToolchain.cjs');
 
@@ -92,10 +92,39 @@ function pickBuiltArtifact(files, platform) {
   return { name: null, isDir: false };
 }
 
+// Long-running build/toolchain child processes (electron-builder, Gradle, sdkmanager,
+// 7za, …). Tracked so we can kill them — and crucially their CHILDREN — if the user quits
+// Flourish or cancels mid-build. On Windows a child's grandchildren (electron-builder spawns
+// app-builder/makensis/7za; gradle spawns java) survive a plain parent kill, so we use
+// `taskkill /T /F` to take down the whole tree; otherwise they'd orphan and keep running
+// after the app closes.
+const activeBuildProcs = new Set();
+
+function killProcessTree(proc, sync) {
+  if (!proc || proc.killed || proc.exitCode !== null) return;
+  try {
+    if (process.platform === 'win32' && proc.pid) {
+      const args = ['/pid', String(proc.pid), '/T', '/F'];
+      if (sync) spawnSync('taskkill', args, { windowsHide: true });
+      else spawn('taskkill', args, { windowsHide: true });
+    } else {
+      proc.kill('SIGKILL');
+    }
+  } catch { /* best-effort */ }
+}
+
+/** Kill every tracked build process tree (on cancel or app quit). */
+function killAllBuilds(sync) {
+  for (const proc of activeBuildProcs) killProcessTree(proc, sync);
+  activeBuildProcs.clear();
+}
+
 /** Spawn a process, streaming each stdout/stderr line to onLine. Resolves on exit 0. */
 function spawnWithProgress(command, args, options, onLine) {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, { ...options, windowsHide: true });
+    activeBuildProcs.add(proc);
+    const done = () => activeBuildProcs.delete(proc);
     let tail = '';
     const handle = (buf) => {
       const text = buf.toString();
@@ -104,8 +133,9 @@ function spawnWithProgress(command, args, options, onLine) {
     };
     if (proc.stdout) proc.stdout.on('data', handle);
     if (proc.stderr) proc.stderr.on('data', handle);
-    proc.on('error', reject);
+    proc.on('error', (err) => { done(); reject(err); });
     proc.on('close', (code) => {
+      done();
       if (code === 0) resolve();
       else reject(new Error(path.basename(command) + ' exited with code ' + code + (tail ? '\n' + tail : '')));
     });
@@ -1016,6 +1046,9 @@ app.on('second-instance', (_event, argv) => {
 // Set quitting flag so the close handler skips the save-confirmation dialog.
 app.on('before-quit', () => {
   isQuitting = true;
+  // Reap any in-flight build/toolchain processes (and their children) so they don't
+  // orphan and keep running after Flourish closes. Async kill is enough here.
+  killAllBuilds(false);
 });
 
 // Quit when all windows are closed.
@@ -1031,6 +1064,10 @@ app.on('will-quit', () => {
   });
   managerWindows.clear();
 
+  // Safety net: synchronously reap any still-tracked build processes before we
+  // force-exit, so the force-exit below can't strand an orphaned build tree.
+  killAllBuilds(true);
+
   // If we're installing an update, do NOT force-exit — let the installer
   // take over gracefully.
   if (updateDownloaded) return;
@@ -1041,6 +1078,13 @@ app.on('will-quit', () => {
     console.warn('App did not exit cleanly – forcing process.exit()');
     process.exit(0);
   }, 3000);
+});
+
+// Cancel an in-progress build: kill the build process tree(s) so nothing is left running.
+// (The renderer's build promise will then reject with a non-zero exit, which the UI treats
+// as a cancellation.)
+ipcMain.on('cancel-build', () => {
+  killAllBuilds(false);
 });
 
 // IPC Handler: Build a desktop game with electron-builder.

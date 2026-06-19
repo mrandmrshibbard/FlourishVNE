@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "Майстри контенту",
+    "stepOf": "Крок {{current}} з {{total}}",
+    "estimatedTime": " · ~{{min}} хв",
+    "chooseWizard": "Виберіть майстра, щоб почати кероване створення контенту.",
+    "steps": "{{count}} кроків",
+    "approxMin": "~{{min}} хв",
+    "selectDefault": "Вибрати...",
+    "noOptions": "Немає доступних варіантів",
+    "enable": "Увімкнути",
+    "fileUploadHint": "Завантаження файлу (налаштуйте після майстра)",
+    "fieldRequired": "Поле «{{label}}» обов'язкове",
+    "backToWizards": "← Майстри",
+    "back": "← Назад",
+    "skip": "Пропустити",
+    "complete": "✓ Завершити",
+    "next": "Далі →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "Клацніть правою кнопкою, щоб відкрити плеєр",
+    "fabTitleStopped": "Відтворити фонову музику (права кнопка для плеєра)",
+    "rightClickPopOut": "Клацніть правою кнопкою, щоб відкрити",
+    "panelTitle": "Музичний плеєр",
+    "dockBack": "Повернути на місце",
+    "selectSong": "Виберіть пісню",
+    "pause": "Пауза",
+    "play": "Відтворити",
+    "nextSong": "Наступна пісня"
+  }
+}

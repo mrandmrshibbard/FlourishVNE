@@ -3321,7 +3321,9 @@ const UIScreenRenderer: React.FC<{
     selectedItemId?: VNID | null;
     selectedElementId?: VNID | null;
     onSelectItem?: (itemId: VNID | null, elementId: VNID) => void;
-}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+    /** Runtime Show/Hide-Element overrides (elementId -> visible). Absent entry = use startHidden. */
+    elementVisibility?: Record<VNID, boolean>;
+}> = React.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility }) => {
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
     const backgroundVideoRef = React.useRef<HTMLVideoElement>(null);
@@ -3504,6 +3506,23 @@ const UIScreenRenderer: React.FC<{
             ...(stateTransition ? { transition: stateTransition } : {}),
             ...transitionStyle,
         };
+
+        // Runtime Show/Hide-Element + startHidden. Only touch elements that PARTICIPATE (have a
+        // startHidden default or a live override) so non-feature elements render byte-identically.
+        // Hidden = opacity 0 + click-through; the opacity transition reuses the element's own fade
+        // duration so pages crossfade when a button swaps them.
+        {
+            const visOverride = elementVisibility?.[element.id];
+            if (element.startHidden || visOverride !== undefined) {
+                const isHidden = visOverride !== undefined ? !visOverride : !!element.startHidden;
+                const fadeMs = element.transitionDuration ?? 300;
+                style.transition = style.transition ? `${style.transition}, opacity ${fadeMs}ms ease` : `opacity ${fadeMs}ms ease`;
+                if (isHidden) {
+                    style.opacity = 0;
+                    style.pointerEvents = 'none';
+                }
+            }
+        }
 
         const getElementAssetUrl = (image: { type: 'image' | 'video', id: VNID } | null) => {
             if (!image) return null;
@@ -4435,6 +4454,35 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const [screenStack, setScreenStack] = useState<VNID[]>(titleScreenId ? [titleScreenId] : []);
     // hudStack holds screens shown as in-game overlays while in 'playing' mode
     const [hudStack, setHudStack] = useState<VNID[]>([]);
+    // Runtime Show/Hide-Element overrides: elementId -> visible. Absent = use the element's
+    // own `startHidden` default. Drives multi-page documents / reveals (Show/HideElement actions).
+    // Cleared per-screen on open when the screen's resetElementVisibilityOnOpen !== false.
+    const [elementVisibility, setElementVisibility] = useState<Record<VNID, boolean>>({});
+    const prevOpenScreensRef = useRef<Set<VNID>>(new Set());
+    // When a screen (re)opens, reset its elements' Show/Hide overrides so `startHidden` pages
+    // return to their defaults — unless the author opted into persistent reveals
+    // (resetElementVisibilityOnOpen === false). Diffs the open set so it only fires on genuine opens.
+    useEffect(() => {
+        const open = new Set<VNID>([...screenStack, ...hudStack]);
+        const newlyOpened: VNID[] = [];
+        open.forEach(id => { if (!prevOpenScreensRef.current.has(id)) newlyOpened.push(id); });
+        prevOpenScreensRef.current = open;
+        if (newlyOpened.length === 0) return;
+        setElementVisibility(prev => {
+            let next = prev;
+            for (const sid of newlyOpened) {
+                const scr = project.uiScreens[sid];
+                if (!scr || scr.resetElementVisibilityOnOpen === false) continue;
+                for (const elId of Object.keys(scr.elements || {})) {
+                    if (next[elId] !== undefined) {
+                        if (next === prev) next = { ...prev };
+                        delete next[elId];
+                    }
+                }
+            }
+            return next;
+        });
+    }, [screenStack, hudStack, project.uiScreens]);
     // Track screens that are currently closing with transitions
     const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
     // In-game confirmation dialog state
@@ -7990,6 +8038,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     setScreenStack([project.ui.pauseScreenId]);
                 }
             }
+        } else if (action.type === UIActionType.ShowElement || action.type === UIActionType.HideElement) {
+            // Reveal/hide a target element on the current screen (multi-page documents, reveals).
+            // Updates the visibility override; renderElement folds it into the element's style and
+            // crossfades using the element's own fade duration.
+            const targetId = (action as any).targetElementId as VNID | undefined;
+            if (targetId) {
+                const visible = action.type === UIActionType.ShowElement;
+                setElementVisibility(prev => (prev[targetId] === visible ? prev : { ...prev, [targetId]: visible }));
+            }
         } else if (action.type === UIActionType.ToggleScreen) {
             // Toggle a screen open/closed (e.g. an inventory overlay). During gameplay it
             // lives on the HUD stack (so it overlays the scene); otherwise the screen stack.
@@ -11117,6 +11174,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             key={`${id}-${isClosing ? 'closing' : 'open'}`}
                             screenId={id}
                             onAction={handleUIAction}
+                            elementVisibility={elementVisibility}
                             settings={settings}
                             onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
                             assetResolver={assetResolver}
@@ -11166,6 +11224,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             key={`${id}-${isClosing ? 'closing' : 'open'}`}
                             screenId={id}
                             onAction={handleUIAction}
+                            elementVisibility={elementVisibility}
                             settings={settings}
                             onSettingsChange={(key, value) => setSettings(s => ({...s, [key]: value}))}
                             assetResolver={assetResolver}

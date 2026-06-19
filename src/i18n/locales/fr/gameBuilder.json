@@ -1,0 +1,232 @@
+{
+  "title": "Compiler un jeu autonome",
+  "chooseBuildType": "Choisissez le type de compilation :",
+  "ready": "Prêt à compiler...",
+  "iconError": "Veuillez sélectionner un fichier image (PNG recommandé, 256×256 ou plus).",
+  "webBuild": {
+    "name": "Compilation Web",
+    "desc": "Jouez dans le navigateur • prêt pour itch.io • Aucune sauvegarde persistante",
+    "infoTitle": "Compilation Web",
+    "intro": "Cela crée un jeu pour navigateur que vous pouvez :",
+    "item1": "✅ Mettre en ligne sur itch.io (le plus simple !)",
+    "item2": "✅ Partager sur n'importe quel hébergeur web (Netlify, GitHub Pages, etc.)",
+    "item3": "✅ Envoyer à des amis sous forme de fichier ZIP",
+    "item4": "✅ Jouer hors ligne dans n'importe quel navigateur",
+    "item5": "⚠️ Remarque : la progression ne sera pas sauvegardée (limitation du navigateur)"
+  },
+  "desktopBuild": {
+    "name": "Compilation Bureau",
+    "desc": "Windows/Mac/Linux • Sauvegarde de la progression • Jeu hors ligne",
+    "infoTitle": "Compilation Bureau",
+    "intro": "Cela crée une application de bureau autonome avec :",
+    "item1": "💾 Système complet d'enregistrement/chargement (10 emplacements de sauvegarde)",
+    "item2": "🔄 Sauvegarde automatique",
+    "item3": "📁 Stockage persistant de la progression",
+    "item4": "🖥️ Fonctionne sur Windows, Mac et Linux",
+    "item5": "📦 Nécessite Electron (inclus dans la compilation)",
+    "installerWarning": "⚡ Les compilations avec installateur sont plus rapides à compiler et se lancent instantanément après l'installation — la configuration extrait tous les fichiers à l'avance",
+    "standaloneWarning": "⏱ Les compilations autonomes prennent plus de temps à compiler et démarrent plus lentement — l'exe doit se décompresser dans un dossier temporaire à chaque lancement"
+  },
+  "noCodingRequired": "Aucun codage requis ! Il suffit de télécharger et de distribuer.",
+  "iconPicker": {
+    "label": "Icône de l'application",
+    "clickToChoose": "Cliquez pour choisir une icône",
+    "altText": "Icône de l'application",
+    "changeIcon": "Changer d'icône",
+    "chooseIcon": "Choisir une icône",
+    "remove": "Retirer",
+    "hint": "Recommandé : PNG 256×256"
+  },
+  "formatPicker": {
+    "title": "Format de compilation",
+    "standaloneName": "📦 .exe autonome",
+    "standaloneDesc": "Exécutable portable unique — aucune installation nécessaire, il suffit de l'exécuter",
+    "standaloneNote": "⏱ Compilation et démarrage plus lents — l'exe doit se décompresser à chaque lancement",
+    "installerName": "🔧 Installateur (Setup)",
+    "installerDesc": "Assistant d'installation avec raccourcis, répertoire d'installation, désinstallateur et dossier de sauvegardes du jeu",
+    "installerNote": "⚡ Compilation et démarrage plus rapides — les fichiers sont pré-extraits lors de l'installation"
+  },
+  "stats": {
+    "estimatedSize": "Taille estimée :",
+    "scenes": "Scènes :",
+    "characters": "Personnages :"
+  },
+  "validation": {
+    "errors": "⛔ {{count}} erreur(s)",
+    "warnings": "⚠️ {{count}} avertissement(s)",
+    "separator": " • "
+  },
+  "buildBtn": {
+    "fixErrors": "Corrigez les erreurs avant de compiler",
+    "buildWeb": "Compiler le jeu Web",
+    "buildInstaller": "Compiler l'installateur",
+    "buildStandalone": "Compiler l'EXE autonome",
+    "buildAndroid": "Compiler l'application Android",
+    "buildAndroidAab": "Compiler l'App Bundle (.aab)"
+  },
+  "helpBox": {
+    "firstTime": "Première fois ?",
+    "before": "Après la compilation, vous obtiendrez un fichier ZIP. Mettez-le en ligne sur",
+    "after": "et c'est terminé ! Aucune ligne de commande nécessaire."
+  },
+  "progress": {
+    "web": {
+      "prepare": "📋 Préparation",
+      "generate": "⚙️ Génération",
+      "assets": "🎨 Regroupement des ressources",
+      "finalize": "📦 Finalisation"
+    },
+    "desktop": {
+      "prepare": "📋 Préparation",
+      "generate": "⚙️ Génération",
+      "assets": "🎨 Ressources",
+      "install": "📥 Dépendances",
+      "build": "🔨 Compiler l'EXE",
+      "save": "💾 Enregistrer",
+      "working": "Les compilations Bureau prennent quelques minutes — l'application travaille en arrière-plan."
+    },
+    "android": {
+      "setup": "Configuration",
+      "prepare": "Préparation",
+      "assets": "Ressources",
+      "build": "Compilation",
+      "save": "Enregistrer",
+      "working": "Cela peut prendre plusieurs minutes la première fois — veuillez garder Flourish ouvert."
+    }
+  },
+  "success": {
+    "webTitle": "Jeu Web compilé avec succès !",
+    "installerTitle": "Installateur compilé avec succès !",
+    "desktopTitle": "Application Bureau compilée avec succès !",
+    "webText": "Votre jeu est prêt à être partagé sur le web !",
+    "installerText": "Votre installateur avec raccourcis et répertoire de sauvegardes du jeu est prêt !",
+    "desktopText": "Votre jeu de bureau autonome est prêt !",
+    "fileSize": "Taille du fichier :",
+    "format": "Format :",
+    "formatValue": "HTML5 (ZIP)",
+    "downloadBtn": "Télécharger le ZIP du jeu Web",
+    "execSaved": "Exécutable enregistré avec succès !",
+    "execLocation": "Vérifiez l'emplacement que vous avez sélectionné pour trouver le fichier exécutable de votre jeu.",
+    "buildAnotherVersion": "Compiler une autre version",
+    "androidTitle": "Votre application Android est prête !",
+    "androidText": "Flourish a compilé un .apk signé et installable.",
+    "apkSaved": "APK enregistré dans votre dossier de compilations Android.",
+    "apkLocation": "Trouvez-le dans Documents → Flourish VNE → Builds → Android.",
+    "androidSideloadHeadsUp": "À noter : lors de l'installation, Android affiche un avertissement concernant les « sources inconnues » / applications inconnues — c'est normal pour les installations directes, il suffit d'appuyer pour autoriser. L'avertissement ne disparaît que pour les applications publiées sur le Play Store (ce qui nécessite des étapes avancées supplémentaires).",
+    "androidAabTitle": "Votre App Bundle est prêt !",
+    "androidAabText": "Flourish a compilé un .aab signé pour le Google Play Store.",
+    "aabSaved": "AAB enregistré dans votre dossier de compilations Android — avec un guide de publication et votre clé de signature.",
+    "aabNextTitle": "📄 Étape suivante : publiez-le vous-même",
+    "aabNextBody": "Ouvrez le fichier _PLAY_STORE_GUIDE.txt enregistré à côté de votre .aab pour des instructions étape par étape, et SAUVEGARDEZ le fichier _upload-key.keystore — vous aurez besoin de cette clé exacte pour publier des mises à jour plus tard."
+  },
+  "nextSteps": {
+    "title": "Et maintenant ?",
+    "web": {
+      "step1Title": "Mettre en ligne sur itch.io (recommandé) :",
+      "step1GoTo": "Allez sur",
+      "step1ChooseHtml": "Choisissez « HTML » comme type de mise en ligne",
+      "step1Upload": "Mettez en ligne le fichier ZIP que vous venez de télécharger",
+      "step1Check": "Cochez « Ce fichier sera joué dans le navigateur »",
+      "step1Publish": "Publiez !",
+      "step2Title": "Ou hébergez-le vous-même :",
+      "step2Desc": "Décompressez et mettez en ligne le contenu sur n'importe quel hébergeur web",
+      "step3Title": "Ou partagez hors ligne :",
+      "step3Desc": "Envoyez le ZIP à vos amis - ils peuvent le décompresser et ouvrir index.html"
+    },
+    "desktop": {
+      "step1Title": "Testez votre jeu :",
+      "step1Installer": "Exécutez l'installateur Setup pour installer votre jeu",
+      "step1Standalone": "Double-cliquez sur l'exécutable pour tester votre jeu",
+      "step1Windows": "• Windows : fichier .exe",
+      "step1Mac": "• Mac : fichier .app ou .dmg",
+      "step1Linux": "• Linux : fichier .AppImage",
+      "step2Title": "Distribuez :",
+      "step2ShareInstaller": "Partagez l'installateur avec les joueurs !",
+      "step2ShareStandalone": "Partagez l'exécutable avec les joueurs !",
+      "step2InstallerDesc": "L'installateur créera des raccourcis sur le bureau/menu Démarrer, un répertoire d'installation et un dossier de sauvegardes du jeu",
+      "step2StandaloneDesc": "Ils n'ont qu'à télécharger et exécuter - aucune installation nécessaire",
+      "step3Title": "Système de sauvegarde :",
+      "step3Desc": "Votre jeu inclut :",
+      "step3Item1": "• Sauvegardes automatiques basées sur des fichiers (persistantes entre les sessions)",
+      "step3Item2": "• La progression des joueurs est enregistrée sur leur ordinateur",
+      "step3Item3": "• Fonctionne hors ligne sans aucun serveur nécessaire",
+      "step4InstallerTitle": "Fonctionnalités de l'installateur :",
+      "step4Item1": "• Sélection personnalisée du répertoire d'installation",
+      "step4Item2": "• Raccourcis sur le bureau et le menu Démarrer",
+      "step4Item3": "• Désinstallateur propre inclus",
+      "step4Item4": "• Sauvegardes du jeu stockées dans le dossier de données utilisateur",
+      "step5NoteTitle": "Remarque :",
+      "step5NoteInstaller": "L'installateur est spécifique à la plateforme",
+      "step5NoteStandalone": "L'exécutable est spécifique à la plateforme",
+      "step5Platform": "Compilez sur Windows pour .exe, Mac pour .app, Linux pour .AppImage"
+    },
+    "android": {
+      "step1Title": "Transférez-le sur votre téléphone :",
+      "step1Desc": "Copiez le .apk sur votre appareil Android (câble USB, un cloud, ou e-mail).",
+      "step2Title": "Autorisez l'installation :",
+      "step2Desc": "Lorsque vous appuyez sur le fichier, Android peut demander l'autorisation d'installer depuis cette source — autorisez-la.",
+      "step3Title": "Installez et jouez :",
+      "step3Desc": "Appuyez sur le .apk pour installer, puis ouvrez votre jeu.",
+      "note": "D'autres options de publication automatisées arriveront dans une future mise à jour."
+    }
+  },
+  "error": {
+    "title": "Échec de la compilation",
+    "unknown": "Une erreur inconnue s'est produite",
+    "commonFixes": "Solutions courantes :",
+    "fix1": "Assurez-vous que votre projet comporte au moins une scène",
+    "fix2": "Vérifiez que toutes les ressources sont correctement chargées",
+    "fix3": "Essayez de fermer et de rouvrir l'application",
+    "tryAgain": "Réessayer"
+  },
+  "androidBuild": {
+    "name": "Android",
+    "desc": "Application installable pour téléphones et tablettes Android (.apk)",
+    "infoTitle": "Application Android (.apk)",
+    "intro": "Empaquette votre jeu sous forme d'application Android native qui s'installe et s'exécute sur téléphones et tablettes — des appuis au lieu de clics, avec des sauvegardes stockées sur l'appareil tout comme la compilation Bureau.",
+    "item1": "Fonctionne entièrement hors ligne une fois installé",
+    "item2": "Les sauvegardes et la progression sont conservées sur l'appareil (sans limites de taille du navigateur)",
+    "item3": "Paysage ou portrait — à votre choix",
+    "item4": "Partagez le fichier .apk directement avec les joueurs",
+    "publishingLater": "D'autres options de publication automatisées arriveront dans une future mise à jour.",
+    "sideloadTitle": "📲 Installation de l'application (veuillez lire)",
+    "sideloadNotice": "Lorsque vous ou un joueur installez ce .apk, Android affiche un avertissement « applications inconnues » / Play Protect et vous demande d'autoriser l'installation. C'est tout à fait normal pour toute application installée en dehors du Google Play Store — cela ne signifie PAS que votre jeu est dangereux. Il suffit d'appuyer pour autoriser.",
+    "playStoreTitle": "🏪 Le mettre sur le Google Play Store",
+    "playStoreNotice": "Le Play Store nécessite des étapes avancées supplémentaires que cette compilation en un clic ne fait pas encore : un format de fichier différent (un Android App Bundle / .aab), une clé de signature que vous créez, possédez et sauvegardez vous-même, et un compte Google Play Console (des frais uniques de 25 $). Vous ne pouvez pas convertir ce .apk terminé en un envoi pour le Play Store — il devrait être recompilé en .aab avec votre propre clé (par exemple dans Android Studio). Les compilations Play Store en un clic sont prévues pour une future mise à jour de Flourish.",
+    "desktopOnly": "Les compilations Android ne sont disponibles que dans la version Bureau de Flourish."
+  },
+  "androidConfig": {
+    "title": "Détails de l'application",
+    "appName": "Nom de l'application",
+    "packageName": "Nom du package",
+    "packageHint": "Un identifiant unique comme com.votrenom.nomdujeu",
+    "packageInvalid": "Utilisez un identifiant unique comme com.votrenom.jeu (lettres minuscules et points)",
+    "version": "Version",
+    "orientation": "Orientation",
+    "orientationLandscape": "Paysage",
+    "orientationPortrait": "Portrait",
+    "orientationAuto": "Auto (rotation)"
+  },
+  "androidFormat": {
+    "title": "Format de compilation",
+    "apkName": "APK — installation directe",
+    "apkDesc": "Partagez et installez partout (itch.io, téléchargement direct). Non accepté par le Play Store.",
+    "aabName": "AAB — Google Play",
+    "aabDesc": "App Bundle pour publier vous-même sur le Google Play Store."
+  },
+  "androidPlayStore": {
+    "yourJobTitle": "⚠️ C'est vous qui le publiez — pas Flourish",
+    "yourJobBody": "Flourish compile et signe le .aab, mais le téléverser réellement sur le Google Play Store est une étape que vous effectuez vous-même — elle nécessite un compte Google Play Console et des frais uniques de 25 $. Une fois la compilation terminée, nous enregistrerons un guide étape par étape ET votre clé de signature juste à côté du .aab afin que vous ayez tout ce dont vous avez besoin.",
+    "guide": "COMMENT PUBLIER VOTRE JEU SUR LE GOOGLE PLAY STORE\n=================================================\n\nFlourish a compilé et signé un Android App Bundle (.aab) pour vous. Flourish ne\nle téléverse PAS sur le Play Store — cette dernière étape vous revient, et elle\nnécessite un compte Google Play Developer. Voici exactement ce qu'il faut faire.\n\nCE QUE CONTIENT CE DOSSIER\n  - votre fichier .aab .............. le bundle que vous téléversez sur Google Play\n  - ..._upload-key.keystore ........ votre clé de signature (SAUVEGARDEZ-LA !)\n  - ..._SIGNING_KEY_BACKUP.txt ..... l'alias + le mot de passe de cette clé\n\nÉTAPE 1 - Créez un compte Google Play Developer\n  Allez sur https://play.google.com/console et inscrivez-vous. Il y a des frais\n  d'inscription uniques de 25 USD (vous ne les payez qu'une seule fois, à vie).\n\nÉTAPE 2 - Créez votre application\n  Dans la Play Console, cliquez sur « Créer une application », saisissez le nom\n  de votre jeu, choisissez le type d'application et gratuit/payant, et acceptez\n  les déclarations.\n\nÉTAPE 3 - Téléversez le .aab\n  Ouvrez Versions. Pour le tester d'abord en privé, choisissez Tests > Tests\n  internes ; pour le mettre en ligne, choisissez Production. Créez une version\n  et téléversez votre fichier .aab.\n\nÉTAPE 4 - Play App Signing (important)\n  Google gère de manière sécurisée la clé qui signe votre application pour les\n  joueurs. La clé créée par Flourish est votre « clé de téléversement » — vous\n  signez chaque téléversement avec elle. CONSERVEZ-LA EN SÉCURITÉ (voir le\n  fichier de clé de signature). Si elle est perdue, vous pouvez demander à\n  Google de la réinitialiser, mais la conserver est bien plus simple.\n\nÉTAPE 5 - Complétez la fiche du Store\n  Ajoutez des captures d'écran, une icône, une description, un lien vers la\n  politique de confidentialité, le questionnaire de classification du contenu\n  et le public cible. La console vous guide à chaque étape.\n\nÉTAPE 6 - Soumettez pour examen\n  Envoyez-le pour examen. Le premier examen peut prendre quelques jours.\n\nMISES À JOUR ULTÉRIEURES\n  Compilez un nouveau .aab dans Flourish avec un numéro de version PLUS ÉLEVÉ,\n  signé avec la MÊME clé de téléversement, et téléversez-le comme nouvelle version.\n\nBON À SAVOIR\n  L'avertissement « sources inconnues » que les gens voient lors de l'installation\n  directe d'un .apk ne se produit PAS pour les applications installées depuis le\n  Play Store.\n\nAide officielle de Google (plus de détails que ce que nous pouvons donner ici) :\n  https://support.google.com/googleplay/android-developer\n",
+    "keyReadme": "VOTRE CLÉ DE SIGNATURE ANDROID - CONSERVEZ-LA EN SÉCURITÉ\n=========================================\n\nCe dossier contient la CLÉ DE TÉLÉVERSEMENT de votre application :\n\n  Fichier de clé : {{keyFile}}\n  Alias          : {{alias}}\n  Mot de passe   : {{password}}\n  (le mot de passe de la clé est le même que celui du store)\n\nPOURQUOI C'EST IMPORTANT\n  Vous signez chaque téléversement Google Play avec cette clé, et vous devez\n  utiliser cette MÊME clé pour publier des MISES À JOUR de votre jeu plus tard.\n  Si vous la perdez, vous pouvez demander à Google de réinitialiser votre clé de\n  téléversement (Play Console > votre application > Configuration > Intégrité de\n  l'application), mais c'est une corvée — conservez-la simplement.\n\nQUE FAIRE\n  - Copiez ce fichier de clé et cette note dans un endroit sûr : un gestionnaire\n    de mots de passe, un disque de sauvegarde ou un stockage cloud.\n  - Ne les partagez PAS publiquement. Quiconque possède le fichier de clé + le mot\n    de passe peut signer des téléversements à votre place, alors traitez-les comme\n    un mot de passe.\n\nC'est la même clé que Flourish réutilise pour chaque compilation sur cet ordinateur,\nvos compilations .apk et .aab la partagent donc déjà.\n"
+  },
+  "androidGate": {
+    "title": "Configuration Android unique",
+    "body": "Compiler pour Android nécessite la chaîne d'outils Android (Java, le SDK Android et Gradle). Flourish la configure automatiquement pour vous — mais il s'agit d'un téléchargement unique d'environ {{size}} Go (environ {{disk}} Go une fois décompressé).",
+    "installerLite": "Nous le téléchargeons maintenant plutôt que de l'inclure afin que l'installateur de Flourish reste petit et rapide.",
+    "oneTime": "Vous ne le faites qu'une seule fois. Chaque compilation Android suivante fonctionne hors ligne.",
+    "downloading": "Configuration des outils Android (unique)…",
+    "continue": "Télécharger et continuer",
+    "cancel": "Annuler"
+  }
+}

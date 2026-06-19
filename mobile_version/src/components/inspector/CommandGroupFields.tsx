@@ -18,7 +18,7 @@ import {
     VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, REACTIVE_VISUAL_TYPES,
 } from '../../features/scene/types';
 import { VNUIAction, UIActionType } from '../../types/shared';
-import { FormField, Select, TextInput, TextArea, ColorInput } from '../ui/Form';
+import { FormField, Select, TextInput, TextArea, ColorInput, RangeInput } from '../ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon } from '../icons';
 import AssetSelector from '../ui/AssetSelector';
 import ActionEditor from '../menu-editor/ActionEditor';
@@ -329,11 +329,11 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
             </FormField>
             {currentTextEffect !== 'none' && <>
                 <FormField label={t('dialogue.effectSpeed')}>
-                    <input type="range" min="0.1" max="5" step="0.1" value={cmd.textEffect?.speed ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), speed: parseFloat(e.target.value) } } as any)} className="w-full" />
+                    <RangeInput min="0.1" max="5" step="0.1" value={cmd.textEffect?.speed ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), speed: parseFloat(e.target.value) } } as any)} className="w-full" />
                     <span className="text-xs text-[var(--text-secondary)]">{(cmd.textEffect?.speed ?? 1).toFixed(1)}x</span>
                 </FormField>
                 <FormField label={t('dialogue.effectIntensity')}>
-                    <input type="range" min="0.1" max="3" step="0.1" value={cmd.textEffect?.intensity ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), intensity: parseFloat(e.target.value) } } as any)} className="w-full" />
+                    <RangeInput min="0.1" max="3" step="0.1" value={cmd.textEffect?.intensity ?? 1} onChange={e => updateCommand({ textEffect: { ...(cmd.textEffect || { type: currentTextEffect as any }), intensity: parseFloat(e.target.value) } } as any)} className="w-full" />
                     <span className="text-xs text-[var(--text-secondary)]">{(cmd.textEffect?.intensity ?? 1).toFixed(1)}x</span>
                 </FormField>
             </>}
@@ -392,7 +392,7 @@ const ShowButtonGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowButtonComm
                 </div>
                 <FormField label={t('button.borderRadius')}><TextInput type="number" value={cmd.borderRadius} onChange={e => updateCommand({ borderRadius: parseInt(e.target.value, 10) || 0 } as any)} /></FormField>
                 <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
-                    <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <RangeInput min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
                 </FormField>
             </>;
         case 'media':
@@ -474,7 +474,7 @@ const ShowItemGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowItemCommand;
             </>;
         case 'appearance':
             return <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
-                <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                <RangeInput min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
             </FormField>;
         case 'media':
             return <>
@@ -680,7 +680,7 @@ const ShowImageGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowImageComman
         case 'appearance':
             return <>
                 <FormField label={t('image.opacity', { value: cmd.opacity })}>
-                    <input type="range" min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full" />
+                    <RangeInput min="0" max="1" step="0.01" value={cmd.opacity} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full" />
                 </FormField>
                 <label className="flex items-center gap-2 mt-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                     <input type="checkbox" checked={!!cmd.fitToContent} onChange={e => updateCommand({ fitToContent: e.target.checked || undefined } as any)} className="cursor-pointer" />
@@ -733,7 +733,7 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
                     ))}
                 <FormField label={t('shared.scale')}>
                     <div className="flex items-center gap-2">
-                        <input type="range" min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) } as any)} className="flex-1" />
+                        <RangeInput min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) } as any)} className="flex-1" />
                         <TextInput type="number" min="0.1" max="5" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) || 1 } as any)} style={{ width: '60px' }} />
                     </div>
                 </FormField>
@@ -833,7 +833,7 @@ const AudioCmdGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand; u
     );
     const volume = (
         <FormField label={`Volume: ${Math.round((cmd.volume ?? 1) * 100)}%`}>
-            <input type="range" min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 } as any)} className="w-full accent-[var(--accent-lavender)]" />
+            <RangeInput min="0" max="100" value={Math.round((cmd.volume ?? 1) * 100)} onChange={e => updateCommand({ volume: parseInt(e.target.value) / 100 } as any)} className="w-full accent-[var(--accent-lavender)]" />
         </FormField>
     );
     switch (command.type) {
@@ -927,7 +927,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             const persistent = cmd.duration === 0;
             return <>
                 <FormField label={t('screen.intensity', { value: cmd.intensity })}>
-                    <input type="range" min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <RangeInput min="1" max="10" value={cmd.intensity} onChange={e => updateCommand({ intensity: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" />
                 </FormField>
                 <FormField label={t('screen.duration')}>
                     <label className="flex items-center gap-2 mb-2"><input type="checkbox" checked={persistent} onChange={e => updateCommand({ duration: e.target.checked ? 0 : 0.5 } as any)} /><span className="text-xs text-[var(--text-primary)]">{t('screen.persistentShake')}</span></label>
@@ -943,9 +943,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             </>;
         case CommandType.PanZoomScreen:
             return <>
-                <FormField label={t('screen.zoom', { value: cmd.zoom })}><input type="range" min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                <FormField label={t('screen.panX', { value: cmd.panX })}><input type="range" min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                <FormField label={t('screen.panY', { value: cmd.panY })}><input type="range" min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('screen.zoom', { value: cmd.zoom })}><RangeInput min="0.1" max="5" step="0.1" value={cmd.zoom} onChange={e => updateCommand({ zoom: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('screen.panX', { value: cmd.panX })}><RangeInput min="-100" max="100" value={cmd.panX} onChange={e => updateCommand({ panX: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('screen.panY', { value: cmd.panY })}><RangeInput min="-100" max="100" value={cmd.panY} onChange={e => updateCommand({ panY: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0" step="0.1" value={cmd.duration} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0 } as any)} /></FormField>
             </>;
         case CommandType.ResetScreenEffects:
@@ -960,7 +960,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
             return <>
                 <FormField label={t('fx.flashColor')}><TextInput type="text" value={cmd.color ?? '#EAF2FF'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                 <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 0.9) * 100) })}>
-                    <input type="range" min="0.1" max="1" step="0.05" value={cmd.intensity ?? 0.9} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <RangeInput min="0.1" max="1" step="0.05" value={cmd.intensity ?? 0.9} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
                 </FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.1" step="0.1" value={cmd.duration ?? 0.7} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 0.7 } as any)} /></FormField>
                 <FormField label={t('fx.flashes')}>
@@ -1013,9 +1013,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     </div>
                 </FormField>
                 <FormField label={t('fx.bursts')}><TextInput type="number" min="1" max="20" value={cmd.bursts ?? 3} onChange={e => updateCommand({ bursts: Math.max(1, parseInt(e.target.value, 10) || 3) } as any)} /></FormField>
-                <FormField label={t('fx.burstHeightPct', { value: Math.round((cmd.burstHeight ?? 0.7) * 100) })}><input type="range" min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('fx.burstHeightPct', { value: Math.round((cmd.burstHeight ?? 0.7) * 100) })}><RangeInput min="0.1" max="1" step="0.05" value={cmd.burstHeight ?? 0.7} onChange={e => updateCommand({ burstHeight: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                 <FormField label={t('shared.durationSec')}><TextInput type="number" min="0.5" step="0.1" value={cmd.duration ?? 2.5} onChange={e => updateCommand({ duration: parseFloat(e.target.value) || 2.5 } as any)} /></FormField>
-                <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 1) * 100) })}><input type="range" min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                <FormField label={t('fx.brightnessPct', { value: Math.round((cmd.intensity ?? 1) * 100) })}><RangeInput min="0.2" max="1" step="0.05" value={cmd.intensity ?? 1} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                 <FormField label={t('fx.boomSfx')}>
                     <Select value={cmd.sfxId || ''} onChange={e => updateCommand({ sfxId: e.target.value || null } as any)}>
                         <option value="">{t('fx.none')}</option>
@@ -1062,9 +1062,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                         </div>
                         {l.type !== 'candle' && <FormField label={t('lights.color')}><TextInput type="text" value={l.color || (l.type === 'star' ? '#ffffff' : '#ff3b3b')} onChange={e => updateLight(i, { color: e.target.value })} /></FormField>}
                         {l.type === 'christmas' && <FormField label={t('lights.twinkle')}><Select value={l.twinkle || 'fade'} onChange={e => updateLight(i, { twinkle: e.target.value })}><option value="steady">{t('lights.twinkleSteady')}</option><option value="fade">{t('lights.twinkleFade')}</option><option value="blink">{t('lights.twinkleBlink')}</option><option value="chase">{t('lights.twinkleChase')}</option></Select></FormField>}
-                        <FormField label={t('lights.sizeX', { value: (l.size ?? 1).toFixed(1) })}><input type="range" min="0.4" max="3" step="0.1" value={l.size ?? 1} onChange={e => updateLight(i, { size: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                        <FormField label={t('lights.twinkleSpeedX', { value: (l.twinkleSpeed ?? 1).toFixed(1) })}><input type="range" min="0.2" max="3" step="0.1" value={l.twinkleSpeed ?? 1} onChange={e => updateLight(i, { twinkleSpeed: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                        <FormField label={t('fx.brightnessPct', { value: Math.round((l.brightness ?? 1) * 100) })}><input type="range" min="0.2" max="1" step="0.05" value={l.brightness ?? 1} onChange={e => updateLight(i, { brightness: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={t('lights.sizeX', { value: (l.size ?? 1).toFixed(1) })}><RangeInput min="0.4" max="3" step="0.1" value={l.size ?? 1} onChange={e => updateLight(i, { size: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={t('lights.twinkleSpeedX', { value: (l.twinkleSpeed ?? 1).toFixed(1) })}><RangeInput min="0.2" max="3" step="0.1" value={l.twinkleSpeed ?? 1} onChange={e => updateLight(i, { twinkleSpeed: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                        <FormField label={t('fx.brightnessPct', { value: Math.round((l.brightness ?? 1) * 100) })}><RangeInput min="0.2" max="1" step="0.05" value={l.brightness ?? 1} onChange={e => updateLight(i, { brightness: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                         <FormField label={t('lights.position')}>
                             <div className="flex gap-1">
                                 <TextInput type="number" value={Math.round(l.x ?? 0)} onChange={e => updateLight(i, { x: parseFloat(e.target.value) || 0 })} />
@@ -1089,9 +1089,9 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     </Select>
                 </FormField>
                 {cmd.enabled && <>
-                    <FormField label={t('fx.lightRadiusPct', { value: cmd.radius ?? 22 })}><input type="range" min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                    <FormField label={t('fx.edgeSoftnessPct', { value: Math.round((cmd.softness ?? 0.6) * 100) })}><input type="range" min="0" max="1" step="0.05" value={cmd.softness ?? 0.6} onChange={e => updateCommand({ softness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
-                    <FormField label={t('fx.darknessPct', { value: Math.round((cmd.darkness ?? 0.85) * 100) })}><input type="range" min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.lightRadiusPct', { value: cmd.radius ?? 22 })}><RangeInput min="8" max="60" value={cmd.radius ?? 22} onChange={e => updateCommand({ radius: parseInt(e.target.value, 10) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.edgeSoftnessPct', { value: Math.round((cmd.softness ?? 0.6) * 100) })}><RangeInput min="0" max="1" step="0.05" value={cmd.softness ?? 0.6} onChange={e => updateCommand({ softness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                    <FormField label={t('fx.darknessPct', { value: Math.round((cmd.darkness ?? 0.85) * 100) })}><RangeInput min="0.2" max="1" step="0.05" value={cmd.darkness ?? 0.85} onChange={e => updateCommand({ darkness: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                     <FormField label={t('fx.darkColor')}><TextInput type="text" value={cmd.color ?? '#000000'} onChange={e => updateCommand({ color: e.target.value } as any)} /></FormField>
                     <FormField label={t('fx.playerToggleKey')}><TextInput type="text" value={cmd.toggleKey ?? ''} onChange={e => updateCommand({ toggleKey: e.target.value || undefined } as any)} placeholder="e.g. f" maxLength={1} /></FormField>
                     <FormField label={t('fx.soundOnToggle')}>
@@ -1133,7 +1133,7 @@ const ScreenMiscGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
                     </Select>
                 </FormField>
                 <FormField label={t('screen.intensityPct', { value: Math.round(intensity * 100) })}>
-                    <input type="range" min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                    <RangeInput min="0" max="1" step="0.01" value={intensity} onChange={e => updateCommand({ intensity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
                 </FormField>
                 {supportsColor && (
                     <FormField label={t('screen.color')}>
@@ -1329,7 +1329,7 @@ const CreditRollGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCom
         case 'logic':
             return <>
                 <FormField label={t('credit.scrollSpeed')}>
-                    <input type="range" min="10" max="200" step="5" value={cmd.scrollSpeed || 60} onChange={e => updateCommand({ scrollSpeed: parseInt(e.target.value) || 60 } as any)} className="w-full" />
+                    <RangeInput min="10" max="200" step="5" value={cmd.scrollSpeed || 60} onChange={e => updateCommand({ scrollSpeed: parseInt(e.target.value) || 60 } as any)} className="w-full" />
                     <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('credit.pxPerSec', { value: cmd.scrollSpeed || 60, label: (cmd.scrollSpeed || 60) <= 40 ? t('credit.speedSlow') : (cmd.scrollSpeed || 60) <= 80 ? t('credit.speedNormal') : (cmd.scrollSpeed || 60) <= 130 ? t('credit.speedFast') : t('credit.speedVeryFast') })}</span>
                 </FormField>
                 <FormField label={t('credit.maxDuration')}>
@@ -1423,7 +1423,7 @@ const CreditRollGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCom
                                         <FormField label={t('credit.height')}><TextInput type="number" min="1" max="100" step="1" value={bg.height ?? 100} onChange={e => updateBg(i, { height: parseFloat(e.target.value) || 100 })} /></FormField>
                                     </div>
                                 </>}
-                                <FormField label={t('credit.opacity', { value: Math.round((bg.opacity ?? 1) * 100) })}><input type="range" min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                                <FormField label={t('credit.opacity', { value: Math.round((bg.opacity ?? 1) * 100) })}><RangeInput min="0" max="1" step="0.01" value={bg.opacity ?? 1} onChange={e => updateBg(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                             </div>
                         ))}
                     </div>
@@ -1461,7 +1461,7 @@ const CreditRollGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCom
                                         <FormField label={t('credit.height')}><TextInput type="number" min="1" max="100" step="1" value={item.height} onChange={e => updateMedia(i, { height: parseFloat(e.target.value) || 30 })} /></FormField>
                                     </div>
                                 </>}
-                                <FormField label={t('credit.opacity', { value: Math.round((item.opacity ?? 1) * 100) })}><input type="range" min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
+                                <FormField label={t('credit.opacity', { value: Math.round((item.opacity ?? 1) * 100) })}><RangeInput min="0" max="1" step="0.01" value={item.opacity ?? 1} onChange={e => updateMedia(i, { opacity: parseFloat(e.target.value) })} className="w-full accent-[var(--accent-lavender)]" /></FormField>
                                 <div className="grid grid-cols-2 gap-1 mt-1.5">
                                     <FormField label={t('credit.showAt')}><TextInput type="number" min="0" step="0.5" value={item.showAt} onChange={e => updateMedia(i, { showAt: parseFloat(e.target.value) || 0 })} /></FormField>
                                     <FormField label={t('credit.hideAt')}><TextInput type="number" min="0" step="0.5" value={item.hideAt} onChange={e => updateMedia(i, { hideAt: parseFloat(e.target.value) || 0 })} /></FormField>
@@ -1526,7 +1526,7 @@ const SpawnParticlesGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updat
         })();
         return <>
             <FormField label={t('particles.density')}>
-                <input type="range" min="1" max="200" value={cfg.emitRate || 20} onChange={e => setCfg({ emitRate: parseInt(e.target.value) || 20 })} className="w-full" />
+                <RangeInput min="1" max="200" value={cfg.emitRate || 20} onChange={e => setCfg({ emitRate: parseInt(e.target.value) || 20 })} className="w-full" />
                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.densityHint', { value: cfg.emitRate || 20 })}</span>
             </FormField>
             <FormField label={t('particles.speed')}>
@@ -1583,11 +1583,11 @@ const SpawnParticlesGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updat
                 </FormField>
                 <FormField label={t('particles.lifetime')}><input type="number" min="0.1" max="30" step="0.1" value={cfg.lifetime || 3} onChange={e => setCfg({ lifetime: parseFloat(e.target.value) || 3 })} className="w-full rounded px-2 py-1 text-sm" style={numInputStyle} /></FormField>
                 <FormField label={t('particles.gravity')}>
-                    <input type="range" min="-100" max="100" value={cfg.gravity || 0} onChange={e => setCfg({ gravity: parseFloat(e.target.value) })} className="w-full" />
+                    <RangeInput min="-100" max="100" value={cfg.gravity || 0} onChange={e => setCfg({ gravity: parseFloat(e.target.value) })} className="w-full" />
                     <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('particles.gravityHint', { value: cfg.gravity || 0 })}</span>
                 </FormField>
                 <FormField label={t('particles.wind')}>
-                    <input type="range" min="-50" max="50" value={cfg.wind || 0} onChange={e => setCfg({ wind: parseFloat(e.target.value) })} className="w-full" />
+                    <RangeInput min="-50" max="50" value={cfg.wind || 0} onChange={e => setCfg({ wind: parseFloat(e.target.value) })} className="w-full" />
                     <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{cfg.wind || 0}</span>
                 </FormField>
                 <FormField label={t('particles.colors')}>
@@ -1680,7 +1680,7 @@ const TweenElementGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateC
             {showRotation && <FormField label={t('tween.rotation')}><TextInput type="number" step="1" value={cmd.rotation ?? ''} onChange={e => updateCommand({ rotation: e.target.value ? parseFloat(e.target.value) : undefined } as any)} placeholder="–" /></FormField>}
             {showScale && <FormField label={t('tween.scale')}>
                 <div className="flex items-center gap-2">
-                    <input type="range" min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) } as any)} className="flex-1" />
+                    <RangeInput min="0.1" max="3" step="0.05" value={cmd.scale ?? 1} onChange={e => updateCommand({ scale: parseFloat(e.target.value) } as any)} className="flex-1" />
                     <TextInput type="number" min="0.1" max="5" step="0.05" value={cmd.scale ?? ''} onChange={e => updateCommand({ scale: e.target.value ? parseFloat(e.target.value) : undefined } as any)} style={{ width: '60px' }} />
                 </div>
             </FormField>}
@@ -1703,7 +1703,7 @@ const TweenElementGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateC
     if (groupId === 'appearance') {
         return <>
             {showOpacity && <FormField label={cmd.opacity !== undefined ? t('tween.opacity', { value: Math.round(cmd.opacity * 100) + '%' }) : t('tween.opacityNone')}>
-                <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
+                <RangeInput min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full accent-[var(--accent-lavender)]" />
             </FormField>}
             {showColor && <FormField label={t('tween.textColor')}>
                 <div className="flex gap-1 items-center">
@@ -1819,7 +1819,7 @@ const PlayMovieGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateComm
             </>;
         case 'appearance':
             return <FormField label={t('movie.opacity', { value: Math.round((cmd.opacity ?? 1) * 100) })}>
-                <input type="range" min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full" />
+                <RangeInput min="0" max="1" step="0.01" value={cmd.opacity ?? 1} onChange={e => updateCommand({ opacity: parseFloat(e.target.value) } as any)} className="w-full" />
             </FormField>;
         default:
             return null;

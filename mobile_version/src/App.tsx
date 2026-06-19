@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { UIScreenThemeProvider } from './contexts/UIScreenThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -8,7 +8,7 @@ import { MusicPlayer } from './components/MusicPlayer';
 import AutoUpdateBanner from './components/AutoUpdateBanner';
 import { VNProject } from './types/project';
 import { NavigationTab } from './components/NavigationTabs';
-import { toggleBackgroundMusic, getCurrentSongName } from './utils/hubAudio';
+import { toggleBackgroundMusic, getCurrentSongName, isBgmPlaying } from './utils/hubAudio';
 import { importProject } from './utils/projectPackager';
 
 // Detect a popped-out manager/child window *synchronously* at module load.
@@ -44,6 +44,10 @@ function editorDebugLog(...args: unknown[]): void {
 
 const App = () => {
     const [activeProject, setActiveProject] = useState<VNProject | null>(null);
+    // Once a project has been opened, the hub chiptune must never (re)start. Guards the
+    // autoplay click-fallback, whose closure would otherwise restart music on the very
+    // click that opens a project. A ref so handlers read the live value synchronously.
+    const projectOpenedRef = useRef(false);
     const [initialTab, setInitialTab] = useState<NavigationTab | undefined>(undefined);
 
     // ── Global music state (persists across hub ↔ editor) ──
@@ -69,11 +73,23 @@ const App = () => {
         };
         tryAutoPlay();
         const clickFallback = () => {
-            if (!isMusicPlaying) tryAutoPlay();
+            // Use the LIVE audio + project state (not the stale captured React state) so this
+            // never restarts music after a project has been opened by this very click.
+            if (!projectOpenedRef.current && !isBgmPlaying()) tryAutoPlay();
             document.removeEventListener('click', clickFallback);
         };
         document.addEventListener('click', clickFallback, { once: true });
         return () => document.removeEventListener('click', clickFallback);
+    }, []);
+
+    // Stop the hub chiptune when entering the editor. UNCONDITIONAL: the real audio
+    // (hubAudio AudioContext) can be playing even when the React `isMusicPlaying` state
+    // says otherwise (autoplay-blocked-then-resumed drift), so always stop — it's
+    // idempotent — rather than gating on the possibly-stale flag.
+    const stopHubMusic = useCallback(() => {
+        projectOpenedRef.current = true;
+        toggleBackgroundMusic(false);
+        setIsMusicPlaying(false);
     }, []);
 
     const handleMusicPlayingChange = useCallback((playing: boolean) => {
@@ -100,8 +116,7 @@ const App = () => {
                 // ?manager= param, stop any hub music that already auto-started
                 // here — chiptune must only play in the project hub.
                 (window as any).__IS_MANAGER_WINDOW__ = true;
-                toggleBackgroundMusic(false);
-                setIsMusicPlaying(false);
+                stopHubMusic();
             });
         }
     }, []);
@@ -130,12 +145,7 @@ const App = () => {
                 }
                 const { project } = await importProject(result.data);
 
-                // Stop hub music if playing
-                if (isMusicPlaying) {
-                    toggleBackgroundMusic(false);
-                    setIsMusicPlaying(false);
-                }
-
+                stopHubMusic(); // entering the editor — silence the hub chiptune
                 saveRecentProject(project, filePath);
                 setActiveProject(project);
             } catch (err) {
@@ -145,11 +155,7 @@ const App = () => {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleProjectSelect = (project: VNProject) => {
-        // Stop hub background music when entering the editor
-        if (isMusicPlaying) {
-            toggleBackgroundMusic(false);
-            setIsMusicPlaying(false);
-        }
+        stopHubMusic(); // entering the editor — silence the hub chiptune (always)
         setActiveProject(project);
     };
 

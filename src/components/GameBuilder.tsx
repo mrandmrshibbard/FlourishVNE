@@ -143,10 +143,19 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
       );
       setBuildStep('success');
     } catch (err) {
+      if (cancelledRef.current) { cancelledRef.current = false; setBuildStep('idle'); return; }
       console.error('Android build error:', err);
       setError(err instanceof Error ? err.message : t('error.unknown'));
       setBuildStep('error');
     }
+  };
+
+  // Stop a running build: ask the main process to kill the build process tree (so nothing
+  // is left running), then reset the UI. The build promise rejects, handled as a cancel.
+  const cancelledRef = React.useRef(false);
+  const handleCancelBuild = () => {
+    cancelledRef.current = true;
+    try { (window as any).electronAPI?.cancelBuild?.(); } catch { /* not in Electron */ }
   };
 
   const runWebOrDesktopBuild = async () => {
@@ -180,6 +189,7 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
       setBuildStep('success');
       
     } catch (err) {
+      if (cancelledRef.current) { cancelledRef.current = false; setBuildStep('idle'); return; }
       console.error('Build error:', err);
       setError(err instanceof Error ? err.message : t('error.unknown'));
       setBuildStep('error');
@@ -601,9 +611,20 @@ export const GameBuilder: React.FC<GameBuilderProps> = ({ project, onClose }) =>
               )}
 
               {(buildType === 'desktop' || buildType === 'android') && (
-                <p style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center', marginTop: '16px' }}>
-                  {buildType === 'android' ? t('progress.android.working') : t('progress.desktop.working')}
-                </p>
+                <>
+                  <p style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center', marginTop: '16px' }}>
+                    {buildType === 'android' ? t('progress.android.working') : t('progress.desktop.working')}
+                  </p>
+                  <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                    <button
+                      onClick={handleCancelBuild}
+                      style={{ background: 'transparent', border: '1px solid rgba(148,163,184,0.4)', color: '#94a3b8', borderRadius: '8px', padding: '6px 16px', fontSize: '12px', cursor: 'pointer' }}
+                      title={t('cancelBuild', 'Stop this build and clean up')}
+                    >
+                      {t('cancelBuild', 'Cancel build')}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           )}

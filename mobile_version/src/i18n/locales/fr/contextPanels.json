@@ -1,0 +1,108 @@
+{
+  "panelManager": {
+    "loading": "Chargement des panneaux contextuels...",
+    "emptyTitle": "Aucun panneau contextuel disponible",
+    "emptyHint": "Sélectionnez un élément pour voir les outils et suggestions pertinents",
+    "suggestionsHeading": "Suggestions",
+    "panelSuggestionsHeading": "Suggestions :",
+    "collapse": "Réduire",
+    "expand": "Développer",
+    "moveUp": "Monter",
+    "moveDown": "Descendre"
+  },
+  "toolbar": {
+    "sceneEditing": {
+      "addDialogue": "Ajouter un dialogue",
+      "addDialogueTip": "Ajouter une commande de dialogue (Alt+D)",
+      "addChoice": "Ajouter un choix",
+      "addChoiceTip": "Ajouter une commande de choix (Alt+C)",
+      "setVariable": "Définir une variable",
+      "setVariableTip": "Ajouter une commande de variable (Alt+V)",
+      "preview": "Aperçu",
+      "previewTip": "Aperçu de la scène (F5)"
+    },
+    "characterEditing": {
+      "addExpression": "Ajouter une expression",
+      "addExpressionTip": "Ajouter une nouvelle expression",
+      "addOutfit": "Ajouter une tenue",
+      "addOutfitTip": "Ajouter une variante de tenue",
+      "duplicate": "Dupliquer",
+      "duplicateTip": "Dupliquer le personnage (Ctrl+D)"
+    },
+    "uiEditing": {
+      "addButton": "Ajouter un bouton",
+      "addButtonTip": "Ajouter un élément bouton",
+      "addText": "Ajouter du texte",
+      "addTextTip": "Ajouter un élément texte",
+      "addImage": "Ajouter une image",
+      "addImageTip": "Ajouter un élément image",
+      "preview": "Aperçu",
+      "previewTip": "Aperçu de l'écran d'interface (F5)"
+    },
+    "templateBrowsing": {
+      "filter": "Filtrer",
+      "filterTip": "Filtrer les modèles",
+      "sort": "Trier",
+      "sortTip": "Trier les modèles",
+      "favorites": "Favoris",
+      "favoritesTip": "Afficher uniquement les favoris"
+    },
+    "logicBuilding": {
+      "addCondition": "Ajouter une condition",
+      "addConditionTip": "Ajouter un nœud de condition",
+      "addAction": "Ajouter une action",
+      "addActionTip": "Ajouter un nœud d'action",
+      "validate": "Valider",
+      "validateTip": "Valider le flux logique"
+    },
+    "variableManagement": {
+      "addVariable": "Ajouter une variable",
+      "addVariableTip": "Ajouter une nouvelle variable (Alt+N)",
+      "debug": "Déboguer",
+      "debugTip": "Ouvrir le débogueur de variables",
+      "export": "Exporter",
+      "exportTip": "Exporter les définitions de variables"
+    },
+    "assetManagement": {
+      "import": "Importer",
+      "importTip": "Importer des ressources",
+      "organize": "Organiser",
+      "organizeTip": "Organiser les ressources",
+      "findUnused": "Trouver les inutilisées",
+      "findUnusedTip": "Trouver les ressources inutilisées"
+    },
+    "wizardFlow": {
+      "back": "Retour",
+      "backTip": "Étape précédente",
+      "next": "Suivant",
+      "nextTip": "Étape suivante",
+      "cancel": "Annuler",
+      "cancelTip": "Annuler l'assistant"
+    }
+  },
+  "localizationPanel": {
+    "title": "Gestionnaire de localisation",
+    "stringCount_one": "{{count}} chaîne",
+    "stringCount_other": "{{count}} chaînes",
+    "addLanguage": "Ajouter une langue",
+    "removeLanguageTip": "Supprimer {{name}}",
+    "searchPlaceholder": "Rechercher par clé ou texte...",
+    "filterAll": "Toutes",
+    "filterDialogue": "Dialogue",
+    "filterChoice": "Choix",
+    "colKey": "Clé",
+    "colContext": "Contexte",
+    "colDefaultText": "Texte par défaut",
+    "emptyNoStrings": "Aucune chaîne trouvée",
+    "emptyNoStringsHintScan": "Ajoutez des commandes de dialogue ou de choix à vos scènes pour voir les chaînes traduisibles.",
+    "emptyNoStringsHintFilter": "Aucune chaîne ne correspond à vos filtres actuels.",
+    "translationPlaceholder": "Saisir la traduction...",
+    "exportCsv": "Exporter en CSV",
+    "importCsv": "Importer un CSV",
+    "importSuccess_one": "{{count}} traduction importée.",
+    "importSuccess_other": "{{count}} traductions importées.",
+    "importErrors_one": "{{count}} erreur :",
+    "importErrors_other": "{{count}} erreurs :",
+    "showingCount": "Affichage de {{filtered}} sur {{total}} chaînes"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "contentWizard": {
+    "title": "Мастера контента",
+    "stepOf": "Шаг {{current}} из {{total}}",
+    "estimatedTime": " · ~{{min}} мин",
+    "chooseWizard": "Выберите мастер, чтобы начать пошаговое создание контента.",
+    "steps": "{{count}} шагов",
+    "approxMin": "~{{min}} мин",
+    "selectDefault": "Выберите...",
+    "noOptions": "Нет доступных вариантов",
+    "enable": "Включить",
+    "fileUploadHint": "Загрузка файла (настроить после мастера)",
+    "fieldRequired": "Поле «{{label}}» обязательно",
+    "backToWizards": "← Мастера",
+    "back": "← Назад",
+    "skip": "Пропустить",
+    "complete": "✓ Завершить",
+    "next": "Далее →"
+  },
+  "musicPlayer": {
+    "fabTitlePlaying": "Правый клик, чтобы открепить плеер",
+    "fabTitleStopped": "Включить фоновую музыку (правый клик для плеера)",
+    "rightClickPopOut": "Правый клик, чтобы открепить",
+    "panelTitle": "Музыкальный плеер",
+    "dockBack": "Прикрепить обратно",
+    "selectSong": "Выберите трек",
+    "pause": "Пауза",
+    "play": "Играть",
+    "nextSong": "Следующий трек"
+  }
+}

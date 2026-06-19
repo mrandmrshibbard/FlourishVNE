@@ -5,7 +5,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNUIScreen, VNScreenCategory, VNHotZoneWinCondition, VNUIElement, UIElementType, UIHotSpotElement, UIImageElement, VNScreenBackgroundLayer } from '../../features/ui/types';
 import { getScreenCategory, getScreenCategoryColor, SCREEN_CATEGORY_ORDER, SCREEN_CATEGORY_LABEL_KEY } from '../../utils/screenCategory';
-import { FormField, TextInput, Select, ColorInput } from '../ui/Form';
+import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
 import AssetSelector from '../ui/AssetSelector';
 import WinConditionEditor from '../ui/WinConditionEditor';
 import UIActionsListEditor from '../ui/UIActionsListEditor';
@@ -23,7 +23,7 @@ const ParamSlider: React.FC<{ label: string; value: number; onChange: (v: number
             <span>{label}</span>
             <span>{Math.round(value * 100)}%</span>
         </div>
-        <input type="range" min="0" max="1" step="0.01" value={value}
+        <RangeInput min="0" max="1" step="0.01" value={value}
             onChange={e => onChange(parseFloat(e.target.value))}
             className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500" />
     </div>
@@ -77,6 +77,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     const screenCategory = getScreenCategory(screen, project);
     const hasOverlaySettings = !!(screen.passThrough || screen.hudAboveDialogue || screen.pauseSceneWhileOpen
         || screen.backdropOpacity || screen.backdropBlur
+        || screen.resetElementVisibilityOnOpen === false
         || (screen.onCloseBehavior && screen.onCloseBehavior !== 'default')
         || (screen.onCloseActions && screen.onCloseActions.length));
     const showOpenBehavior = screenCategory === 'hud' || screenCategory === 'overlay' || hasOverlaySettings;
@@ -213,7 +214,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                             </div>
                         </FormField>
                         <FormField label={t('screenInspector.depthN', { n: (screen.backgroundParallaxDepth ?? 0).toFixed(2) })}>
-                            <input type="range" min="0" max="2" step="0.05" value={screen.backgroundParallaxDepth ?? 0} onChange={e => updateScreen({ backgroundParallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
+                            <RangeInput min="0" max="2" step="0.05" value={screen.backgroundParallaxDepth ?? 0} onChange={e => updateScreen({ backgroundParallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
                         </FormField>
                     </div>
                     <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">{t('screenInspector.layerDepthHint')}</p>
@@ -269,7 +270,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                             </div>
                                         </FormField>
                                         <FormField label={t('screenInspector.depthN', { n: (b.parallaxDepth ?? 0).toFixed(2) })}>
-                                            <input type="range" min="0" max="2" step="0.05" value={b.parallaxDepth ?? 0} onChange={e => updateAddlBg(b.id, { parallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
+                                            <RangeInput min="0" max="2" step="0.05" value={b.parallaxDepth ?? 0} onChange={e => updateAddlBg(b.id, { parallaxDepth: parseFloat(e.target.value) || undefined })} className="w-full accent-purple-500" />
                                         </FormField>
                                     </div>
                                     <FormField label={t('screenInspector.bgTransition')}>
@@ -301,7 +302,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </FormField>
                     </div>
                     <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.music.volume ?? 1) * 100) })}>
-                        <input type="range" min="0" max="100" value={Math.round((screen.music.volume ?? 1) * 100)}
+                        <RangeInput min="0" max="100" value={Math.round((screen.music.volume ?? 1) * 100)}
                             onChange={e => updateScreen({ music: { ...screen.music, volume: parseInt(e.target.value) / 100 } })}
                             className="w-full accent-purple-500" />
                     </FormField>
@@ -318,7 +319,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         </FormField>
                     </div>
                     <FormField label={t('screenInspector.defaultVolume', { pct: Math.round((screen.ambientNoise.volume ?? 1) * 100) })}>
-                        <input type="range" min="0" max="100" value={Math.round((screen.ambientNoise.volume ?? 1) * 100)}
+                        <RangeInput min="0" max="100" value={Math.round((screen.ambientNoise.volume ?? 1) * 100)}
                             onChange={e => updateScreen({ ambientNoise: { ...screen.ambientNoise, volume: parseInt(e.target.value) / 100 } })}
                             className="w-full accent-purple-500" />
                     </FormField>
@@ -392,6 +393,10 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                         <input type="checkbox" checked={!!screen.pauseSceneWhileOpen} onChange={e => updateScreen({ pauseSceneWhileOpen: e.target.checked || undefined })} className="w-5 h-5" />
                     </FormField>
                     <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.pauseSceneHint')}</p>
+                    <FormField label={t('screenInspector.resetElementVisibility', 'Reset hidden elements on open')}>
+                        <input type="checkbox" checked={screen.resetElementVisibilityOnOpen !== false} onChange={e => updateScreen({ resetElementVisibilityOnOpen: e.target.checked ? undefined : false })} className="w-5 h-5" />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.resetElementVisibilityHint', 'On: Show/Hide-Element overrides reset each time the screen opens (a document reopens on page 1). Off: reveals persist across opens (e.g. a map you uncover).')}</p>
                     <div className="grid grid-cols-2 gap-2 mt-2">
                         <FormField label={t('screenInspector.backdropDim')}>
                             <TextInput type="number" min={0} max={1} step={0.05} value={screen.backdropOpacity ?? ''} placeholder="0"
@@ -436,7 +441,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                     </FormField>
                     {screen.parallax?.mode && screen.parallax.mode !== 'off' && (
                         <FormField label={t('screenInspector.parallaxIntensity', { n: (screen.parallax.intensity ?? 1).toFixed(2) })}>
-                            <input type="range" min="0" max="3" step="0.05" value={screen.parallax.intensity ?? 1}
+                            <RangeInput min="0" max="3" step="0.05" value={screen.parallax.intensity ?? 1}
                                 onChange={e => updateScreen({ parallax: { ...screen.parallax, intensity: parseFloat(e.target.value) || 0 } })}
                                 className="w-full accent-purple-500" />
                         </FormField>
@@ -517,8 +522,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                             <span>{t('screenInspector.intensity')}</span>
                                             <span>{Math.round(intensity * 100)}%</span>
                                         </div>
-                                        <input
-                                            type="range"
+                                        <RangeInput
                                             min="0"
                                             max="1"
                                             step="0.01"

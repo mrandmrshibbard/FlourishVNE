@@ -39,6 +39,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["OpenURL"] = "OpenURL";
     UIActionType2["PlayAnimation"] = "PlayAnimation";
     UIActionType2["ChangeImage"] = "ChangeImage";
+    UIActionType2["ShowElement"] = "ShowElement";
+    UIActionType2["HideElement"] = "HideElement";
     UIActionType2["ContinueGame"] = "ContinueGame";
     UIActionType2["ShowLog"] = "ShowLog";
     UIActionType2["ToggleAutoAdvance"] = "ToggleAutoAdvance";
@@ -430,6 +432,74 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return state;
     }
   };
+  var CommandType = /* @__PURE__ */ ((CommandType2) => {
+    CommandType2["Dialogue"] = "Dialogue";
+    CommandType2["SetBackground"] = "SetBackground";
+    CommandType2["ShowCharacter"] = "ShowCharacter";
+    CommandType2["HideCharacter"] = "HideCharacter";
+    CommandType2["Choice"] = "Choice";
+    CommandType2["BranchStart"] = "BranchStart";
+    CommandType2["BranchElseIf"] = "BranchElseIf";
+    CommandType2["BranchElse"] = "BranchElse";
+    CommandType2["BranchEnd"] = "BranchEnd";
+    CommandType2["SetVariable"] = "SetVariable";
+    CommandType2["TextInput"] = "TextInput";
+    CommandType2["Jump"] = "Jump";
+    CommandType2["Label"] = "Label";
+    CommandType2["JumpToLabel"] = "JumpToLabel";
+    CommandType2["PlayMusic"] = "PlayMusic";
+    CommandType2["StopMusic"] = "StopMusic";
+    CommandType2["PlaySoundEffect"] = "PlaySoundEffect";
+    CommandType2["StopSoundEffect"] = "StopSoundEffect";
+    CommandType2["PlayMovie"] = "PlayMovie";
+    CommandType2["StopMovie"] = "StopMovie";
+    CommandType2["Wait"] = "Wait";
+    CommandType2["ShakeScreen"] = "ShakeScreen";
+    CommandType2["TintScreen"] = "TintScreen";
+    CommandType2["PanZoomScreen"] = "PanZoomScreen";
+    CommandType2["ResetScreenEffects"] = "ResetScreenEffects";
+    CommandType2["FlashScreen"] = "FlashScreen";
+    CommandType2["SetScreenOverlayEffect"] = "SetScreenOverlayEffect";
+    CommandType2["ShowScreen"] = "ShowScreen";
+    CommandType2["ShowText"] = "ShowText";
+    CommandType2["ShowImage"] = "ShowImage";
+    CommandType2["HideText"] = "HideText";
+    CommandType2["HideImage"] = "HideImage";
+    CommandType2["ShowButton"] = "ShowButton";
+    CommandType2["HideButton"] = "HideButton";
+    CommandType2["ShowItem"] = "ShowItem";
+    CommandType2["CreditRoll"] = "CreditRoll";
+    CommandType2["Group"] = "Group";
+    CommandType2["RunScript"] = "RunScript";
+    CommandType2["SpawnParticles"] = "SpawnParticles";
+    CommandType2["StopParticles"] = "StopParticles";
+    CommandType2["CallCommonEvent"] = "CallCommonEvent";
+    CommandType2["ShowHotSpot"] = "ShowHotSpot";
+    CommandType2["HideHotSpot"] = "HideHotSpot";
+    CommandType2["TweenElement"] = "TweenElement";
+    CommandType2["GiveItem"] = "GiveItem";
+    CommandType2["UseItem"] = "UseItem";
+    CommandType2["DestroyItem"] = "DestroyItem";
+    CommandType2["RestockCollection"] = "RestockCollection";
+    CommandType2["BuyItem"] = "BuyItem";
+    CommandType2["SellItem"] = "SellItem";
+    CommandType2["Lightning"] = "Lightning";
+    CommandType2["Flashlight"] = "Flashlight";
+    CommandType2["Fireworks"] = "Fireworks";
+    CommandType2["PlaceLights"] = "PlaceLights";
+    CommandType2["ClearLights"] = "ClearLights";
+    return CommandType2;
+  })(CommandType || {});
+  const REACTIVE_VISUAL_TYPES = /* @__PURE__ */ new Set([
+    "SetBackground",
+    "ShowImage",
+    "ShowText",
+    "ShowButton",
+    "ShowItem",
+    "ShowCharacter",
+    "ShowHotSpot"
+    /* ShowHotSpot */
+  ]);
   function migrateItemCountVariableBounds(project) {
     var _a, _b;
     if (!project || !project.variables) return project;
@@ -518,10 +588,43 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }
     return changed ? { ...project, variables, stats } : project;
   }
+  function repairOrphanBranchMarkers(project) {
+    var _a;
+    if (!(project == null ? void 0 : project.scenes)) return project;
+    let changedAny = false;
+    const newScenes = { ...project.scenes };
+    for (const sceneId in project.scenes) {
+      const scene = project.scenes[sceneId];
+      if (!((_a = scene == null ? void 0 : scene.commands) == null ? void 0 : _a.length)) continue;
+      const cmds = scene.commands;
+      const endIds = /* @__PURE__ */ new Set();
+      for (const c of cmds) {
+        if (c.type === CommandType.BranchEnd) endIds.add(c.branchId);
+      }
+      let changed = false;
+      const out = [];
+      for (const c of cmds) {
+        out.push(c);
+        if (c.type === CommandType.BranchStart) {
+          const bid = c.branchId;
+          if (bid && !endIds.has(bid)) {
+            out.push({ id: `cmd-${Math.random().toString(36).substring(2, 9)}`, type: CommandType.BranchEnd, branchId: bid });
+            endIds.add(bid);
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        newScenes[sceneId] = { ...scene, commands: out };
+        changedAny = true;
+      }
+    }
+    return changedAny ? { ...project, scenes: newScenes } : project;
+  }
   const projectReducer = (state, action) => {
     switch (action.type) {
       case "SET_PROJECT":
-        return migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload))));
+        return repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(action.payload)))));
       case "UPDATE_PROJECT": {
         return {
           ...state,
@@ -541,74 +644,6 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return state;
     }
   };
-  var CommandType = /* @__PURE__ */ ((CommandType2) => {
-    CommandType2["Dialogue"] = "Dialogue";
-    CommandType2["SetBackground"] = "SetBackground";
-    CommandType2["ShowCharacter"] = "ShowCharacter";
-    CommandType2["HideCharacter"] = "HideCharacter";
-    CommandType2["Choice"] = "Choice";
-    CommandType2["BranchStart"] = "BranchStart";
-    CommandType2["BranchElseIf"] = "BranchElseIf";
-    CommandType2["BranchElse"] = "BranchElse";
-    CommandType2["BranchEnd"] = "BranchEnd";
-    CommandType2["SetVariable"] = "SetVariable";
-    CommandType2["TextInput"] = "TextInput";
-    CommandType2["Jump"] = "Jump";
-    CommandType2["Label"] = "Label";
-    CommandType2["JumpToLabel"] = "JumpToLabel";
-    CommandType2["PlayMusic"] = "PlayMusic";
-    CommandType2["StopMusic"] = "StopMusic";
-    CommandType2["PlaySoundEffect"] = "PlaySoundEffect";
-    CommandType2["StopSoundEffect"] = "StopSoundEffect";
-    CommandType2["PlayMovie"] = "PlayMovie";
-    CommandType2["StopMovie"] = "StopMovie";
-    CommandType2["Wait"] = "Wait";
-    CommandType2["ShakeScreen"] = "ShakeScreen";
-    CommandType2["TintScreen"] = "TintScreen";
-    CommandType2["PanZoomScreen"] = "PanZoomScreen";
-    CommandType2["ResetScreenEffects"] = "ResetScreenEffects";
-    CommandType2["FlashScreen"] = "FlashScreen";
-    CommandType2["SetScreenOverlayEffect"] = "SetScreenOverlayEffect";
-    CommandType2["ShowScreen"] = "ShowScreen";
-    CommandType2["ShowText"] = "ShowText";
-    CommandType2["ShowImage"] = "ShowImage";
-    CommandType2["HideText"] = "HideText";
-    CommandType2["HideImage"] = "HideImage";
-    CommandType2["ShowButton"] = "ShowButton";
-    CommandType2["HideButton"] = "HideButton";
-    CommandType2["ShowItem"] = "ShowItem";
-    CommandType2["CreditRoll"] = "CreditRoll";
-    CommandType2["Group"] = "Group";
-    CommandType2["RunScript"] = "RunScript";
-    CommandType2["SpawnParticles"] = "SpawnParticles";
-    CommandType2["StopParticles"] = "StopParticles";
-    CommandType2["CallCommonEvent"] = "CallCommonEvent";
-    CommandType2["ShowHotSpot"] = "ShowHotSpot";
-    CommandType2["HideHotSpot"] = "HideHotSpot";
-    CommandType2["TweenElement"] = "TweenElement";
-    CommandType2["GiveItem"] = "GiveItem";
-    CommandType2["UseItem"] = "UseItem";
-    CommandType2["DestroyItem"] = "DestroyItem";
-    CommandType2["RestockCollection"] = "RestockCollection";
-    CommandType2["BuyItem"] = "BuyItem";
-    CommandType2["SellItem"] = "SellItem";
-    CommandType2["Lightning"] = "Lightning";
-    CommandType2["Flashlight"] = "Flashlight";
-    CommandType2["Fireworks"] = "Fireworks";
-    CommandType2["PlaceLights"] = "PlaceLights";
-    CommandType2["ClearLights"] = "ClearLights";
-    return CommandType2;
-  })(CommandType || {});
-  const REACTIVE_VISUAL_TYPES = /* @__PURE__ */ new Set([
-    "SetBackground",
-    "ShowImage",
-    "ShowText",
-    "ShowButton",
-    "ShowItem",
-    "ShowCharacter",
-    "ShowHotSpot"
-    /* ShowHotSpot */
-  ]);
   const assetReducer = (state, action) => {
     switch (action.type) {
       case "ADD_ASSET": {
@@ -2865,7 +2900,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const toast = useToast();
     const [history, setHistory] = React2.useState(() => ({
       past: [],
-      present: migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject)))),
+      present: repairOrphanBranchMarkers(migrateStatVariables(migrateItemCountVariableBounds(migrateProjectRemoveLegacyCommands(migrateProjectToUnifiedScreens(initialProject))))),
       future: []
     }));
     const [lastAutoSave, setLastAutoSave] = React2.useState(null);
@@ -10192,7 +10227,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ] })
     );
   };
-  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem }) => {
+  const UIScreenRenderer = React2.memo(({ screenId, onAction, settings, onSettingsChange, assetResolver, gameSaves, playSound, variables = {}, onVariableChange, isClosing = false, evaluateConditions: evaluateConditions2, onCommitVariables, inventorySlots, onReorderSlots, selectedItemId, selectedElementId, onSelectItem, elementVisibility }) => {
     var _a, _b;
     const { project } = useProject();
     const screen = project.uiScreens[screenId];
@@ -10354,6 +10389,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         ...stateTransition ? { transition: stateTransition } : {},
         ...transitionStyle
       };
+      {
+        const visOverride = elementVisibility == null ? void 0 : elementVisibility[element.id];
+        if (element.startHidden || visOverride !== void 0) {
+          const isHidden = visOverride !== void 0 ? !visOverride : !!element.startHidden;
+          const fadeMs = element.transitionDuration ?? 300;
+          style.transition = style.transition ? `${style.transition}, opacity ${fadeMs}ms ease` : `opacity ${fadeMs}ms ease`;
+          if (isHidden) {
+            style.opacity = 0;
+            style.pointerEvents = "none";
+          }
+        }
+      }
       const getElementAssetUrl = (image) => {
         if (!image) return null;
         return assetResolver(image.id, image.type);
@@ -11142,6 +11189,31 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const titleScreenId = getValidTitleScreenId();
     const [screenStack, setScreenStack] = React2.useState(titleScreenId ? [titleScreenId] : []);
     const [hudStack, setHudStack] = React2.useState([]);
+    const [elementVisibility, setElementVisibility] = React2.useState({});
+    const prevOpenScreensRef = React2.useRef(/* @__PURE__ */ new Set());
+    React2.useEffect(() => {
+      const open = /* @__PURE__ */ new Set([...screenStack, ...hudStack]);
+      const newlyOpened = [];
+      open.forEach((id) => {
+        if (!prevOpenScreensRef.current.has(id)) newlyOpened.push(id);
+      });
+      prevOpenScreensRef.current = open;
+      if (newlyOpened.length === 0) return;
+      setElementVisibility((prev) => {
+        let next = prev;
+        for (const sid of newlyOpened) {
+          const scr = project.uiScreens[sid];
+          if (!scr || scr.resetElementVisibilityOnOpen === false) continue;
+          for (const elId of Object.keys(scr.elements || {})) {
+            if (next[elId] !== void 0) {
+              if (next === prev) next = { ...prev };
+              delete next[elId];
+            }
+          }
+        }
+        return next;
+      });
+    }, [screenStack, hudStack, project.uiScreens]);
     const [closingScreens, setClosingScreens] = React2.useState(/* @__PURE__ */ new Set());
     const [confirmDialog, setConfirmDialog] = React2.useState(null);
     const [sceneTransitionFading, setSceneTransitionFading] = React2.useState(false);
@@ -14273,6 +14345,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             setScreenStack([project.ui.pauseScreenId]);
           }
         }
+      } else if (action.type === UIActionType.ShowElement || action.type === UIActionType.HideElement) {
+        const targetId = action.targetElementId;
+        if (targetId) {
+          const visible = action.type === UIActionType.ShowElement;
+          setElementVisibility((prev) => prev[targetId] === visible ? prev : { ...prev, [targetId]: visible });
+        }
       } else if (action.type === UIActionType.ToggleScreen) {
         const targetId = action.targetScreenId;
         if (!targetId || !project.uiScreens[targetId]) {
@@ -16922,6 +17000,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             {
               screenId: id,
               onAction: handleUIAction,
+              elementVisibility,
               settings,
               onSettingsChange: (key, value) => setSettings((s) => ({ ...s, [key]: value })),
               assetResolver,
@@ -16964,6 +17043,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             {
               screenId: id,
               onAction: handleUIAction,
+              elementVisibility,
               settings,
               onSettingsChange: (key, value) => setSettings((s) => ({ ...s, [key]: value })),
               assetResolver,

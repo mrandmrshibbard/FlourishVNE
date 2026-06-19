@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNID, VNPosition, VNTransition, VNPositionPreset } from '../types';
 import type { VNScreenOverlayEffect } from '../types';
@@ -623,6 +623,10 @@ const StagingArea: React.FC<{
         startPosY: number;
     } | null>(null);
     const [overlayDragOffset, setOverlayDragOffset] = useState<{ x: number; y: number } | null>(null);
+    // Latest live drag offset, mirrored in a ref so the commit (onUp) reads it WITHOUT
+    // `overlayDragOffset` being a dep of the drag effect — otherwise the window listeners are
+    // re-attached every mousemove (per-move churn during a drag).
+    const overlayDragOffsetRef = useRef<{ x: number; y: number } | null>(null);
 
     // --- Resize (scale) State ---
     const [overlayResize, setOverlayResize] = useState<{
@@ -633,10 +637,17 @@ const StagingArea: React.FC<{
         startMouseY: number;
         startW: number;
         startH: number;
+        /** Which handle is being dragged (e.g. 'br','tl','tr','bl'); drives the grow direction. */
+        corner?: string;
     } | null>(null);
     const [overlayResizeSize, setOverlayResizeSize] = useState<{ width: number; height: number } | null>(null);
+    // Latest live resize size, mirrored in a ref so the commit (onUp) can read it WITHOUT
+    // `overlayResizeSize` being a dependency of the resize effect — otherwise the window
+    // mouse listeners are torn down and re-attached on every single mousemove (per-move jank
+    // that makes a resize drag feel slow, especially with many sprites on stage).
+    const overlayResizeSizeRef = useRef<{ width: number; height: number } | null>(null);
 
-    const handleOverlayResizeMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, overlayId: string, width: number, height: number, sourceCommandId?: string) => {
+    const handleOverlayResizeMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, overlayId: string, width: number, height: number, sourceCommandId?: string, corner?: string) => {
         e.preventDefault();
         e.stopPropagation();
         setOverlayResize({
@@ -649,6 +660,7 @@ const StagingArea: React.FC<{
             startMouseY: e.clientY,
             startW: width,
             startH: height,
+            corner,
         });
         setOverlayResizeSize(null);
     }, []);
@@ -662,9 +674,18 @@ const StagingArea: React.FC<{
             'left': { x: 25, y: 10 }, 'center': { x: 50, y: 10 }, 'right': { x: 75, y: 10 },
             'off-left': { x: -25, y: 10 }, 'off-right': { x: 125, y: 10 },
         };
-        const startPos = isCustom
+        let startPos = isCustom
             ? (char.position as { x: number; y: number })
             : (presetToCoords[char.position as string] || { x: 50, y: 10 });
+        // Preset positions render CENTER-anchored (transform: translateX(-50%)), but the drag — and
+        // the custom {x,y} position it commits — render LEFT-EDGE-anchored. Without converting, the
+        // sprite jumps sideways by half its width the instant the drag starts (the "flicker").
+        // Convert the preset centre-x to the sprite's actual left-edge-x using its rendered width.
+        if (!isCustom && stageSize.width > 0) {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const halfWidthPct = (rect.width / stageSize.width) * 100 / 2;
+            startPos = { x: startPos.x - halfWidthPct, y: startPos.y };
+        }
         setOverlayDrag({
             kind: 'character',
             overlayId: char.charId,
@@ -675,7 +696,7 @@ const StagingArea: React.FC<{
             startPosY: startPos.y,
         });
         setOverlayDragOffset(null);
-    }, []);
+    }, [stageSize]);
 
     const handleOverlayMouseDown = useCallback((e: React.MouseEvent, kind: DragKind, id: string, x: number, y: number) => {
         e.preventDefault();
@@ -708,38 +729,45 @@ const StagingArea: React.FC<{
             }
             nx = Math.round(nx * 10) / 10;
             ny = Math.round(ny * 10) / 10;
-            setOverlayDragOffset({ x: nx, y: ny });
+            const next = { x: nx, y: ny };
+            overlayDragOffsetRef.current = next;
+            setOverlayDragOffset(next);
         };
         const onUp = () => {
             const drag = overlayDrag;
-            const offset = overlayDragOffset;
+            const offset = overlayDragOffsetRef.current;
+            // Commit the new position BEFORE clearing the drag state so the committed value is what
+            // renders next — never an intermediate frame at the pre-drag position.
+            if (offset) {
+                const newX = offset.x;
+                const newY = offset.y;
+                for (const scene of Object.values(project.scenes) as VNScene[]) {
+                    const idx = scene.commands.findIndex((c: VNCommand) => c.id === drag.sourceCommandId);
+                    if (idx < 0) continue;
+                    const cmd = scene.commands[idx];
+                    if (drag.kind === 'character') {
+                        dispatch({
+                            type: 'UPDATE_COMMAND',
+                            payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, position: { x: newX, y: newY } } },
+                        });
+                    } else {
+                        dispatch({
+                            type: 'UPDATE_COMMAND',
+                            payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, x: newX, y: newY } },
+                        });
+                    }
+                    break;
+                }
+            }
             setOverlayDrag(null);
             setOverlayDragOffset(null);
-            if (!offset) return;
-            const newX = offset.x;
-            const newY = offset.y;
-            for (const scene of Object.values(project.scenes) as VNScene[]) {
-                const idx = scene.commands.findIndex((c: VNCommand) => c.id === drag.sourceCommandId);
-                if (idx < 0) continue;
-                const cmd = scene.commands[idx];
-                if (drag.kind === 'character') {
-                    dispatch({
-                        type: 'UPDATE_COMMAND',
-                        payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, position: { x: newX, y: newY } } },
-                    });
-                } else {
-                    dispatch({
-                        type: 'UPDATE_COMMAND',
-                        payload: { sceneId: scene.id, commandIndex: idx, command: { ...cmd, x: newX, y: newY } },
-                    });
-                }
-                break;
-            }
+            overlayDragOffsetRef.current = null;
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    }, [overlayDrag, overlayDragOffset, project.scenes, dispatch, stageSize]);
+        // overlayDragOffset intentionally not a dep — latest read via ref (listeners attach once per drag).
+    }, [overlayDrag, project.scenes, dispatch, stageSize]);
 
     // Resize drag: the overlay is center-anchored, so growing width/height by 2× the
     // mouse delta keeps the dragged corner under the cursor.
@@ -753,12 +781,18 @@ const StagingArea: React.FC<{
             const dx = ((e.clientX - overlayResize.startMouseX) / sw) * 100;
             const dy = ((e.clientY - overlayResize.startMouseY) / sh) * 100;
             if (isCharacter) {
-                // Characters scale uniformly. They render at ~90% of stage height, so dragging the
-                // handle down by dy% of the stage grows the scale by dy/90. startW holds the start scale.
-                let s = overlayResize.startW + dy / 90;
+                // Characters scale uniformly. They render at ~90% of stage height, so dragging a
+                // handle OUTWARD by dy% of the stage grows the scale by dy/90. The corner decides the
+                // outward direction (top handles grow on up-drag, bottom on down-drag) so every corner
+                // feels natural. startW holds the start scale.
+                const corner = overlayResize.corner || 'br';
+                const sy = corner.includes('t') ? -1 : 1; // top handles: up = grow
+                let s = overlayResize.startW + (sy * dy) / 90;
                 if (e.shiftKey) s = Math.round(s * 10) / 10;
                 s = Math.max(0.1, Math.round(s * 100) / 100);
-                setOverlayResizeSize({ width: s, height: s });
+                const next = { width: s, height: s };
+                overlayResizeSizeRef.current = next;
+                setOverlayResizeSize(next);
                 return;
             }
             let nw = overlayResize.startW + dx * 2;
@@ -766,13 +800,16 @@ const StagingArea: React.FC<{
             if (e.shiftKey) { nw = Math.round(nw); nh = Math.round(nh); }
             nw = Math.max(MIN, Math.round(nw * 10) / 10);
             nh = Math.max(MIN, Math.round(nh * 10) / 10);
-            setOverlayResizeSize({ width: nw, height: nh });
+            const next = { width: nw, height: nh };
+            overlayResizeSizeRef.current = next;
+            setOverlayResizeSize(next);
         };
         const onUp = () => {
             const resize = overlayResize;
-            const size = overlayResizeSize;
+            const size = overlayResizeSizeRef.current;
             setOverlayResize(null);
             setOverlayResizeSize(null);
+            overlayResizeSizeRef.current = null;
             if (!size) return;
             for (const scene of Object.values(project.scenes) as VNScene[]) {
                 const idx = scene.commands.findIndex((c: VNCommand) => c.id === resize.sourceCommandId);
@@ -791,7 +828,9 @@ const StagingArea: React.FC<{
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    }, [overlayResize, overlayResizeSize, project.scenes, dispatch, stageSize]);
+        // NOTE: `overlayResizeSize` is intentionally NOT a dep — the latest size is read via
+        // overlayResizeSizeRef in onUp, so the listeners attach once per drag (not per mousemove).
+    }, [overlayResize, project.scenes, dispatch, stageSize]);
 
     const getPositionStyle = (position: VNPosition): React.CSSProperties => {
         if (typeof position === 'object') {
@@ -1426,9 +1465,6 @@ const StagingArea: React.FC<{
                     const isCustomPosition = typeof char.position === 'object';
                     const isDragging = overlayDrag?.kind === 'character' && overlayDrag.overlayId === char.charId;
                     const isResizingChar = overlayResize?.kind === 'character' && overlayResize.overlayId === char.charId;
-                    if (isDragging && overlayDragOffset) {
-                        posStyle = { left: `${overlayDragOffset.x}%`, top: `${overlayDragOffset.y}%` };
-                    }
                     // For preset positions, anchor to bottom. For custom positions, respect the exact coordinates
                     // Build transform including scale and inversion
                     let transformStr = posStyle.transform || '';
@@ -1441,9 +1477,25 @@ const StagingArea: React.FC<{
                         const scaleY = (char.flipY ? -1 : 1) * liveScale;
                         transformStr = `${transformStr} scale(${scaleX}, ${scaleY})`.trim();
                     }
-                    const finalStyle = isCustomPosition || (isDragging && overlayDragOffset)
-                        ? { ...posStyle, height: '90%', ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}) }
-                        : { ...posStyle, height: '90%', bottom: '0', top: 'auto', ...(transformStr ? { transform: transformStr, transformOrigin: 'center bottom' } : {}) };
+                    // Live drag = a pure SCREEN-SPACE translate added on top of the sprite's REST style —
+                    // the position/anchor (preset bottom+centre vs custom top-left) never switches mid-drag,
+                    // which is what caused the residual flicker (anchor swap → sub-pixel repaint). Prepended
+                    // so it composes AFTER (isn't multiplied by) the sprite's scale(). The committed position
+                    // is still derived from overlayDragOffset in onUp, so drop lands byte-identically.
+                    if (isDragging && overlayDragOffset && overlayDrag) {
+                        const dxPx = (overlayDragOffset.x - overlayDrag.startPosX) / 100 * (stageSize.width || 1);
+                        const dyPx = (overlayDragOffset.y - overlayDrag.startPosY) / 100 * (stageSize.height || 1);
+                        transformStr = `translate(${dxPx}px, ${dyPx}px) ${transformStr}`.trim();
+                    }
+                    // Keep the sprite on a STABLE GPU compositing layer at all times. When transformStr
+                    // would otherwise be empty (custom position, scale 1, no rotation/flip), the element
+                    // flips between "has transform" (composited) and "no transform" (not composited) the
+                    // instant you start/stop a drag or resize — a one-frame layer promote/demote repaint.
+                    // A constant translateZ(0) pins the layer.
+                    transformStr = `${transformStr} translateZ(0)`.trim();
+                    const finalStyle = isCustomPosition
+                        ? { ...posStyle, height: '90%', transform: transformStr, transformOrigin: 'center bottom' }
+                        : { ...posStyle, height: '90%', bottom: '0', top: 'auto', transform: transformStr, transformOrigin: 'center bottom' };
                     return (
                         <div
                             key={char.charId}
@@ -1457,18 +1509,24 @@ const StagingArea: React.FC<{
                             onContextMenu={(commandRadial && char.sourceCommandId) ? (e) => { e.preventDefault(); commandRadial.openById(char.sourceCommandId!, e.clientX, e.clientY); } : undefined}
                         >
                             {char.imageUrls.map((url, index) => <img key={index} src={url} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: index }} />)}
-                            {/* Resize handle (bottom-right) — drag to scale the character sprite. */}
-                            {char.sourceCommandId && (
+                            {/* Resize handles — grab ANY corner to scale the sprite uniformly. */}
+                            {char.sourceCommandId && ([
+                                { c: 'tl', pos: { top: -2, left: -2 }, cursor: 'nwse-resize' },
+                                { c: 'tr', pos: { top: -2, right: -2 }, cursor: 'nesw-resize' },
+                                { c: 'bl', pos: { bottom: -2, left: -2 }, cursor: 'nesw-resize' },
+                                { c: 'br', pos: { bottom: -2, right: -2 }, cursor: 'nwse-resize' },
+                            ].map(h => (
                                 <div
-                                    onMouseDown={e => handleOverlayResizeMouseDown(e, 'character', char.charId, char.scale ?? 1, char.scale ?? 1, char.sourceCommandId)}
+                                    key={h.c}
+                                    onMouseDown={e => handleOverlayResizeMouseDown(e, 'character', char.charId, char.scale ?? 1, char.scale ?? 1, char.sourceCommandId, h.c)}
                                     title={t('dragToResizeScale')}
                                     style={{
-                                        position: 'absolute', right: 0, bottom: 0, width: 14, height: 14,
+                                        position: 'absolute', width: 14, height: 14,
                                         borderRadius: 3, background: '#0ea5e9', border: '2px solid #fff',
-                                        boxShadow: '0 0 3px rgba(0,0,0,0.6)', cursor: 'nwse-resize', zIndex: 60,
+                                        boxShadow: '0 0 3px rgba(0,0,0,0.6)', zIndex: 60, cursor: h.cursor, ...h.pos,
                                     }}
                                 />
-                            )}
+                            )))}
                             {isDragging && overlayDragOffset && (
                                 <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/80 text-sky-300 text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50">
                                     {overlayDragOffset.x}%, {overlayDragOffset.y}%

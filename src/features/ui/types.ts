@@ -313,6 +313,11 @@ interface BaseUIElement {
     x: number; y: number; width: number; height: number;
     anchorX: number; anchorY: number;
     opacity?: number; // 0-1, default 1 (fully opaque)
+    /** When true, the element starts invisible (and click-through) at runtime until a ShowElement
+     *  action reveals it. Pairs with Show/HideElement actions for multi-page documents and reveals.
+     *  Additive-optional: undefined/false = always-visible legacy behavior. Editor still shows it
+     *  (dimmed, with a badge) so it stays selectable/editable. */
+    startHidden?: boolean;
     /** Stacking order among elements on the screen. Higher = nearer the viewer. Optional;
      *  when undefined the element keeps its insertion order (back-compat, no migration). */
     layer?: number;
@@ -791,6 +796,11 @@ export interface VNUIScreen {
      *  skip, and manual advance are all suspended (the scene stays visible but paused) until the
      *  overlay closes. Default (unset) = the scene keeps running behind it. Additive-optional. */
     pauseSceneWhileOpen?: boolean;
+    /** When true (default for new screens), opening this screen clears any runtime Show/Hide-Element
+     *  overrides for its elements, so `startHidden` pages reset to their defaults each time it opens
+     *  (a re-opened document starts on page 1). Set false to make reveals cumulative/persistent
+     *  across opens (e.g. a map you progressively uncover). Additive-optional: undefined = reset. */
+    resetElementVisibilityOnOpen?: boolean;
     /** Optional dark backdrop opacity (0–1) drawn between the scene/dialogue and this overlay while
      *  it's open (a "dim the room behind the popup" effect). 0/undefined = no backdrop. */
     backdropOpacity?: number;

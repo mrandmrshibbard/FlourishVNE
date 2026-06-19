@@ -4,7 +4,7 @@ import { useProject } from '../contexts/ProjectContext';
 import { VNID } from '../types';
 import { VNScene } from '../features/scene/types';
 import Panel from './ui/Panel';
-import { FormField, Select, TextInput } from './ui/Form';
+import { FormField, Select, TextInput, RangeInput } from './ui/Form';
 import ConditionsEditor from './ui/ConditionsEditor';
 
 const SceneConfigEditor: React.FC<{
@@ -93,8 +93,7 @@ const SceneConfigEditor: React.FC<{
                         </FormField>
                         {px?.mode && px.mode !== 'off' && (
                             <FormField label={`Intensity: ${(px.intensity ?? 1).toFixed(2)}×`}>
-                                <input
-                                    type="range" min="0" max="3" step="0.05"
+                                <RangeInput min="0" max="3" step="0.05"
                                     value={px.intensity ?? 1}
                                     onChange={e => updateScene({ parallax: { ...px, intensity: parseFloat(e.target.value) || 0 } })}
                                     className="w-full accent-[var(--accent-cyan)]"

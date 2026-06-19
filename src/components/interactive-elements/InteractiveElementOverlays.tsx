@@ -8,7 +8,7 @@
  * the element overlay converts to the legacy `VNHotZoneElement` runtime layout
  * so the per-type JSX can render unchanged — an implementation detail only.
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import {
@@ -174,6 +174,11 @@ export const PolyRegionOverlay: React.FC<{
 }> = ({ region, parentSize, isRegionSelected, onSelect, onUpdate }) => {
     const [vertexDrag, setVertexDrag] = useState<{ idx: number; startMouseX: number; startMouseY: number; startX: number; startY: number } | null>(null);
     const [bodyDrag, setBodyDrag] = useState<{ startMouseX: number; startMouseY: number; startCoords: number[] } | null>(null);
+    // Live coords during a vertex/body drag, rendered locally so only this region re-renders per
+    // move. onUpdate (a full project dispatch re-rendering the editor) fires once, on release —
+    // without this, reshaping a polygon dispatched on every mousemove and lagged. One undo step too.
+    const [liveCoords, setLiveCoords] = useState<number[] | null>(null);
+    const liveCoordsRef = useRef<number[] | null>(null);
 
     useEffect(() => {
         if (!vertexDrag && !bodyDrag) return;
@@ -190,17 +195,26 @@ export const PolyRegionOverlay: React.FC<{
                 const newCoords = [...region.coords];
                 newCoords[vertexDrag.idx * 2] = nx;
                 newCoords[vertexDrag.idx * 2 + 1] = ny;
-                onUpdate(newCoords);
+                liveCoordsRef.current = newCoords;
+                setLiveCoords(newCoords);
             } else if (bodyDrag) {
                 const dx = ((e.clientX - bodyDrag.startMouseX) / pw) * 100;
                 const dy = ((e.clientY - bodyDrag.startMouseY) / ph) * 100;
                 const newCoords = bodyDrag.startCoords.map((c, i) =>
                     Math.round((c + (i % 2 === 0 ? dx : dy)) * 10) / 10
                 );
-                onUpdate(newCoords);
+                liveCoordsRef.current = newCoords;
+                setLiveCoords(newCoords);
             }
         };
-        const onUp = () => { setVertexDrag(null); setBodyDrag(null); };
+        const onUp = () => {
+            setVertexDrag(null);
+            setBodyDrag(null);
+            const final = liveCoordsRef.current;
+            liveCoordsRef.current = null;
+            setLiveCoords(null);
+            if (final) onUpdate(final);
+        };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => {
@@ -209,9 +223,10 @@ export const PolyRegionOverlay: React.FC<{
         };
     }, [vertexDrag, bodyDrag, parentSize.width, parentSize.height, region.coords, onUpdate]);
 
+    const effCoords = liveCoords ?? region.coords;
     const points: { x: number; y: number }[] = [];
-    for (let i = 0; i + 1 < region.coords.length; i += 2) {
-        points.push({ x: region.coords[i] ?? 0, y: region.coords[i + 1] ?? 0 });
+    for (let i = 0; i + 1 < effCoords.length; i += 2) {
+        points.push({ x: effCoords[i] ?? 0, y: effCoords[i + 1] ?? 0 });
     }
     const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
     const fill = isRegionSelected
