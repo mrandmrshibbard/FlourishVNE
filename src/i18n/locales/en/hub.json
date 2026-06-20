@@ -1,4 +1,9 @@
 {
+  "holiday": {
+    "activeLabel": "{{theme}} theme",
+    "turnOff": "Turn off",
+    "turnOffTip": "Switch back to your normal theme (you can re-pick it anytime in the Theme menu)"
+  },
   "tagline": "Visual Novel Engine",
   "subtitle": "Create Without Limits",
   "createNew": "Create New Project",

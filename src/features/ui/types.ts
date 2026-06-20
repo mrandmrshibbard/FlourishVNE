@@ -150,6 +150,11 @@ export interface VNProjectUI {
     inputBoxColor?: string; // background color hex (default '#0f172a')
     inputBoxOpacity?: number; // 0-100 background opacity (default 92)
     inputBoxBorderRadius?: number; // px corner radius (default 8)
+    // Submit button of the text-input box (full styling — additive-optional, all fall back to defaults)
+    inputSubmitLabel?: string; // button text (default "Submit")
+    inputSubmitColor?: string; // background color hex (default a slate grey)
+    inputSubmitBorderRadius?: number; // px corner radius
+    inputSubmitImage?: UIAsset | null; // optional background image for the submit button
     // Quick menu (skip/auto/log/back/save/load buttons)
     quickMenuPosition?: 'above-dialogue' | 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'hidden'; // default 'above-dialogue'
     quickMenuColor?: string; // button background color hex (default '#0f172a')
@@ -213,17 +218,12 @@ export interface VNProjectUI {
     confirmDialogs?: VNConfirmDialogSettings;
 }
 
-export interface VNConfirmDialogSettings {
-    /** Quit / Exit confirmation */
-    quitTitle?: string;          // default "Quit Game"
-    quitMessage?: string;        // default "Are you sure you want to quit?"
-    quitConfirmLabel?: string;   // default "Quit"
-    quitCancelLabel?: string;    // default "Cancel"
-    /** New Game confirmation (shown when a game is already in progress) */
-    newGameTitle?: string;       // default "Start New Game"
-    newGameMessage?: string;     // default "Any unsaved progress will be lost. Are you sure?"
-    newGameConfirmLabel?: string;// default "New Game"
-    newGameCancelLabel?: string; // default "Cancel"
+/**
+ * Per-variant overridable look of a confirmation dialog (everything EXCEPT the text, which is
+ * authored per-variant separately). Every field is optional; an unset field falls back to the
+ * shared base on VNConfirmDialogSettings, which in turn falls back to a hard-coded default.
+ */
+export interface VNConfirmVariantStyle {
     /** Visual styling */
     backgroundColor?: string;   // default '#0f172a'
     backgroundOpacity?: number;  // 0-100, default 92
@@ -255,6 +255,39 @@ export interface VNConfirmDialogSettings {
     buttonBorderRadius?: number; // px corner radius (default borderRadius - 4)
     buttonSizeMode?: 'stretch' | 'contain' | 'cover' | 'nine-slice';
     buttonSlice?: number;        // for nine-slice on button images
+    /** Free layout: when true, the box and each button are positioned/sized by the rects below
+     *  (screen-percent, like the Quick Menu's independent layout) instead of the centred auto-layout. */
+    independentLayout?: boolean;
+    boxRect?: { x: number; y: number; width: number; height: number };
+    confirmRect?: { x: number; y: number; width: number; height: number };
+    cancelRect?: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * Confirmation dialogs (Quit / New Game). Text is per-variant (quit* / newGame*). The styling fields
+ * inherited from VNConfirmVariantStyle act as the SHARED BASE — preserved for backward compatibility
+ * with projects authored before per-variant styling. `variants.{quit,newGame}` hold per-variant style
+ * overrides; the effective look of a variant = { ...base, ...variants[variant] }. Fully additive: a
+ * project with no `variants` renders both dialogs from the shared base exactly as before.
+ */
+export interface VNConfirmDialogSettings extends VNConfirmVariantStyle {
+    /** Quit / Exit confirmation */
+    quitTitle?: string;          // default "Quit Game"
+    quitMessage?: string;        // default "Are you sure you want to quit?"
+    quitConfirmLabel?: string;   // default "Quit"
+    quitCancelLabel?: string;    // default "Cancel"
+    /** New Game confirmation (shown when a game is already in progress) */
+    newGameTitle?: string;       // default "Start New Game"
+    newGameMessage?: string;     // default "Any unsaved progress will be lost. Are you sure?"
+    newGameConfirmLabel?: string;// default "New Game"
+    newGameCancelLabel?: string; // default "Cancel"
+    /** Erase Save confirmation (shown before a save slot is deleted) */
+    eraseSaveTitle?: string;       // default "Erase Save"
+    eraseSaveMessage?: string;     // default "Erase this save? This cannot be undone."
+    eraseSaveConfirmLabel?: string;// default "Erase"
+    eraseSaveCancelLabel?: string; // default "Cancel"
+    /** Per-variant style overrides (full independence). Unset → inherit the shared base above. */
+    variants?: { quit?: VNConfirmVariantStyle; newGame?: VNConfirmVariantStyle; eraseSave?: VNConfirmVariantStyle };
 }
 
 export type UIAsset = {
@@ -352,6 +385,11 @@ interface BaseUIElement {
     snapToHotSpot?: boolean;
     /** Hide the element after snapping to a hot spot (only applies when snapToHotSpot is true) */
     hideOnDrop?: boolean;
+    /** Optional label so hot spots can accept this draggable by tag instead of by id. */
+    dragTag?: string;
+    /** Optional inventory item this draggable represents — consumed (unless reusable) + use-effect
+     *  runs on a successful drop; its tag is used for matching when dragTag is unset. */
+    boundItemId?: VNID;
     /** Actions fired when the element is clicked (when not draggable). For draggable elements,
      *  these are typically empty — hot spots own the drop logic. */
     actions?: VNUIAction[];
@@ -458,6 +496,8 @@ export interface UISaveSlotGridElement extends BaseUIElement {
     hideInfoBar?: boolean;
     /** Hide only the "Slot N" label inside the info bar */
     hideSlotLabel?: boolean;
+    /** Hide the per-slot erase (✕) button shown on occupied slots. Default = shown. */
+    hideEraseButtons?: boolean;
 }
 export type GameSetting = 'musicVolume' | 'sfxVolume' | 'voiceVolume' | 'ambientVolume' | 'textSpeed';
 export interface UISettingsSliderElement extends BaseUIElement {
@@ -675,6 +715,8 @@ export interface UIHotSpotElement extends BaseUIElement {
     trigger: HotSpotTrigger;
     /** For drag-drop hot spots: which draggable element ids are accepted here */
     acceptedElementIds?: VNID[];
+    /** For drag-drop hot spots: accept any dragged object whose `dragTag` matches this. */
+    acceptTag?: string;
     /** Sticky visual cue colour (used for debug/edit-time and the visible-flag display) */
     highlightColor?: string;
     /** When true, the spot is drawn at runtime; otherwise it's only visible in the editor */
@@ -842,7 +884,10 @@ export interface VNHotSpot {
     width: number; // percentage
     height: number; // percentage
     trigger: HotSpotTrigger;
-    acceptedElementIds?: VNID[]; // For drag-drop: which elements can be dropped here
+    acceptedElementIds?: VNID[]; // For drag-drop: which specific elements can be dropped here
+    /** For drag-drop: accept ANY dragged object whose `dragTag` matches this (e.g. "key").
+     *  Empty = fall back to acceptedElementIds (or accept anything if that's empty too). */
+    acceptTag?: string;
     actions: VNUIAction[]; // Actions to run when triggered
     conditions?: VNCondition[]; // Only active when conditions are met
     highlightColor?: string; // Visual feedback color (debug/hover)
@@ -874,6 +919,13 @@ export interface VNHotZoneElement {
     snapBack?: boolean; // Return to original position if not dropped on valid spot
     snapToHotSpot?: boolean; // Snap to hot spot center when dropped
     hideOnDrop?: boolean; // Hide element after it snaps to a hot spot (only applies when snapToHotSpot is true)
+    /** Optional label so hot spots can accept this object by tag instead of by id (e.g. tag every
+     *  key "key", then a door hot spot that accepts "key" takes any of them). Additive-optional. */
+    dragTag?: string;
+    /** Optional inventory item this draggable represents. On a successful drop the item is consumed
+     *  (unless reusable) and its use-effect runs. If `dragTag` is unset, the item's tag is used for
+     *  hot-spot matching. Lets authors drag an item to a hot spot without an inventory. Additive-optional. */
+    boundItemId?: VNID;
     conditions?: VNCondition[]; // Only visible when conditions are met
     actions?: VNUIAction[]; // Actions on click (when not dragging)
     clickSoundId?: VNID | null;

@@ -598,12 +598,7 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
                                         <div className="mt-2">
                                             <div className="text-xs text-slate-300 mb-1">{t('screenInspector.color')}</div>
                                             <div className="flex items-center gap-2">
-                                                <input
-                                                    type="color"
-                                                    value={effectColor || defaultColor}
-                                                    onChange={(e) => setEffect(type, intensity, variant, e.target.value, params)}
-                                                    className="w-10 h-8 p-0 border-0 rounded cursor-pointer"
-                                                />
+                                                <ColorInput value={effectColor || defaultColor} onChange={v => setEffect(type, intensity, variant, v, params)} />
                                                 <input
                                                     type="text"
                                                     value={effectColor || defaultColor}

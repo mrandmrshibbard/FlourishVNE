@@ -389,7 +389,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         )}
                         {bgType === 'color' ? (
                             <FormField label={t('elementInspector.colorValue')}>
-                                <TextInput type="color" value={typeof bgValue === 'string' && bgValue.startsWith('#') ? bgValue : '#000000'} onChange={e => updateElement({ background: { type: 'color', value: e.target.value }, image: null })} className="p-1 h-10" />
+                                <ColorInput value={typeof bgValue === 'string' && bgValue.startsWith('#') ? bgValue : '#000000'} onChange={v => updateElement({ background: { type: 'color', value: v }, image: null })} />
                             </FormField>
                         ) : (
                             <AssetSelector label={bgType === 'video' ? t('elementInspector.videoAsset') : t('elementInspector.imageAsset')} assetType={bgType === 'video' ? 'videos' : 'images'} allowVideo value={typeof bgValue === 'string' ? bgValue : null} onChange={id => updateElement({ background: { ...(el.background as any), type: bgType as 'image' | 'video', assetId: id }, image: null })} />
@@ -449,6 +449,10 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                     {t('elementInspector.hideSlotLabel')}
                                 </label>
                             )}
+                            <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" checked={el.hideEraseButtons === true} onChange={e => updateElement({ hideEraseButtons: e.target.checked })} className="accent-purple-500" />
+                                {t('elementInspector.hideEraseButtons', 'Hide erase (✕) buttons')}
+                            </label>
                         </div>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.navigationButtons')}</h4>
                         <FormField label={t('elementInspector.prevButtonText')}><TextInput value={el.prevButtonText ?? '◀ Prev'} onChange={e => updateElement({ prevButtonText: e.target.value })} /></FormField>
@@ -595,8 +599,8 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                     appearance: <>
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label={t('elementInspector.background')}><TextInput type="color" value={el.backgroundColor || '#1e293b'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
-                            <FormField label={t('elementInspector.border')}><TextInput type="color" value={el.borderColor || '#475569'} onChange={e => updateElement({ borderColor: e.target.value })} /></FormField>
+                            <FormField label={t('elementInspector.background')}><ColorInput value={el.backgroundColor || '#1e293b'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
+                            <FormField label={t('elementInspector.border')}><ColorInput value={el.borderColor || '#475569'} onChange={v => updateElement({ borderColor: v })} /></FormField>
                         </div>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.fontStyle')}</h4>
                         <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })} />
@@ -653,9 +657,9 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                     appearance: <>
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label={t('elementInspector.background')}><input type="color" className="w-full" value={el.backgroundColor || '#1e293b'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
-                            <FormField label={t('elementInspector.border')}><input type="color" className="w-full" value={el.borderColor || '#475569'} onChange={e => updateElement({ borderColor: e.target.value })} /></FormField>
-                            <FormField label={t('elementInspector.hover')}><input type="color" className="w-full" value={el.hoverColor || '#334155'} onChange={e => updateElement({ hoverColor: e.target.value })} /></FormField>
+                            <FormField label={t('elementInspector.background')}><ColorInput value={el.backgroundColor || '#1e293b'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
+                            <FormField label={t('elementInspector.border')}><ColorInput value={el.borderColor || '#475569'} onChange={v => updateElement({ borderColor: v })} /></FormField>
+                            <FormField label={t('elementInspector.hover')}><ColorInput value={el.hoverColor || '#334155'} onChange={v => updateElement({ hoverColor: v })} /></FormField>
                         </div>
                         <FormField label="Arrow Side">
                             <Select value={el.arrowSide || 'right'} onChange={e => updateElement({ arrowSide: e.target.value as 'left' | 'right' })}>
@@ -700,8 +704,8 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                     appearance: <>
                         <div className="grid grid-cols-2 gap-2">
-                            <FormField label={t('elementInspector.checkboxColor')}><input type="color" className="w-full" value={el.checkboxColor || '#3b82f6'} onChange={e => updateElement({ checkboxColor: e.target.value })} /></FormField>
-                            <FormField label={t('elementInspector.labelColor')}><input type="color" className="w-full" value={el.labelColor || '#f1f5f9'} onChange={e => updateElement({ labelColor: e.target.value })} /></FormField>
+                            <FormField label={t('elementInspector.checkboxColor')}><ColorInput value={el.checkboxColor || '#3b82f6'} onChange={v => updateElement({ checkboxColor: v })} /></FormField>
+                            <FormField label={t('elementInspector.labelColor')}><ColorInput value={el.labelColor || '#f1f5f9'} onChange={v => updateElement({ labelColor: v })} /></FormField>
                         </div>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.fontStyle')}</h4>
                         <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })} />
@@ -762,15 +766,15 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                     appearance: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">{t('elementInspector.thumbnailStyling')}</h4>
-                        <FormField label={t('elementInspector.borderColor')}><input type="color" className="w-full" value={el.thumbnailBorderColor || '#4D3273'} onChange={e => updateElement({ thumbnailBorderColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.borderColor')}><ColorInput value={el.thumbnailBorderColor || '#4D3273'} onChange={v => updateElement({ thumbnailBorderColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.thumbnailBorderRadius || 8)} onChange={e => updateElement({ thumbnailBorderRadius: parseInt(e.target.value, 10) || 8 })} /></FormField>
-                        <FormField label={t('elementInspector.backgroundColor')}><input type="color" className="w-full" value={el.backgroundColor || '#0f172a'} onChange={e => updateElement({ backgroundColor: e.target.value })} disabled={el.hideBackgroundPanel === true} /></FormField>
+                        <FormField label={t('elementInspector.backgroundColor')}><ColorInput value={el.backgroundColor || '#0f172a'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
                         <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer my-1">
                             <input type="checkbox" checked={el.hideBackgroundPanel === true} onChange={e => updateElement({ hideBackgroundPanel: e.target.checked })} className="accent-purple-500" />
                             Hide background panel (show thumbnails over your own art)
                         </label>
                         <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.lockedEntries')}</h4>
-                        <FormField label={t('elementInspector.lockedBackground')}><input type="color" className="w-full" value={el.lockedColor || '#1e293b'} onChange={e => updateElement({ lockedColor: e.target.value })} /></FormField>
+                        <FormField label={t('elementInspector.lockedBackground')}><ColorInput value={el.lockedColor || '#1e293b'} onChange={v => updateElement({ lockedColor: v })} /></FormField>
                         <FormField label={t('elementInspector.lockedText')}><TextInput value={el.lockedText || '🔒'} onChange={e => updateElement({ lockedText: e.target.value })} placeholder="🔒" /></FormField>
                         {el.showNames !== false && el.nameFont && (
                             <>
@@ -847,11 +851,11 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                     appearance: <>
                         <h4 className="font-bold my-1 text-slate-400 text-xs">Slot styling</h4>
-                        <FormField label="Slot background"><input type="color" className="w-full" value={el.slotColor && el.slotColor.startsWith('#') ? el.slotColor : '#1e293b'} onChange={e => updateElement({ slotColor: e.target.value })} /></FormField>
-                        <FormField label={t('elementInspector.borderColor')}><input type="color" className="w-full" value={el.slotBorderColor || '#4D3273'} onChange={e => updateElement({ slotBorderColor: e.target.value })} /></FormField>
+                        <FormField label="Slot background"><ColorInput value={el.slotColor && el.slotColor.startsWith('#') ? el.slotColor : '#1e293b'} onChange={v => updateElement({ slotColor: v })} /></FormField>
+                        <FormField label={t('elementInspector.borderColor')}><ColorInput value={el.slotBorderColor || '#4D3273'} onChange={v => updateElement({ slotBorderColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.slotBorderRadius ?? 8)} onChange={e => updateElement({ slotBorderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
-                        <FormField label="Selected ring"><input type="color" className="w-full" value={el.selectedBorderColor || '#38bdf8'} onChange={e => updateElement({ selectedBorderColor: e.target.value })} /></FormField>
-                        <FormField label={t('elementInspector.backgroundColor')}><input type="color" className="w-full" value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#0f172a'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
+                        <FormField label="Selected ring"><ColorInput value={el.selectedBorderColor || '#38bdf8'} onChange={v => updateElement({ selectedBorderColor: v })} /></FormField>
+                        <FormField label={t('elementInspector.backgroundColor')}><ColorInput value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#0f172a'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
                         {el.showNames !== false && el.nameFont && (
                             <>
                                 <h4 className="font-bold my-2 text-slate-400 text-xs">{t('elementInspector.nameFont')}</h4>
@@ -868,9 +872,9 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <AssetSelector label="Button art" assetType="images" allowVideo value={el.useButtonImage?.id || null} onChange={id => updateElement({ useButtonImage: id ? { type: 'image', id } : null })} />
                                 <AssetSelector label="Hover art" assetType="images" allowVideo value={el.useButtonHoverImage?.id || null} onChange={id => updateElement({ useButtonHoverImage: id ? { type: 'image', id } : null })} />
                                 <div className="grid grid-cols-3 gap-1">
-                                    <FormField label="BG"><input type="color" className="w-full" value={el.useButtonColor && el.useButtonColor.startsWith('#') ? el.useButtonColor : '#0ea5e9'} onChange={e => updateElement({ useButtonColor: e.target.value })} /></FormField>
-                                    <FormField label="Hover"><input type="color" className="w-full" value={el.useButtonHoverColor && el.useButtonHoverColor.startsWith('#') ? el.useButtonHoverColor : '#0284c7'} onChange={e => updateElement({ useButtonHoverColor: e.target.value })} /></FormField>
-                                    <FormField label="Text"><input type="color" className="w-full" value={el.useButtonTextColor && el.useButtonTextColor.startsWith('#') ? el.useButtonTextColor : '#ffffff'} onChange={e => updateElement({ useButtonTextColor: e.target.value })} /></FormField>
+                                    <FormField label="BG"><ColorInput value={el.useButtonColor && el.useButtonColor.startsWith('#') ? el.useButtonColor : '#0ea5e9'} onChange={v => updateElement({ useButtonColor: v })} /></FormField>
+                                    <FormField label="Hover"><ColorInput value={el.useButtonHoverColor && el.useButtonHoverColor.startsWith('#') ? el.useButtonHoverColor : '#0284c7'} onChange={v => updateElement({ useButtonHoverColor: v })} /></FormField>
+                                    <FormField label="Text"><ColorInput value={el.useButtonTextColor && el.useButtonTextColor.startsWith('#') ? el.useButtonTextColor : '#ffffff'} onChange={v => updateElement({ useButtonTextColor: v })} /></FormField>
                                 </div>
                                 <FormField label="Corner radius (px)"><TextInput type="number" min="0" max="32" value={String(el.useButtonRadius ?? 6)} onChange={e => updateElement({ useButtonRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
                                 {el.useButtonFont
@@ -927,7 +931,7 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         )}
                     </>,
                     appearance: <>
-                        <FormField label="Fill color"><input type="color" className="w-full" value={el.fillColor || '#a78bfa'} onChange={e => updateElement({ fillColor: e.target.value })} /></FormField>
+                        <FormField label="Fill color"><ColorInput value={el.fillColor || '#a78bfa'} onChange={v => updateElement({ fillColor: v })} /></FormField>
                         {boundStat?.color && boundStat.color !== el.fillColor && (
                             <button onClick={() => updateElement({ fillColor: boundStat.color })} className="text-xs text-sky-400 hover:text-sky-300 -mt-1 flex items-center gap-1.5">
                                 <span className="w-3 h-3 rounded-full inline-block" style={{ background: boundStat.color }} /> Use "{boundStat.name}" stat color
@@ -935,14 +939,14 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                         )}
                         <FormField label="Gradient end (optional)">
                             <div className="flex items-center gap-2">
-                                <input type="color" className="flex-1" value={el.fillColorEnd || '#f472b6'} onChange={e => updateElement({ fillColorEnd: e.target.value })} />
+                                <ColorInput value={el.fillColorEnd || '#f472b6'} onChange={v => updateElement({ fillColorEnd: v })} />
                                 {el.fillColorEnd && <button onClick={() => updateElement({ fillColorEnd: undefined })} className="text-xs text-red-400 hover:text-red-300">Clear</button>}
                             </div>
                         </FormField>
-                        <FormField label="Track color"><input type="color" className="w-full" value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#1e293b'} onChange={e => updateElement({ backgroundColor: e.target.value })} /></FormField>
+                        <FormField label="Track color"><ColorInput value={el.backgroundColor && el.backgroundColor.startsWith('#') ? el.backgroundColor : '#1e293b'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
                         <FormField label={t('elementInspector.borderColor')}>
                             <div className="flex items-center gap-2">
-                                <input type="color" className="flex-1" value={el.borderColor || '#4D3273'} onChange={e => updateElement({ borderColor: e.target.value })} />
+                                <ColorInput value={el.borderColor || '#4D3273'} onChange={v => updateElement({ borderColor: v })} />
                                 {el.borderColor && <button onClick={() => updateElement({ borderColor: undefined })} className="text-xs text-red-400 hover:text-red-300">Clear</button>}
                             </div>
                         </FormField>
@@ -1070,11 +1074,11 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </CollapsibleSection>
                             <CollapsibleSection title={t('elementInspector.appearance')} hint={t('elementInspector.appearanceHint')}>
                                 <div className="grid grid-cols-2 gap-2 mt-1">
-                                    <FormField label={t('elementInspector.arrowColor')}><input type="color" className="w-full" value={el.arrowColor || '#a855f7'} onChange={e => updateElement({ arrowColor: e.target.value })} /></FormField>
+                                    <FormField label={t('elementInspector.arrowColor')}><ColorInput value={el.arrowColor || '#a855f7'} onChange={v => updateElement({ arrowColor: v })} /></FormField>
                                     <FormField label={t('elementInspector.arrowSize')}><TextInput type="number" value={String(el.arrowSize || 24)} onChange={e => updateElement({ arrowSize: Number(e.target.value) })} min="12" max="48" /></FormField>
                                 </div>
                                 <FormField label={t('elementInspector.background')}>
-                                    <input type="color" className="w-full" value={el.backgroundColor?.replace(/rgba?\([^)]+\)/, '#1e293b') || '#1e293b'} onChange={e => { const hex = e.target.value; const rgba = `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, 0.8)`; updateElement({ backgroundColor: rgba }); }} />
+                                    <ColorInput value={el.backgroundColor?.replace(/rgba?\([^)]+\)/, '#1e293b') || '#1e293b'} onChange={v => { const hex = v; const rgba = `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, 0.8)`; updateElement({ backgroundColor: rgba }); }} />
                                 </FormField>
                                 <h4 className="font-bold text-xs mt-3 mb-1 text-slate-400">{t('elementInspector.font')}</h4>
                                 <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font, [prop]: value } })} />

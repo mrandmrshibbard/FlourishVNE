@@ -11,7 +11,7 @@ import { fontSettingsToStyle, extractTextGradientStyle, buildTextEffectStyles, b
 import { VNID, VNPosition, VNPositionPreset, VNTransition, normalizeOverlayEffects, upsertOverlayEffect, type VNScreenOverlayEffect } from '../types';
 import { VNProject, CGGalleryEntry } from '../types/project';
 import {
-    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, RESET_ALL_VARIABLES
+    VNUIAction, UIActionType, GoToScreenAction, JumpToSceneAction, JumpToLabelAction, SetVariableAction, ResetVariableAction, PlaySoundAction, SaveGameAction, LoadGameAction, DeleteSaveAction, CycleLayerAssetAction, OpenURLAction, ToggleScreenAction, CallCommonEventAction, RESET_ALL_VARIABLES
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
@@ -493,9 +493,42 @@ const ButtonOverlayElement: React.FC<{
     onAdvance?: () => void;
     onCommitVariables?: () => void;
     onPickup?: (overlay: ButtonOverlay) => void;
-}> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables, onPickup }) => {
+    /** Show Item drag-to-hot-spot: called on drag-release with the cursor's viewport coords. */
+    onItemDrop?: (overlay: ButtonOverlay, clientX: number, clientY: number) => void;
+    /** Reports the dragged item's icon + cursor position so the parent can render a viewport-fixed
+     *  ghost OUTSIDE the scene's camera transform (so it tracks the mouse exactly). */
+    onItemDragMove?: (imageUrl: string | null, clientX: number, clientY: number, w: number, h: number) => void;
+    onItemDragEnd?: () => void;
+}> = ({ overlay, onAction, playSound, onAdvance, onCommitVariables, onPickup, onItemDrop, onItemDragMove, onItemDragEnd }) => {
     const tweenValues = useTween(overlay.id, 'button');
     const [isHovered, setIsHovered] = useState(false);
+    const [dragging, setDragging] = useState(false);
+
+    // Press-and-drag an on-scene item onto a drop-zone hot spot. The dragged image is drawn by the
+    // parent as a viewport-fixed ghost (immune to the scene's scale/translate/rotation); the original
+    // just dims. A move past the threshold is a drag (resolved on release); no move is a normal click.
+    const startDrag = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const sx = e.clientX, sy = e.clientY;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        let moved = false;
+        const onMove = (ev: MouseEvent) => {
+            if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 4) { moved = true; setDragging(true); }
+            if (moved) onItemDragMove?.(displayImage, ev.clientX, ev.clientY, w, h);
+        };
+        const onUp = (ev: MouseEvent) => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            setDragging(false);
+            onItemDragEnd?.();
+            if (moved) onItemDrop?.(overlay, ev.clientX, ev.clientY);
+            else handleClick();
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
     const hasTransition = overlay.transition && overlay.transition !== 'instant';
     const [playTransition, setPlayTransition] = useState<boolean>(overlay.action === 'hide' && !!hasTransition);
     const timeoutRef = useRef<number | null>(null);
@@ -618,6 +651,8 @@ const ButtonOverlayElement: React.FC<{
         pointerEvents: 'auto',
         // Author stacking: button band (1) + layer. Default 0 → below characters (band 5), as today.
         zIndex: 1 + (overlay.layer ?? 0) * 100,
+        // While dragging, dim the original in place; the parent draws the moving ghost at the cursor.
+        ...(dragging ? { opacity: 0.3 } : {}),
     };
 
     // Pre-hide if showing WITH a transition that hasn't started yet
@@ -680,10 +715,11 @@ const ButtonOverlayElement: React.FC<{
             {...(overlay.quickMenuMode ? { 'data-vn-no-advance': 'true' } : {})}
         >
             <button
-                onClick={handleClick}
+                onClick={overlay.draggable ? undefined : handleClick}
+                onMouseDown={overlay.draggable ? startDrag : undefined}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                style={buttonStyle}
+                style={{ ...buttonStyle, cursor: overlay.draggable ? (dragging ? 'grabbing' : 'grab') : buttonStyle.cursor }}
             >
                 {/* Image drives the button size (width 100%, height auto = aspect-correct). */}
                 {displayImage && (
@@ -905,9 +941,7 @@ const HotSpotOverlayElement: React.FC<{
     onAdvance?: () => void;
     evaluateConditions: (conditions: VNCondition[] | undefined, vars: Record<VNID, string | number | boolean>) => boolean;
     variables: Record<VNID, string | number | boolean>;
-    /** Editor preview (not exported game): show a faint outline even when invisible. */
-    editTime?: boolean;
-}> = ({ overlay, onAction, onAdvance, evaluateConditions, variables, editTime }) => {
+}> = ({ overlay, onAction, onAdvance, evaluateConditions, variables }) => {
     const active = !overlay.conditions || overlay.conditions.length === 0 || evaluateConditions(overlay.conditions, variables);
 
     // Publish drag-drop spots to the global registry so draggables from any surface
@@ -940,12 +974,11 @@ const HotSpotOverlayElement: React.FC<{
         // so empty/drag clicks still reach the stage. click/hover spots capture.
         pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
         cursor: overlay.trigger === 'click' ? 'pointer' : 'default',
-        background: overlay.visible
-            ? (overlay.highlightColor || 'rgba(99,102,241,0.35)')
-            : (editTime ? 'rgba(99,102,241,0.08)' : 'transparent'),
-        border: overlay.visible
-            ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}`
-            : (editTime ? '2px dashed rgba(99,102,241,0.7)' : undefined),
+        // Honor "Draw the spot during play" (overlay.visible) ONLY — an invisible spot is fully
+        // invisible even in test-play. (Authors still see/position it on the scene editor canvas,
+        // which always draws hot spots with a label.)
+        background: overlay.visible ? (overlay.highlightColor || 'rgba(99,102,241,0.35)') : 'transparent',
+        border: overlay.visible ? `1px solid ${overlay.highlightColor || 'rgba(99,102,241,0.6)'}` : undefined,
     };
 
     return (
@@ -1219,7 +1252,9 @@ const pickReactiveTextboxState = (
 const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], settings: GameSettings, projectUI: any, onFinished: () => void, variables: Record<VNID, string | number | boolean>, project: VNProject, reactiveState?: any }> = ({ dialogue, settings, projectUI, onFinished, variables, project, reactiveState }) => {
     if (!dialogue) return null;
     const interpolatedText = interpolateVariables(dialogue.text, variables, project);
-    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, settings.textSpeed);
+    // Per-line text-speed override (Dialogue command) takes precedence over the global setting.
+    const effectiveTextSpeed = (dialogue.textSpeed != null && dialogue.textSpeed > 0) ? dialogue.textSpeed : settings.textSpeed;
+    const { displayText, skip, hasFinished } = useTypewriter(interpolatedText, effectiveTextSpeed);
 
     // Per-character textbox overrides (appearance only). Resolves a per-line theme override > the
     // character's assigned theme (+ inline custom on top). Any field left undefined falls back to
@@ -1735,6 +1770,12 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
     const submitStyle: React.CSSProperties = projectUI?.inputSubmitFont
         ? fontSettingsToStyle(projectUI.inputSubmitFont)
         : { color: '#FFFFFF' };
+    // Submit button appearance (all additive-optional → fall back to the original look).
+    const inputSubmitUrl = projectUI?.inputSubmitImage
+        ? (project.images[projectUI.inputSubmitImage.id]?.imageUrl || project.backgrounds[projectUI.inputSubmitImage.id]?.imageUrl)
+        : null;
+    const submitRadius = projectUI?.inputSubmitBorderRadius ?? Math.max(4, inputBorderRadius - 4);
+    const submitLabel = projectUI?.inputSubmitLabel || 'Submit';
 
     /* ── Percentage-based layout rect (matching InGameUIEditor) ── */
     const gameW = project.gameResolution?.width || 1920;
@@ -1816,12 +1857,13 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
                                 className="w-full mt-4 px-4 py-2 transition-colors hover:brightness-110"
                                 style={{
                                     ...submitStyle,
-                                    backgroundColor: hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)',
-                                    border: '1px solid rgba(148,163,184,0.2)',
-                                    borderRadius: scalePx(Math.max(4, inputBorderRadius - 4)),
+                                    ...(inputSubmitUrl
+                                        ? { backgroundImage: `url(${inputSubmitUrl})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundColor: 'transparent', border: 'none' }
+                                        : { backgroundColor: projectUI?.inputSubmitColor ?? (hasCustomImage ? 'rgba(255,255,255,0.1)' : 'rgba(51,65,85,0.8)'), border: '1px solid rgba(148,163,184,0.2)' }),
+                                    borderRadius: scalePx(submitRadius),
                                 }}
                             >
-                                <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>Submit</span>
+                                <span style={extractTextGradientStyle(projectUI?.inputSubmitFont) || undefined}>{submitLabel}</span>
                             </button>
                         </form>
                     </div>
@@ -1934,6 +1976,23 @@ const SaveSlotGridComponent: React.FC<{
                             zIndex: 10
                         }}>
                             Slot {i + 1}
+                        </div>
+                    )}
+
+                    {/* Erase control — only on occupied slots. Fires DeleteSave, which routes through the
+                        customizable "Erase Save" confirm. stopPropagation so it doesn't also Save/Load.
+                        A clickable div (can't nest a <button> in the slot <button>). */}
+                    {slotData && !el.hideEraseButtons && (
+                        <div
+                            role="button"
+                            aria-label="Erase this save"
+                            title="Erase this save"
+                            onClick={(e) => { e.stopPropagation(); onAction({ type: UIActionType.DeleteSave, slotNumber: i + 1 } as VNUIAction); }}
+                            style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 11, width: '1.5em', height: '1.5em', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: baseFont.fontSize, lineHeight: 1, cursor: 'pointer', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.92)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.55)'; }}
+                        >
+                            ✕
                         </div>
                     )}
                 </div>
@@ -2670,6 +2729,9 @@ const InventoryGridElement: React.FC<{
 
     const useItem = (it: VNItem) => {
         if (!it.usable) return;
+        // Carry-to-use items aren't consumed here — they're picked up onto the cursor; the use-effect
+        // + consume fire only when the player clicks an accepting drop-zone hot spot.
+        if (it.carryToUse) { onAction({ type: UIActionType.CarryItem, itemId: it.id } as VNUIAction); return; }
         // Mirror the screen Button flow: run SetVariable/ResetVariable mutations FIRST, then COMMIT
         // them to player state (otherwise they stay in the uncommitted UI-variable buffer and are
         // lost), then run any navigation/other actions. The count decrement is a var mutation too —
@@ -3080,6 +3142,7 @@ const InteractiveRuntime: React.FC<{
                 id: `screen-${screen.id}-${spot.id}`,
                 rectPct: { x: spot.x, y: spot.y, width: spot.width, height: spot.height },
                 acceptedElementIds: spot.acceptedElementIds,
+                acceptTag: spot.acceptTag || undefined,
                 onDrop: () => { spot.actions.forEach(a => handleLocalAction(a)); },
             }));
         }
@@ -3135,7 +3198,11 @@ const InteractiveRuntime: React.FC<{
             // centre. Top-most matching target wins.
             const cx = dragOffset.x + el.width / 2;
             const cy = dragOffset.y + el.height / 2;
-            const target = hitTestDropTarget({ x: cx, y: cy }, el.id);
+            // A draggable bound to an inventory item matches by the item's tag when it has no tag of
+            // its own — so authors can just pick "this is item X" without retyping the tag.
+            const boundItem = el.boundItemId ? project.items?.[el.boundItemId] : null;
+            const effTag = el.dragTag || boundItem?.dragTag || undefined;
+            const target = hitTestDropTarget({ x: cx, y: cy }, el.id, effTag);
 
             if (target) {
                 // Snap to the target's centre if configured (works for local or remote targets).
@@ -3147,6 +3214,11 @@ const InteractiveRuntime: React.FC<{
                 setPlacedElements(prev => ({ ...prev, [el.id]: target.id }));
                 // Fire the target's actions (in its own surface's context).
                 target.onDrop(el.id);
+                // If this draggable represents an item, consume it (unless reusable) + run its use-effect.
+                if (boundItem) {
+                    if (boundItem.consumeOnUse !== false) handleLocalAction({ type: UIActionType.SetVariable, variableId: boundItem.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
+                    (boundItem.useEffect || []).forEach(eff => handleLocalAction(eff));
+                }
             } else if (el.snapBack) {
                 // Snap back to original position
                 setElementPositions(prev => ({ ...prev, [el.id]: { x: el.x, y: el.y } }));
@@ -3160,7 +3232,7 @@ const InteractiveRuntime: React.FC<{
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    }, [dragState, dragOffset, containerSize, interactiveElements, hotSpots, handleLocalAction]);
+    }, [dragState, dragOffset, containerSize, interactiveElements, hotSpots, handleLocalAction, project]);
 
     // Handle hot spot click/hover triggers
     const handleSpotClick = useCallback((spot: VNHotSpot) => {
@@ -4249,180 +4321,180 @@ const UIScreenRenderer: React.FC<{
 
 // --- In-Game Confirmation Dialog ---
 const InGameConfirmDialog: React.FC<{
-    type: 'quit' | 'newGame';
+    type: 'quit' | 'newGame' | 'eraseSave';
     settings?: VNConfirmDialogSettings;
     assetResolver: (id: VNID, type: string) => string;
     onConfirm: () => void;
     onCancel: () => void;
 }> = ({ type, settings: s, assetResolver, onConfirm, onCancel }) => {
-    const isQuit = type === 'quit';
-    const title = isQuit
-        ? (s?.quitTitle || 'Quit Game')
-        : (s?.newGameTitle || 'Start New Game');
-    const message = isQuit
-        ? (s?.quitMessage || 'Are you sure you want to quit?')
-        : (s?.newGameMessage || 'Any unsaved progress will be lost. Are you sure?');
-    const confirmLabel = isQuit
-        ? (s?.quitConfirmLabel || 'Quit')
-        : (s?.newGameConfirmLabel || 'New Game');
-    const cancelLabel = isQuit
-        ? (s?.quitCancelLabel || 'Cancel')
-        : (s?.newGameCancelLabel || 'Cancel');
+    // Per-variant text + hard-coded defaults (3 variants: quit / newGame / eraseSave).
+    const CONFIRM_DEFAULTS = {
+        quit: { title: 'Quit Game', message: 'Are you sure you want to quit?', confirm: 'Quit', cancel: 'Cancel' },
+        newGame: { title: 'Start New Game', message: 'Any unsaved progress will be lost. Are you sure?', confirm: 'New Game', cancel: 'Cancel' },
+        eraseSave: { title: 'Erase Save', message: 'Erase this save? This cannot be undone.', confirm: 'Erase', cancel: 'Cancel' },
+    } as const;
+    const def = CONFIRM_DEFAULTS[type];
+    const title = (s as any)?.[`${type}Title`] || def.title;
+    const message = (s as any)?.[`${type}Message`] || def.message;
+    const confirmLabel = (s as any)?.[`${type}ConfirmLabel`] || def.confirm;
+    const cancelLabel = (s as any)?.[`${type}CancelLabel`] || def.cancel;
 
-    const bgColor = s?.backgroundColor || '#0f172a';
-    const bgOpacity = (s?.backgroundOpacity ?? 92) / 100;
-    const borderRadius = s?.borderRadius ?? 12;
-    const overlayColor = s?.overlayColor || 'rgba(0,0,0,0.75)';
-    const confirmBtnColor = s?.confirmButtonColor || '';
-    const cancelBtnColor = s?.cancelButtonColor || '#1e293b';
-    const confirmHoverColor = s?.confirmHoverColor || '';
-    const cancelHoverColor = s?.cancelHoverColor || '#334155';
-    const btnBorderRadius = s?.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
-    const btnPad = s?.buttonPadding ?? 8;
-    const dialogPad = s?.dialogPadding ?? 32;
+    // Effective per-variant style: base (shared, legacy) overlaid with this variant's overrides.
+    // Old projects have no `variants` → e === base, so both dialogs look exactly as before.
+    const e = { ...(s || {}), ...((s?.variants?.[type]) || {}) };
 
-    const titleStyle: React.CSSProperties = s?.titleFont ? fontSettingsToStyle(s.titleFont) : { fontSize: '1.25rem', fontWeight: 600, color: '#fff' };
-    const messageStyle: React.CSSProperties = s?.messageFont ? fontSettingsToStyle(s.messageFont) : { fontSize: '0.95rem', color: '#cbd5e1' };
-    const buttonStyle: React.CSSProperties = s?.buttonFont ? fontSettingsToStyle(s.buttonFont) : { fontSize: '0.95rem', fontWeight: 500, color: '#fff' };
+    const bgColor = e.backgroundColor || '#0f172a';
+    const bgOpacity = (e.backgroundOpacity ?? 92) / 100;
+    const borderRadius = e.borderRadius ?? 12;
+    const overlayColor = e.overlayColor || 'rgba(0,0,0,0.75)';
+    const confirmBtnColor = e.confirmButtonColor || '';
+    const cancelBtnColor = e.cancelButtonColor || '#1e293b';
+    const confirmHoverColor = e.confirmHoverColor || '';
+    const cancelHoverColor = e.cancelHoverColor || '#334155';
+    const btnBorderRadius = e.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
+    const btnPad = e.buttonPadding ?? 8;
+    const dialogPad = e.dialogPadding ?? 32;
+
+    const titleStyle: React.CSSProperties = e.titleFont ? fontSettingsToStyle(e.titleFont) : { fontSize: '1.25rem', fontWeight: 600, color: '#fff' };
+    const messageStyle: React.CSSProperties = e.messageFont ? fontSettingsToStyle(e.messageFont) : { fontSize: '0.95rem', color: '#cbd5e1' };
+    const buttonStyle: React.CSSProperties = e.buttonFont ? fontSettingsToStyle(e.buttonFont) : { fontSize: '0.95rem', fontWeight: 500, color: '#fff' };
 
     // Resolve asset URLs
     const resolveAsset = (asset?: { id: VNID } | null) => asset?.id ? assetResolver(asset.id, 'image') : null;
-    const bgImageUrl = resolveAsset(s?.backgroundImage);
-    const borderImageUrl = resolveAsset(s?.borderImage);
-    const confirmBtnImgUrl = resolveAsset(s?.confirmButtonImage);
-    const cancelBtnImgUrl = resolveAsset(s?.cancelButtonImage);
-    const confirmHoverImgUrl = resolveAsset(s?.confirmHoverImage);
-    const cancelHoverImgUrl = resolveAsset(s?.cancelHoverImage);
+    const bgImageUrl = resolveAsset(e.backgroundImage);
+    const borderImageUrl = resolveAsset(e.borderImage);
+    const confirmBtnImgUrl = resolveAsset(e.confirmButtonImage);
+    const cancelBtnImgUrl = resolveAsset(e.cancelButtonImage);
+    const confirmHoverImgUrl = resolveAsset(e.confirmHoverImage);
+    const cancelHoverImgUrl = resolveAsset(e.cancelHoverImage);
 
-    const sizeMode = s?.backgroundSizeMode || 'stretch';
+    const sizeMode = e.backgroundSizeMode || 'stretch';
     const bgImageStyle: React.CSSProperties = bgImageUrl ? {
         backgroundImage: `url(${bgImageUrl})`,
         backgroundSize: sizeMode === 'nine-slice' ? undefined : (sizeMode === 'stretch' ? '100% 100%' : sizeMode),
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
         ...(sizeMode === 'nine-slice' ? {
-            borderImage: `url(${bgImageUrl}) ${s?.backgroundSlice ?? 20} fill`,
-            borderImageWidth: `${s?.backgroundSlice ?? 20}px`,
+            borderImage: `url(${bgImageUrl}) ${e.backgroundSlice ?? 20} fill`,
+            borderImageWidth: `${e.backgroundSlice ?? 20}px`,
         } : {}),
     } : {};
 
     const makeBtnImageStyle = (imgUrl: string | null): React.CSSProperties => {
         if (!imgUrl) return {};
-        const bsm = s?.buttonSizeMode || 'stretch';
+        const bsm = e.buttonSizeMode || 'stretch';
         return {
             backgroundImage: `url(${imgUrl})`,
             backgroundSize: bsm === 'nine-slice' ? undefined : (bsm === 'stretch' ? '100% 100%' : bsm),
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
             backgroundColor: 'transparent',
-            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${s?.buttonSlice ?? 10} fill`, borderImageWidth: `${s?.buttonSlice ?? 10}px` } : {}),
+            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${e.buttonSlice ?? 10} fill`, borderImageWidth: `${e.buttonSlice ?? 10}px` } : {}),
         };
     };
 
-    const borderPad = s?.borderPadding ?? 12;
+    const borderPad = e.borderPadding ?? 12;
+
+    // Shared box chrome (bg colour/opacity OR bg image). Used by both the centred auto-layout
+    // and the free/independent layout. Excludes padding/sizing so callers can position freely.
+    const boxStyleBase: React.CSSProperties = {
+        backgroundColor: bgImageUrl ? 'transparent' : bgColor,
+        opacity: bgImageUrl ? 1 : undefined,
+        borderRadius,
+        textAlign: 'center',
+        boxShadow: borderImageUrl ? 'none' : '0 12px 40px rgba(0,0,0,0.5)',
+        ...bgImageStyle,
+        ...(bgImageUrl ? {} : { background: `${bgColor}${Math.round(bgOpacity * 255).toString(16).padStart(2, '0')}` }),
+    };
+
+    // One reusable button renderer (was two near-identical inline buttons). `posStyle` lets the
+    // free layout position/size the button absolutely; auto layout passes nothing.
+    const renderBtn = (kind: 'confirm' | 'cancel', label: string, onClick: () => void, posStyle?: React.CSSProperties) => {
+        const isConfirm = kind === 'confirm';
+        const imgUrl = isConfirm ? confirmBtnImgUrl : cancelBtnImgUrl;
+        const hoverImgUrl = isConfirm ? confirmHoverImgUrl : cancelHoverImgUrl;
+        const baseColor = isConfirm ? (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)') : cancelBtnColor;
+        const hoverColor = isConfirm ? confirmHoverColor : cancelHoverColor;
+        const setBase = (el: HTMLButtonElement) => { if (isConfirm) el.style.background = baseColor; else el.style.backgroundColor = baseColor; };
+        return (
+            <button
+                onClick={onClick}
+                style={{
+                    ...buttonStyle,
+                    padding: `${btnPad}px ${btnPad * 3}px`,
+                    borderRadius: btnBorderRadius,
+                    ...(isConfirm
+                        ? { background: imgUrl ? 'transparent' : baseColor, border: 'none' }
+                        : { backgroundColor: imgUrl ? 'transparent' : baseColor, border: imgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)' }),
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s, box-shadow 0.15s',
+                    ...makeBtnImageStyle(imgUrl),
+                    ...(posStyle || {}),
+                }}
+                onMouseEnter={e => {
+                    if (hoverImgUrl) e.currentTarget.style.backgroundImage = `url(${hoverImgUrl})`;
+                    else if (hoverColor) { if (isConfirm) e.currentTarget.style.background = hoverColor; else e.currentTarget.style.backgroundColor = hoverColor; }
+                    else if (isConfirm) e.currentTarget.style.boxShadow = '0 4px 16px rgba(236,72,153,0.3)';
+                }}
+                onMouseLeave={e => {
+                    if (imgUrl) e.currentTarget.style.backgroundImage = `url(${imgUrl})`;
+                    else if (hoverImgUrl) { e.currentTarget.style.backgroundImage = 'none'; setBase(e.currentTarget); }
+                    else if (hoverColor) setBase(e.currentTarget);
+                    else if (isConfirm) e.currentTarget.style.boxShadow = 'none';
+                }}
+            >
+                {label}
+            </button>
+        );
+    };
+
+    const free = !!e.independentLayout;
+    const boxRect = e.boxRect, confirmRect = e.confirmRect, cancelRect = e.cancelRect;
+    const pctStyle = (r: { x: number; y: number; width: number; height: number }): React.CSSProperties =>
+        ({ position: 'absolute', left: `${r.x}%`, top: `${r.y}%`, width: `${r.width}%`, height: `${r.height}%` });
 
     return (
         <div
-            className="absolute inset-0 flex items-center justify-center"
+            className={`absolute inset-0 ${free && boxRect ? '' : 'flex items-center justify-center'}`}
             style={{ backgroundColor: overlayColor, zIndex: 9998, animation: 'fade-in 0.2s ease-out' }}
             onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
         >
-            {/* Border image wrapper */}
-            <div style={borderImageUrl ? {
-                backgroundImage: `url(${borderImageUrl})`,
-                backgroundSize: '100% 100%',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                padding: borderPad,
-                borderRadius,
-            } : {}}>
-                <div
-                    style={{
-                        backgroundColor: bgImageUrl ? 'transparent' : bgColor,
-                        opacity: bgImageUrl ? 1 : undefined,
-                        borderRadius,
-                        padding: dialogPad,
-                        ...(s?.dialogWidth ? { width: s.dialogWidth } : { minWidth: 320, maxWidth: 440 }),
-                        textAlign: 'center',
-                        boxShadow: borderImageUrl ? 'none' : '0 12px 40px rgba(0,0,0,0.5)',
-                        ...bgImageStyle,
-                        ...(bgImageUrl ? {} : { background: `${bgColor}${Math.round(bgOpacity * 255).toString(16).padStart(2, '0')}` }),
-                    }}
-                >
-                    <div style={{ ...titleStyle, marginBottom: '0.75rem' }}>{title}</div>
-                    <div style={{ ...messageStyle, marginBottom: '1.5rem' }}>{message}</div>
-                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                        <button
-                            onClick={onCancel}
-                            style={{
-                                ...buttonStyle,
-                                padding: `${btnPad}px ${btnPad * 3}px`,
-                                borderRadius: btnBorderRadius,
-                                backgroundColor: cancelBtnImgUrl ? 'transparent' : cancelBtnColor,
-                                border: cancelBtnImgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.15s',
-                                ...makeBtnImageStyle(cancelBtnImgUrl),
-                            }}
-                            onMouseEnter={e => {
-                                if (cancelHoverImgUrl) {
-                                    e.currentTarget.style.backgroundImage = `url(${cancelHoverImgUrl})`;
-                                } else {
-                                    e.currentTarget.style.backgroundColor = cancelHoverColor;
-                                }
-                            }}
-                            onMouseLeave={e => {
-                                if (cancelBtnImgUrl) {
-                                    e.currentTarget.style.backgroundImage = `url(${cancelBtnImgUrl})`;
-                                } else if (cancelHoverImgUrl) {
-                                    e.currentTarget.style.backgroundImage = 'none';
-                                    e.currentTarget.style.backgroundColor = cancelBtnColor;
-                                } else {
-                                    e.currentTarget.style.backgroundColor = cancelBtnColor;
-                                }
-                            }}
-                        >
-                            {cancelLabel}
-                        </button>
-                        <button
-                            onClick={onConfirm}
-                            style={{
-                                ...buttonStyle,
-                                padding: `${btnPad}px ${btnPad * 3}px`,
-                                borderRadius: btnBorderRadius,
-                                background: confirmBtnImgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)'),
-                                border: 'none',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.15s, box-shadow 0.15s',
-                                ...makeBtnImageStyle(confirmBtnImgUrl),
-                            }}
-                            onMouseEnter={e => {
-                                if (confirmHoverImgUrl) {
-                                    e.currentTarget.style.backgroundImage = `url(${confirmHoverImgUrl})`;
-                                } else if (confirmHoverColor) {
-                                    e.currentTarget.style.background = confirmHoverColor;
-                                } else {
-                                    e.currentTarget.style.boxShadow = '0 4px 16px rgba(236,72,153,0.3)';
-                                }
-                            }}
-                            onMouseLeave={e => {
-                                if (confirmBtnImgUrl) {
-                                    e.currentTarget.style.backgroundImage = `url(${confirmBtnImgUrl})`;
-                                } else if (confirmHoverImgUrl) {
-                                    e.currentTarget.style.backgroundImage = 'none';
-                                    e.currentTarget.style.background = confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)';
-                                } else if (confirmHoverColor) {
-                                    e.currentTarget.style.background = confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)';
-                                } else {
-                                    e.currentTarget.style.boxShadow = 'none';
-                                }
-                            }}
-                        >
-                            {confirmLabel}
-                        </button>
+            {free && boxRect ? (
+                <>
+                    {/* Free layout: box + each button positioned/sized independently (screen-%). */}
+                    <div style={{ ...boxStyleBase, ...pctStyle(boxRect), padding: dialogPad, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', overflow: 'hidden' }}>
+                        <div style={titleStyle}>{title}</div>
+                        <div style={messageStyle}>{message}</div>
+                    </div>
+                    {cancelRect && renderBtn('cancel', cancelLabel, onCancel, pctStyle(cancelRect))}
+                    {confirmRect && renderBtn('confirm', confirmLabel, onConfirm, pctStyle(confirmRect))}
+                </>
+            ) : (
+                /* Border image wrapper */
+                <div style={borderImageUrl ? {
+                    backgroundImage: `url(${borderImageUrl})`,
+                    backgroundSize: '100% 100%',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    padding: borderPad,
+                    borderRadius,
+                } : {}}>
+                    <div
+                        style={{
+                            ...boxStyleBase,
+                            padding: dialogPad,
+                            ...(e.dialogWidth ? { width: e.dialogWidth } : { minWidth: 320, maxWidth: 440 }),
+                        }}
+                    >
+                        <div style={{ ...titleStyle, marginBottom: '0.75rem' }}>{title}</div>
+                        <div style={{ ...messageStyle, marginBottom: '1.5rem' }}>{message}</div>
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                            {renderBtn('cancel', cancelLabel, onCancel)}
+                            {renderBtn('confirm', confirmLabel, onConfirm)}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
@@ -4486,7 +4558,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Track screens that are currently closing with transitions
     const [closingScreens, setClosingScreens] = useState<Set<VNID>>(new Set());
     // In-game confirmation dialog state
-    const [confirmDialog, setConfirmDialog] = useState<{ type: 'quit' | 'newGame'; pendingAction: VNUIAction } | null>(null);
+    const [confirmDialog, setConfirmDialog] = useState<{ type: 'quit' | 'newGame' | 'eraseSave'; pendingAction: VNUIAction } | null>(null);
     // Track scene exit transition (type, duration, and active state)
     const [sceneTransitionFading, setSceneTransitionFading] = useState(false);
     const [sceneTransitionType, setSceneTransitionType] = useState<'fade' | 'dissolve' | 'iris-out' | 'wipe-right' | 'slide-left' | 'instant'>('fade');
@@ -4710,6 +4782,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Play-container ref – measures the aspect-ratio box so we can set --font-scale
     const playContainerRef = useRef<HTMLDivElement | null>(null);
     const playContainerSize = useStageSize(playContainerRef);
+
+    // --- Carry-to-use: an item picked up onto the cursor, clicked onto a drop-zone hot spot to use it.
+    const [carriedItemId, setCarriedItemId] = useState<VNID | null>(null);
+    const [carryCursor, setCarryCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const carriedItem = carriedItemId ? project.items?.[carriedItemId] : null;
     // WebAudio resources for SFX
     const audioCtxRef = useRef<AudioContext | null>(null);
     const sfxBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
@@ -5133,6 +5210,21 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         };
 
         void createSaveRecord();
+    };
+
+    // Erase one save slot. Saves live in a single per-project record (`vn-saves-<id>`) that BOTH the
+    // Save and Load screens read, so removing the slot here clears it everywhere; setGameSaves
+    // refreshes the grid live (no reload). Mirrors saveGame's persistent/in-memory split.
+    const deleteGameSaveSlot = (slotNumber: number) => {
+        const doDelete = async () => {
+            const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
+            if (!(slotNumber in saves)) return;
+            delete saves[slotNumber];
+            if (!savesPersistentRef.current) inMemorySavesRef.current = saves;
+            else await saveGameSaves(saves);
+            setGameSaves({ ...saves });
+        };
+        void doDelete();
     };
 
     const loadGame = (slotNumber: number) => {
@@ -7961,6 +8053,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             setConfirmDialog({ type: 'newGame', pendingAction: action });
             return;
         }
+        if (action.type === UIActionType.DeleteSave) {
+            // Always confirm an erase via the customizable "Erase Save" dialog; the actual delete
+            // runs through executeUIAction on confirm (which doesn't re-intercept → no loop).
+            setConfirmDialog({ type: 'eraseSave', pendingAction: action });
+            return;
+        }
 
         executeUIAction(action, opts);
     };
@@ -8425,6 +8523,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             void doLoad();
         } else if (action.type === UIActionType.SaveGame) {
             saveGame((action as SaveGameAction).slotNumber);
+        } else if (action.type === UIActionType.DeleteSave) {
+            deleteGameSaveSlot((action as DeleteSaveAction).slotNumber);
         } else if (action.type === UIActionType.LoadGame) {
             loadGame((action as LoadGameAction).slotNumber);
         } else if (action.type === UIActionType.JumpToScene) {
@@ -9008,6 +9108,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
                 (item.useEffect || []).forEach((eff: VNUIAction) => executeUIAction(eff));
             }
+        } else if (action.type === UIActionType.CarryItem) {
+            // Pick the item up onto the cursor (point-and-click "carry"); use happens on a drop-zone click.
+            startCarry((action as any).itemId);
         } else if (action.type === UIActionType.RestockCollection) {
             // Refill an item list's stock to its configured amounts (each entry → a SetVariable 'set').
             const a = action as any;
@@ -9063,6 +9166,81 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const selectItem = (itemId: VNID | null, elementId: VNID) => {
         // Track which grid owns the selection so two grids showing the same item don't both highlight.
         updatePlayerState(p => p ? { ...p, selectedItemId: itemId, selectedElementId: itemId ? elementId : null } : null);
+    };
+
+    // --- Carry-to-use handlers ---
+    // Pick an item up onto the cursor and close the inventory overlay it was in, so the player can
+    // click a drop-zone hot spot on the scene to use it there (point-and-click style).
+    const startCarry = (itemId: VNID) => {
+        const item = project.items?.[itemId];
+        if (!item) return;
+        if (Number(screenVariables[item.countVariableId] ?? 0) < 1) return; // must actually own one
+        setCarriedItemId(itemId);
+        // Close the top overlay (the inventory) so the scene is reachable. Prefer the HUD overlay
+        // stack (typical "open inventory during play"); fall back to popping a full screen.
+        if (hudStack.length > 0) setHudStack(s => s.slice(0, -1));
+        else if (screenStack.length > 1) setScreenStack(s => s.slice(0, -1));
+        // Drop the inventory selection highlight.
+        updatePlayerState(p => p ? { ...p, selectedItemId: null, selectedElementId: null } : null);
+    };
+
+    // Player clicked while carrying: hit-test the drop-target registry at the cursor. On an accepting
+    // hot spot, fire its actions + the item's use-effect + consume (unless reusable). A miss cancels
+    // the carry (the item was never removed, so nothing is lost).
+    const resolveCarryClick = (clientX: number, clientY: number) => {
+        const item = carriedItemId ? project.items?.[carriedItemId] : null;
+        const rect = playContainerRef.current?.getBoundingClientRect();
+        if (!item || !carriedItemId || !rect || !rect.width || !rect.height) { setCarriedItemId(null); return; }
+        const pctX = ((clientX - rect.left) / rect.width) * 100;
+        const pctY = ((clientY - rect.top) / rect.height) * 100;
+        const target = hitTestDropTarget({ x: pctX, y: pctY }, carriedItemId, item.dragTag || undefined);
+        if (target) {
+            // Consume + run the item's own use-effect, then the hot spot's reaction (which may navigate).
+            if (item.consumeOnUse !== false) {
+                executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: 'subtract', value: 1 } as VNUIAction);
+            }
+            (item.useEffect || []).forEach(eff => executeUIAction(eff));
+            target.onDrop(carriedItemId, item.dragTag);
+        }
+        setCarriedItemId(null);
+    };
+
+    // While carrying: follow the cursor and let Esc / right-click cancel.
+    useEffect(() => {
+        if (!carriedItemId) return;
+        const onMove = (e: MouseEvent) => setCarryCursor({ x: e.clientX, y: e.clientY });
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setCarriedItemId(null); } };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('keydown', onKey, true);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('keydown', onKey, true); };
+    }, [carriedItemId]);
+
+    // Viewport-fixed ghost for a Show Item being press-dragged (rendered at the LivePreview root so
+    // it sits OUTSIDE the scene camera transform and tracks the cursor 1:1).
+    const [itemDragGhost, setItemDragGhost] = useState<{ url: string | null; x: number; y: number; w: number; h: number } | null>(null);
+    const handleItemDragMove = (url: string | null, x: number, y: number, w: number, h: number) => setItemDragGhost({ url, x, y, w, h });
+    const handleItemDragEnd = () => setItemDragGhost(null);
+
+    // A draggable on-scene Show Item was released: hit-test the drop registry at the cursor. On an
+    // accepting hot spot, fire its actions and remove the icon. A miss snaps it back (no-op here).
+    const handleItemOverlayDrop = (overlay: ButtonOverlay, clientX: number, clientY: number) => {
+        const itemId = overlay.dragItemId || overlay.giveItemId || null;
+        const item = itemId ? project.items?.[itemId] : null;
+        const rect = playContainerRef.current?.getBoundingClientRect();
+        if (!rect || !rect.width || !rect.height) return;
+        const pctX = ((clientX - rect.left) / rect.width) * 100;
+        const pctY = ((clientY - rect.top) / rect.height) * 100;
+        const tag = item?.dragTag || undefined;
+        const target = hitTestDropTarget({ x: pctX, y: pctY }, itemId || overlay.id, tag);
+        if (!target) return; // missed a valid target → snaps back
+        target.onDrop(itemId || overlay.id, tag);
+        updatePlayerState(p => p ? {
+            ...p,
+            stageState: overlay.removeAfterClick
+                ? { ...p.stageState, buttonOverlays: p.stageState.buttonOverlays.filter(b => b.id !== overlay.id) }
+                : p.stageState,
+            pickedUpItems: overlay.pickUpOnceId ? [...(p.pickedUpItems || []), overlay.pickUpOnceId] : p.pickedUpItems,
+        } : null);
     };
 
     const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
@@ -9905,10 +10083,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         {state.buttonOverlays.filter((o: ButtonOverlay) => !o.live || !o.conditions || evaluateConditions(o.conditions, liveVars)).map((overlay: ButtonOverlay) => (
                             <ButtonOverlayElement
                                 key={overlay.id}
-                                overlay={overlay} 
-                                onAction={handleUIAction} 
-                                playSound={playSound} 
+                                overlay={overlay}
+                                onAction={handleUIAction}
+                                playSound={playSound}
                                 onCommitVariables={commitUiVariablesToPlayerState}
+                                onItemDrop={handleItemOverlayDrop}
+                                onItemDragMove={handleItemDragMove}
+                                onItemDragEnd={handleItemDragEnd}
                                 onAdvance={overlay.waitForClick ? () => {
                                     updatePlayerState(p => {
                                         if (!p) return null;
@@ -9962,7 +10143,6 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                 onAction={handleUIAction}
                                 evaluateConditions={evaluateConditions}
                                 variables={liveVars}
-                                editTime={!hideCloseButton}
                                 onAdvance={() => updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null)}
                             />
                         ))}
@@ -11371,6 +11551,42 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 <button onClick={handleClose} className="absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50">
                     <XMarkIcon className="w-8 h-8"/>
                 </button>
+            )}
+
+            {/* Viewport-fixed ghost for a Show Item being press-dragged (tracks the cursor 1:1, outside
+                the scene camera transform). */}
+            {itemDragGhost && itemDragGhost.url && (
+                <img
+                    src={itemDragGhost.url}
+                    alt=""
+                    draggable={false}
+                    className="fixed z-[10060] pointer-events-none select-none"
+                    style={{ left: itemDragGhost.x, top: itemDragGhost.y, width: itemDragGhost.w, height: itemDragGhost.h, transform: 'translate(-50%, -50%)', objectFit: 'contain', filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.55))' }}
+                />
+            )}
+
+            {/* Carry-to-use overlay: a transparent click-catcher (resolves the drop on click) + the
+                item icon following the cursor + a small hint. Active only while carrying an item. */}
+            {carriedItem && (
+                <>
+                    <div
+                        className="absolute inset-0 z-[10050]"
+                        style={{ cursor: 'pointer' }}
+                        onClick={e => resolveCarryClick(e.clientX, e.clientY)}
+                        onContextMenu={e => { e.preventDefault(); setCarriedItemId(null); }}
+                    />
+                    <img
+                        src={assetResolver(carriedItem.icon?.id || null, 'image') || ''}
+                        alt=""
+                        draggable={false}
+                        className="fixed z-[10052] pointer-events-none select-none"
+                        style={{ left: carryCursor.x, top: carryCursor.y, maxWidth: 64, maxHeight: 64, width: 'auto', height: 'auto', objectFit: 'contain', transform: 'translate(-50%, -50%)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.6))' }}
+                    />
+                    <div className="fixed z-[10052] pointer-events-none px-2 py-1 rounded bg-black/75 text-white text-xs whitespace-nowrap"
+                        style={{ left: carryCursor.x + 36, top: carryCursor.y + 24 }}>
+                        {carriedItem.name} — click a spot to use · Esc to cancel
+                    </div>
+                </>
             )}
         </div>
     );

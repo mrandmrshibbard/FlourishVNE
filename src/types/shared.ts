@@ -39,6 +39,9 @@ export enum UIActionType {
     GoToScreen = 'GoToScreen',
     LoadGame = 'LoadGame',
     SaveGame = 'SaveGame',
+    /** Erases a save slot (clears it for both the Save and Load screens). Confirmed via the
+     *  customizable "Erase Save" confirmation dialog. */
+    DeleteSave = 'DeleteSave',
     ReturnToGame = 'ReturnToGame',
     ReturnToPreviousScreen = 'ReturnToPreviousScreen',
     QuitToTitle = 'QuitToTitle',
@@ -85,6 +88,9 @@ export enum UIActionType {
     DestroyItem = 'DestroyItem',
     /** Uses whichever inventory item the player has currently selected (no fixed item id). */
     UseSelectedItem = 'UseSelectedItem',
+    /** Picks up an item onto the cursor so the player can click a hot spot to use it there
+     *  (point-and-click "carry" use). Closes the inventory overlay it was picked from. */
+    CarryItem = 'CarryItem',
     /** Restocks an item list/collection to its configured amounts (reset or random range). */
     RestockCollection = 'RestockCollection',
     /** Buys one of an item from a shop list (spends the shop's currency, moves stock to the player). */
@@ -115,6 +121,7 @@ export interface ResetVariableAction extends BaseUIAction { type: UIActionType.R
 export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlaySound; audioId: VNID; volume?: number; loop?: boolean; }
 export interface LoadGameAction extends BaseUIAction { type: UIActionType.LoadGame; slotNumber: number; }
 export interface SaveGameAction extends BaseUIAction { type: UIActionType.SaveGame; slotNumber: number; }
+export interface DeleteSaveAction extends BaseUIAction { type: UIActionType.DeleteSave; slotNumber: number; }
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
@@ -127,10 +134,11 @@ export interface GiveItemAction extends BaseUIAction { type: UIActionType.GiveIt
 export interface UseItemAction extends BaseUIAction { type: UIActionType.UseItem; itemId: VNID; }
 export interface DestroyItemAction extends BaseUIAction { type: UIActionType.DestroyItem; itemId: VNID; quantity?: number; all?: boolean; }
 export interface UseSelectedItemAction extends BaseUIAction { type: UIActionType.UseSelectedItem; }
+export interface CarryItemAction extends BaseUIAction { type: UIActionType.CarryItem; itemId: VNID; }
 export interface RestockCollectionAction extends BaseUIAction { type: UIActionType.RestockCollection; collectionId: VNID; }
 export interface BuyItemAction extends BaseUIAction { type: UIActionType.BuyItem; itemId: VNID; collectionId: VNID; quantity?: number; }
 export interface SellItemAction extends BaseUIAction { type: UIActionType.SellItem; itemId: VNID; collectionId: VNID; quantity?: number; }
 export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType.BuySelectedItem; collectionId: VNID; }
 export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction;

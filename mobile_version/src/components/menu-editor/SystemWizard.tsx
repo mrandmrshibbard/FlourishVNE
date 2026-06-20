@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ColorInput } from '../ui/Form';
 import { createPortal } from 'react-dom';
 import { VNProject } from '../../types/project';
 import { VNID } from '../../types';
@@ -113,7 +114,7 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
                 <label className="block"><span className="text-xs text-slate-400">Columns</span>
                     <input type="number" min={1} max={8} value={columns} onChange={e => setColumns(Math.max(1, parseInt(e.target.value) || 1))} className="mt-1 w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 outline-none" /></label>
                 <label className="block"><span className="text-xs text-slate-400">Background color</span>
-                    <input type="color" value={backgroundColor} onChange={e => setBackgroundColor(e.target.value)} className="mt-1 w-full h-9 bg-slate-900 border border-slate-600 rounded" /></label>
+                    <ColorInput value={backgroundColor} onChange={v => setBackgroundColor(v)} /></label>
             </div>
 
             {(mode === 'imageMap' || mode === 'dragDrop') && (

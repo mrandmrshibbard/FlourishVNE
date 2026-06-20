@@ -179,7 +179,7 @@
     "asyncTip": "Tip: This command will execute and immediately advance to the next command without waiting for completion.",
     "conditions": "Conditions",
     "conditionsDesc": "This command will only run if all conditions are met.",
-    "liveConditions": "Keep evaluating live",
+    "liveConditions": "Live Evaluation",
     "liveConditionsDesc": "Re-check the conditions every moment and show/hide this live as variables change (instead of only once when reached)."
   },
   "vars": {
@@ -671,6 +671,7 @@
     "triggerDrop": "Drop target",
     "acceptTag": "Accept tag (optional)",
     "acceptTagPlaceholder": "e.g. key — leave empty to accept any",
+    "acceptTagHelp": "Accepts a carried item or dragged object whose tag matches this. Tag a key item “key”, accept “key” here. Leave empty to accept anything dropped here.",
     "advanceOnClick": "Advance dialogue on click",
     "advanceOnClickHint": "Otherwise the click is consumed",
     "drawDuringPlay": "Draw the spot during play",

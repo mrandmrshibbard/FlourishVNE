@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RangeInput } from './ui/Form';
+import { RangeInput, ColorInput } from './ui/Form';
 import { useTranslation, Trans } from 'react-i18next';
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n';
 import { VNProject, VNProjectFont, CGGalleryConfig, CGGalleryEntry } from '../types/project';
@@ -556,13 +556,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
         <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">{label}</label>
             <div className="flex items-center gap-3">
-                <input
-                    type="color"
-                    value={colorValue}
-                    onChange={(e) => onColorChange(e.target.value)}
-                    className="w-12 h-10 rounded cursor-pointer border border-[var(--border-default)]"
-                    style={{ padding: '2px' }}
-                />
+                <ColorInput value={colorValue} onChange={v => onColorChange(v)} />
                 <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
                         <span className="text-xs text-[var(--text-secondary)]">Opacity</span>
@@ -1082,13 +1076,7 @@ const UIAssetsSettings: React.FC<UIAssetsSettingsProps> = ({ project, onUpdate }
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">Hover Background Color</label>
-                            <input
-                                type="color"
-                                value={project.ui.choiceHoverColor ?? '#334155'}
-                                onChange={(e) => onUpdate({ choiceHoverColor: e.target.value })}
-                                className="w-12 h-10 rounded cursor-pointer border border-[var(--border-default)]"
-                                style={{ padding: '2px' }}
-                            />
+                            <ColorInput value={project.ui.choiceHoverColor ?? '#334155'} onChange={v => onUpdate({ choiceHoverColor: v })} />
                         </div>
                     </div>
                 </div>
@@ -1595,12 +1583,7 @@ const CGGallerySettings: React.FC<CGGallerySettingsProps> = ({ project, onUpdate
                 <div>
                     <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">{t('cgGallery.viewerBgColor')}</label>
                     <div className="flex gap-2 items-center">
-                        <input
-                            type="color"
-                            value={gallery.viewerBackgroundColor || '#000000'}
-                            onChange={(e) => updateGallery({ viewerBackgroundColor: e.target.value })}
-                            className="h-9 w-12 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded cursor-pointer"
-                        />
+                        <ColorInput value={gallery.viewerBackgroundColor || '#000000'} onChange={v => updateGallery({ viewerBackgroundColor: v })} />
                         <input
                             type="text"
                             value={gallery.viewerBackgroundColor || '#000000'}

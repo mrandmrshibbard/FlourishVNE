@@ -313,6 +313,10 @@ const DialogueGroup: React.FC<{ groupId: InspectorGroupId; cmd: DialogueCommand;
             <FormField label={t('dialogue.keepOpen')}>
                 <input type="checkbox" checked={cmd.keepOpenDuringChoices ?? false} onChange={e => updateCommand({ keepOpenDuringChoices: e.target.checked } as any)} className="cursor-pointer" />
             </FormField>
+            <FormField label={t('dialogue.textSpeed', 'Text speed override')}>
+                <TextInput type="number" min="0" max="100" value={cmd.textSpeed ?? ''} placeholder={t('dialogue.textSpeedGlobal', 'Global default')}
+                    onChange={e => { const n = parseInt(e.target.value, 10); updateCommand({ textSpeed: Number.isFinite(n) && n > 0 ? Math.min(n, 100) : undefined } as any); }} />
+            </FormField>
         </>;
     }
     if (groupId === 'effects') {
@@ -489,6 +493,13 @@ const ShowItemGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowItemCommand;
                     <input type="checkbox" checked={cmd.giveOnClick !== false} onChange={e => updateCommand({ giveOnClick: e.target.checked } as any)} className="w-4 h-4" />
                     {t('showItem.giveOnClick')}
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={!!cmd.draggable} onChange={e => updateCommand({ draggable: e.target.checked } as any)} className="w-4 h-4" />
+                    {t('showItem.draggable', 'Player can drag it onto a hot spot')}
+                </label>
+                {cmd.draggable && (
+                    <p className="text-[10px] text-[var(--text-muted)] -mt-1">{t('showItem.draggableHint', 'The player presses and drags this item onto a drop-zone hot spot that accepts the item’s Drag tag (set the tag in Systems → Items). On a successful drop the hot spot’s actions fire and the icon is removed. No inventory needed.')}</p>
+                )}
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                     <input type="checkbox" checked={cmd.removeAfterPickup !== false} onChange={e => updateCommand({ removeAfterPickup: e.target.checked } as any)} className="w-4 h-4" />
                     {t('showItem.removeAfterPickup')}
@@ -1222,6 +1233,12 @@ const HideTargetGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
 // ─────────────────────────────────────────────────────────────────────────────
 const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
     const acts = cmd.actions || [];
+    // Drag-tag suggestions for the Accept-tag autocomplete: carry-to-use items + draggable screen
+    // objects already tagged, so authors pick an existing tag instead of risking a typo.
+    const dragTagOptions = Array.from(new Set([
+        ...Object.values(project.items || {}).map((it: any) => it.dragTag),
+        ...Object.values(project.uiScreens || {}).flatMap((s: any) => Object.values(s.elements || {}).map((el: any) => el.dragTag)),
+    ].filter((x): x is string => !!x)));
     switch (groupId) {
         case 'content':
             return <>
@@ -1243,7 +1260,11 @@ const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCo
                 </div>
                 {cmd.trigger === 'drag-drop' && (
                     <FormField label={t('hotspot.acceptTag')}>
-                        <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value } as any)} placeholder={t('hotspot.acceptTagPlaceholder')} />
+                        <TextInput list="flourish-hotspot-cmd-tags" value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value } as any)} placeholder={t('hotspot.acceptTagPlaceholder')} />
+                        <datalist id="flourish-hotspot-cmd-tags">
+                            {dragTagOptions.map(tag => <option key={tag} value={tag} />)}
+                        </datalist>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('hotspot.acceptTagHelp', 'Accepts a carried item or dragged object whose tag matches this. Tag a key item “key”, accept “key” here. Leave empty to accept anything dropped here.')}</p>
                     </FormField>
                 )}
                 {cmd.trigger === 'click' && (

@@ -9,7 +9,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { VNTransition, VNPosition, VNPositionPreset } from '../../types';
-import { FormField, Select, TextInput, RangeInput } from '../ui/Form';
+import { FormField, Select, TextInput, RangeInput, ColorInput } from '../ui/Form';
 import TransitionPreview from '../ui/TransitionPreview';
 
 /**
@@ -177,7 +177,7 @@ export const CharacterVisualEffectsEditor: React.FC<{
                 {(eff.type === 'glow' || eff.type === 'tint' || eff.type === 'silhouette') && (
                     <div className="flex items-center gap-2">
                         <span className="text-xs w-12 shrink-0" style={{ color: 'var(--text-secondary)' }}>{t('character.color')}</span>
-                        <input type="color" value={eff.color || '#FFFFFF'} onChange={e => updateEffect(idx, { color: e.target.value })} className="w-7 h-7 rounded cursor-pointer border-0" />
+                        <ColorInput value={eff.color || '#FFFFFF'} onChange={v => updateEffect(idx, { color: v })} />
                     </div>
                 )}
             </div>

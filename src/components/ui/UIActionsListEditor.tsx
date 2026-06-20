@@ -80,6 +80,7 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
             [UIActionType.OpenURL]: { url: '', newTab: true },
             [UIActionType.LoadGame]: { slotNumber: 1 },
             [UIActionType.SaveGame]: { slotNumber: 1 },
+            [UIActionType.DeleteSave]: { slotNumber: 1 },
         };
         const next = [...actions];
         next[index] = { type: newType, ...(defaults[newType] || {}) } as VNUIAction;
@@ -246,6 +247,7 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
             }
             case UIActionType.SaveGame:
             case UIActionType.LoadGame:
+            case UIActionType.DeleteSave:
                 return (
                     <div className="ml-3 mt-1 mb-2 p-1.5 border-l-2 border-sky-500/30">
                         <div className="flex items-center gap-1">
@@ -253,6 +255,9 @@ const UIActionsListEditor: React.FC<UIActionsListEditorProps> = ({
                             <input type="number" value={a.slotNumber ?? 1} min={1} max={99}
                                 onChange={e => updateAction(index, { slotNumber: Number(e.target.value) } as any)} className={inputCls + ' w-16'} />
                         </div>
+                        {a.type === UIActionType.DeleteSave && (
+                            <p className="text-[10px] text-[var(--text-muted)] mt-1">{t('actionsList.deleteSaveHint', 'Erases this slot (clears it for Save and Load). Shows the customizable “Erase Save” confirmation first.')}</p>
+                        )}
                     </div>
                 );
             default:

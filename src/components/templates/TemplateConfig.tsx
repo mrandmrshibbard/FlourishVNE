@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { ColorInput } from '../ui/Form';
 import { useTranslation } from 'react-i18next';
 import { Template, TemplateConfig as TConfig, TemplateValidationResult } from '../../types/template';
 import { VNID } from '../../types';
@@ -437,12 +438,7 @@ const ConfigFieldRenderer: React.FC<ConfigFieldRendererProps> = ({
       )}
 
       {field.type === 'color' && (
-        <input
-          type="color"
-          className="config-field__color"
-          value={value || '#000000'}
-          onChange={handleChange}
-        />
+        <ColorInput value={value || '#000000'} onChange={v => (handleChange)({ target: { value: v } } as any)} />
       )}
 
       {error && (

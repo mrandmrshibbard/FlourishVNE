@@ -17,7 +17,7 @@ import ConditionsEditor from '../ui/ConditionsEditor';
  *  (Intentionally excludes PlayAnimation / ChangeImage, which are interactive-element-only.) */
 const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.None, UIActionType.StartNewGame, UIActionType.ContinueGame, UIActionType.GoToScreen,
-    UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
+    UIActionType.LoadGame, UIActionType.SaveGame, UIActionType.DeleteSave, UIActionType.ReturnToGame, UIActionType.ReturnToPreviousScreen,
     UIActionType.QuitToTitle, UIActionType.ExitGame, UIActionType.JumpToScene, UIActionType.JumpToLabel,
     UIActionType.SetVariable, UIActionType.ResetVariable, UIActionType.PlaySound, UIActionType.CycleLayerAsset, UIActionType.ToggleScreen, UIActionType.OpenURL,
     UIActionType.ShowElement, UIActionType.HideElement,
@@ -296,6 +296,21 @@ const ActionEditor: React.FC<{
                                 </optgroup>
                             ))}
                         </Select>
+                    </FormField>
+                );
+            }
+            case UIActionType.SaveGame:
+            case UIActionType.LoadGame:
+            case UIActionType.DeleteSave: {
+                const a = action as any;
+                return (
+                    <FormField label={t('actionEditor.saveSlot', 'Save slot')}>
+                        <input type="number" min={1} max={99} value={a.slotNumber ?? 1}
+                            onChange={e => onActionChange({ ...a, slotNumber: Number(e.target.value) || 1 })}
+                            className="w-full bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs" />
+                        {action.type === UIActionType.DeleteSave && (
+                            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('actionEditor.deleteSaveHint', 'Erases this slot (Save + Load). Shows the customizable “Erase Save” confirmation first.')}</p>
+                        )}
                     </FormField>
                 );
             }

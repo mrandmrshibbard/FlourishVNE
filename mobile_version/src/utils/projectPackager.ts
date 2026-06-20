@@ -841,10 +841,13 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
         }
     }
 
-    // Process confirm dialog image assets
+    // Process confirm dialog image assets. Walk the shared base AND each per-variant override
+    // (variants.quit / variants.newGame) so per-variant images are embedded too. Dedupe by asset
+    // id — the URL rewrite is keyed by id in the images/backgrounds dicts, so embedding once covers
+    // every reference (and re-processing an already-embedded id would spuriously fail to re-fetch).
     const cdSettings = projectClone.ui.confirmDialogs;
     if (cdSettings) {
-        const cdImageFields: { field: keyof typeof cdSettings; prefix: string }[] = [
+        const cdImageFields: { field: string; prefix: string }[] = [
             { field: 'backgroundImage', prefix: 'cd_bg' },
             { field: 'borderImage', prefix: 'cd_border' },
             { field: 'confirmButtonImage', prefix: 'cd_confirm_btn' },
@@ -852,10 +855,15 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
             { field: 'confirmHoverImage', prefix: 'cd_confirm_hover' },
             { field: 'cancelHoverImage', prefix: 'cd_cancel_hover' },
         ];
+        const cdSources = [cdSettings, cdSettings.variants?.quit, cdSettings.variants?.newGame].filter(Boolean) as Record<string, any>[];
+        const cdProcessed = new Set<string>();
+        for (const src of cdSources)
         for (const { field, prefix } of cdImageFields) {
-            const uiAsset = cdSettings[field] as { id: string } | null | undefined;
+            const uiAsset = src[field] as { id: string } | null | undefined;
             if (!uiAsset?.id) continue;
             const assetId = uiAsset.id;
+            if (cdProcessed.has(assetId)) continue;
+            cdProcessed.add(assetId);
             const asset = projectClone.images[assetId] || projectClone.backgrounds[assetId];
             const assetUrl = (asset as any)?.imageUrl;
             if (assetUrl && assetUrl.startsWith('data:')) {

@@ -54,27 +54,26 @@ export const ColorInput: React.FC<{
     value: string;
     onChange: (value: string) => void;
     className?: string;
-}> = ({ value, onChange, className }) => {
-    const [localValue, setLocalValue] = useState(value);
+    disabled?: boolean;
+}> = ({ value, onChange, className, disabled }) => {
+    const [localValue, setLocalValue] = useState(value); // normalized hex (drives the swatch)
+    const [text, setText] = useState(value);             // raw text the user is typing (may be partial)
     const latestValueRef = useRef(value);
     const lastDispatchRef = useRef(0);
     const timeoutRef = useRef<number | null>(null);
 
-    // Sync from parent when external value changes (e.g. undo/redo)
+    // Sync from parent when external value changes (e.g. undo/redo, switching elements)
     useEffect(() => {
         latestValueRef.current = value;
         setLocalValue(value);
+        setText(value);
     }, [value]);
 
-    // The native colour input fires a continuous stream of `input` events while the user drags
-    // in the picker. Each upstream onChange is a full project dispatch that re-renders the whole
-    // editor, so firing one per event (or even per animation frame) makes colour-picking — and
-    // editing elements with many colour fields like a health-bar Meter — lag. We keep the swatch
-    // live via local state but THROTTLE the upstream commit to ~10/sec, then flush the final value.
+    // The native colour SWATCH fires a continuous stream of events while dragging. Each upstream
+    // onChange is a full project dispatch that re-renders the editor, so we THROTTLE the swatch
+    // commit to ~10/sec (then flush the final value). Typed hex commits immediately (not a drag).
     const THROTTLE_MS = 100;
-    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const newVal = e.target.value;
-        setLocalValue(newVal);
+    const commitThrottled = useCallback((newVal: string) => {
         latestValueRef.current = newVal;
         const now = performance.now();
         if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
@@ -91,27 +90,74 @@ export const ColorInput: React.FC<{
         }
     }, [onChange]);
 
-    // Guarantee the final picked colour lands (e.g. if the last event came mid-throttle window).
+    const handleSwatch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const newVal = e.target.value;
+        setLocalValue(newVal);
+        setText(newVal);
+        commitThrottled(newVal);
+    }, [commitThrottled]);
+
     const flush = useCallback(() => {
         if (timeoutRef.current !== null) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
         if (latestValueRef.current !== value) onChange(latestValueRef.current);
     }, [onChange, value]);
 
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
-        };
-    }, []);
+    useEffect(() => () => { if (timeoutRef.current !== null) clearTimeout(timeoutRef.current); }, []);
+
+    // ── Hex text entry (type or paste) ──
+    // Normalizes "abc"/"#abc"/"aabbcc"/"#aabbcc" → "#aabbcc"; null if not a valid 3/6-digit hex.
+    const normalizeHex = (raw: string): string | null => {
+        let h = raw.trim().replace(/^#/, '');
+        if (/^[0-9a-fA-F]{3}$/.test(h)) h = h.split('').map(c => c + c).join('');
+        if (/^[0-9a-fA-F]{6}$/.test(h)) return '#' + h.toLowerCase();
+        return null;
+    };
+    const handleHexChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        setText(raw);
+        const norm = normalizeHex(raw);
+        if (norm) { // commit once it's a complete, valid colour
+            setLocalValue(norm);
+            latestValueRef.current = norm;
+            onChange(norm);
+        }
+    };
+    const handleHexBlur = () => {
+        const norm = normalizeHex(text);
+        if (norm) {
+            setText(norm);
+            setLocalValue(norm);
+            if (norm !== value) onChange(norm);
+        } else {
+            setText(value); // revert unparseable input
+            setLocalValue(value);
+        }
+    };
 
     return (
-        <input
-            type="color"
-            value={localValue || '#000000'}
-            onChange={handleChange}
-            onBlur={flush}
-            className={`${inputBaseStyles} ${className || ''}`}
-        />
+        <div className={`flex items-center gap-2 ${className || 'w-full'} ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <input
+                type="color"
+                value={localValue || '#000000'}
+                onChange={handleSwatch}
+                onBlur={flush}
+                disabled={disabled}
+                title="Pick a colour"
+                className="h-9 w-11 flex-shrink-0 rounded-lg border border-[var(--border-default)] bg-transparent cursor-pointer p-0.5"
+            />
+            <input
+                type="text"
+                value={text}
+                onChange={handleHexChange}
+                onBlur={handleHexBlur}
+                disabled={disabled}
+                spellCheck={false}
+                maxLength={7}
+                placeholder="#RRGGBB"
+                aria-label="Hex colour code"
+                className="flex-1 min-w-0 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded-lg px-2.5 py-1.5 text-sm font-mono uppercase text-[var(--text-primary)] placeholder-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] focus:outline-none focus:border-[var(--accent-lavender)]"
+            />
+        </div>
     );
 };
 

@@ -8,6 +8,8 @@ import { ChangelogModal } from './ChangelogModal';
 import { useToast } from '../contexts/ToastContext';
 import LoadingOverlay from './ui/LoadingOverlay';
 import { getAutoSaveMetadata, loadProjectFromIDB, deleteAutoSave } from '../utils/storage';
+import { useTheme } from '../contexts/ThemeContext';
+import HolidayDecorations from './HolidayDecorations';
 
 // Recent project metadata (stored in localStorage)
 interface RecentProject {
@@ -111,6 +113,7 @@ export const ProjectHub: React.FC<{
     const [showRecovery, setShowRecovery] = useState(false);
     const toast = useToast();
     const { t } = useTranslation('hub');
+    const { theme, isHoliday, exitHoliday } = useTheme();
 
     const ITCHIO_URL = 'https://memento-morii1.itch.io/flourish-visual-novel-engine';
 
@@ -479,7 +482,14 @@ export const ProjectHub: React.FC<{
     return (
         <div className="h-screen w-screen text-[var(--text-primary)] flex items-center justify-center p-4 overflow-y-auto"
             style={{
-                background: `
+                background: isHoliday
+                    ? `
+                    radial-gradient(ellipse at 16% 26%, rgba(255, 45, 78, 0.30) 0%, transparent 52%),
+                    radial-gradient(ellipse at 84% 28%, rgba(47, 107, 255, 0.30) 0%, transparent 52%),
+                    radial-gradient(ellipse at 50% 100%, rgba(255, 255, 255, 0.14) 0%, transparent 46%),
+                    linear-gradient(180deg, var(--bg-primary) 0%, #04060e 100%)
+                    `
+                    : `
                     radial-gradient(ellipse at 20% 30%, rgba(255, 126, 179, 0.12) 0%, transparent 50%),
                     radial-gradient(ellipse at 80% 70%, rgba(126, 255, 255, 0.1) 0%, transparent 50%),
                     radial-gradient(ellipse at 50% 100%, rgba(184, 126, 255, 0.08) 0%, transparent 40%),
@@ -487,6 +497,21 @@ export const ProjectHub: React.FC<{
                 `
             }}
         >
+            {/* Seasonal/holiday hub decorations (fireworks + gradient flashes) + a quick off-switch. */}
+            {isHoliday && theme.holiday && (
+                <>
+                    <HolidayDecorations decoration={theme.holiday.decoration} />
+                    <button
+                        onClick={exitHoliday}
+                        title={t('holiday.turnOffTip', 'Switch back to your normal theme (you can re-pick it anytime in the Theme menu)')}
+                        className="fixed bottom-4 left-4 z-50 flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium bg-[var(--bg-secondary)]/85 backdrop-blur-md border border-[var(--border-default)]/60 text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] shadow-lg transition-colors"
+                    >
+                        <span>{theme.emoji} {t('holiday.activeLabel', { theme: theme.label, defaultValue: '{{theme}} theme' })}</span>
+                        <span className="opacity-50">·</span>
+                        <span className="font-semibold">{t('holiday.turnOff', 'Turn off')}</span>
+                    </button>
+                </>
+            )}
             {/* Floating decorative elements */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-20 left-10 w-32 h-32 rounded-full bg-gradient-to-br from-[var(--accent-pink)]/10 to-transparent blur-2xl animate-float" style={{ animationDelay: '0s' }} />

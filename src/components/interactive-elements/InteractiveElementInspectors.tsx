@@ -10,6 +10,7 @@
  * can stay unchanged — purely an implementation detail, no save/load impact.
  */
 import React, { useMemo } from 'react';
+import { ColorInput } from '../ui/Form';
 import { useTranslation } from 'react-i18next';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
@@ -59,6 +60,8 @@ function hotZoneElementPatchToTyped(
     if ('snapBack' in patch) out.snapBack = patch.snapBack;
     if ('snapToHotSpot' in patch) out.snapToHotSpot = patch.snapToHotSpot;
     if ('hideOnDrop' in patch) out.hideOnDrop = patch.hideOnDrop;
+    if ('dragTag' in patch) out.dragTag = patch.dragTag;
+    if ('boundItemId' in patch) out.boundItemId = patch.boundItemId;
     if ('actions' in patch) out.actions = patch.actions;
     if ('clickSoundId' in patch) out.clickSoundId = patch.clickSoundId;
     if ('hoverSoundId' in patch) out.hoverSoundId = patch.hoverSoundId;
@@ -130,7 +133,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 imageMapRegions: (el as any).imageMapRegions,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -148,7 +151,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 videoLoop: anyEl.videoLoop, videoMuted: anyEl.videoMuted,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -159,7 +162,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 imageId: '' as VNID, text: (el as any).text, font: (el as any).font,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -172,7 +175,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 backgroundColor: (el as any).backgroundColor,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: el.conditions,
                 actions: (el as any).actions ?? anyEl.actions,
                 clickSoundId: (el as any).clickSoundId ?? null,
@@ -191,7 +194,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
                 maxLength: (el as any).maxLength,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
-                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
+                snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
                 conditions: el.conditions, actions: anyEl.actions,
                 clickSoundId: anyEl.clickSoundId, hoverSoundId: anyEl.hoverSoundId,
             };
@@ -206,10 +209,12 @@ export const HotSpotProperties: React.FC<{
     project: VNProject;
     /** Names of draggable elements on the screen — used as the "Accepted Elements" picker. */
     targetableElements: { id: VNID; name: string }[];
+    /** Drag tags already used by draggable objects on this screen — for the Accept-tag autocomplete. */
+    dragTagOptions?: string[];
     onUpdate: (patch: Partial<UIHotSpotElement>) => void;
     /** Removes this hot spot from the screen. */
     onDelete?: () => void;
-}> = ({ spot, project, targetableElements, onUpdate: typedOnUpdate, onDelete }) => {
+}> = ({ spot, project, targetableElements, dragTagOptions = [], onUpdate: typedOnUpdate, onDelete }) => {
     const { t } = useTranslation('ui');
     // Inside the body we still operate on the legacy VNHotSpot shape (field
     // names match), so existing JSX builds Partial<VNHotSpot> patches; convert
@@ -271,7 +276,22 @@ export const HotSpotProperties: React.FC<{
             </div>
 
             {spot.trigger === 'drag-drop' && (
-                <div>
+                <div className="space-y-2 rounded-md border border-[var(--border-subtle)] p-2 bg-[var(--bg-primary)]/40">
+                    <p className="text-[10px] text-[var(--text-muted)]">{t('hotZone.dropHowHint', 'Choose what this drop zone accepts. Use a tag for groups of objects (easiest), or tick specific objects below.')}</p>
+                    {/* Easiest path: accept-by-tag */}
+                    <label className="block">
+                        <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.acceptTagLabel', 'Accept objects tagged')}</span>
+                        <input
+                            type="text"
+                            list="flourish-drag-tags"
+                            value={spot.acceptTag || ''}
+                            placeholder={t('hotZone.acceptTagPlaceholder', 'e.g. key — leave empty to accept any')}
+                            onChange={e => onUpdate({ acceptTag: e.target.value || undefined })}
+                            className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
+                        />
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('hotZone.acceptTagHelp', 'Type the same word you put in an object’s “Drag tag”. Tip: tag every key “key”, then accept “key” here so any key works.')}</p>
+                    </label>
+                    <div>
                     <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.acceptedElements')}</span>
                     <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('hotZone.acceptedHint')}</p>
                     <div className="mt-0.5 space-y-0.5 max-h-28 overflow-y-auto">
@@ -298,18 +318,17 @@ export const HotSpotProperties: React.FC<{
                             <p className="text-[10px] text-slate-500 italic">{t('hotZone.noElementsYet')}</p>
                         )}
                     </div>
+                    </div>
+                    <datalist id="flourish-drag-tags">
+                        {dragTagOptions.map(tag => <option key={tag} value={tag} />)}
+                    </datalist>
                 </div>
             )}
 
             <div className="flex gap-2">
                 <label className="block flex-1">
                     <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.highlightColor')}</span>
-                    <input
-                        type="color"
-                        value={spot.highlightColor || '#3b82f6'}
-                        onChange={e => onUpdate({ highlightColor: e.target.value })}
-                        className="w-full mt-0.5 h-7 bg-transparent border border-[var(--border-default)] rounded cursor-pointer"
-                    />
+                    <ColorInput value={spot.highlightColor || '#3b82f6'} onChange={v => onUpdate({ highlightColor: v })} />
                 </label>
                 <label className="flex items-end gap-1.5 pb-0.5">
                     <input
@@ -424,10 +443,12 @@ export const InteractiveElementProperties: React.FC<{
     /** Names of draggable elements on the screen — used by the inner actions
      *  editor's target-element pickers. */
     targetableElements: { id: VNID; name: string }[];
+    /** Drag tags already used on this screen — for the Drag-tag autocomplete. */
+    dragTagOptions?: string[];
     onUpdate: (patch: Partial<VNUIElement>) => void;
     /** Removes this element (draggable / image map) from the screen. */
     onDelete?: () => void;
-}> = ({ element: typedElement, project, targetableElements, onUpdate: typedOnUpdate, onDelete }) => {
+}> = ({ element: typedElement, project, targetableElements, dragTagOptions = [], onUpdate: typedOnUpdate, onDelete }) => {
     const { t } = useTranslation('ui');
     const element = toLegacyHotZoneElement(typedElement);
     if (!element) return null;
@@ -594,15 +615,11 @@ export const InteractiveElementProperties: React.FC<{
                     <div className="grid grid-cols-2 gap-1">
                         <label className="block">
                             <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.background')}</span>
-                            <input type="color" value={element.backgroundColor || '#1e293b'}
-                                onChange={e => onUpdate({ backgroundColor: e.target.value })}
-                                className="w-full h-6 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
+                            <ColorInput value={element.backgroundColor || '#1e293b'} onChange={v => onUpdate({ backgroundColor: v })} />
                         </label>
                         <label className="block">
                             <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.border')}</span>
-                            <input type="color" value={element.borderColor || '#475569'}
-                                onChange={e => onUpdate({ borderColor: e.target.value })}
-                                className="w-full h-6 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
+                            <ColorInput value={element.borderColor || '#475569'} onChange={v => onUpdate({ borderColor: v })} />
                         </label>
                     </div>
                 </>
@@ -726,9 +743,7 @@ export const InteractiveElementProperties: React.FC<{
 
                                 <label className="block">
                                     <span className="text-[var(--text-muted)] text-[10px]">{t('hotZone.highlightColor')}</span>
-                                    <input type="color" value={region.highlightColor?.startsWith('rgba') ? '#10b981' : (region.highlightColor || '#10b981')}
-                                        onChange={e => updateRegion(idx, { highlightColor: e.target.value + '4D' })}
-                                        className="w-full h-5 bg-transparent border border-[var(--border-default)] rounded cursor-pointer" />
+                                    <ColorInput value={region.highlightColor?.startsWith('rgba') ? '#10b981' : (region.highlightColor || '#10b981')} onChange={v => updateRegion(idx, { highlightColor: v + '4D' })} />
                                 </label>
 
                                 <UIActionsListEditor
@@ -777,11 +792,7 @@ export const InteractiveElementProperties: React.FC<{
                                 className="bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-1 py-0.5 text-white text-[10px]"
                                 title={t('hotZone.fontSize')}
                             />
-                            <input type="color" value={font.color}
-                                onChange={e => updateFont({ color: e.target.value })}
-                                className="h-6 bg-transparent border border-[var(--border-default)] rounded cursor-pointer"
-                                title={t('hotZone.textColor')}
-                            />
+                            <ColorInput value={font.color} onChange={v => updateFont({ color: v })} />
                         </div>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
@@ -862,6 +873,35 @@ export const InteractiveElementProperties: React.FC<{
                                 <span className="text-[var(--text-secondary)]">{t('hotZone.hideOnDrop')}</span>
                             </label>
                         )}
+                        <label className="block ml-3 mt-1">
+                            <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.dragTagLabel', 'Drag tag')}</span>
+                            <input
+                                type="text"
+                                list="flourish-drag-tags"
+                                value={element.dragTag || ''}
+                                placeholder={t('hotZone.dragTagPlaceholder', 'e.g. key')}
+                                onChange={e => onUpdate({ dragTag: e.target.value || undefined })}
+                                className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
+                            />
+                            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('hotZone.dragTagHelp', 'Give this object a label so a drop zone can accept it by tag. Give several objects the same tag to make them interchangeable (e.g. all keys “key”). Optional.')}</p>
+                        </label>
+                        <label className="block ml-3 mt-1">
+                            <span className="text-[var(--text-secondary)] text-xs font-semibold">{t('hotZone.boundItem', 'This object is an item (optional)')}</span>
+                            <select
+                                value={element.boundItemId || ''}
+                                onChange={e => onUpdate({ boundItemId: (e.target.value || undefined) as VNID | undefined })}
+                                className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
+                            >
+                                <option value="">{t('hotZone.boundItemNone', '— none —')}</option>
+                                {(Object.values(project.items || {}) as any[]).map(it => (
+                                    <option key={it.id} value={it.id}>{it.name || it.id}</option>
+                                ))}
+                            </select>
+                            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('hotZone.boundItemHelp', 'When set, dropping this on a hot spot consumes the item (unless it’s reusable) and runs its use-effect. If Drag tag is empty, the item’s own tag is used to match hot spots.')}</p>
+                        </label>
+                        <datalist id="flourish-drag-tags">
+                            {dragTagOptions.map(tag => <option key={tag} value={tag} />)}
+                        </datalist>
                     </>
                 )}
             </div>

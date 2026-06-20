@@ -168,6 +168,9 @@ export interface DialogueCommand extends BaseCommand {
     textboxThemeId?: VNID | null;
     /** If true, keeps this dialogue box open when the next command is a Choice command */
     keepOpenDuringChoices?: boolean;
+    /** Per-line text-speed override (chars/sec scale, same 1-100 range as the global Text Speed
+     *  setting). Unset = use the player's global text speed. Additive-optional. */
+    textSpeed?: number;
 }
 
 export interface SetBackgroundCommand extends BaseCommand {
@@ -694,6 +697,10 @@ export interface ShowItemCommand extends BaseCommand {
     flipX?: boolean;
     flipY?: boolean;
     giveOnClick?: boolean;        // default true → click runs GiveItem(itemId, quantity)
+    /** When true, the player can press-and-drag this on-scene item onto a drop-zone hot spot (uses the
+     *  item's Drag tag to match). On a successful drop the hot spot's actions fire + the icon is
+     *  removed. A plain click still does giveOnClick. Additive-optional. No inventory required. */
+    draggable?: boolean;
     removeAfterPickup?: boolean;  // default true → the icon disappears on click
     pickUpOnce?: boolean;         // default true → remembered across scene revisits + saves
     actions?: VNUIAction[];       // extra on-click actions

@@ -44,6 +44,7 @@ export const handleDialogue = (
                     voiceAudioId: voiceAudioId,
                     textEffect: textEffect,
                     textboxThemeId: command.textboxThemeId ?? null,
+                    textSpeed: command.textSpeed,
                 }
             }
         }

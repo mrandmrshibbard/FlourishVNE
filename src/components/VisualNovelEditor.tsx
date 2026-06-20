@@ -227,6 +227,13 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     const targetable = (Object.values(activeScreen.elements || {}) as VNUIElement[])
                         .filter(isInteractiveElement)
                         .map(el => ({ id: el.id, name: el.name }));
+                    // Drag tags already in use — power the Drag-tag / Accept-tag autocomplete. Includes
+                    // both draggable screen objects AND carry-to-use inventory items (so a hot spot can
+                    // be set to accept an item's tag without retyping it).
+                    const dragTagOptions = Array.from(new Set([
+                        ...(Object.values(activeScreen.elements || {}) as VNUIElement[]).map(el => (el as any).dragTag),
+                        ...(Object.values(project.items || {}) as any[]).map(it => it.dragTag),
+                    ].filter((t): t is string => !!t)));
                     const deleteSelectedElement = () => {
                         dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId: activeMenuScreenId, elementId: lastId } });
                         setSelectedUIElementIds([]);
@@ -237,6 +244,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 spot={selectedElement}
                                 project={project}
                                 targetableElements={targetable}
+                                dragTagOptions={dragTagOptions}
                                 onUpdate={(patch) => dispatch({
                                     type: 'UPDATE_UI_ELEMENT',
                                     payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch as Partial<VNUIElement> },
@@ -251,6 +259,7 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                                 element={selectedElement}
                                 project={project}
                                 targetableElements={targetable}
+                                dragTagOptions={dragTagOptions}
                                 onUpdate={(patch) => dispatch({
                                     type: 'UPDATE_UI_ELEMENT',
                                     payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch },

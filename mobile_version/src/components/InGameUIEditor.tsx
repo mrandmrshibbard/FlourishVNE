@@ -8,9 +8,10 @@
  * Hold Shift while dragging for snap-to-grid.
  */
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { RangeInput } from './ui/Form';
+import { RangeInput, ColorInput } from './ui/Form';
+import { CollapsibleSection } from './ui/CollapsibleSection';
 import { VNProject } from '../types/project';
-import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton } from '../features/ui/types';
+import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantStyle, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton } from '../features/ui/types';
 import { VNID } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import FontEditor, { defaultFontSettings } from './ui/FontEditor';
@@ -421,9 +422,17 @@ const InputBoxPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui
                     <div className="w-[80%] bg-white/10 rounded px-2 py-1" style={fontToStyle(ui.inputFieldFont)}>
                         <span className="opacity-40">{t('inGameUi.typeHere')}</span>
                     </div>
-                    <div className="px-4 py-1 rounded bg-sky-600/80">
+                    <div className="px-4 py-1" style={{
+                        borderRadius: ui.inputSubmitBorderRadius ?? 6,
+                        ...((() => {
+                            const subUrl = ui.inputSubmitImage?.id
+                                ? (project.images?.[ui.inputSubmitImage.id]?.imageUrl || project.backgrounds?.[ui.inputSubmitImage.id]?.imageUrl)
+                                : null;
+                            return subUrl ? buildImageBackgroundStyle(subUrl, 'stretch') : { backgroundColor: ui.inputSubmitColor ?? '#334155' };
+                        })()),
+                    }}>
                         <span style={fontToStyle(ui.inputSubmitFont)}>
-                            <GradientText style={extractTextGradientStyle(ui.inputSubmitFont)}>{t('inGameUi.submit')}</GradientText>
+                            <GradientText style={extractTextGradientStyle(ui.inputSubmitFont)}>{ui.inputSubmitLabel || t('inGameUi.submit')}</GradientText>
                         </span>
                     </div>
                 </div>
@@ -522,29 +531,50 @@ const QuickMenuButtonPreview: React.FC<{ ui: VNProjectUI; project: VNProject; la
     );
 };
 
-const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+/** The three confirmation variants (Quit / New Game / Erase Save) + their default text. */
+type ConfirmVariant = 'quit' | 'newGame' | 'eraseSave';
+const CONFIRM_VARIANTS: ConfirmVariant[] = ['quit', 'newGame', 'eraseSave'];
+const CONFIRM_TEXT_DEFAULTS: Record<ConfirmVariant, { title: string; message: string; confirm: string; cancel: string }> = {
+    quit: { title: 'Quit Game', message: 'Are you sure you want to quit?', confirm: 'Quit', cancel: 'Cancel' },
+    newGame: { title: 'Start New Game', message: 'Any unsaved progress will be lost. Are you sure?', confirm: 'New Game', cancel: 'Cancel' },
+    eraseSave: { title: 'Erase Save', message: 'Erase this save? This cannot be undone.', confirm: 'Erase', cancel: 'Cancel' },
+};
+const confirmVariantLabel = (v: ConfirmVariant, t: any): string =>
+    v === 'quit' ? t('inGameUi.quitConfirmation') : v === 'newGame' ? t('inGameUi.newGameConfirmation') : t('inGameUi.eraseSaveConfirmation', 'Erase Save');
+
+const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject; variant?: ConfirmVariant }> = ({ ui, project, variant = 'quit' }) => {
     const { t } = useTranslation('ui');
     const cd = ui.confirmDialogs || {};
-    const bgColor = cd.backgroundColor ?? '#0f172a';
-    const bgOpacity = (cd.backgroundOpacity ?? 92) / 100;
-    const borderRadius = cd.borderRadius ?? 12;
-    const overlayColor = cd.overlayColor ?? 'rgba(0,0,0,0.75)';
-    const confirmBtnColor = cd.confirmButtonColor ?? '';
-    const cancelBtnColor = cd.cancelButtonColor ?? '#1e293b';
-    const btnBorderRadius = cd.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
-    const btnPad = cd.buttonPadding ?? 8;
-    const dialogPad = cd.dialogPadding ?? 32;
+    // Which confirmation to preview. Styling is per-variant; text differs per variant.
+    const isQuit = variant === 'quit';
+    const _d = CONFIRM_TEXT_DEFAULTS[variant];
+    const previewTitle = (cd as any)[variant + 'Title'] || _d.title;
+    const previewMessage = (cd as any)[variant + 'Message'] || _d.message;
+    const previewCancel = (cd as any)[variant + 'CancelLabel'] || _d.cancel;
+    const previewConfirm = (cd as any)[variant + 'ConfirmLabel'] || _d.confirm;
+    void isQuit;
+    // Effective per-variant style (shared base overlaid with this variant's overrides).
+    const e = { ...cd, ...(cd.variants?.[variant] || {}) };
+    const bgColor = e.backgroundColor ?? '#0f172a';
+    const bgOpacity = (e.backgroundOpacity ?? 92) / 100;
+    const borderRadius = e.borderRadius ?? 12;
+    const overlayColor = e.overlayColor ?? 'rgba(0,0,0,0.75)';
+    const confirmBtnColor = e.confirmButtonColor ?? '';
+    const cancelBtnColor = e.cancelButtonColor ?? '#1e293b';
+    const btnBorderRadius = e.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
+    const btnPad = e.buttonPadding ?? 8;
+    const dialogPad = e.dialogPadding ?? 32;
 
     // Resolve assets
     const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
     const resolveUrl = (asset?: { id: string } | null) => asset?.id ? (allAssets[asset.id]?.imageUrl || null) : null;
 
-    const bgImageUrl = resolveUrl(cd.backgroundImage as any);
-    const borderImageUrl = resolveUrl(cd.borderImage as any);
-    const confirmBtnImgUrl = resolveUrl(cd.confirmButtonImage as any);
-    const cancelBtnImgUrl = resolveUrl(cd.cancelButtonImage as any);
+    const bgImageUrl = resolveUrl(e.backgroundImage as any);
+    const borderImageUrl = resolveUrl(e.borderImage as any);
+    const confirmBtnImgUrl = resolveUrl(e.confirmButtonImage as any);
+    const cancelBtnImgUrl = resolveUrl(e.cancelButtonImage as any);
 
-    const sizeMode = cd.backgroundSizeMode || 'stretch';
+    const sizeMode = e.backgroundSizeMode || 'stretch';
 
     const bgImageStyle: React.CSSProperties = bgImageUrl ? {
         backgroundImage: `url(${bgImageUrl})`,
@@ -553,13 +583,13 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
         backgroundRepeat: 'no-repeat',
     } : {};
 
-    const titleStyle: React.CSSProperties = cd.titleFont ? fontToStyle(cd.titleFont) : {
+    const titleStyle: React.CSSProperties = e.titleFont ? fontToStyle(e.titleFont) : {
         fontSize: 'calc(var(--font-scale,1) * 20px)', fontWeight: 600, color: '#fff'
     };
-    const messageStyle: React.CSSProperties = cd.messageFont ? fontToStyle(cd.messageFont) : {
+    const messageStyle: React.CSSProperties = e.messageFont ? fontToStyle(e.messageFont) : {
         fontSize: 'calc(var(--font-scale,1) * 15px)', color: '#cbd5e1'
     };
-    const btnStyle: React.CSSProperties = cd.buttonFont ? fontToStyle(cd.buttonFont) : {
+    const btnStyle: React.CSSProperties = e.buttonFont ? fontToStyle(e.buttonFont) : {
         fontSize: 'calc(var(--font-scale,1) * 14px)', fontWeight: 500, color: '#fff'
     };
 
@@ -567,18 +597,18 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
 
     const makeBtnImageStyle = (imgUrl: string | null): React.CSSProperties => {
         if (!imgUrl) return {};
-        const bsm = cd.buttonSizeMode || 'stretch';
+        const bsm = e.buttonSizeMode || 'stretch';
         return {
             backgroundImage: `url(${imgUrl})`,
             backgroundSize: bsm === 'nine-slice' ? undefined : (bsm === 'stretch' ? '100% 100%' : bsm),
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
             backgroundColor: 'transparent',
-            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${cd.buttonSlice ?? 10} fill`, borderImageWidth: `${cd.buttonSlice ?? 10}px` } : {}),
+            ...(bsm === 'nine-slice' ? { borderImage: `url(${imgUrl}) ${e.buttonSlice ?? 10} fill`, borderImageWidth: `${e.buttonSlice ?? 10}px` } : {}),
         };
     };
 
-    const borderPad = cd.borderPadding ?? 12;
+    const borderPad = e.borderPadding ?? 12;
 
     return (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -596,16 +626,16 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                     backgroundColor: bgImageUrl ? 'transparent' : `${bgColor}${alphaHex}`,
                     borderRadius: `calc(var(--font-scale,1) * ${borderRadius}px)`,
                     padding: `calc(var(--font-scale,1) * ${dialogPad}px)`,
-                    ...(cd.dialogWidth ? { width: `calc(var(--font-scale,1) * ${cd.dialogWidth}px)` } : { minWidth: 'calc(var(--font-scale,1) * 320px)', maxWidth: 'calc(var(--font-scale,1) * 440px)' }),
+                    ...(e.dialogWidth ? { width: `calc(var(--font-scale,1) * ${e.dialogWidth}px)` } : { minWidth: 'calc(var(--font-scale,1) * 320px)', maxWidth: 'calc(var(--font-scale,1) * 440px)' }),
                     textAlign: 'center' as const,
                     boxShadow: borderImageUrl ? 'none' : '0 12px 40px rgba(0,0,0,0.5)',
                     ...bgImageStyle,
                 }}>
                     <div style={{ ...titleStyle, marginBottom: 'calc(var(--font-scale,1) * 12px)' }}>
-                        {cd.quitTitle || t('inGameUi.phQuitGame')}
+                        {previewTitle}
                     </div>
                     <div style={{ ...messageStyle, marginBottom: 'calc(var(--font-scale,1) * 24px)' }}>
-                        {cd.quitMessage || t('inGameUi.phQuitMsg')}
+                        {previewMessage}
                     </div>
                     <div style={{ display: 'flex', gap: 'calc(var(--font-scale,1) * 12px)', justifyContent: 'center' }}>
                         <div style={{
@@ -616,7 +646,7 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                             border: cancelBtnImgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)',
                             ...makeBtnImageStyle(cancelBtnImgUrl),
                         }}>
-                            {cd.quitCancelLabel || t('inGameUi.phCancel')}
+                            {previewCancel}
                         </div>
                         <div style={{
                             ...btnStyle,
@@ -625,11 +655,61 @@ const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = 
                             background: confirmBtnImgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)'),
                             ...makeBtnImageStyle(confirmBtnImgUrl),
                         }}>
-                            {cd.quitConfirmLabel || t('inGameUi.phQuit')}
+                            {previewConfirm}
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
+    );
+};
+
+/** One free-layout piece of the confirm dialog (box / confirm button / cancel button), styled like
+ *  ConfirmDialogPreview but filling its container so a ResizableDraggable can position/size it. */
+const ConfirmFreePart: React.FC<{ ui: VNProjectUI; project: VNProject; variant: ConfirmVariant; part: 'box' | 'confirm' | 'cancel' }> = ({ ui, project, variant, part }) => {
+    const { t } = useTranslation('ui');
+    const cd = ui.confirmDialogs || {};
+    const isQuit = variant === 'quit';
+    const e = { ...cd, ...(cd.variants?.[variant] || {}) };
+    const bgColor = e.backgroundColor ?? '#0f172a';
+    const alphaHex = Math.round(((e.backgroundOpacity ?? 92) / 100) * 255).toString(16).padStart(2, '0');
+    const borderRadius = e.borderRadius ?? 12;
+    const confirmBtnColor = e.confirmButtonColor ?? '';
+    const cancelBtnColor = e.cancelButtonColor ?? '#1e293b';
+    const btnBorderRadius = e.buttonBorderRadius ?? Math.max(borderRadius - 4, 4);
+    const dialogPad = e.dialogPadding ?? 32;
+    const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
+    const resolveUrl = (asset?: { id: string } | null) => asset?.id ? (allAssets[asset.id]?.imageUrl || null) : null;
+    const bgImageUrl = resolveUrl(e.backgroundImage as any);
+    const sizeMode = e.backgroundSizeMode || 'stretch';
+    const bgImageStyle: React.CSSProperties = bgImageUrl ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: sizeMode === 'nine-slice' ? undefined : (sizeMode === 'stretch' ? '100% 100%' : sizeMode), backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : {};
+    const titleStyle = e.titleFont ? fontToStyle(e.titleFont) : { fontSize: 'calc(var(--font-scale,1) * 20px)', fontWeight: 600, color: '#fff' };
+    const messageStyle = e.messageFont ? fontToStyle(e.messageFont) : { fontSize: 'calc(var(--font-scale,1) * 15px)', color: '#cbd5e1' };
+    const btnStyle = e.buttonFont ? fontToStyle(e.buttonFont) : { fontSize: 'calc(var(--font-scale,1) * 14px)', fontWeight: 500, color: '#fff' };
+    const makeBtnImageStyle = (imgUrl: string | null): React.CSSProperties => {
+        if (!imgUrl) return {};
+        const bsm = e.buttonSizeMode || 'stretch';
+        return { backgroundImage: `url(${imgUrl})`, backgroundSize: bsm === 'nine-slice' ? undefined : (bsm === 'stretch' ? '100% 100%' : bsm), backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundColor: 'transparent' };
+    };
+
+    if (part === 'box') {
+        const previewTitle = (cd as any)[variant + 'Title'] || CONFIRM_TEXT_DEFAULTS[variant].title;
+        const previewMessage = (cd as any)[variant + 'Message'] || CONFIRM_TEXT_DEFAULTS[variant].message;
+        return (
+            <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', backgroundColor: bgImageUrl ? 'transparent' : `${bgColor}${alphaHex}`, borderRadius: `calc(var(--font-scale,1) * ${borderRadius}px)`, padding: `calc(var(--font-scale,1) * ${dialogPad}px)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'calc(var(--font-scale,1) * 8px)', overflow: 'hidden', textAlign: 'center', boxShadow: '0 12px 40px rgba(0,0,0,0.5)', ...bgImageStyle }}>
+                <div style={titleStyle}>{previewTitle}</div>
+                <div style={messageStyle}>{previewMessage}</div>
+            </div>
+        );
+    }
+    const isConfirm = part === 'confirm';
+    const imgUrl = resolveUrl((isConfirm ? e.confirmButtonImage : e.cancelButtonImage) as any);
+    const label = isConfirm
+        ? ((cd as any)[variant + 'ConfirmLabel'] || CONFIRM_TEXT_DEFAULTS[variant].confirm)
+        : ((cd as any)[variant + 'CancelLabel'] || CONFIRM_TEXT_DEFAULTS[variant].cancel);
+    return (
+        <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', ...btnStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: `calc(var(--font-scale,1) * ${btnBorderRadius}px)`, ...(isConfirm ? { background: imgUrl ? 'transparent' : (confirmBtnColor || 'linear-gradient(to right, #ec4899, #a855f7)') } : { backgroundColor: imgUrl ? 'transparent' : cancelBtnColor, border: imgUrl ? 'none' : '1px solid rgba(255,255,255,0.1)' }), ...makeBtnImageStyle(imgUrl) }}>
+            {label}
         </div>
     );
 };
@@ -643,6 +723,9 @@ interface PropsEditorProps {
     element: InGameUIElement;
     project: VNProject;
     onUpdate: (updates: Partial<VNProjectUI>) => void;
+    /** For the confirmDialogs panel: which variant (Quit / New Game) is being edited+previewed. */
+    confirmVariant?: ConfirmVariant;
+    onConfirmVariantChange?: (v: ConfirmVariant) => void;
 }
 
 /* ── Shared CSS classes and helper components for the properties panel ── */
@@ -662,7 +745,7 @@ const PropsNumInput: React.FC<{ label: string; value: number | undefined; fallba
 
 const PropsColorField: React.FC<{ label: string; value: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
     <PropsField label={label}>
-        <input type="color" value={value} onChange={e => onChange(e.target.value)} className="w-full h-8 rounded cursor-pointer border border-[var(--border-default)]" />
+        <ColorInput value={value} onChange={onChange} />
     </PropsField>
 );
 
@@ -675,7 +758,7 @@ const PropsOpacityField: React.FC<{ label: string; value: number; onChange: (v: 
     </PropsField>
 );
 
-const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project, onUpdate }) => {
+const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project, onUpdate, confirmVariant = 'newGame', onConfirmVariantChange }) => {
     const { t } = useTranslation('ui');
     // Gather all available images (images + backgrounds) for background image selectors
     const allImages = useMemo(() => [
@@ -693,80 +776,86 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     /* Dialogue Box properties */
     if (element === 'dialogueBox') {
         return (
-            <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.dialogueBox')}</h4>
-                <div className="grid grid-cols-2 gap-2">
-                    <ColorField label={t('inGameUi.colorBackground')} value={ui.dialogueBoxColor ?? '#0f172a'} onChange={v => onUpdate({ dialogueBoxColor: v })} />
-                    <OpacityField label={t('inGameUi.opacity')} value={ui.dialogueBoxOpacity ?? 90} onChange={v => onUpdate({ dialogueBoxOpacity: v })} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <NumInput label={t('inGameUi.borderRadius')} value={ui.dialogueBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ dialogueBoxBorderRadius: v })} />
-                    <NumInput label={t('inGameUi.contentPadding')} value={ui.dialogueBoxPadding} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxPadding: v })} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <NumInput label={t('inGameUi.width')} value={ui.dialogueBoxWidth} fallback={100} min={10} max={100} onChange={v => onUpdate({ dialogueBoxWidth: v })} />
-                    <NumInput label={t('inGameUi.bottomMargin')} value={ui.dialogueBoxBottomMargin} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxBottomMargin: v })} />
-                </div>
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('inGameUi.dialogueBox')}</h4>
+                <CollapsibleSection title={t('inGameUi.groupBoxAppearance', 'Box appearance')} defaultOpen>
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label={t('inGameUi.colorBackground')} value={ui.dialogueBoxColor ?? '#0f172a'} onChange={v => onUpdate({ dialogueBoxColor: v })} />
+                            <OpacityField label={t('inGameUi.opacity')} value={ui.dialogueBoxOpacity ?? 90} onChange={v => onUpdate({ dialogueBoxOpacity: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.borderRadius')} value={ui.dialogueBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ dialogueBoxBorderRadius: v })} />
+                            <NumInput label={t('inGameUi.contentPadding')} value={ui.dialogueBoxPadding} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxPadding: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.width')} value={ui.dialogueBoxWidth} fallback={100} min={10} max={100} onChange={v => onUpdate({ dialogueBoxWidth: v })} />
+                            <NumInput label={t('inGameUi.bottomMargin')} value={ui.dialogueBoxBottomMargin} fallback={20} min={0} onChange={v => onUpdate({ dialogueBoxBottomMargin: v })} />
+                        </div>
+                    </div>
+                </CollapsibleSection>
 
-                <Field label={t('inGameUi.backgroundImage')}>
-                    <select className={inputCls} value={ui.dialogueBoxImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.noneUseColor')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
+                <CollapsibleSection title={t('inGameUi.groupBackgroundBorder', 'Background & border image')}>
+                    <div className="space-y-2">
+                        <Field label={t('inGameUi.backgroundImage')}>
+                            <select className={inputCls} value={ui.dialogueBoxImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ dialogueBoxImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.noneUseColor')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.dialogueBoxImage && (
+                            <Field label={t('inGameUi.imageFitMode')}>
+                                <select className={inputCls} value={ui.dialogueBoxSizeMode ?? 'stretch'}
+                                    onChange={e => onUpdate({ dialogueBoxSizeMode: e.target.value as any })}>
+                                    <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                                    <option value="contain">{t('inGameUi.fitContain')}</option>
+                                    <option value="cover">{t('inGameUi.fitCover')}</option>
+                                    <option value="tile">{t('inGameUi.fitTile')}</option>
+                                    <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
+                                </select>
+                            </Field>
+                        )}
+                        {ui.dialogueBoxImage && (ui.dialogueBoxSizeMode ?? 'stretch') === 'nine-slice' && (
+                            <NumInput label={t('inGameUi.slice')} value={ui.dialogueBoxSlice} fallback={30} min={1} onChange={v => onUpdate({ dialogueBoxSlice: v })} />
+                        )}
+                        <Field label={t('inGameUi.borderImage')}>
+                            <select className={inputCls} value={ui.dialogueBoxBorderImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ dialogueBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.none')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.dialogueBoxBorderImage && (
+                            <NumInput label={t('inGameUi.borderPadding')} value={ui.dialogueBorderPadding} fallback={12} min={0} onChange={v => onUpdate({ dialogueBorderPadding: v })} />
+                        )}
+                    </div>
+                </CollapsibleSection>
 
-                {ui.dialogueBoxImage && (
-                    <Field label={t('inGameUi.imageFitMode')}>
-                        <select className={inputCls} value={ui.dialogueBoxSizeMode ?? 'stretch'}
-                            onChange={e => onUpdate({ dialogueBoxSizeMode: e.target.value as any })}>
-                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
-                            <option value="contain">{t('inGameUi.fitContain')}</option>
-                            <option value="cover">{t('inGameUi.fitCover')}</option>
-                            <option value="tile">{t('inGameUi.fitTile')}</option>
-                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
-                        </select>
-                    </Field>
-                )}
-                {ui.dialogueBoxImage && (ui.dialogueBoxSizeMode ?? 'stretch') === 'nine-slice' && (
-                    <NumInput label={t('inGameUi.slice')} value={ui.dialogueBoxSlice} fallback={30} min={1} onChange={v => onUpdate({ dialogueBoxSlice: v })} />
-                )}
+                <CollapsibleSection title={t('inGameUi.groupTextFont', 'Text & font')}>
+                    <div className="space-y-2">
+                        <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.textPosHint')}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.posTop')} value={ui.dialogueTextPaddingTop} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingTop: v })} />
+                            <NumInput label={t('inGameUi.posBottom')} value={ui.dialogueTextPaddingBottom} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingBottom: v })} />
+                            <NumInput label={t('inGameUi.posLeft')} value={ui.dialogueTextPaddingLeft} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingLeft: v })} />
+                            <NumInput label={t('inGameUi.posRight')} value={ui.dialogueTextPaddingRight} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingRight: v })} />
+                        </div>
+                        <FontEditor
+                            label={t('inGameUi.dialogueTextFont')}
+                            font={(ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings}
+                            onFontChange={(prop, value) => onUpdate({ dialogueTextFont: { ...((ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                        />
+                    </div>
+                </CollapsibleSection>
 
-                <Field label={t('inGameUi.borderImage')}>
-                    <select className={inputCls} value={ui.dialogueBoxBorderImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ dialogueBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.none')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
-                {ui.dialogueBoxBorderImage && (
-                    <NumInput label={t('inGameUi.borderPadding')} value={ui.dialogueBorderPadding} fallback={12} min={0} onChange={v => onUpdate({ dialogueBorderPadding: v })} />
-                )}
-
-                {/* Text padding inside dialogue */}
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-2">{t('inGameUi.textPosition')}</h4>
-                <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.textPosHint')}</p>
-                <div className="grid grid-cols-2 gap-2">
-                    <NumInput label={t('inGameUi.posTop')} value={ui.dialogueTextPaddingTop} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingTop: v })} />
-                    <NumInput label={t('inGameUi.posBottom')} value={ui.dialogueTextPaddingBottom} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingBottom: v })} />
-                    <NumInput label={t('inGameUi.posLeft')} value={ui.dialogueTextPaddingLeft} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingLeft: v })} />
-                    <NumInput label={t('inGameUi.posRight')} value={ui.dialogueTextPaddingRight} fallback={0} min={0} onChange={v => onUpdate({ dialogueTextPaddingRight: v })} />
-                </div>
-
-                <FontEditor
-                    label={t('inGameUi.dialogueTextFont')}
-                    font={(ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings}
-                    onFontChange={(prop, value) => onUpdate({ dialogueTextFont: { ...((ui.dialogueTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
-                />
-
-                <div className="border-t border-[var(--border-subtle)] pt-2">
-                    <h4 className="text-sm font-bold text-white mb-1">Speaker Emphasis</h4>
+                <CollapsibleSection title={t('inGameUi.groupSpeakerEmphasis', 'Speaker emphasis')}>
                     <p className="text-[10px] text-[var(--text-muted)] mb-2">While a character is speaking, brighten + slightly enlarge them and dim the others — a "who's talking" cue that needs no mouth art.</p>
                     <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
                         <input type="checkbox" checked={ui.speakerEmphasisEnabled ?? false} onChange={e => onUpdate({ speakerEmphasisEnabled: e.target.checked })} className="cursor-pointer" />
@@ -778,11 +867,11 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             <NumInput label="Speaker zoom %" value={ui.speakerEmphasisScale != null ? Math.round(ui.speakerEmphasisScale * 100) : undefined} fallback={104} min={100} max={120} onChange={v => onUpdate({ speakerEmphasisScale: Math.max(1, Math.min(1.3, v / 100)) })} />
                         </div>
                     )}
-                </div>
+                </CollapsibleSection>
 
-                <div className="border-t border-[var(--border-subtle)] pt-2">
+                <CollapsibleSection title={t('inGameUi.groupReactiveStates', 'Reactive states')}>
                     <DialogueReactiveStatesEditor states={ui.dialogueReactiveStates} project={project} onChange={s => onUpdate({ dialogueReactiveStates: s })} />
-                </div>
+                </CollapsibleSection>
             </div>
         );
     }
@@ -790,50 +879,59 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     /* Name Box properties */
     if (element === 'nameBox') {
         return (
-            <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.nameBox')}</h4>
-                <div className="grid grid-cols-2 gap-2">
-                    <ColorField label={t('inGameUi.colorBackground')} value={ui.nameboxColor ?? '#0f172a'} onChange={v => onUpdate({ nameboxColor: v })} />
-                    <OpacityField label={t('inGameUi.opacity')} value={ui.nameboxOpacity ?? 92} onChange={v => onUpdate({ nameboxOpacity: v })} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <NumInput label={t('inGameUi.borderRadius')} value={ui.nameboxBorderRadius} fallback={6} min={0} onChange={v => onUpdate({ nameboxBorderRadius: v })} />
-                    <NumInput label={t('inGameUi.padding')} value={ui.nameboxPadding} fallback={8} min={0} onChange={v => onUpdate({ nameboxPadding: v })} />
-                    <NumInput label={t('inGameUi.hPadding')} value={ui.nameboxHorizontalPadding} fallback={14} min={0} onChange={v => onUpdate({ nameboxHorizontalPadding: v })} />
-                </div>
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('inGameUi.nameBox')}</h4>
+                <CollapsibleSection title={t('inGameUi.groupBoxAppearance', 'Box appearance')} defaultOpen>
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label={t('inGameUi.colorBackground')} value={ui.nameboxColor ?? '#0f172a'} onChange={v => onUpdate({ nameboxColor: v })} />
+                            <OpacityField label={t('inGameUi.opacity')} value={ui.nameboxOpacity ?? 92} onChange={v => onUpdate({ nameboxOpacity: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.borderRadius')} value={ui.nameboxBorderRadius} fallback={6} min={0} onChange={v => onUpdate({ nameboxBorderRadius: v })} />
+                            <NumInput label={t('inGameUi.padding')} value={ui.nameboxPadding} fallback={8} min={0} onChange={v => onUpdate({ nameboxPadding: v })} />
+                            <NumInput label={t('inGameUi.hPadding')} value={ui.nameboxHorizontalPadding} fallback={14} min={0} onChange={v => onUpdate({ nameboxHorizontalPadding: v })} />
+                        </div>
+                    </div>
+                </CollapsibleSection>
 
-                <Field label={t('inGameUi.backgroundImage')}>
-                    <select className={inputCls} value={ui.nameboxImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ nameboxImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.noneUseColor')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
+                <CollapsibleSection title={t('inGameUi.groupBackgroundImage', 'Background image')}>
+                    <div className="space-y-2">
+                        <Field label={t('inGameUi.backgroundImage')}>
+                            <select className={inputCls} value={ui.nameboxImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ nameboxImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.noneUseColor')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.nameboxImage && (
+                            <Field label={t('inGameUi.imageFitMode')}>
+                                <select className={inputCls} value={ui.nameboxSizeMode ?? 'stretch'}
+                                    onChange={e => onUpdate({ nameboxSizeMode: e.target.value as any })}>
+                                    <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                                    <option value="contain">{t('inGameUi.fitContain')}</option>
+                                    <option value="cover">{t('inGameUi.fitCover')}</option>
+                                    <option value="tile">{t('inGameUi.fitTile')}</option>
+                                    <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
+                                </select>
+                            </Field>
+                        )}
+                    </div>
+                </CollapsibleSection>
 
-                {ui.nameboxImage && (
-                    <Field label={t('inGameUi.imageFitMode')}>
-                        <select className={inputCls} value={ui.nameboxSizeMode ?? 'stretch'}
-                            onChange={e => onUpdate({ nameboxSizeMode: e.target.value as any })}>
-                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
-                            <option value="contain">{t('inGameUi.fitContain')}</option>
-                            <option value="cover">{t('inGameUi.fitCover')}</option>
-                            <option value="tile">{t('inGameUi.fitTile')}</option>
-                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
-                        </select>
-                    </Field>
-                )}
-
-                <FontEditor
-                    label={t('inGameUi.nameFont')}
-                    font={(ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings}
-                    onFontChange={(prop, value) => onUpdate({ dialogueNameFont: { ...((ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
-                />
-                <p className="text-[10px] text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-2">
-                    Want the nameplate to change with a variable? Set up <strong>Reactive States</strong> in the Dialogue Box section — they cover the box <em>and</em> the nameplate.
-                </p>
+                <CollapsibleSection title={t('inGameUi.groupFont', 'Font')}>
+                    <FontEditor
+                        label={t('inGameUi.nameFont')}
+                        font={(ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings}
+                        onFontChange={(prop, value) => onUpdate({ dialogueNameFont: { ...((ui.dialogueNameFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                    />
+                    <p className="text-[10px] text-[var(--text-muted)] mt-2">
+                        Want the nameplate to change with a variable? Set up <strong>Reactive States</strong> in the Dialogue Box section — they cover the box <em>and</em> the nameplate.
+                    </p>
+                </CollapsibleSection>
             </div>
         );
     }
@@ -841,77 +939,84 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     /* Choice Buttons properties */
     if (element === 'choiceButtons') {
         return (
-            <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.choiceButtons')}</h4>
-                <div className="grid grid-cols-2 gap-2">
-                    <ColorField label={t('inGameUi.colorBackground')} value={ui.choiceButtonColor ?? '#1e293b'} onChange={v => onUpdate({ choiceButtonColor: v })} />
-                    <OpacityField label={t('inGameUi.opacity')} value={ui.choiceButtonOpacity ?? 90} onChange={v => onUpdate({ choiceButtonOpacity: v })} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <NumInput label={t('inGameUi.borderRadius')} value={ui.choiceButtonBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ choiceButtonBorderRadius: v })} />
-                    <NumInput label={t('inGameUi.padding')} value={ui.choiceButtonPadding} fallback={16} min={0} onChange={v => onUpdate({ choiceButtonPadding: v })} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <ColorField label={t('inGameUi.hoverColor')} value={ui.choiceHoverColor ?? '#334155'} onChange={v => onUpdate({ choiceHoverColor: v })} />
-                </div>
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('inGameUi.choiceButtons')}</h4>
+                <CollapsibleSection title={t('inGameUi.groupButtonAppearance', 'Button appearance')} defaultOpen>
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label={t('inGameUi.colorBackground')} value={ui.choiceButtonColor ?? '#1e293b'} onChange={v => onUpdate({ choiceButtonColor: v })} />
+                            <OpacityField label={t('inGameUi.opacity')} value={ui.choiceButtonOpacity ?? 90} onChange={v => onUpdate({ choiceButtonOpacity: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.borderRadius')} value={ui.choiceButtonBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ choiceButtonBorderRadius: v })} />
+                            <NumInput label={t('inGameUi.padding')} value={ui.choiceButtonPadding} fallback={16} min={0} onChange={v => onUpdate({ choiceButtonPadding: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label={t('inGameUi.hoverColor')} value={ui.choiceHoverColor ?? '#334155'} onChange={v => onUpdate({ choiceHoverColor: v })} />
+                        </div>
+                    </div>
+                </CollapsibleSection>
 
-                <Field label={t('inGameUi.backgroundImage')}>
-                    <select className={inputCls} value={ui.choiceButtonImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ choiceButtonImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.noneUseColor')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
+                <CollapsibleSection title={t('inGameUi.groupImages', 'Images')}>
+                    <div className="space-y-2">
+                        <Field label={t('inGameUi.backgroundImage')}>
+                            <select className={inputCls} value={ui.choiceButtonImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ choiceButtonImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.noneUseColor')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.choiceButtonImage && (
+                            <Field label={t('inGameUi.imageFitMode')}>
+                                <select className={inputCls} value={ui.choiceButtonSizeMode ?? 'stretch'}
+                                    onChange={e => onUpdate({ choiceButtonSizeMode: e.target.value as any })}>
+                                    <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                                    <option value="contain">{t('inGameUi.fitContain')}</option>
+                                    <option value="cover">{t('inGameUi.fitCover')}</option>
+                                    <option value="tile">{t('inGameUi.fitTile')}</option>
+                                    <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
+                                </select>
+                            </Field>
+                        )}
+                        {ui.choiceButtonImage && (ui.choiceButtonSizeMode ?? 'stretch') === 'nine-slice' && (
+                            <NumInput label={t('inGameUi.slice')} value={ui.choiceButtonSlice} fallback={15} min={1} onChange={v => onUpdate({ choiceButtonSlice: v })} />
+                        )}
+                        <Field label={t('inGameUi.hoverImage')}>
+                            <select className={inputCls} value={ui.choiceHoverImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ choiceHoverImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.none')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        <Field label={t('inGameUi.borderImage')}>
+                            <select className={inputCls} value={ui.choiceButtonBorderImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ choiceButtonBorderImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.none')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.choiceButtonBorderImage && (
+                            <NumInput label={t('inGameUi.borderPadding')} value={ui.choiceBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ choiceBorderPadding: v })} />
+                        )}
+                    </div>
+                </CollapsibleSection>
 
-                {ui.choiceButtonImage && (
-                    <Field label={t('inGameUi.imageFitMode')}>
-                        <select className={inputCls} value={ui.choiceButtonSizeMode ?? 'stretch'}
-                            onChange={e => onUpdate({ choiceButtonSizeMode: e.target.value as any })}>
-                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
-                            <option value="contain">{t('inGameUi.fitContain')}</option>
-                            <option value="cover">{t('inGameUi.fitCover')}</option>
-                            <option value="tile">{t('inGameUi.fitTile')}</option>
-                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
-                        </select>
-                    </Field>
-                )}
-                {ui.choiceButtonImage && (ui.choiceButtonSizeMode ?? 'stretch') === 'nine-slice' && (
-                    <NumInput label={t('inGameUi.slice')} value={ui.choiceButtonSlice} fallback={15} min={1} onChange={v => onUpdate({ choiceButtonSlice: v })} />
-                )}
-
-                <Field label={t('inGameUi.hoverImage')}>
-                    <select className={inputCls} value={ui.choiceHoverImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ choiceHoverImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.none')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
-
-                <Field label={t('inGameUi.borderImage')}>
-                    <select className={inputCls} value={ui.choiceButtonBorderImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ choiceButtonBorderImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.none')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
-                {ui.choiceButtonBorderImage && (
-                    <NumInput label={t('inGameUi.borderPadding')} value={ui.choiceBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ choiceBorderPadding: v })} />
-                )}
-
-                <FontEditor
-                    label={t('inGameUi.choiceTextFont')}
-                    font={(ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings}
-                    onFontChange={(prop, value) => onUpdate({ choiceTextFont: { ...((ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
-                />
+                <CollapsibleSection title={t('inGameUi.groupFont', 'Font')}>
+                    <FontEditor
+                        label={t('inGameUi.choiceTextFont')}
+                        font={(ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings}
+                        onFontChange={(prop, value) => onUpdate({ choiceTextFont: { ...((ui.choiceTextFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                    />
+                </CollapsibleSection>
             </div>
         );
     }
@@ -919,73 +1024,106 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     /* Input Box properties */
     if (element === 'inputBox') {
         return (
-            <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.textInputBox')}</h4>
-                <div className="grid grid-cols-2 gap-2">
-                    <ColorField label={t('inGameUi.colorBackground')} value={ui.inputBoxColor ?? '#0f172a'} onChange={v => onUpdate({ inputBoxColor: v })} />
-                    <OpacityField label={t('inGameUi.opacity')} value={ui.inputBoxOpacity ?? 92} onChange={v => onUpdate({ inputBoxOpacity: v })} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <NumInput label={t('inGameUi.borderRadius')} value={ui.inputBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ inputBoxBorderRadius: v })} />
-                    <NumInput label={t('inGameUi.padding')} value={ui.inputBoxPadding} fallback={24} min={0} onChange={v => onUpdate({ inputBoxPadding: v })} />
-                </div>
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('inGameUi.textInputBox')}</h4>
+                <CollapsibleSection title={t('inGameUi.groupBoxAppearance', 'Box appearance')} defaultOpen>
+                    <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label={t('inGameUi.colorBackground')} value={ui.inputBoxColor ?? '#0f172a'} onChange={v => onUpdate({ inputBoxColor: v })} />
+                            <OpacityField label={t('inGameUi.opacity')} value={ui.inputBoxOpacity ?? 92} onChange={v => onUpdate({ inputBoxOpacity: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label={t('inGameUi.borderRadius')} value={ui.inputBoxBorderRadius} fallback={8} min={0} onChange={v => onUpdate({ inputBoxBorderRadius: v })} />
+                            <NumInput label={t('inGameUi.padding')} value={ui.inputBoxPadding} fallback={24} min={0} onChange={v => onUpdate({ inputBoxPadding: v })} />
+                        </div>
+                    </div>
+                </CollapsibleSection>
 
-                <Field label={t('inGameUi.backgroundImage')}>
-                    <select className={inputCls} value={ui.inputBoxImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ inputBoxImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.noneUseColor')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
+                <CollapsibleSection title={t('inGameUi.groupBackgroundBorder', 'Background & border image')}>
+                    <div className="space-y-2">
+                        <Field label={t('inGameUi.backgroundImage')}>
+                            <select className={inputCls} value={ui.inputBoxImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ inputBoxImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.noneUseColor')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.inputBoxImage && (
+                            <Field label={t('inGameUi.imageFitMode')}>
+                                <select className={inputCls} value={ui.inputBoxSizeMode ?? 'stretch'}
+                                    onChange={e => onUpdate({ inputBoxSizeMode: e.target.value as any })}>
+                                    <option value="stretch">{t('inGameUi.fitStretch')}</option>
+                                    <option value="contain">{t('inGameUi.fitContain')}</option>
+                                    <option value="cover">{t('inGameUi.fitCover')}</option>
+                                    <option value="tile">{t('inGameUi.fitTile')}</option>
+                                    <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
+                                </select>
+                            </Field>
+                        )}
+                        {ui.inputBoxImage && (ui.inputBoxSizeMode ?? 'stretch') === 'nine-slice' && (
+                            <NumInput label={t('inGameUi.slice')} value={ui.inputBoxSlice} fallback={20} min={1} onChange={v => onUpdate({ inputBoxSlice: v })} />
+                        )}
+                        <Field label={t('inGameUi.borderImage')}>
+                            <select className={inputCls} value={ui.inputBoxBorderImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ inputBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.none')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        {ui.inputBoxBorderImage && (
+                            <NumInput label={t('inGameUi.borderPadding')} value={ui.inputBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ inputBorderPadding: v })} />
+                        )}
+                    </div>
+                </CollapsibleSection>
 
-                {ui.inputBoxImage && (
-                    <Field label={t('inGameUi.imageFitMode')}>
-                        <select className={inputCls} value={ui.inputBoxSizeMode ?? 'stretch'}
-                            onChange={e => onUpdate({ inputBoxSizeMode: e.target.value as any })}>
-                            <option value="stretch">{t('inGameUi.fitStretch')}</option>
-                            <option value="contain">{t('inGameUi.fitContain')}</option>
-                            <option value="cover">{t('inGameUi.fitCover')}</option>
-                            <option value="tile">{t('inGameUi.fitTile')}</option>
-                            <option value="nine-slice">{t('inGameUi.fitNineSlice')}</option>
-                        </select>
-                    </Field>
-                )}
-                {ui.inputBoxImage && (ui.inputBoxSizeMode ?? 'stretch') === 'nine-slice' && (
-                    <NumInput label={t('inGameUi.slice')} value={ui.inputBoxSlice} fallback={20} min={1} onChange={v => onUpdate({ inputBoxSlice: v })} />
-                )}
+                <CollapsibleSection title={t('inGameUi.groupFonts', 'Fonts')}>
+                    <div className="space-y-2">
+                        <FontEditor
+                            label={t('inGameUi.promptFont')}
+                            font={(ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings}
+                            onFontChange={(prop, value) => onUpdate({ inputPromptFont: { ...((ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                        />
+                        <FontEditor
+                            label={t('inGameUi.inputFieldFont')}
+                            font={(ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings}
+                            onFontChange={(prop, value) => onUpdate({ inputFieldFont: { ...((ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                        />
+                    </div>
+                </CollapsibleSection>
 
-                <Field label={t('inGameUi.borderImage')}>
-                    <select className={inputCls} value={ui.inputBoxBorderImage?.id || ''}
-                        onChange={e => {
-                            const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
-                            onUpdate({ inputBoxBorderImage: asset ? { type: 'image', id: asset.id } : null });
-                        }}>
-                        <option value="">{t('inGameUi.none')}</option>
-                        {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
-                    </select>
-                </Field>
-                {ui.inputBoxBorderImage && (
-                    <NumInput label={t('inGameUi.borderPadding')} value={ui.inputBorderPadding} fallback={8} min={0} onChange={v => onUpdate({ inputBorderPadding: v })} />
-                )}
-
-                <FontEditor
-                    label={t('inGameUi.promptFont')}
-                    font={(ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings}
-                    onFontChange={(prop, value) => onUpdate({ inputPromptFont: { ...((ui.inputPromptFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
-                />
-                <FontEditor
-                    label={t('inGameUi.inputFieldFont')}
-                    font={(ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings}
-                    onFontChange={(prop, value) => onUpdate({ inputFieldFont: { ...((ui.inputFieldFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
-                />
-                <FontEditor
-                    label={t('inGameUi.submitButtonFont')}
-                    font={(ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings}
-                    onFontChange={(prop, value) => onUpdate({ inputSubmitFont: { ...((ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
-                />
+                <CollapsibleSection title={t('inGameUi.submitButton', 'Submit Button')}>
+                    <div className="space-y-2">
+                        <Field label={t('inGameUi.buttonLabel', 'Button text')}>
+                            <input className={inputCls} value={ui.inputSubmitLabel ?? ''} placeholder={t('inGameUi.submit')}
+                                onChange={e => onUpdate({ inputSubmitLabel: e.target.value || undefined })} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label={t('inGameUi.colorBackground')} value={ui.inputSubmitColor ?? '#334155'} onChange={v => onUpdate({ inputSubmitColor: v })} />
+                            <NumInput label={t('inGameUi.borderRadius')} value={ui.inputSubmitBorderRadius} fallback={6} min={0} onChange={v => onUpdate({ inputSubmitBorderRadius: v })} />
+                        </div>
+                        <Field label={t('inGameUi.backgroundImage')}>
+                            <select className={inputCls} value={ui.inputSubmitImage?.id || ''}
+                                onChange={e => {
+                                    const asset = e.target.value ? allImages.find((img: any) => img.id === e.target.value) : null;
+                                    onUpdate({ inputSubmitImage: asset ? { type: 'image', id: asset.id } : null });
+                                }}>
+                                <option value="">{t('inGameUi.noneUseColor')}</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        <FontEditor
+                            label={t('inGameUi.submitButtonFont')}
+                            font={(ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings}
+                            onFontChange={(prop, value) => onUpdate({ inputSubmitFont: { ...((ui.inputSubmitFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })}
+                        />
+                    </div>
+                </CollapsibleSection>
             </div>
         );
     }
@@ -993,8 +1131,10 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
     /* Quick Menu properties */
     if (element === 'quickMenu') {
         return (
-            <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.quickMenu')}</h4>
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('inGameUi.quickMenu')}</h4>
+                <CollapsibleSection title={t('inGameUi.groupAppearancePosition', 'Appearance & position')} defaultOpen>
+                <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                     <ColorField label={t('inGameUi.buttonColor')} value={ui.quickMenuColor ?? '#0f172a'} onChange={v => onUpdate({ quickMenuColor: v })} />
                     <OpacityField label={t('inGameUi.opacity')} value={ui.quickMenuOpacity ?? 75} onChange={v => onUpdate({ quickMenuOpacity: v })} />
@@ -1048,11 +1188,14 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                     <span className="text-xs text-[var(--text-secondary)] ml-2">{t('inGameUi.independentHint')}</span>
                 </Field>
 
-                <div className="border-t border-[var(--border-subtle)] pt-2">
-                    <QuickMenuReactiveStatesEditor states={ui.quickMenuReactiveStates} project={project} onChange={s => onUpdate({ quickMenuReactiveStates: s })} />
                 </div>
+                </CollapsibleSection>
 
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 pt-3">{t('inGameUi.buttonsHeader')}</h4>
+                <CollapsibleSection title={t('inGameUi.groupReactiveStates', 'Reactive states')}>
+                    <QuickMenuReactiveStatesEditor states={ui.quickMenuReactiveStates} project={project} onChange={s => onUpdate({ quickMenuReactiveStates: s })} />
+                </CollapsibleSection>
+
+                <CollapsibleSection title={t('inGameUi.buttonsHeader')} defaultOpen>
                 <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.buttonsHint')}{ui.quickMenuIndependentLayout ? t('inGameUi.buttonsHintDrag') : ''}</p>
 
                 <div className="space-y-2">
@@ -1185,6 +1328,7 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         onClick={() => onUpdate({ quickMenuCustomButtons: [...(ui.quickMenuCustomButtons || []), { id: ('qmc-' + Math.random().toString(36).slice(2, 9)) as VNID, label: 'New Button', action: { type: UIActionType.None } as VNUIAction }] })}
                     >+ {t('inGameUi.addCustomButton')}</button>
                 </div>
+                </CollapsibleSection>
             </div>
         );
     }
@@ -1194,76 +1338,108 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
         const cd = ui.confirmDialogs || {} as VNConfirmDialogSettings;
         const updateCD = (patch: Partial<VNConfirmDialogSettings>) => onUpdate({ confirmDialogs: { ...cd, ...patch } });
 
+        const variantKey = (confirmVariant || 'newGame') as ConfirmVariant; // 'quit' | 'newGame' | 'eraseSave'
+        const vDefaults = CONFIRM_TEXT_DEFAULTS[variantKey];
+        // Context-aware text accessors — edit ONLY the selected variant's strings.
+        const titleVal = ((cd as any)[variantKey + 'Title'] as string) ?? '';
+        const msgVal = ((cd as any)[variantKey + 'Message'] as string) ?? '';
+        const confirmVal = ((cd as any)[variantKey + 'ConfirmLabel'] as string) ?? '';
+        const cancelVal = ((cd as any)[variantKey + 'CancelLabel'] as string) ?? '';
+        const setText = (field: 'Title' | 'Message' | 'ConfirmLabel' | 'CancelLabel', val: string) => {
+            const key = (variantKey + field) as keyof VNConfirmDialogSettings;
+            updateCD({ [key]: val || undefined } as Partial<VNConfirmDialogSettings>);
+        };
+        // Per-variant STYLE: read from the merged effective look, write to this variant's override
+        // bag so each confirmation (Quit / New Game / Erase Save) is fully independent.
+        const eff = { ...cd, ...(cd.variants?.[variantKey] || {}) } as VNConfirmVariantStyle & VNConfirmDialogSettings;
+        const updateCDStyle = (patch: Partial<VNConfirmVariantStyle>) => updateCD({
+            variants: { ...(cd.variants || {}), [variantKey]: { ...(cd.variants?.[variantKey] || {}), ...patch } },
+        });
         return (
-            <div className="space-y-3 p-3">
-                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1">{t('inGameUi.confirmationDialogs')}</h4>
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">{t('inGameUi.confirmationDialogs')}</h4>
                 <p className="text-xs text-[var(--text-secondary)]">
                     Shown when the player quits to title or starts a new game while a game is in progress.
                 </p>
 
-                {/* Quit dialog text */}
-                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.quitConfirmation')}</span>
-                    <Field label={t('inGameUi.title')}>
-                        <input className={inputCls} value={cd.quitTitle ?? ''} placeholder={t('inGameUi.phQuitGame')}
-                            onChange={e => updateCD({ quitTitle: e.target.value || undefined })} />
-                    </Field>
-                    <Field label={t('inGameUi.message')}>
-                        <textarea className={inputCls} rows={2} value={cd.quitMessage ?? ''} placeholder={t('inGameUi.phQuitMsg')}
-                            onChange={e => updateCD({ quitMessage: e.target.value || undefined })} />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-2">
-                        <Field label={t('inGameUi.confirmButton')}>
-                            <input className={inputCls} value={cd.quitConfirmLabel ?? ''} placeholder={t('inGameUi.phQuit')}
-                                onChange={e => updateCD({ quitConfirmLabel: e.target.value || undefined })} />
-                        </Field>
-                        <Field label={t('inGameUi.cancelButton')}>
-                            <input className={inputCls} value={cd.quitCancelLabel ?? ''} placeholder={t('inGameUi.phCancel')}
-                                onChange={e => updateCD({ quitCancelLabel: e.target.value || undefined })} />
-                        </Field>
-                    </div>
+                {/* Variant selector — chooses which confirmation you're editing AND previewing. */}
+                <div className="flex gap-1 bg-[var(--bg-tertiary)] rounded-lg p-1">
+                    {CONFIRM_VARIANTS.map(v => (
+                        <button key={v} onClick={() => onConfirmVariantChange?.(v)}
+                            className={`flex-1 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${confirmVariant === v ? 'bg-[var(--accent-lavender)] text-white shadow' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                            {confirmVariantLabel(v, t)}
+                        </button>
+                    ))}
                 </div>
 
-                {/* New Game dialog text */}
-                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.newGameConfirmation')}</span>
-                    <Field label={t('inGameUi.title')}>
-                        <input className={inputCls} value={cd.newGameTitle ?? ''} placeholder={t('inGameUi.phStartNewGame')}
-                            onChange={e => updateCD({ newGameTitle: e.target.value || undefined })} />
+                {/* Free / independent layout (per-variant) */}
+                <CollapsibleSection title={t('inGameUi.freeLayout', 'Free layout (drag & resize)')}>
+                    <Field label={t('inGameUi.independentLayout')}>
+                        <input
+                            type="checkbox"
+                            checked={eff.independentLayout ?? false}
+                            onChange={e => {
+                                const on = e.target.checked;
+                                if (on && !eff.boxRect) {
+                                    // Seed sensible defaults so the box + buttons appear placed, then drag.
+                                    updateCDStyle({
+                                        independentLayout: true,
+                                        boxRect: { x: 32, y: 26, width: 36, height: 34 },
+                                        cancelRect: { x: 34, y: 50, width: 14, height: 8 },
+                                        confirmRect: { x: 52, y: 50, width: 14, height: 8 },
+                                    });
+                                } else {
+                                    updateCDStyle({ independentLayout: on });
+                                }
+                            }}
+                            className="cursor-pointer"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)] ml-2">{t('inGameUi.confirmFreeHint', 'Drag & resize the box and each button on the canvas (applies to the selected confirmation).')}</span>
                     </Field>
-                    <Field label={t('inGameUi.message')}>
-                        <textarea className={inputCls} rows={2} value={cd.newGameMessage ?? ''} placeholder={t('inGameUi.phNewGameMsg')}
-                            onChange={e => updateCD({ newGameMessage: e.target.value || undefined })} />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-2">
-                        <Field label={t('inGameUi.confirmButton')}>
-                            <input className={inputCls} value={cd.newGameConfirmLabel ?? ''} placeholder={t('inGameUi.phNewGame')}
-                                onChange={e => updateCD({ newGameConfirmLabel: e.target.value || undefined })} />
-                        </Field>
-                        <Field label={t('inGameUi.cancelButton')}>
-                            <input className={inputCls} value={cd.newGameCancelLabel ?? ''} placeholder={t('inGameUi.phCancel')}
-                                onChange={e => updateCD({ newGameCancelLabel: e.target.value || undefined })} />
-                        </Field>
-                    </div>
-                </div>
+                </CollapsibleSection>
 
-                {/* Visual styling */}
-                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.dialogBoxAppearance')}</span>
-                    <div className="grid grid-cols-2 gap-2">
-                        <ColorField label={t('inGameUi.colorBackground')} value={cd.backgroundColor ?? '#0f172a'} onChange={v => updateCD({ backgroundColor: v })} />
-                        <OpacityField label={t('inGameUi.opacity')} value={cd.backgroundOpacity ?? 92} onChange={v => updateCD({ backgroundOpacity: v })} />
+                {/* Context-aware text for the SELECTED confirmation only */}
+                <CollapsibleSection title={`${confirmVariantLabel(variantKey, t)} — ${t('inGameUi.textAndButtons', 'text & buttons')}`} defaultOpen>
+                    <div className="space-y-2">
+                        <Field label={t('inGameUi.title')}>
+                            <input className={inputCls} value={titleVal} placeholder={vDefaults.title}
+                                onChange={e => setText('Title', e.target.value)} />
+                        </Field>
+                        <Field label={t('inGameUi.message')}>
+                            <textarea className={inputCls} rows={2} value={msgVal} placeholder={vDefaults.message}
+                                onChange={e => setText('Message', e.target.value)} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <Field label={t('inGameUi.confirmButton')}>
+                                <input className={inputCls} value={confirmVal} placeholder={vDefaults.confirm}
+                                    onChange={e => setText('ConfirmLabel', e.target.value)} />
+                            </Field>
+                            <Field label={t('inGameUi.cancelButton')}>
+                                <input className={inputCls} value={cancelVal} placeholder={vDefaults.cancel}
+                                    onChange={e => setText('CancelLabel', e.target.value)} />
+                            </Field>
+                        </div>
+                        <p className="text-[10px] text-[var(--text-muted)]">{t('inGameUi.confirmPerVariantStyleHint', 'The appearance, buttons, fonts and layout below apply to the SELECTED confirmation only — Quit, New Game and Erase Save are styled independently.')}</p>
                     </div>
-                    <NumInput label={t('inGameUi.borderRadius')} value={cd.borderRadius} fallback={12} min={0} onChange={v => updateCD({ borderRadius: v })} />
-                    <NumInput label={t('inGameUi.dialogWidth')} value={cd.dialogWidth} fallback={0} min={0} max={1200} onChange={v => updateCD({ dialogWidth: v || undefined })} />
-                    <NumInput label={t('inGameUi.innerPadding')} value={cd.dialogPadding} fallback={32} min={0} max={100} onChange={v => updateCD({ dialogPadding: v })} />
-                    <ColorField label={t('inGameUi.overlayColor')} value={cd.overlayColor ?? '#000000'} onChange={v => updateCD({ overlayColor: `${v}bf` })} />
+                </CollapsibleSection>
+
+                {/* Visual styling (per-variant) */}
+                <CollapsibleSection title={t('inGameUi.dialogBoxAppearance')}>
+                    <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label={t('inGameUi.colorBackground')} value={eff.backgroundColor ?? '#0f172a'} onChange={v => updateCDStyle({ backgroundColor: v })} />
+                        <OpacityField label={t('inGameUi.opacity')} value={eff.backgroundOpacity ?? 92} onChange={v => updateCDStyle({ backgroundOpacity: v })} />
+                    </div>
+                    <NumInput label={t('inGameUi.borderRadius')} value={eff.borderRadius} fallback={12} min={0} onChange={v => updateCDStyle({ borderRadius: v })} />
+                    <NumInput label={t('inGameUi.dialogWidth')} value={eff.dialogWidth} fallback={0} min={0} max={1200} onChange={v => updateCDStyle({ dialogWidth: v || undefined })} />
+                    <NumInput label={t('inGameUi.innerPadding')} value={eff.dialogPadding} fallback={32} min={0} max={100} onChange={v => updateCDStyle({ dialogPadding: v })} />
+                    <ColorField label={t('inGameUi.overlayColor')} value={eff.overlayColor ?? '#000000'} onChange={v => updateCDStyle({ overlayColor: `${v}bf` })} />
 
                     <Field label={t('inGameUi.backgroundImage')}>
-                        <select className={inputCls} value={cd.backgroundImage?.id || ''}
+                        <select className={inputCls} value={eff.backgroundImage?.id || ''}
                             onChange={e => {
-                                if (!e.target.value) { updateCD({ backgroundImage: null }); return; }
-                                updateCD({ backgroundImage: { type: 'image', id: e.target.value as any } });
+                                if (!e.target.value) { updateCDStyle({ backgroundImage: null }); return; }
+                                updateCDStyle({ backgroundImage: { type: 'image', id: e.target.value as any } });
                             }}>
                             <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
@@ -1271,10 +1447,10 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             ))}
                         </select>
                     </Field>
-                    {cd.backgroundImage && (
+                    {eff.backgroundImage && (
                         <Field label={t('inGameUi.imageSizing')}>
-                            <select className={inputCls} value={cd.backgroundSizeMode ?? 'stretch'}
-                                onChange={e => updateCD({ backgroundSizeMode: e.target.value as any })}>
+                            <select className={inputCls} value={eff.backgroundSizeMode ?? 'stretch'}
+                                onChange={e => updateCDStyle({ backgroundSizeMode: e.target.value as any })}>
                                 <option value="stretch">{t('inGameUi.sizeStretch')}</option>
                                 <option value="contain">{t('inGameUi.sizeContain')}</option>
                                 <option value="cover">{t('inGameUi.sizeCover')}</option>
@@ -1282,15 +1458,15 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             </select>
                         </Field>
                     )}
-                    {cd.backgroundImage && cd.backgroundSizeMode === 'nine-slice' && (
-                        <NumInput label={t('inGameUi.sliceSize')} value={cd.backgroundSlice} fallback={20} min={1} onChange={v => updateCD({ backgroundSlice: v })} />
+                    {eff.backgroundImage && eff.backgroundSizeMode === 'nine-slice' && (
+                        <NumInput label={t('inGameUi.sliceSize')} value={eff.backgroundSlice} fallback={20} min={1} onChange={v => updateCDStyle({ backgroundSlice: v })} />
                     )}
 
                     <Field label={t('inGameUi.borderImage')}>
-                        <select className={inputCls} value={cd.borderImage?.id || ''}
+                        <select className={inputCls} value={eff.borderImage?.id || ''}
                             onChange={e => {
-                                if (!e.target.value) { updateCD({ borderImage: null }); return; }
-                                updateCD({ borderImage: { type: 'image', id: e.target.value as any } });
+                                if (!e.target.value) { updateCDStyle({ borderImage: null }); return; }
+                                updateCDStyle({ borderImage: { type: 'image', id: e.target.value as any } });
                             }}>
                             <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
@@ -1298,32 +1474,33 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             ))}
                         </select>
                     </Field>
-                    {cd.borderImage && (
-                        <NumInput label={t('inGameUi.borderPadding')} value={cd.borderPadding} fallback={12} min={0} onChange={v => updateCD({ borderPadding: v })} />
+                    {eff.borderImage && (
+                        <NumInput label={t('inGameUi.borderPadding')} value={eff.borderPadding} fallback={12} min={0} onChange={v => updateCDStyle({ borderPadding: v })} />
                     )}
-                </div>
+                    </div>
+                </CollapsibleSection>
 
-                {/* Button styling */}
-                <div className="border border-[var(--border-subtle)] rounded p-2 space-y-2">
-                    <span className="text-xs font-semibold text-sky-400">{t('inGameUi.buttonStyling')}</span>
+                {/* Button styling (per-variant) */}
+                <CollapsibleSection title={t('inGameUi.buttonStyling')}>
+                    <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label={t('inGameUi.confirmBtnColor')} value={cd.confirmButtonColor ?? '#ec4899'} onChange={v => updateCD({ confirmButtonColor: v })} />
-                        <ColorField label={t('inGameUi.cancelBtnColor')} value={cd.cancelButtonColor ?? '#1e293b'} onChange={v => updateCD({ cancelButtonColor: v })} />
+                        <ColorField label={t('inGameUi.confirmBtnColor')} value={eff.confirmButtonColor ?? '#ec4899'} onChange={v => updateCDStyle({ confirmButtonColor: v })} />
+                        <ColorField label={t('inGameUi.cancelBtnColor')} value={eff.cancelButtonColor ?? '#1e293b'} onChange={v => updateCDStyle({ cancelButtonColor: v })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <ColorField label={t('inGameUi.confirmHoverColor')} value={cd.confirmHoverColor ?? ''} onChange={v => updateCD({ confirmHoverColor: v || undefined })} />
-                        <ColorField label={t('inGameUi.cancelHoverColor')} value={cd.cancelHoverColor ?? '#334155'} onChange={v => updateCD({ cancelHoverColor: v })} />
+                        <ColorField label={t('inGameUi.confirmHoverColor')} value={eff.confirmHoverColor ?? ''} onChange={v => updateCDStyle({ confirmHoverColor: v || undefined })} />
+                        <ColorField label={t('inGameUi.cancelHoverColor')} value={eff.cancelHoverColor ?? '#334155'} onChange={v => updateCDStyle({ cancelHoverColor: v })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        <NumInput label={t('inGameUi.buttonPadding')} value={cd.buttonPadding} fallback={8} min={0} max={60} onChange={v => updateCD({ buttonPadding: v })} />
-                        <NumInput label={t('inGameUi.buttonRadius')} value={cd.buttonBorderRadius} fallback={8} min={0} onChange={v => updateCD({ buttonBorderRadius: v })} />
+                        <NumInput label={t('inGameUi.buttonPadding')} value={eff.buttonPadding} fallback={8} min={0} max={60} onChange={v => updateCDStyle({ buttonPadding: v })} />
+                        <NumInput label={t('inGameUi.buttonRadius')} value={eff.buttonBorderRadius} fallback={8} min={0} onChange={v => updateCDStyle({ buttonBorderRadius: v })} />
                     </div>
 
                     <Field label={t('inGameUi.confirmButtonImage')}>
-                        <select className={inputCls} value={cd.confirmButtonImage?.id || ''}
+                        <select className={inputCls} value={eff.confirmButtonImage?.id || ''}
                             onChange={e => {
-                                if (!e.target.value) { updateCD({ confirmButtonImage: null }); return; }
-                                updateCD({ confirmButtonImage: { type: 'image', id: e.target.value as any } });
+                                if (!e.target.value) { updateCDStyle({ confirmButtonImage: null }); return; }
+                                updateCDStyle({ confirmButtonImage: { type: 'image', id: e.target.value as any } });
                             }}>
                             <option value="">{t('inGameUi.noneSolidColor')}</option>
                             {allImages.map((img: any) => (
@@ -1332,10 +1509,10 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </select>
                     </Field>
                     <Field label={t('inGameUi.cancelButtonImage')}>
-                        <select className={inputCls} value={cd.cancelButtonImage?.id || ''}
+                        <select className={inputCls} value={eff.cancelButtonImage?.id || ''}
                             onChange={e => {
-                                if (!e.target.value) { updateCD({ cancelButtonImage: null }); return; }
-                                updateCD({ cancelButtonImage: { type: 'image', id: e.target.value as any } });
+                                if (!e.target.value) { updateCDStyle({ cancelButtonImage: null }); return; }
+                                updateCDStyle({ cancelButtonImage: { type: 'image', id: e.target.value as any } });
                             }}>
                             <option value="">{t('inGameUi.noneSolidColor')}</option>
                             {allImages.map((img: any) => (
@@ -1344,10 +1521,10 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </select>
                     </Field>
                     <Field label={t('inGameUi.confirmHoverImage')}>
-                        <select className={inputCls} value={cd.confirmHoverImage?.id || ''}
+                        <select className={inputCls} value={eff.confirmHoverImage?.id || ''}
                             onChange={e => {
-                                if (!e.target.value) { updateCD({ confirmHoverImage: null }); return; }
-                                updateCD({ confirmHoverImage: { type: 'image', id: e.target.value as any } });
+                                if (!e.target.value) { updateCDStyle({ confirmHoverImage: null }); return; }
+                                updateCDStyle({ confirmHoverImage: { type: 'image', id: e.target.value as any } });
                             }}>
                             <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
@@ -1356,10 +1533,10 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                         </select>
                     </Field>
                     <Field label={t('inGameUi.cancelHoverImage')}>
-                        <select className={inputCls} value={cd.cancelHoverImage?.id || ''}
+                        <select className={inputCls} value={eff.cancelHoverImage?.id || ''}
                             onChange={e => {
-                                if (!e.target.value) { updateCD({ cancelHoverImage: null }); return; }
-                                updateCD({ cancelHoverImage: { type: 'image', id: e.target.value as any } });
+                                if (!e.target.value) { updateCDStyle({ cancelHoverImage: null }); return; }
+                                updateCDStyle({ cancelHoverImage: { type: 'image', id: e.target.value as any } });
                             }}>
                             <option value="">{t('inGameUi.none')}</option>
                             {allImages.map((img: any) => (
@@ -1367,43 +1544,47 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
                             ))}
                         </select>
                     </Field>
-                    {(cd.confirmButtonImage || cd.cancelButtonImage) && (
+                    {(eff.confirmButtonImage || eff.cancelButtonImage) && (
                         <>
                             <Field label={t('inGameUi.buttonImageSizing')}>
-                                <select className={inputCls} value={cd.buttonSizeMode ?? 'stretch'}
-                                    onChange={e => updateCD({ buttonSizeMode: e.target.value as any })}>
+                                <select className={inputCls} value={eff.buttonSizeMode ?? 'stretch'}
+                                    onChange={e => updateCDStyle({ buttonSizeMode: e.target.value as any })}>
                                     <option value="stretch">{t('inGameUi.sizeStretch')}</option>
                                     <option value="contain">{t('inGameUi.sizeContain')}</option>
                                     <option value="cover">{t('inGameUi.sizeCover')}</option>
                                     <option value="nine-slice">{t('inGameUi.sizeNineSlice')}</option>
                                 </select>
                             </Field>
-                            {cd.buttonSizeMode === 'nine-slice' && (
-                                <NumInput label={t('inGameUi.buttonSlice')} value={cd.buttonSlice} fallback={10} min={1} onChange={v => updateCD({ buttonSlice: v })} />
+                            {eff.buttonSizeMode === 'nine-slice' && (
+                                <NumInput label={t('inGameUi.buttonSlice')} value={eff.buttonSlice} fallback={10} min={1} onChange={v => updateCDStyle({ buttonSlice: v })} />
                             )}
                         </>
                     )}
-                </div>
+                    </div>
+                </CollapsibleSection>
 
-                {/* Font editors */}
-                <FontEditor
-                    label={t('inGameUi.titleFont')}
-                    font={cd.titleFont ?? defaultFontSettings}
-                    onFontChange={(prop, value) => updateCD({ titleFont: { ...(cd.titleFont ?? defaultFontSettings), [prop]: value } })}
-                    defaultAlign="center"
-                />
-                <FontEditor
-                    label={t('inGameUi.messageFont')}
-                    font={cd.messageFont ?? defaultFontSettings}
-                    onFontChange={(prop, value) => updateCD({ messageFont: { ...(cd.messageFont ?? defaultFontSettings), [prop]: value } })}
-                    defaultAlign="center"
-                />
-                <FontEditor
-                    label={t('inGameUi.buttonFont')}
-                    font={cd.buttonFont ?? defaultFontSettings}
-                    onFontChange={(prop, value) => updateCD({ buttonFont: { ...(cd.buttonFont ?? defaultFontSettings), [prop]: value } })}
-                    defaultAlign="center"
-                />
+                <CollapsibleSection title={t('inGameUi.groupFonts', 'Fonts')}>
+                    <div className="space-y-2">
+                        <FontEditor
+                            label={t('inGameUi.titleFont')}
+                            font={eff.titleFont ?? defaultFontSettings}
+                            onFontChange={(prop, value) => updateCDStyle({ titleFont: { ...(eff.titleFont ?? defaultFontSettings), [prop]: value } })}
+                            defaultAlign="center"
+                        />
+                        <FontEditor
+                            label={t('inGameUi.messageFont')}
+                            font={eff.messageFont ?? defaultFontSettings}
+                            onFontChange={(prop, value) => updateCDStyle({ messageFont: { ...(eff.messageFont ?? defaultFontSettings), [prop]: value } })}
+                            defaultAlign="center"
+                        />
+                        <FontEditor
+                            label={t('inGameUi.buttonFont')}
+                            font={eff.buttonFont ?? defaultFontSettings}
+                            onFontChange={(prop, value) => updateCDStyle({ buttonFont: { ...(eff.buttonFont ?? defaultFontSettings), [prop]: value } })}
+                            defaultAlign="center"
+                        />
+                    </div>
+                </CollapsibleSection>
             </div>
         );
     }
@@ -1444,6 +1625,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     const { dispatch } = useProject();
     const [selectedElement, setSelectedElement] = useState<InGameUIElement | null>('dialogueBox');
     const [selectedThemeId, setSelectedThemeId] = useState<VNID | null>(null);
+    // Which confirmation the preview shows (Quit vs New Game). Default to New Game so it's visible.
+    const [confirmPreviewVariant, setConfirmPreviewVariant] = useState<ConfirmVariant>('newGame');
     const [showSnapGuides, setShowSnapGuides] = useState(false);
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -1531,6 +1714,16 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
     const quickMenuButtonRects = useMemo(() => getQuickMenuButtonRects(ui, gameW, gameH), [ui, gameW, gameH]);
     const quickMenuIndependent = !!ui.quickMenuIndependentLayout && selectedElement === 'quickMenu' && ui.quickMenuPosition !== 'hidden';
+
+    // Confirm-dialog free layout: drag/resize the box + each button independently (screen-%), PER variant.
+    const confirmEff = { ...(ui.confirmDialogs || {}), ...(ui.confirmDialogs?.variants?.[confirmPreviewVariant] || {}) };
+    const confirmIndependent = selectedElement === 'confirmDialogs' && !!confirmEff.independentLayout && !!confirmEff.boxRect;
+    const handleDragConfirmRect = useCallback((which: 'boxRect' | 'confirmRect' | 'cancelRect', u: { x: number; y: number; width: number; height: number }) => {
+        const prev = ui.confirmDialogs || {};
+        const vk = confirmPreviewVariant;
+        const prevV = prev.variants?.[vk] || {};
+        updateUI({ confirmDialogs: { ...prev, variants: { ...(prev.variants || {}), [vk]: { ...prevV, [which]: { x: u.x, y: u.y, width: u.width, height: u.height } } } } });
+    }, [ui.confirmDialogs, confirmPreviewVariant, updateUI]);
 
     const isHidden = (el: InGameUIElement) => el === 'quickMenu' && ui.quickMenuPosition === 'hidden';
 
@@ -1669,9 +1862,47 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         </ResizableDraggable>
                     )}
 
-                    {/* Confirm Dialogs preview – full-canvas overlay, not draggable */}
+                    {/* Confirm Dialogs preview – full-canvas overlay, not draggable. A toggle lets the
+                        author preview EITHER the Quit or the New Game confirmation (shared styling). */}
                     {selectedElement === 'confirmDialogs' && (
-                        <ConfirmDialogPreview ui={ui} project={project} />
+                        <>
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-[var(--bg-secondary)]/90 backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-lg">
+                                {CONFIRM_VARIANTS.map(v => (
+                                    <button key={v} onClick={() => setConfirmPreviewVariant(v)}
+                                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${confirmPreviewVariant === v ? 'bg-[var(--accent-lavender)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                                        {confirmVariantLabel(v, t)}
+                                    </button>
+                                ))}
+                            </div>
+                            {confirmIndependent ? (
+                                <>
+                                    {/* Free layout: draggable/resizable box + each button (screen-%). */}
+                                    <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: confirmEff.overlayColor ?? 'rgba(0,0,0,0.75)' }} />
+                                    {([
+                                        { which: 'boxRect' as const, rect: confirmEff.boxRect!, part: 'box' as const, label: t('inGameUi.confirmBoxLabel', 'Dialog box') },
+                                        { which: 'cancelRect' as const, rect: confirmEff.cancelRect, part: 'cancel' as const, label: t('inGameUi.cancelButton') },
+                                        { which: 'confirmRect' as const, rect: confirmEff.confirmRect, part: 'confirm' as const, label: t('inGameUi.confirmButton') },
+                                    ]).filter(d => d.rect).map(d => (
+                                        <ResizableDraggable
+                                            key={d.which}
+                                            x={d.rect!.x} y={d.rect!.y}
+                                            width={d.rect!.width} height={d.rect!.height}
+                                            anchorX={0} anchorY={0}
+                                            parentSize={stageSize}
+                                            isSelected={true}
+                                            onSelect={e => { e.stopPropagation(); }}
+                                            onUpdate={u => handleDragConfirmRect(d.which, u)}
+                                            snapGrid={1}
+                                            label={d.label}
+                                        >
+                                            <ConfirmFreePart ui={ui} project={project} variant={confirmPreviewVariant} part={d.part} />
+                                        </ResizableDraggable>
+                                    ))}
+                                </>
+                            ) : (
+                                <ConfirmDialogPreview ui={ui} project={project} variant={confirmPreviewVariant} />
+                            )}
+                        </>
                     )}
 
                     {/* Textbox theme preview – shows the selected theme's box + nameplate (not draggable). */}
@@ -1705,7 +1936,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                 {selectedElement === 'textboxThemes' ? (
                     <TextboxThemeManager project={project} selectedThemeId={selectedThemeId} onSelect={setSelectedThemeId} />
                 ) : selectedElement ? (
-                    <InGameUIPropsEditor ui={ui} element={selectedElement} project={project} onUpdate={updateUI} />
+                    <InGameUIPropsEditor key={selectedElement} ui={ui} element={selectedElement} project={project} onUpdate={updateUI} confirmVariant={confirmPreviewVariant} onConfirmVariantChange={setConfirmPreviewVariant} />
                 ) : (
                     <div className="p-4 text-center text-[var(--text-secondary)] text-sm">
                         Click an element on the sidebar to edit its properties

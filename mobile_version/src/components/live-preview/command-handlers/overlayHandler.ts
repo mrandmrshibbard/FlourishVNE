@@ -418,6 +418,8 @@ export function handleShowItem(
     pickUpOnceId: command.pickUpOnce !== false ? command.id : null,
     giveItemId: give ? command.itemId : null,
     giveQuantity: command.quantity ?? 1,
+    draggable: command.draggable,
+    dragItemId: command.itemId,
     ...(command.liveConditions ? { conditions: command.conditions, live: true } : {}),
   };
 

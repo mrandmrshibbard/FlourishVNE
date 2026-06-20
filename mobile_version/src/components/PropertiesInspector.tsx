@@ -439,12 +439,16 @@ const PropertiesInspector: React.FC<{
                         </FormField>
                     </>}
                     <FormField label={t('dialogue.keepOpen')}>
-                        <input 
-                            type="checkbox" 
-                            checked={cmd.keepOpenDuringChoices ?? false} 
+                        <input
+                            type="checkbox"
+                            checked={cmd.keepOpenDuringChoices ?? false}
                             onChange={e => updateCommand({ keepOpenDuringChoices: e.target.checked })}
                             className="cursor-pointer"
                         />
+                    </FormField>
+                    <FormField label={t('dialogue.textSpeed', 'Text speed override')}>
+                        <TextInput type="number" min="0" max="100" value={cmd.textSpeed ?? ''} placeholder={t('dialogue.textSpeedGlobal', 'Global default')}
+                            onChange={e => { const n = parseInt(e.target.value, 10); updateCommand({ textSpeed: Number.isFinite(n) && n > 0 ? Math.min(n, 100) : undefined }); }} />
                     </FormField>
                 </>;
             }
@@ -486,12 +490,7 @@ const PropertiesInspector: React.FC<{
                     </FormField>
                     {useColor ? (
                         <FormField label={t('background.color')}>
-                            <input
-                                type="color"
-                                value={cmd.backgroundColor}
-                                onChange={(e) => updateCommand({ backgroundColor: e.target.value })}
-                                className="w-full h-10 rounded cursor-pointer"
-                            />
+                            <ColorInput value={cmd.backgroundColor} onChange={v => updateCommand({ backgroundColor: v })} />
                         </FormField>
                     ) : (
                         <FormField label={t('background.background')}>
@@ -1576,6 +1575,10 @@ const PropertiesInspector: React.FC<{
             case CommandType.ShowHotSpot: {
                 const cmd = command as ShowHotSpotCommand;
                 const acts = cmd.actions || [];
+                const hotspotDragTags = Array.from(new Set([
+                    ...Object.values(project.items || {}).map((it: any) => it.dragTag),
+                    ...Object.values(project.uiScreens || {}).flatMap((s: any) => Object.values(s.elements || {}).map((el: any) => el.dragTag)),
+                ].filter((x): x is string => !!x)));
                 return <>
                     <FormField label={t('hotspot.name')}><TextInput value={cmd.name} onChange={e => updateCommand({ name: e.target.value })} /></FormField>
                     <div className="grid grid-cols-2 gap-1">
@@ -1601,7 +1604,11 @@ const PropertiesInspector: React.FC<{
                     </div>
                     {cmd.trigger === 'drag-drop' && (
                         <FormField label={t('hotspot.acceptTag')}>
-                            <TextInput value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value })} placeholder={t('hotspot.acceptTagPlaceholder')} />
+                            <TextInput list="flourish-hotspot-cmd-tags2" value={cmd.acceptedTag || ''} onChange={e => updateCommand({ acceptedTag: e.target.value })} placeholder={t('hotspot.acceptTagPlaceholder')} />
+                            <datalist id="flourish-hotspot-cmd-tags2">
+                                {hotspotDragTags.map(tag => <option key={tag} value={tag} />)}
+                            </datalist>
+                            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('hotspot.acceptTagHelp', 'Accepts a carried item or dragged object whose tag matches this. Tag a key item “key”, accept “key” here. Leave empty to accept anything dropped here.')}</p>
                         </FormField>
                     )}
                     {cmd.trigger === 'click' && (
@@ -2456,7 +2463,7 @@ const PropertiesInspector: React.FC<{
                                                     {Object.values(project.variables).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                                                 </select>
                                             ) : p.type === 'color' ? (
-                                                <input type="color" value={String(cur || '#ffffff')} onChange={e => setParam(p.name, e.target.value)} className="w-full" />
+                                                <ColorInput value={String(cur || '#ffffff')} onChange={v => setParam(p.name, v)} />
                                             ) : (
                                                 <input type={p.type === 'number' ? 'number' : 'text'} value={String(cur)} onChange={e => setParam(p.name, p.type === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] px-2 py-1 rounded border border-[var(--border-default)]" />
                                             )}

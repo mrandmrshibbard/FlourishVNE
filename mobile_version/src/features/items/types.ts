@@ -27,6 +27,13 @@ export interface VNItem {
     consumeOnUse?: boolean;
     /** Extra actions run when the item is used (the count is decremented automatically alongside these). */
     useEffect?: VNUIAction[];
+    /** When true, "using" this item picks it up onto the cursor (point-and-click style) so the player
+     *  can click a drop-zone hot spot to use it there, instead of firing the use-effect immediately.
+     *  The use-effect + consume happen only on a successful drop. Additive-optional. */
+    carryToUse?: boolean;
+    /** Optional tag so a drop-zone hot spot can accept this item by tag (e.g. tag a key "key", a door
+     *  hot spot that accepts "key" takes it). Same tag system as draggable screen objects. */
+    dragTag?: string;
     /** Default shop price in the shop's currency. Items not sold can leave this undefined. */
     price?: number;
     /** When true the item is a one-of flag (owned 0 or 1) — shops mark it sold-out once bought. */

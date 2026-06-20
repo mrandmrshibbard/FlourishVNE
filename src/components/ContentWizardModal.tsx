@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { RangeInput } from './ui/Form';
+import { RangeInput, ColorInput } from './ui/Form';
 import { useTranslation } from 'react-i18next';
 import { ContentWizardService } from '../features/content-wizards/ContentWizardService';
 import { ContentWizard, WizardStep, StepInputField } from '../types/wizard';
@@ -227,12 +227,7 @@ const ContentWizardModal: React.FC<ContentWizardModalProps> = ({ isOpen, onClose
 
                 {field.type === 'color' && (
                     <div className="flex items-center gap-3">
-                        <input
-                            type="color"
-                            value={value || '#FFFFFF'}
-                            onChange={(e) => handleFieldChange(field.id, e.target.value)}
-                            className="w-10 h-10 rounded border border-[var(--border-default)] bg-[var(--bg-primary)] cursor-pointer"
-                        />
+                        <ColorInput value={value || '#FFFFFF'} onChange={v => handleFieldChange(field.id, v)} />
                         <span className="text-sm text-[var(--text-secondary)] font-mono">{value || '#FFFFFF'}</span>
                     </div>
                 )}

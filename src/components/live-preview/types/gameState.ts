@@ -128,6 +128,10 @@ export interface ButtonOverlay {
     giveItemId?: VNID | null;
     /** Quantity to give on click (default 1; ignored for `unique` items, which clamp to 1). */
     giveQuantity?: number;
+    /** Show Item drag-to-hot-spot: when true the icon can be press-dragged onto a drop-zone hot spot. */
+    draggable?: boolean;
+    /** The item id this overlay represents (for drag tag lookup), even when giveOnClick is off. */
+    dragItemId?: VNID | null;
 }
 
 /** An interactive hot spot placed on the scene stage (from a ShowHotSpot command). */
@@ -341,6 +345,8 @@ export interface PlayerState {
             textEffect?: VNDialogueTextEffect;
             /** Per-line textbox theme override id (from the Dialogue command); resolved at render. */
             textboxThemeId?: VNID | null;
+            /** Per-line text-speed override (1-100); unset = use the global Text Speed setting. */
+            textSpeed?: number;
         } | null;
         choices: ChoiceOption[] | null;
         /** Layout for the active choice menu (from the Choice command). undefined = vertical stack. */

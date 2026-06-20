@@ -19,7 +19,7 @@ import SystemWizard from './menu-editor/SystemWizard';
 import { applySystemWizardResult } from '../features/systems/applySystem';
 import { UIActionType, VNCondition } from '../types/shared';
 import { VNID } from '../types';
-import { FormField, TextInput, TextArea, Select } from './ui/Form';
+import { FormField, TextInput, TextArea, Select, ColorInput } from './ui/Form';
 import AssetSelector from './ui/AssetSelector';
 import UIActionsListEditor from './ui/UIActionsListEditor';
 import ConditionsEditor from './ui/ConditionsEditor';
@@ -343,6 +343,26 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                         <p className="text-[11px] text-[var(--text-muted)] -mt-1">Uncheck for a reusable item (a tool/key) that runs its effect without being spent.</p>
                                         <p className="text-[11px] text-[var(--text-muted)] mb-1">Extra actions when used{selected.consumeOnUse !== false ? ' (the count is decremented automatically on use)' : ''}:</p>
                                         <UIActionsListEditor actions={selected.useEffect || []} project={project} onChange={acts => update(selected.id, { useEffect: acts })} label="Use effect" />
+
+                                        {/* Carry-to-use: point-and-click "pick up and click a spot" usage */}
+                                        <label className="flex items-center gap-2 cursor-pointer pt-1">
+                                            <input type="checkbox" checked={!!selected.carryToUse} onChange={e => update(selected.id, { carryToUse: e.target.checked || undefined })} className="w-4 h-4" />
+                                            <span className="text-sm text-[var(--text-primary)]">Click and drag to use </span>
+                                        </label>
+                                        <p className="text-[11px] text-[var(--text-muted)] -mt-1">When on, pressing “Use” picks the item up onto the cursor and closes the inventory. The player then clicks a drop-zone hot spot to use it there (the effect above + consume happen on a successful drop). Great for keys, tools, etc.</p>
+                                        {selected.carryToUse && (
+                                            <label className="block">
+                                                <span className="text-xs font-semibold text-[var(--text-secondary)]">Drag tag</span>
+                                                <input
+                                                    type="text"
+                                                    value={selected.dragTag || ''}
+                                                    placeholder="e.g. key"
+                                                    onChange={e => update(selected.id, { dragTag: e.target.value || undefined })}
+                                                    className="w-full mt-0.5 bg-[var(--bg-primary)] border border-[var(--border-default)] rounded px-2 py-1 text-white text-xs"
+                                                />
+                                                <span className="block text-[11px] text-[var(--text-muted)] mt-0.5">A drop-zone hot spot accepts this item when its “Accept objects tagged” matches this word. Give several items the same tag to make them interchangeable (e.g. all keys “key”).</span>
+                                            </label>
+                                        )}
                                     </div>
                                 )}
 
@@ -413,8 +433,7 @@ const SystemsManager: React.FC<SystemsManagerProps> = ({ project: projectProp, o
                                     <FormField label="Maximum"><TextInput type="number" value={selectedStat.max} onChange={e => updateStat(selectedStat.id, { max: parseFloat(e.target.value) || 0 })} /></FormField>
                                     <FormField label="Starts at"><TextInput type="number" value={selectedStat.defaultValue} onChange={e => updateStat(selectedStat.id, { defaultValue: parseFloat(e.target.value) || 0 })} /></FormField>
                                     <FormField label="Meter color">
-                                        <input type="color" value={selectedStat.color || '#a78bfa'} onChange={e => updateStat(selectedStat.id, { color: e.target.value })}
-                                            className="w-full h-9 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-subtle)] cursor-pointer" />
+                                        <ColorInput value={selectedStat.color || '#a78bfa'} onChange={v => updateStat(selectedStat.id, { color: v })} />
                                     </FormField>
                                 </div>
 

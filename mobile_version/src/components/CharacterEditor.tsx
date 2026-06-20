@@ -14,7 +14,7 @@ import { VNID } from '../types';
 import { VNCharacter, VNCharacterExpression, VNCharacterLayer, VNLayerAsset, VNCharacterTextbox } from '../features/character/types';
 import { fileToBase64 } from '../utils/file';
 import { PlusIcon, TrashIcon, UploadIcon, PencilIcon } from './icons';
-import { FormField, TextInput, Select } from './ui/Form';
+import { FormField, TextInput, Select, ColorInput } from './ui/Form';
 import TextboxStyleFields from './ui/TextboxStyleFields';
 import { popularFonts as _sharedFonts } from './ui/FontEditor';
 import ConfirmationModal from './ui/ConfirmationModal';
@@ -359,13 +359,7 @@ const CharacterEditor: React.FC<{
                         style={{ color: 'var(--text-primary)', maxWidth: '200px' }}
                     />
                     <div className="flex items-center gap-1.5">
-                        <input
-                            type="color"
-                            value={character.color}
-                            onChange={e => updateCharacter({ color: e.target.value })}
-                            className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
-                            title={t('editor.dialogueColor')}
-                        />
+                        <ColorInput value={character.color} onChange={v => updateCharacter({ color: v })} />
                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('editor.color')}</span>
                     </div>
                 </div>

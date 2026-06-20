@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-export type ThemeName = 'rainbow' | 'midnight' | 'ocean' | 'forest' | 'sunset' | 'sakura';
+export type ThemeName = 'rainbow' | 'midnight' | 'ocean' | 'forest' | 'sunset' | 'sakura' | 'july4';
+
+/** Marks a theme as a seasonal/holiday theme: it auto-applies once during its date window and
+ *  unlocks Project-Hub decorations (fireworks, gradient flashes). `decoration` selects which
+ *  hub effect renders. Window is inclusive [start, end] as [month (1-12), day]. */
+export interface HolidayMeta {
+  id: string;
+  decoration: 'usa-fireworks';
+  windowStart: [number, number];
+  windowEnd: [number, number];
+}
 
 export interface ThemeColors {
   bgPrimary: string;
@@ -37,6 +47,8 @@ export interface Theme {
   label: string;
   emoji: string;
   colors: ThemeColors;
+  /** Present on seasonal themes (auto-apply window + hub decorations). */
+  holiday?: HolidayMeta;
 }
 
 const themes: Record<ThemeName, Theme> = {
@@ -262,6 +274,47 @@ const themes: Record<ThemeName, Theme> = {
       `,
     },
   },
+  july4: {
+    name: 'july4',
+    label: '4th of July',
+    emoji: '🎆',
+    holiday: { id: 'july4', decoration: 'usa-fireworks', windowStart: [6, 28], windowEnd: [7, 7] },
+    colors: {
+      // Deep night-sky navy so the bold red/white/blue + fireworks really pop.
+      bgPrimary: '#070a1c',
+      bgSecondary: '#0f1530',
+      bgTertiary: '#172048',
+      bgElevated: '#243168',
+      accentPink: '#ff4368',
+      accentCyan: '#a8ccff',
+      accentPurple: '#6f8eff',
+      accentSky: '#4d8bff',
+      accentBlue: '#2f6bff',
+      accentYellow: '#ffdf7a',
+      accentRed: '#ff2d4e',
+      accentGreen: '#4ade80',
+      accentPeach: '#ff8f7a',
+      accentMint: '#a8ccff',
+      // Lavender is the app's primary accent — make it a bold patriotic blue.
+      accentLavender: '#4778ff',
+      textPrimary: '#fcfbff',
+      textSecondary: '#cdd6f5',
+      textTertiary: '#8b9bc8',
+      textMuted: '#5f6e9c',
+      slate900: '#070a1c',
+      slate800: '#0f1530',
+      slate700: '#172048',
+      slate600: '#2a3870',
+      slate500: '#42559a',
+      slate400: '#6f82bd',
+      // Stronger, more saturated flag-vibe wash so the theme reads instantly as 4th of July.
+      gradientBg: `
+        radial-gradient(ellipse at 12% 22%, rgba(255, 45, 78, 0.26) 0%, transparent 52%),
+        radial-gradient(ellipse at 88% 28%, rgba(47, 107, 255, 0.26) 0%, transparent 52%),
+        radial-gradient(ellipse at 50% 100%, rgba(255, 255, 255, 0.13) 0%, transparent 46%)
+      `,
+    },
+  },
 };
 
 interface ThemeContextValue {
@@ -269,11 +322,26 @@ interface ThemeContextValue {
   themeName: ThemeName;
   setTheme: (name: ThemeName) => void;
   availableThemes: Theme[];
+  /** True while a seasonal/holiday theme is active (drives hub decorations). */
+  isHoliday: boolean;
+  /** Revert from a holiday theme to whatever was active before it auto-applied (else the default).
+   *  Non-persistent: it just switches the theme this once. */
+  exitHoliday: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const THEME_STORAGE_KEY = 'flourish-editor-theme';
+const PRE_HOLIDAY_KEY = 'flourish-pre-holiday-theme';
+const DEFAULT_THEME: ThemeName = 'rainbow';
+
+/** Is `now` inside a holiday's inclusive [start, end] month/day window? (Handles year-wrap.) */
+const isWithinHolidayWindow = (h: HolidayMeta, now: Date): boolean => {
+  const md = (now.getMonth() + 1) * 100 + now.getDate();
+  const start = h.windowStart[0] * 100 + h.windowStart[1];
+  const end = h.windowEnd[0] * 100 + h.windowEnd[1];
+  return start <= end ? md >= start && md <= end : md >= start || md <= end;
+};
 
 const applyThemeToDocument = (theme: Theme) => {
   const root = document.documentElement;
@@ -357,10 +425,46 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  // ── Seasonal auto-activation ──────────────────────────────────────────────
+  // Once per season, if today falls inside a holiday theme's window AND we haven't already
+  // auto-applied it this year, switch to it (remembering the prior theme so the hub "turn off"
+  // button can restore it). Runs once on mount. Users can always pick/leave it via the Theme menu.
+  useEffect(() => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      for (const t of Object.values(themes)) {
+        if (!t.holiday) continue;
+        if (!isWithinHolidayWindow(t.holiday, now)) continue;
+        const seenKey = `flourish-holiday-seen-${t.holiday.id}-${year}`;
+        if (localStorage.getItem(seenKey)) continue; // already auto-applied this year
+        localStorage.setItem(seenKey, '1');
+        if (themeName !== t.name) {
+          localStorage.setItem(PRE_HOLIDAY_KEY, themeName); // remember what to restore
+          setTheme(t.name);
+        }
+        break; // one holiday at a time
+      }
+    } catch { /* localStorage unavailable — skip auto-activation */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const exitHoliday = useCallback(() => {
+    let restore: ThemeName = DEFAULT_THEME;
+    try {
+      const prev = localStorage.getItem(PRE_HOLIDAY_KEY);
+      if (prev && themes[prev as ThemeName] && !themes[prev as ThemeName].holiday) {
+        restore = prev as ThemeName;
+      }
+      localStorage.removeItem(PRE_HOLIDAY_KEY);
+    } catch { /* ignore */ }
+    setTheme(restore);
+  }, [setTheme]);
+
   const availableThemes = Object.values(themes);
 
   return (
-    <ThemeContext.Provider value={{ theme, themeName, setTheme, availableThemes }}>
+    <ThemeContext.Provider value={{ theme, themeName, setTheme, availableThemes, isHoliday: !!theme.holiday, exitHoliday }}>
       {children}
     </ThemeContext.Provider>
   );
