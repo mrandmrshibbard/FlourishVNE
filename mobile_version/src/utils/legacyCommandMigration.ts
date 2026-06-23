@@ -7,7 +7,7 @@
  * games all converge on the current command set.
  *
  * Retired so far:
- *   - `ShowImageMap` / `HideImageMap` — the scene image-map overlay commands.
+ *   - `ShowdraggableImageElement` / `HidedraggableImageElement` — the scene image-map overlay commands.
  *     Superseded by `ShowHotSpot` and by the screen-level Image Map element.
  *     They were never a documented/kept feature; removing the data here means
  *     no dangling unknown-command entries survive a round-trip.
@@ -19,7 +19,7 @@
 import { VNProject } from '../types/project';
 
 /** Command type strings that are no longer supported and should be dropped on load. */
-const RETIRED_COMMAND_TYPES = new Set<string>(['ShowImageMap', 'HideImageMap']);
+const RETIRED_COMMAND_TYPES = new Set<string>(['ShowdraggableImageElement', 'HidedraggableImageElement']);
 
 /** Remove retired commands from one command array. Returns the same array
  *  reference when nothing was removed (so callers can detect "no change"). */

@@ -5,6 +5,7 @@ import { VNID } from '../types';
 import { VNProject } from '../types/project';
 import { VNCharacter } from '../features/character/types';
 import { useProject } from '../contexts/ProjectContext';
+import { resolveFieldUrl } from '../utils/assetStore';
 import CharacterEditor from './CharacterEditor';
 import { PlusIcon, TrashIcon, SparkleIcon, PencilIcon } from './icons';
 
@@ -180,10 +181,11 @@ const CharacterItem: React.FC<CharacterItemProps> = ({
     onDrop
 }) => {
     const { t } = useTranslation('common');
+    const { project: cardProject } = useProject();
     const { inputProps: renameInputProps } = useInlineRename(character.name, onCommitRename);
 
-    // Get thumbnail from base image or first expression
-    const thumbnailUrl = character.baseImageUrl || (Object.values(character.expressions)[0] ? null : null);
+    // Get thumbnail from base image (managed refs → flourish-asset:// URL).
+    const thumbnailUrl = resolveFieldUrl(cardProject.id, character.baseImageUrl) || undefined;
 
     return (
         <div

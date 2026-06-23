@@ -403,11 +403,19 @@ export async function buildAndroidGame(
 
   onProgress({ step: 'prepare', progress: 8, message: 'Preparing Android build...' });
 
-  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob, resolveProjectAssets } =
+  const { generateStandaloneHTML, collectAllAssets, buildLeanProject, dataURLToBlob, resolveProjectAssets, streamManagedAssets } =
     await import('./gameBundler');
 
+  const wwwRoot = 'app/src/main/assets/www';
+
+  // Stream file-backed media straight into the APK www/assets (no base64 re-inline), then resolve rest.
+  const streamedFiles: Record<string, ArrayBuffer> = {};
+  const streamedProject = await streamManagedAssets(project, (rel, bytes) => {
+    streamedFiles[`${wwwRoot}/${rel}`] = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  });
+
   // Same web bundle as Web/Desktop.
-  const resolvedProject = await resolveProjectAssets(project, onProgress);
+  const resolvedProject = await resolveProjectAssets(streamedProject, onProgress);
   const assetUrls = collectAllAssets(resolvedProject);
   const leanProject = buildLeanProject(resolvedProject, assetUrls);
   let htmlContent = await generateStandaloneHTML(leanProject);
@@ -415,7 +423,6 @@ export async function buildAndroidGame(
 
   onProgress({ step: 'assets', progress: 22, message: 'Collecting assets...' });
 
-  const wwwRoot = 'app/src/main/assets/www';
   const androidFiles: Record<string, string | ArrayBuffer> = {
     'settings.gradle': settingsGradle(),
     'build.gradle': rootBuildGradle(),
@@ -425,6 +432,7 @@ export async function buildAndroidGame(
     'app/src/main/res/values/strings.xml': stringsXml(options),
     [`app/src/main/java/${WRAPPER_PKG_PATH}/MainActivity.java`]: MAIN_ACTIVITY,
     [`${wwwRoot}/index.html`]: htmlContent,
+    ...streamedFiles,
   };
 
   // Game assets → assets/www/assets/

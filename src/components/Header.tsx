@@ -5,6 +5,8 @@ import { PlayIcon, HomeIcon, SaveIcon, ArrowUturnLeftIcon, ArrowUturnRightIcon, 
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { exportProject } from '../utils/projectPackager';
+import { estimateProjectAssetBytes, formatBytes, LARGE_PROJECT_WARN_BYTES, type ProjectAssetSize } from '../utils/projectAssetSize';
+import { isElectronAssetStore, getProjectAssetSizes } from '../utils/assetStore';
 import { saveRecentProject, getRecentProjectInfo } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
 import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
@@ -52,6 +54,10 @@ const Header: React.FC<{
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    // Large-export warning: shown before exporting a media-heavy project. The pending promise resolver
+    // is called with the user's choice (proceed / cancel).
+    const [sizeWarn, setSizeWarn] = useState<ProjectAssetSize | null>(null);
+    const sizeWarnResolveRef = useRef<((proceed: boolean) => void) | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isExportingQuick, setIsExportingQuick] = useState(false);
     const [exitMode, setExitMode] = useState<'hub' | 'electron' | null>(null);
@@ -59,6 +65,35 @@ const Header: React.FC<{
     const toast = useToast();
     const { t } = useTranslation(['header', 'common']);
     const isChildWindow = isManagerWindow();
+
+    // Returns true to proceed with export. If the project's embedded media is large, shows a warning
+    // first and waits for the user's choice; small projects pass straight through.
+    const confirmLargeExport = useCallback(async (): Promise<boolean> => {
+        const data = estimateProjectAssetBytes(project); // base64 still embedded (web / not-yet-migrated)
+        let total = data.total;
+        let largest = data.largest;
+        if (isElectronAssetStore()) {
+            const { total: fileTotal, sizes } = await getProjectAssetSizes(project.id);
+            total += fileTotal; // file-backed media on disk
+            if (largest.length === 0 && Object.keys(sizes).length) {
+                largest = Object.entries(sizes)
+                    .map(([rel, bytes]) => ({ name: rel.split('/').pop() || rel, bytes, kind: rel.split('/')[1] || 'asset' }))
+                    .sort((a, b) => b.bytes - a.bytes).slice(0, 6);
+            }
+        }
+        if (total < LARGE_PROJECT_WARN_BYTES) return true;
+        return new Promise<boolean>(resolve => {
+            sizeWarnResolveRef.current = resolve;
+            setSizeWarn({ total, largest, embeddedCount: data.embeddedCount });
+        });
+    }, [project]);
+
+    const resolveSizeWarn = useCallback((proceed: boolean) => {
+        setSizeWarn(null);
+        const r = sizeWarnResolveRef.current;
+        sizeWarnResolveRef.current = null;
+        if (r) r(proceed);
+    }, []);
 
     const isDirtyRef = useRef(isDirty);
     isDirtyRef.current = isDirty;
@@ -114,6 +149,7 @@ const Header: React.FC<{
     };
 
     const handleExport = async () => {
+        if (!(await confirmLargeExport())) return;
         setIsExportingQuick(true);
         try {
             const overwritePath = resolveOverwritePath();
@@ -149,6 +185,7 @@ const Header: React.FC<{
 
     const handleConfirmReturn = async () => {
         const mode = exitMode;
+        if (!(await confirmLargeExport())) return;
         setIsExporting(true);
         try {
             const overwritePath = resolveOverwritePath();
@@ -470,6 +507,43 @@ const Header: React.FC<{
         >
             {errorMessage}
         </InfoModal>
+
+        {/* Large-project export warning */}
+        {sizeWarn && ReactDOM.createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm"
+                onClick={(e) => { if (e.target === e.currentTarget) resolveSizeWarn(false); }}
+                style={{ animation: 'fade-in 0.2s ease-out' }}>
+                <div className="bg-gradient-to-b from-[var(--bg-tertiary)] to-[var(--bg-secondary)] text-[var(--text-primary)] rounded-xl shadow-2xl w-full max-w-md p-6 m-4 border border-[var(--border-default)]"
+                    style={{ animation: 'modal-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}>
+                    <h2 className="text-lg font-semibold mb-1">{t('largeExport.title', 'This project is large')}</h2>
+                    <p className="text-sm text-[var(--text-secondary)] mb-3">
+                        {t('largeExport.body', 'Its media adds up to about {{size}}. The export will still work, but it may be slow and produce a large file. Compressing your biggest assets keeps things fast and small.', { size: formatBytes(sizeWarn.total) })}
+                    </p>
+                    {sizeWarn.largest.length > 0 && (
+                        <div className="mb-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-2 max-h-44 overflow-y-auto">
+                            <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted)] mb-1 px-1">{t('largeExport.biggest', 'Biggest assets')}</div>
+                            {sizeWarn.largest.map((a, i) => (
+                                <div key={i} className="flex items-center justify-between gap-2 text-xs px-1 py-0.5">
+                                    <span className="truncate text-[var(--text-secondary)]"><span className="text-[var(--text-muted)]">[{a.kind}]</span> {a.name}</span>
+                                    <span className="flex-shrink-0 font-medium text-[var(--text-primary)]">{formatBytes(a.bytes)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                        <button onClick={() => resolveSizeWarn(true)}
+                            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[var(--accent-pink)] to-[var(--accent-purple)] hover:shadow-lg transition-all text-white font-semibold text-sm">
+                            {t('largeExport.proceed', 'Export anyway')}
+                        </button>
+                        <button onClick={() => resolveSizeWarn(false)}
+                            className="w-full px-4 py-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-elevated)] border border-[var(--border-subtle)] transition-all font-medium text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                            {t('common:cancel')}
+                        </button>
+                    </div>
+                </div>
+            </div>,
+            document.body
+        )}
         
         {/* Export Loading Overlay */}
         <LoadingOverlay 

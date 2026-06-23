@@ -100,6 +100,13 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.ShowHotSpot:
             // name/shape/trigger/advance; x/y/w/h; visible outline + colour; actions; conditions.
             return order(['content', 'transform', 'appearance', 'logic', 'conditions']);
+        case CommandType.ShowPhoneText:
+        case CommandType.ShowPhone:
+        case CommandType.HidePhone:
+        case CommandType.HidePhoneText:
+        case CommandType.PhoneIncomingText:
+        case CommandType.PhoneIncomingCall:
+            return order(['content', 'conditions']);
         case CommandType.CreditRoll:
             // entries; bg/text colours; slideshow + foreground media; playback (speed/duration/skip/onComplete).
             return order(['content', 'appearance', 'media', 'logic', 'conditions']);

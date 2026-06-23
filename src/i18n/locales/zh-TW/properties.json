@@ -443,7 +443,7 @@
     "pickUpOnce": "記住（只拾取一次）",
     "pickUpOnceHint": "一旦拾取，玩家再次造訪此場景時它不會重新出現，且拾取會被儲存。關閉以使拾取物可重生。"
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "圖像對應背景",
     "hoverStateImage": "停留狀態圖像",
     "hoverStateHint": "當停留於某區域時，此圖像會被裁剪顯示在該區域（Ren'Py 風格的停留效果）。",
@@ -479,9 +479,9 @@
     "addAction": "+ 新增動作",
     "regionConditions": "區域條件",
     "regionConditionsHint": "僅在符合條件時區域才處於作用狀態。",
-    "targetImageMap": "要隱藏的目標圖像對應",
-    "selectImageMap": "選擇圖像對應……",
-    "imageMapOption": "圖像對應（{{count}} 個區域）（ID：{{id}}）"
+    "targetdraggableImageElement": "要隱藏的目標圖像對應",
+    "selectdraggableImageElement": "選擇圖像對應……",
+    "draggableImageElementOption": "圖像對應（{{count}} 個區域）（ID：{{id}}）"
   },
   "credit": {
     "entries": "製作人員條目",
@@ -628,7 +628,7 @@
     "typeImage": "圖像疊加",
     "typeText": "文字疊加",
     "typeButton": "按鈕疊加",
-    "typeImageMap": "圖像對應",
+    "typedraggableImageElement": "圖像對應",
     "typeMovie": "影片（播放影片）",
     "typeScreen": "螢幕",
     "targetId": "目標 ID",
@@ -658,7 +658,7 @@
     "panY": "平移 Y (%)",
     "screen": "螢幕",
     "imageLabel": "圖像（{{id}}…）",
-    "imageMapLabel": "圖像對應（{{id}}…）"
+    "draggableImageElementLabel": "圖像對應（{{id}}…）"
   },
   "hotspot": {
     "name": "名稱",

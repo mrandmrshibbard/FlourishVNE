@@ -1,7 +1,15 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, protocol, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const fs = require('fs');
+
+// Custom scheme that streams a project's media files from the managed asset library on disk, so the
+// editor never has to hold gigabytes of base64 in memory. Must be declared as privileged BEFORE the
+// app is ready. URL shape: flourish-asset://<projectId>/<relativePath> (e.g. assets/videos/<id>.mp4).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'flourish-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+]);
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -285,6 +293,12 @@ const defaultBuildsAndroidDir = path.join(flourishDocsRoot, 'Builds', 'Android')
 // The Android build toolchain (JDK + Android SDK + Gradle) is downloaded once on
 // first use into userData (not bundled in the installer — it's ~3 GB on disk).
 const androidToolchainRoot = path.join(app.getPath('userData'), 'android-toolchain');
+
+// Managed per-project asset library: userData/projectAssets/<projectId>/<type>/<id>.<ext>
+const projectAssetsRoot = path.join(app.getPath('userData'), 'projectAssets');
+// Keep an id/segment to a single safe path segment (no separators, no traversal).
+const safeSeg = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+function projectAssetDir(projectId) { return path.join(projectAssetsRoot, safeSeg(projectId)); }
 
 /**
  * Ensure all default user directories exist.  Called once on app-ready.
@@ -655,6 +669,26 @@ function createWindow() {
 app.whenReady().then(() => {
   // Create default user directories (Documents/Flourish Visual Novel Engine/…)
   ensureUserDirectories();
+  try { fs.mkdirSync(projectAssetsRoot, { recursive: true }); } catch {}
+
+  // Serve managed project assets. net.fetch on a file:// URL handles streaming + Range requests
+  // (so video/audio can seek). Paths are sanitized + confined to the project's asset folder.
+  protocol.handle('flourish-asset', async (request) => {
+    try {
+      const u = new URL(request.url);
+      const baseDir = projectAssetDir(u.hostname);
+      const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+      const filePath = path.normalize(path.join(baseDir, rel));
+      if (filePath !== baseDir && !filePath.startsWith(baseDir + path.sep)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      if (!fs.existsSync(filePath)) return new Response('Not found', { status: 404 });
+      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
+    } catch (err) {
+      console.error('flourish-asset serve failed:', err);
+      return new Response('Error', { status: 500 });
+    }
+  });
 
   // ── File-association / CLI open ──
   // If the user double-clicked a .flourish file, the path is in process.argv.
@@ -1571,6 +1605,190 @@ ipcMain.handle('save-project-export', async (event, { data, filename, filePath }
     return { success: true, filePath: result.filePath };
   } catch (error) {
     console.error('Failed to save project export:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ── Streaming project export (chunked write to disk) ──────────────────────────────────────────
+// Lets very large projects export without ever holding the whole .flourish archive in one buffer
+// (which would hit V8's ~2GB ArrayBuffer limit). The renderer opens a stream, sends chunks, finalizes.
+let exportStream = null;
+let exportStreamPath = null;
+
+ipcMain.handle('export-stream-start', async (event, { filename, filePath }) => {
+  try {
+    // Clean up any abandoned prior stream.
+    if (exportStream) { try { exportStream.destroy(); } catch {} exportStream = null; exportStreamPath = null; }
+    let target = filePath;
+    if (target) {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+    } else {
+      const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+      const defaultName = String(filename || 'project').replace(/\.(zip|flourish)$/i, '') + '.flourish';
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Save Project',
+        defaultPath: path.join(defaultProjectsDir, defaultName),
+        filters: [
+          { name: 'Flourish Project', extensions: ['flourish'] },
+          { name: 'Zip Archive (legacy)', extensions: ['zip'] },
+        ],
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      });
+      if (result.canceled || !result.filePath) return { canceled: true };
+      target = result.filePath;
+    }
+    exportStream = fs.createWriteStream(target);
+    exportStreamPath = target;
+    return { success: true, filePath: target };
+  } catch (error) {
+    console.error('export-stream-start failed:', error);
+    exportStream = null; exportStreamPath = null;
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('export-stream-chunk', async (_event, chunk) => {
+  try {
+    if (!exportStream) return { success: false, error: 'No export in progress.' };
+    const buf = Buffer.from(chunk);
+    await new Promise((resolve, reject) => {
+      exportStream.write(buf, (err) => (err ? reject(err) : resolve()));
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('export-stream-chunk failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('export-stream-end', async () => {
+  try {
+    if (!exportStream) return { success: false, error: 'No export in progress.' };
+    const p = exportStreamPath;
+    await new Promise((resolve, reject) => {
+      exportStream.end((err) => (err ? reject(err) : resolve()));
+    });
+    exportStream = null; exportStreamPath = null;
+    return { success: true, filePath: p };
+  } catch (error) {
+    console.error('export-stream-end failed:', error);
+    exportStream = null; exportStreamPath = null;
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('export-stream-abort', async () => {
+  try {
+    if (exportStream) {
+      const p = exportStreamPath;
+      try { exportStream.destroy(); } catch {}
+      exportStream = null; exportStreamPath = null;
+      try { if (p) fs.unlinkSync(p); } catch {} // remove the partial file
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ── Managed project asset library (file-backed media) ─────────────────────────────────────────
+// Write a single asset file and return its project-relative path (assets/<type>/<id>.<ext>).
+ipcMain.handle('write-project-asset', async (_event, { projectId, type, id, ext, data }) => {
+  try {
+    const rel = path.posix.join('assets', safeSeg(type), `${safeSeg(id)}.${safeSeg(ext || 'bin')}`);
+    const filePath = path.join(projectAssetDir(projectId), rel);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(data));
+    return { success: true, relPath: rel };
+  } catch (error) {
+    console.error('write-project-asset failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Read an asset file back as bytes (used by export to copy files into the .flourish zip).
+ipcMain.handle('read-project-asset', async (_event, { projectId, relPath }) => {
+  try {
+    const baseDir = projectAssetDir(projectId);
+    const filePath = path.normalize(path.join(baseDir, relPath));
+    if (filePath !== baseDir && !filePath.startsWith(baseDir + path.sep)) return { success: false, error: 'Forbidden' };
+    if (!fs.existsSync(filePath)) return { success: false, error: 'Not found' };
+    return { success: true, data: fs.readFileSync(filePath) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-project-asset', async (_event, { projectId, relPath }) => {
+  try {
+    const baseDir = projectAssetDir(projectId);
+    const filePath = path.normalize(path.join(baseDir, relPath));
+    if (filePath !== baseDir && !filePath.startsWith(baseDir + path.sep)) return { success: false, error: 'Forbidden' };
+    try { fs.unlinkSync(filePath); } catch {}
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-project-asset-folder', async (_event, { projectId }) => {
+  try {
+    fs.rmSync(projectAssetDir(projectId), { recursive: true, force: true });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('copy-project-asset-folder', async (_event, { fromProjectId, toProjectId }) => {
+  try {
+    const src = projectAssetDir(fromProjectId);
+    if (fs.existsSync(src)) fs.cpSync(src, projectAssetDir(toProjectId), { recursive: true });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Total bytes + per-file sizes of a project's managed asset folder (for size display).
+ipcMain.handle('get-project-asset-sizes', async (_event, { projectId }) => {
+  try {
+    const baseDir = projectAssetDir(projectId);
+    const sizes = {};
+    let total = 0;
+    const walk = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else {
+          try { const sz = fs.statSync(full).size; total += sz; sizes[path.relative(baseDir, full).split(path.sep).join('/')] = sz; } catch {}
+        }
+      }
+    };
+    walk(baseDir);
+    return { success: true, total, sizes };
+  } catch (error) {
+    return { success: false, error: error.message, total: 0, sizes: {} };
+  }
+});
+
+// Relative paths of every file currently in a project's asset folder (for orphan cleanup / export).
+ipcMain.handle('list-project-assets', async (_event, { projectId }) => {
+  try {
+    const baseDir = projectAssetDir(projectId);
+    const out = [];
+    const walk = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else out.push(path.relative(baseDir, full).split(path.sep).join('/'));
+      }
+    };
+    walk(baseDir);
+    return { success: true, files: out };
+  } catch (error) {
     return { success: false, error: error.message };
   }
 });

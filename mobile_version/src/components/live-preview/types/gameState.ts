@@ -6,8 +6,10 @@ import React from 'react';
 import { VNID, VNPosition, VNTransition } from '../../../types';
 import { VNCommand } from '../../../features/scene/types';
 import { ChoiceOption } from '../../../features/scene/types';
+import type { PhoneReply, PhoneIncomingCallCommand } from '../../../features/scene/types';
 import type { VNScreenOverlayEffect } from '../../../types';
 import type { VNCharacterVisualEffect, VNDialogueTextEffect, VNParticleConfig, VNLight } from '../../../features/scene/types';
+import type { PhonePortraitSource } from '../../../features/ui/types';
 
 export type StageSize = { width: number; height: number };
 
@@ -372,7 +374,71 @@ export interface PlayerState {
         screenSceneId: VNID | null; // Track which scene a UI screen was opened from
         /** Whether skip-forward is currently active */
         isSkipping: boolean;
+        /** In-game phone: open state + accumulated chat history. Persists in saves. */
+        phone?: {
+            open: boolean;
+            messages: PhoneMessage[];
+            /** True while a chat message is presenting reply choices. */
+            waiting?: boolean;
+            /** Reply options for the current chat prompt (rendered as in-phone reply buttons). */
+            pendingChoices?: ChoiceOption[];
+            /** Richer reply options (text + follow-up sender messages + actions) for incoming texts. */
+            pendingReplies?: PhoneReply[];
+            /** Which built-in phone view is showing: the home screen (app buttons), the chat thread,
+             *  or the recents/history log. App buttons only appear on 'home'. */
+            view?: 'home' | 'chat' | 'history';
+            /** A pending incoming-text banner (non-blocking notification the player can tap to read). */
+            notification?: PhoneNotification | null;
+            /** A live "…" typing indicator shown on the sender side before a message lands. */
+            typing?: { senderId: VNID | 'player' } | null;
+            /** An active incoming call (ringing) or the just-ended call awaiting teardown. */
+            incomingCall?: PhoneIncomingCallState | null;
+            /** Persistent log of calls (accepted / declined / missed) for the recents view. */
+            callLog?: PhoneCallLogEntry[];
+            /** Unread/notification badge flag (drives the dialogue-box / HUD badge). */
+            unread?: boolean;
+        } | null;
     };
+}
+
+/** One chat bubble in the in-game phone. `senderId` = a character id, or 'player' for the player's
+ *  own (right-aligned) message. Stored in player state so the conversation persists across save/load. */
+export interface PhoneMessage {
+    id: VNID;
+    senderId: VNID | 'player';
+    text: string;
+    /** Optional per-message avatar source (base sprite / chosen pose / custom). Unset = base. */
+    portrait?: PhonePortraitSource;
+}
+
+/** A non-blocking incoming-text banner. */
+export interface PhoneNotification {
+    senderId: VNID | 'player';
+    text: string;
+    portrait?: PhonePortraitSource;
+    visible: boolean;
+}
+
+/** Live state of an incoming call. Carries the originating command so a save can fully restore the
+ *  call (accept/decline/timeout actions, ringtone, duration) and re-arm the ring on load. */
+export interface PhoneIncomingCallState {
+    callerId: VNID | 'player';
+    portrait?: PhonePortraitSource;
+    /** 'ringing' while awaiting accept/decline/timeout; 'ended' briefly after. */
+    phase: 'ringing' | 'ended';
+    /** Whether the call rings as a modal overlay (pauses) or in the corner (non-blocking). */
+    modal?: boolean;
+    /** The command that started the call (for save/load restore of actions + ringtone + timeout). */
+    cmd?: PhoneIncomingCallCommand;
+}
+
+/** One entry in the phone's recents/call log. */
+export interface PhoneCallLogEntry {
+    id: VNID;
+    callerId: VNID | 'player';
+    status: 'accepted' | 'declined' | 'missed';
+    portrait?: PhonePortraitSource;
+    order: number;
 }
 
 export interface GameStateSave {
@@ -388,6 +454,10 @@ export interface GameStateSave {
         variables: Record<VNID, string | number | boolean>;
         stageState: StageState;
         musicState: MusicState;
+        /** In-game phone runtime state (additive-optional; older saves lack it). Persisted in full so
+         *  an in-progress conversation, pending replies, a notification, and an active call all restore
+         *  exactly as they were. */
+        phone?: PlayerState['uiState']['phone'];
     }
 }
 

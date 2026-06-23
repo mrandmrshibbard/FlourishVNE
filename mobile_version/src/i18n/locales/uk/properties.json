@@ -443,7 +443,7 @@
     "pickUpOnce": "Запам'ятати (підібрати один раз)",
     "pickUpOnceHint": "Після збирання предмет не з'явиться знову, коли гравець повернеться до цієї сцени, а підбирання збережеться. Вимкніть для предметів, що відновлюються."
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "Фон карти зображення",
     "hoverStateImage": "Зображення стану наведення",
     "hoverStateHint": "Коли курсор наводиться на область, це зображення показується обрізаним до цієї області (ефект наведення у стилі Ren'Py).",
@@ -479,9 +479,9 @@
     "addAction": "+ Додати дію",
     "regionConditions": "Умови області",
     "regionConditionsHint": "Область активна лише коли виконано умови.",
-    "targetImageMap": "Цільова карта зображення для приховання",
-    "selectImageMap": "Виберіть карту зображення...",
-    "imageMapOption": "Карта зображення ({{count}} областей) (ID: {{id}})"
+    "targetdraggableImageElement": "Цільова карта зображення для приховання",
+    "selectdraggableImageElement": "Виберіть карту зображення...",
+    "draggableImageElementOption": "Карта зображення ({{count}} областей) (ID: {{id}})"
   },
   "credit": {
     "entries": "Записи титрів",
@@ -628,7 +628,7 @@
     "typeImage": "Накладання зображення",
     "typeText": "Накладання тексту",
     "typeButton": "Накладання кнопки",
-    "typeImageMap": "Карта зображення",
+    "typedraggableImageElement": "Карта зображення",
     "typeMovie": "Відео (Відтворити відео)",
     "typeScreen": "Екран",
     "targetId": "ID цілі",
@@ -658,7 +658,7 @@
     "panY": "Pan Y (%)",
     "screen": "Екран",
     "imageLabel": "Зображення ({{id}}…)",
-    "imageMapLabel": "Карта зображення ({{id}}…)"
+    "draggableImageElementLabel": "Карта зображення ({{id}}…)"
   },
   "hotspot": {
     "name": "Назва",

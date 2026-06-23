@@ -79,6 +79,9 @@ export interface VNCharacter {
     textEffect?: VNDialogueTextEffect;
     /** Default voice audio clip ID for this character (can be overridden per-line) */
     defaultVoiceId?: VNID | null;
+    /** Default ringtone for an Incoming Call from this character (per-call override wins; then the
+     *  project-wide themed default). Additive-optional. */
+    phoneRingtoneAudioId?: VNID | null;
     /** Optional per-character dialogue textbox / nameplate appearance overrides (custom, inline). */
     textbox?: VNCharacterTextbox;
     /** Optional reusable textbox theme this character uses by default (project.textboxThemes).

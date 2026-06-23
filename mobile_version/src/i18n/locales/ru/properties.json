@@ -443,7 +443,7 @@
     "pickUpOnce": "Запомнить (подобрать один раз)",
     "pickUpOnceHint": "После подбора предмет не появится снова при повторном посещении этой сцены, и подбор сохраняется. Отключите для возрождающихся предметов."
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "Фон карты изображения",
     "hoverStateImage": "Изображение состояния наведения",
     "hoverStateHint": "При наведении на область это изображение показывается обрезанным по этой области (эффект наведения в стиле Ren'Py).",
@@ -479,9 +479,9 @@
     "addAction": "+ Добавить действие",
     "regionConditions": "Условия области",
     "regionConditionsHint": "Область активна только при выполнении условий.",
-    "targetImageMap": "Целевая карта изображения для скрытия",
-    "selectImageMap": "Выберите карту изображения...",
-    "imageMapOption": "Карта изображения ({{count}} областей) (ID: {{id}})"
+    "targetdraggableImageElement": "Целевая карта изображения для скрытия",
+    "selectdraggableImageElement": "Выберите карту изображения...",
+    "draggableImageElementOption": "Карта изображения ({{count}} областей) (ID: {{id}})"
   },
   "credit": {
     "entries": "Записи титров",
@@ -628,7 +628,7 @@
     "typeImage": "Наложение изображения",
     "typeText": "Наложение текста",
     "typeButton": "Наложение кнопки",
-    "typeImageMap": "Карта изображения",
+    "typedraggableImageElement": "Карта изображения",
     "typeMovie": "Видео (Воспроизвести видео)",
     "typeScreen": "Экран",
     "targetId": "ID цели",
@@ -658,7 +658,7 @@
     "panY": "Pan Y (%)",
     "screen": "Экран",
     "imageLabel": "Изображение ({{id}}…)",
-    "imageMapLabel": "Карта изображения ({{id}}…)"
+    "draggableImageElementLabel": "Карта изображения ({{id}}…)"
   },
   "hotspot": {
     "name": "Название",

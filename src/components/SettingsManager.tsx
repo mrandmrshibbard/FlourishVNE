@@ -1429,7 +1429,8 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ project, onUpdate }) =>
         { key: 'saveScreenId', label: t('screens.slots.saveScreen'), description: t('screens.slots.saveScreenDesc') },
         { key: 'loadScreenId', label: t('screens.slots.loadScreen'), description: t('screens.slots.loadScreenDesc') },
         { key: 'pauseScreenId', label: t('screens.slots.pauseScreen'), description: t('screens.slots.pauseScreenDesc') },
-        { key: 'gameHudScreenId', label: t('screens.slots.gameHud'), description: t('screens.slots.gameHudDesc') },
+        // Game HUD is now set per-screen in the screen's "Overlay behavior" properties (the
+        // "Use as game HUD" toggle), alongside the other overlay settings.
     ];
 
     return (

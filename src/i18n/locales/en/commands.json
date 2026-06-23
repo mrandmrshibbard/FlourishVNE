@@ -13,9 +13,16 @@
     "Screen FX": "Screen FX",
     "UI Elements": "UI Elements",
     "Media": "Media",
-    "Flow Control": "Flow Control"
+    "Flow Control": "Flow Control",
+    "Phone": "Phone"
   },
   "names": {
+    "ShowPhone": "Show Phone",
+    "HidePhone": "Hide Phone",
+    "ShowPhoneText": "Show Text",
+    "HidePhoneText": "Hide Text",
+    "PhoneIncomingText": "Incoming Text",
+    "PhoneIncomingCall": "Incoming Call",
     "Dialogue": "Dialogue",
     "Choice": "Choice",
     "Label": "Label",
@@ -46,8 +53,8 @@
     "ShowButton": "Show Button",
     "HideButton": "Hide Button",
     "ShowItem": "Show Item",
-    "ShowImageMap": "Show Image Map",
-    "HideImageMap": "Hide Image Map",
+    "ShowdraggableImageElement": "Show Image Map",
+    "HidedraggableImageElement": "Hide Image Map",
     "ShowHotSpot": "Show Hot Spot",
     "HideHotSpot": "Hide Hot Spot",
     "ShowScreen": "Show Screen",

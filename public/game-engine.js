@@ -15,7 +15,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIElementType2["CGGallery"] = "CGGallery";
     UIElementType2["Inventory"] = "Inventory";
     UIElementType2["HotSpot"] = "HotSpot";
-    UIElementType2["ImageMap"] = "ImageMap";
+    UIElementType2["draggableImageElement"] = "draggableImageElement";
     UIElementType2["Meter"] = "Meter";
     return UIElementType2;
   })(UIElementType || {});
@@ -26,6 +26,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     UIActionType2["LoadGame"] = "LoadGame";
     UIActionType2["SaveGame"] = "SaveGame";
     UIActionType2["DeleteSave"] = "DeleteSave";
+    UIActionType2["ShowPhone"] = "ShowPhone";
+    UIActionType2["HidePhone"] = "HidePhone";
+    UIActionType2["ShowPhoneText"] = "ShowPhoneText";
+    UIActionType2["HidePhoneText"] = "HidePhoneText";
+    UIActionType2["ShowPhoneHistory"] = "ShowPhoneHistory";
     UIActionType2["ReturnToGame"] = "ReturnToGame";
     UIActionType2["ReturnToPreviousScreen"] = "ReturnToPreviousScreen";
     UIActionType2["QuitToTitle"] = "QuitToTitle";
@@ -151,13 +156,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         };
         return out;
       }
-      case "imageMap": {
+      case "draggableImageElement": {
         const out = {
           ...baseProps,
-          type: UIElementType.ImageMap,
+          type: UIElementType.draggableImageElement,
           image: hz.imageId ? { type: "image", id: hz.imageId } : null,
           hoverImage: hz.hoverImageId ? { type: "image", id: hz.hoverImageId } : null,
-          imageMapRegions: hz.imageMapRegions
+          draggableImageElementRegions: hz.draggableImageElementRegions
         };
         return out;
       }
@@ -263,7 +268,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       uiScreens: newScreens
     };
   }
-  const RETIRED_COMMAND_TYPES = /* @__PURE__ */ new Set(["ShowImageMap", "HideImageMap"]);
+  const RETIRED_COMMAND_TYPES = /* @__PURE__ */ new Set(["ShowdraggableImageElement", "HidedraggableImageElement"]);
   function stripCommands(commands) {
     if (!commands || commands.length === 0) return commands;
     let hasRetired = false;
@@ -490,6 +495,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     CommandType2["Fireworks"] = "Fireworks";
     CommandType2["PlaceLights"] = "PlaceLights";
     CommandType2["ClearLights"] = "ClearLights";
+    CommandType2["ShowPhone"] = "ShowPhone";
+    CommandType2["HidePhone"] = "HidePhone";
+    CommandType2["ShowPhoneText"] = "ShowPhoneText";
+    CommandType2["HidePhoneText"] = "HidePhoneText";
+    CommandType2["PhoneIncomingText"] = "PhoneIncomingText";
+    CommandType2["PhoneIncomingCall"] = "PhoneIncomingCall";
     return CommandType2;
   })(CommandType || {});
   const REACTIVE_VISUAL_TYPES = /* @__PURE__ */ new Set([
@@ -809,7 +820,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay } = action.payload;
         const character = state.characters[characterId];
         if (!(character == null ? void 0 : character.layers[layerId])) return state;
-        const newAssetId = `asset-${generateId$6()}`;
+        const newAssetId = action.payload.id || `asset-${generateId$6()}`;
         const newAsset = {
           id: newAssetId,
           name,
@@ -2578,16 +2589,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       const plugin = createPlugin(manifest, source, {});
       dispatch({ type: "INSTALL_PLUGIN", payload: { plugin } });
-      const api = this.createPluginAPI(manifest);
-      const hooks = this.parsePluginSource(source, api);
-      this.loadedPlugins.set(manifest.id, { hooks, api });
+      const api2 = this.createPluginAPI(manifest);
+      const hooks = this.parsePluginSource(source, api2);
+      this.loadedPlugins.set(manifest.id, { hooks, api: api2 });
       try {
-        (_a = hooks.onLoad) == null ? void 0 : _a.call(hooks, api);
+        (_a = hooks.onLoad) == null ? void 0 : _a.call(hooks, api2);
       } catch (e) {
         console.error(`[Plugin ${manifest.id}] onLoad failed:`, e);
       }
       try {
-        (_b = hooks.onEnable) == null ? void 0 : _b.call(hooks, api);
+        (_b = hooks.onEnable) == null ? void 0 : _b.call(hooks, api2);
       } catch (e) {
         console.error(`[Plugin ${manifest.id}] onEnable failed:`, e);
       }
@@ -2601,9 +2612,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (!plugin) return;
       let loaded = this.loadedPlugins.get(pluginId);
       if (!loaded) {
-        const api = this.createPluginAPI(plugin.manifest);
-        const hooks = this.parsePluginSource(plugin.source, api);
-        loaded = { hooks, api };
+        const api2 = this.createPluginAPI(plugin.manifest);
+        const hooks = this.parsePluginSource(plugin.source, api2);
+        loaded = { hooks, api: api2 };
         this.loadedPlugins.set(pluginId, loaded);
         try {
           (_b = (_a = loaded.hooks).onLoad) == null ? void 0 : _b.call(_a, loaded.api);
@@ -2659,11 +2670,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (plugin.state !== "enabled") continue;
         if (this.loadedPlugins.has(plugin.manifest.id)) continue;
         try {
-          const api = this.createPluginAPI(plugin.manifest);
-          const hooks = this.parsePluginSource(plugin.source, api);
-          this.loadedPlugins.set(plugin.manifest.id, { hooks, api });
-          (_a = hooks.onLoad) == null ? void 0 : _a.call(hooks, api);
-          (_b = hooks.onEnable) == null ? void 0 : _b.call(hooks, api);
+          const api2 = this.createPluginAPI(plugin.manifest);
+          const hooks = this.parsePluginSource(plugin.source, api2);
+          this.loadedPlugins.set(plugin.manifest.id, { hooks, api: api2 });
+          (_a = hooks.onLoad) == null ? void 0 : _a.call(hooks, api2);
+          (_b = hooks.onEnable) == null ? void 0 : _b.call(hooks, api2);
         } catch (e) {
           console.error(`[Plugin ${plugin.manifest.id}] failed to load:`, e);
         }
@@ -2773,7 +2784,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       ];
       return blocked.map((g) => `var ${g} = undefined;`).join("\n");
     }
-    parsePluginSource(source, api) {
+    parsePluginSource(source, api2) {
       var _a;
       try {
         if (/\.\s*constructor\b/.test(source)) {
@@ -2785,7 +2796,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                 ${source}
                 return typeof plugin !== 'undefined' ? plugin : {};
             `);
-        return hooksFn(api) || {};
+        return hooksFn(api2) || {};
       } catch (err) {
         console.error("[PluginManager] Failed to parse plugin source:", err);
         (_a = this.host) == null ? void 0 : _a.notify(`Plugin failed to load: ${err.message}`, "error");
@@ -2891,6 +2902,155 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     return { valid: errors.length === 0, errors };
   }
   const pluginManager = PluginManagerService.getInstance();
+  const ASSET_SCHEME = "flourish-asset";
+  const api = () => typeof window !== "undefined" ? window.electronAPI : void 0;
+  const isElectronAssetStore = () => {
+    var _a;
+    return !!((_a = api()) == null ? void 0 : _a.writeProjectAsset);
+  };
+  const isExternalRef = (value) => !!value && !/^(data:|https?:|blob:|flourish-asset:|file:)/i.test(value) && value.includes("assets/");
+  const assetUrl = (projectId, relPath) => `${ASSET_SCHEME}://${projectId}/${relPath.replace(/^\/+/, "")}`;
+  const resolveFieldUrl = (projectId, value) => {
+    if (!value) return null;
+    if (isExternalRef(value)) return isElectronAssetStore() ? assetUrl(projectId, value) : value;
+    return value;
+  };
+  const extFromDataUrl = (dataUrl) => {
+    const m = dataUrl.match(/^data:([^;,]+)/);
+    const mime = m ? m[1] : "";
+    const sub = mime.split("/")[1] || "bin";
+    const map = { jpeg: "jpg", "svg+xml": "svg", mpeg: "mp3", quicktime: "mov", "x-wav": "wav" };
+    return (map[sub] || sub).toLowerCase().replace(/[^a-z0-9]/g, "");
+  };
+  const dataUrlToBytes = (dataUrl) => {
+    const comma = dataUrl.indexOf(",");
+    const b64 = dataUrl.slice(comma + 1);
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  async function writeAssetBytes(projectId, type, id, ext, bytes) {
+    const a = api();
+    if (!(a == null ? void 0 : a.writeProjectAsset)) return null;
+    const res = await a.writeProjectAsset(projectId, type, id, ext, bytes);
+    return (res == null ? void 0 : res.success) ? res.relPath : null;
+  }
+  async function writeAssetDataUrl(projectId, type, id, dataUrl) {
+    return writeAssetBytes(projectId, type, id, extFromDataUrl(dataUrl), dataUrlToBytes(dataUrl));
+  }
+  const isAssetsExternalized = (project) => project.assetStorage === "external";
+  function collectAssetFields(p) {
+    const refs = [];
+    const pushColl = (coll, type, keys) => {
+      if (!coll) return;
+      for (const a of Object.values(coll)) {
+        for (const key of keys) {
+          if (typeof a[key] === "string" && a[key]) refs.push({ type, id: a.id, obj: a, key, label: a.name || a.id });
+        }
+      }
+    };
+    pushColl(p.images, "images", ["imageUrl", "videoUrl"]);
+    pushColl(p.backgrounds, "backgrounds", ["imageUrl", "videoUrl"]);
+    pushColl(p.audio, "audio", ["audioUrl"]);
+    pushColl(p.videos, "videos", ["videoUrl"]);
+    pushColl(p.fonts, "fonts", ["fontUrl"]);
+    for (const c of Object.values(p.characters || {})) {
+      const cl = c.name || c.id;
+      if (typeof c.baseImageUrl === "string" && c.baseImageUrl) refs.push({ type: "characters", id: `${c.id}-base`, obj: c, key: "baseImageUrl", label: cl });
+      if (typeof c.baseVideoUrl === "string" && c.baseVideoUrl) refs.push({ type: "characters", id: `${c.id}-base`, obj: c, key: "baseVideoUrl", label: cl });
+      if (typeof c.fontUrl === "string" && c.fontUrl) refs.push({ type: "characters", id: `${c.id}-font`, obj: c, key: "fontUrl", label: `${cl} font` });
+      for (const layer of Object.values(c.layers || {})) {
+        for (const asset of Object.values(layer.assets || {})) {
+          if (typeof asset.imageUrl === "string" && asset.imageUrl) refs.push({ type: "characters", id: asset.id, obj: asset, key: "imageUrl", label: cl });
+          if (typeof asset.videoUrl === "string" && asset.videoUrl) refs.push({ type: "characters", id: asset.id, obj: asset, key: "videoUrl", label: cl });
+        }
+      }
+    }
+    return refs;
+  }
+  const isBase64 = (v) => v.startsWith("data:");
+  const isBareRef = (v) => /^assets\//.test(v) && !v.startsWith("data:");
+  const dataUrlBytes = (v) => {
+    const i = v.indexOf(",");
+    return i < 0 ? 0 : Math.floor((v.length - i - 1) * 0.75);
+  };
+  async function externalizeProjectAssets(project, onProgress) {
+    if (!isElectronAssetStore()) return { project, changed: false, migratedCount: 0 };
+    const pid = project.id;
+    const p = project;
+    const pending = collectAssetFields(p).filter((r) => {
+      const v = r.obj[r.key];
+      return isBase64(v) || isBareRef(v);
+    });
+    const total = pending.length;
+    let changed = false;
+    let migratedCount = 0;
+    let bytes = 0;
+    let done = 0;
+    if (total > 0) onProgress == null ? void 0 : onProgress({ done: 0, total, bytes: 0, label: "" });
+    for (const r of pending) {
+      const v = r.obj[r.key];
+      try {
+        if (isBase64(v)) {
+          const rel = await writeAssetDataUrl(pid, r.type, r.id, v);
+          if (rel) {
+            r.obj[r.key] = assetUrl(pid, rel);
+            changed = true;
+            migratedCount++;
+            bytes += dataUrlBytes(v);
+          }
+        } else if (isBareRef(v)) {
+          r.obj[r.key] = assetUrl(pid, v);
+          changed = true;
+        }
+      } catch (e) {
+        console.warn("[assetMigration] write failed for", r.type, r.id, e);
+      }
+      done++;
+      onProgress == null ? void 0 : onProgress({ done, total, bytes, label: r.label });
+    }
+    if (changed || !isAssetsExternalized(project)) {
+      p.assetStorage = "external";
+    }
+    return { project: p, changed, migratedCount };
+  }
+  const fmtBytes = (n) => {
+    if (!n) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+    return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  };
+  const Spinner = () => /* @__PURE__ */ jsxRuntime2.jsxs("svg", { className: "w-4 h-4 animate-spin text-sky-400", viewBox: "0 0 24 24", fill: "none", "aria-hidden": true, children: [
+    /* @__PURE__ */ jsxRuntime2.jsx("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }),
+    /* @__PURE__ */ jsxRuntime2.jsx("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" })
+  ] });
+  const MigrationStatusBar = ({ status }) => {
+    if (!status) return null;
+    const pct = status.total > 0 ? Math.round(status.done / status.total * 100) : 0;
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000] w-[min(92vw,30rem)] pointer-events-none", children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "rounded-lg border border-sky-500 bg-slate-900/95 shadow-xl backdrop-blur-sm px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
+        /* @__PURE__ */ jsxRuntime2.jsx(Spinner, {}),
+        /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-sm font-medium text-white", children: "Updating project storage…" }),
+        /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "ml-auto text-xs text-slate-400 tabular-nums", children: [
+          status.done,
+          "/",
+          status.total
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "h-2 w-full rounded-full bg-slate-700 overflow-hidden", children: /* @__PURE__ */ jsxRuntime2.jsx(
+        "div",
+        {
+          className: "h-full bg-sky-500 transition-all duration-200 ease-out",
+          style: { width: `${pct}%` }
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "mt-1.5 flex items-center justify-between gap-3", children: [
+        /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-xs text-slate-400 truncate", children: status.label ? `Moving ${status.label}…` : "Preparing assets…" }),
+        status.bytes > 0 && /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-xs text-slate-500 tabular-nums flex-shrink-0", children: fmtBytes(status.bytes) })
+      ] })
+    ] }) });
+  };
   const log = createLogger("ProjectContext");
   const AUTO_SAVE_INTERVAL = 2 * 60 * 1e3;
   const COALESCE_MS = 300;
@@ -2907,6 +3067,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }));
     const [lastAutoSave, setLastAutoSave] = React2.useState(null);
     const [isDirty, setIsDirty] = React2.useState(false);
+    const [migration, setMigration] = React2.useState(null);
     const isSyncing = React2.useRef(false);
     const historyRef = React2.useRef(history);
     historyRef.current = history;
@@ -2943,6 +3104,40 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         return newHistory;
       });
     }, []);
+    React2.useEffect(() => {
+      if (!isElectronAssetStore()) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const { project: migrated, changed, migratedCount } = await externalizeProjectAssets(
+            historyRef.current.present,
+            (p) => {
+              if (!cancelled) setMigration(p);
+            }
+          );
+          if (cancelled) return;
+          setMigration(null);
+          if (!changed) return;
+          setHistory((prev) => ({ ...prev, present: { ...migrated } }));
+          try {
+            await saveProjectToIDB(migrated);
+          } catch {
+          }
+          if (migratedCount > 0) {
+            try {
+              toast.success(`Moved ${migratedCount} asset${migratedCount === 1 ? "" : "s"} into the new project storage`);
+            } catch {
+            }
+          }
+        } catch (err) {
+          log.warn("Asset externalization failed:", err);
+          if (!cancelled) setMigration(null);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [initialProject.id]);
     React2.useEffect(() => {
       var _a;
       if ((_a = window.electronAPI) == null ? void 0 : _a.onProjectStateUpdate) {
@@ -3058,7 +3253,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         log.warn("Plugin ensureLoaded failed:", e);
       }
     }, [dispatchWithHistory, toast]);
-    return /* @__PURE__ */ jsxRuntime2.jsx(ProjectContext.Provider, { value: {
+    return /* @__PURE__ */ jsxRuntime2.jsxs(ProjectContext.Provider, { value: {
       project: history.present,
       dispatch: dispatchWithHistory,
       undo,
@@ -3068,7 +3263,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       lastAutoSave,
       isDirty,
       markSaved
-    }, children });
+    }, children: [
+      children,
+      /* @__PURE__ */ jsxRuntime2.jsx(MigrationStatusBar, { status: migration })
+    ] });
   };
   const useProject = () => {
     const context = React2.useContext(ProjectContext);
@@ -3169,15 +3367,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     var _a, _b, _c, _d;
     const anyEl = el;
     switch (el.type) {
-      case UIElementType.ImageMap: {
+      case UIElementType.draggableImageElement: {
         const m = el;
         return {
           id: m.id,
           name: m.name,
-          elementType: "imageMap",
+          elementType: "draggableImageElement",
           imageId: ((_a = m.image) == null ? void 0 : _a.id) ?? "",
           hoverImageId: (_b = m.hoverImage) == null ? void 0 : _b.id,
-          imageMapRegions: m.imageMapRegions,
+          draggableImageElementRegions: m.draggableImageElementRegions,
           x: m.x,
           y: m.y,
           width: m.width,
@@ -3311,7 +3509,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const out = {};
     for (const el of Object.values(screen.elements || {})) {
       if (el.type === UIElementType.HotSpot) continue;
-      if (el.type === UIElementType.ImageMap || el.draggable === true) {
+      if (el.type === UIElementType.draggableImageElement || el.draggable === true) {
         const legacy = elementToLegacyHotZoneElement(el);
         if (legacy) out[el.id] = legacy;
       }
@@ -3452,6 +3650,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     ]);
   }
+  const PHONE_GLYPHS = {
+    chat: "💬",
+    contacts: "👥",
+    gallery: "🖼️",
+    map: "🗺️",
+    call: "📞",
+    heart: "❤️",
+    star: "⭐",
+    settings: "⚙️",
+    home: "🏠",
+    back: "‹",
+    close: "✕",
+    phone: "📱"
+  };
   function getEffect(effects, type) {
     return effects.find((e) => e.type === type);
   }
@@ -5372,12 +5584,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const videoUrls = [];
     let hasVideo = false;
     let videoLoop = false;
+    const wrap = (u) => resolveFieldUrl(project.id, u) || u;
     if (charData.baseVideoUrl) {
-      videoUrls.push(charData.baseVideoUrl);
+      videoUrls.push(wrap(charData.baseVideoUrl));
       hasVideo = true;
       videoLoop = !!charData.baseVideoLoop;
     } else if (charData.baseImageUrl) {
-      imageUrls.push(charData.baseImageUrl);
+      imageUrls.push(wrap(charData.baseImageUrl));
     }
     const finalBindings = {};
     const existingChar = playerState == null ? void 0 : playerState.stageState.characters[command.characterId];
@@ -5440,11 +5653,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       if (asset) {
         if (asset.videoUrl) {
-          videoUrls.push(asset.videoUrl);
+          videoUrls.push(wrap(asset.videoUrl));
           hasVideo = true;
           videoLoop = videoLoop || !!asset.loop;
         } else if (asset.imageUrl) {
-          imageUrls.push(asset.imageUrl);
+          imageUrls.push(wrap(asset.imageUrl));
         }
       }
     });
@@ -7348,6 +7561,57 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       advance: !waitForCompletion
     };
   }
+  const basePhone = (context) => ({
+    open: false,
+    messages: [],
+    ...context.playerState.uiState.phone || {}
+  });
+  const handleShowPhone = (_command, context) => {
+    return {
+      advance: true,
+      updates: { uiState: { phone: { ...basePhone(context), open: true, view: "home", notification: null } } }
+    };
+  };
+  const handleHidePhone = (_command, context) => {
+    return {
+      advance: true,
+      updates: { uiState: { phone: { ...basePhone(context), open: false, waiting: false, pendingChoices: void 0, notification: null } } }
+    };
+  };
+  const handleShowPhoneText = (command, context) => {
+    const prev = basePhone(context);
+    const messages = prev.messages;
+    const msg = {
+      id: `${command.id}-${messages.length}`,
+      senderId: command.senderId,
+      text: command.text,
+      ...command.portrait ? { portrait: command.portrait } : {}
+    };
+    const hasChoices = !!(command.choices && command.choices.length > 0);
+    return {
+      // When the message offers replies, pause the scene — the in-phone reply buttons resume it.
+      advance: !hasChoices,
+      updates: {
+        uiState: {
+          phone: {
+            ...prev,
+            open: true,
+            view: "chat",
+            messages: [...messages, msg],
+            waiting: hasChoices,
+            pendingChoices: hasChoices ? command.choices : void 0,
+            typing: null
+          }
+        }
+      }
+    };
+  };
+  const handleHidePhoneText = (_command, context) => {
+    return {
+      advance: true,
+      updates: { uiState: { phone: { ...basePhone(context), messages: [], waiting: false, pendingChoices: void 0, typing: null } } }
+    };
+  };
   const computeCollectionRestock = (collection, variables) => {
     var _a;
     const out = {};
@@ -8543,10 +8807,13 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     };
     const boxImage = (charTb == null ? void 0 : charTb.dialogueBoxImage) ?? projectUI.dialogueBoxImage;
-    const dialogueBoxUrl = boxImage ? boxImage.type === "video" ? (_a = project.videos[boxImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[boxImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[boxImage.id]) == null ? void 0 : _c.imageUrl) : null;
+    const dialogueBoxUrl = boxImage ? resolveFieldUrl(
+      project.id,
+      boxImage.type === "video" ? (_a = project.videos[boxImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[boxImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[boxImage.id]) == null ? void 0 : _c.imageUrl)
+    ) : null;
     const isDialogueBoxVideo = (boxImage == null ? void 0 : boxImage.type) === "video";
     const borderImage = (charTb == null ? void 0 : charTb.dialogueBoxBorderImage) ?? projectUI.dialogueBoxBorderImage;
-    const dialogueBorderUrl = borderImage ? ((_d = project.images[borderImage.id]) == null ? void 0 : _d.imageUrl) || ((_e = project.backgrounds[borderImage.id]) == null ? void 0 : _e.imageUrl) : null;
+    const dialogueBorderUrl = borderImage ? resolveFieldUrl(project.id, ((_d = project.images[borderImage.id]) == null ? void 0 : _d.imageUrl) || ((_e = project.backgrounds[borderImage.id]) == null ? void 0 : _e.imageUrl)) : null;
     const dialogueBorderPadding = (charTb == null ? void 0 : charTb.dialogueBorderPadding) ?? projectUI.dialogueBorderPadding ?? 12;
     const dialogueBoxWidth = projectUI.dialogueBoxWidth ?? 100;
     const dialogueBoxHeight = projectUI.dialogueBoxHeight || 0;
@@ -8558,7 +8825,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const dialogueOpacity = (charTb == null ? void 0 : charTb.dialogueBoxOpacity) ?? projectUI.dialogueBoxOpacity ?? 90;
     const dialogueBorderRadius = (charTb == null ? void 0 : charTb.dialogueBoxBorderRadius) ?? projectUI.dialogueBoxBorderRadius ?? 8;
     const nameboxImage = (charTb == null ? void 0 : charTb.nameboxImage) ?? projectUI.nameboxImage;
-    const nameboxImageUrl = nameboxImage ? ((_f = project.images[nameboxImage.id]) == null ? void 0 : _f.imageUrl) || ((_g = project.backgrounds[nameboxImage.id]) == null ? void 0 : _g.imageUrl) : null;
+    const nameboxImageUrl = nameboxImage ? resolveFieldUrl(project.id, ((_f = project.images[nameboxImage.id]) == null ? void 0 : _f.imageUrl) || ((_g = project.backgrounds[nameboxImage.id]) == null ? void 0 : _g.imageUrl)) : null;
     const nameboxColor = (charTb == null ? void 0 : charTb.nameboxColor) ?? projectUI.nameboxColor ?? "#0f172a";
     const nameboxOpacity = (charTb == null ? void 0 : charTb.nameboxOpacity) ?? projectUI.nameboxOpacity ?? 92;
     const nameboxPadding = (charTb == null ? void 0 : charTb.nameboxPadding) ?? projectUI.nameboxPadding ?? 8;
@@ -8748,9 +9015,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
   const ChoiceMenu = ({ choices, projectUI, onSelect, variables, project, layout }) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const [hoveredIndex, setHoveredIndex] = React2.useState(null);
-    const choiceButtonUrl = projectUI.choiceButtonImage ? projectUI.choiceButtonImage.type === "video" ? (_a = project.videos[projectUI.choiceButtonImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[projectUI.choiceButtonImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[projectUI.choiceButtonImage.id]) == null ? void 0 : _c.imageUrl) : null;
+    const choiceButtonUrl = projectUI.choiceButtonImage ? resolveFieldUrl(
+      project.id,
+      projectUI.choiceButtonImage.type === "video" ? (_a = project.videos[projectUI.choiceButtonImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[projectUI.choiceButtonImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[projectUI.choiceButtonImage.id]) == null ? void 0 : _c.imageUrl)
+    ) : null;
     const isChoiceButtonVideo = ((_d = projectUI.choiceButtonImage) == null ? void 0 : _d.type) === "video";
-    const choiceBorderUrl = projectUI.choiceButtonBorderImage ? ((_e = project.images[projectUI.choiceButtonBorderImage.id]) == null ? void 0 : _e.imageUrl) || ((_f = project.backgrounds[projectUI.choiceButtonBorderImage.id]) == null ? void 0 : _f.imageUrl) : null;
+    const choiceBorderUrl = projectUI.choiceButtonBorderImage ? resolveFieldUrl(project.id, ((_e = project.images[projectUI.choiceButtonBorderImage.id]) == null ? void 0 : _e.imageUrl) || ((_f = project.backgrounds[projectUI.choiceButtonBorderImage.id]) == null ? void 0 : _f.imageUrl)) : null;
     const choiceBorderPadding = projectUI.choiceBorderPadding ?? 8;
     const choiceWidth = projectUI.choiceButtonWidth || 0;
     const choiceHeight = projectUI.choiceButtonHeight || 0;
@@ -8761,7 +9031,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const choiceOpacity = projectUI.choiceButtonOpacity ?? 90;
     const choiceBorderRadius = projectUI.choiceButtonBorderRadius ?? 8;
     const choiceHoverColor = projectUI.choiceHoverColor ?? "#334155";
-    const choiceHoverUrl = projectUI.choiceHoverImage ? ((_g = project.images[projectUI.choiceHoverImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.choiceHoverImage.id]) == null ? void 0 : _h.imageUrl) : null;
+    const choiceHoverUrl = projectUI.choiceHoverImage ? resolveFieldUrl(project.id, ((_g = project.images[projectUI.choiceHoverImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.choiceHoverImage.id]) == null ? void 0 : _h.imageUrl)) : null;
     const choiceBgColor = hexToRgba(choiceColor, choiceOpacity);
     const choiceHoverBgColor = hexToRgba(choiceHoverColor, choiceOpacity);
     const gameW = ((_i = project.gameResolution) == null ? void 0 : _i.width) || 1920;
@@ -8773,7 +9043,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const resolveChoiceImg = (a) => {
       var _a2, _b2, _c2, _d2, _e2;
       if (!a) return null;
-      return a.type === "video" ? ((_a2 = project.videos[a.id]) == null ? void 0 : _a2.videoUrl) || ((_b2 = project.backgrounds[a.id]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.images[a.id]) == null ? void 0 : _c2.videoUrl) || null : ((_d2 = project.images[a.id]) == null ? void 0 : _d2.imageUrl) || ((_e2 = project.backgrounds[a.id]) == null ? void 0 : _e2.imageUrl) || null;
+      return resolveFieldUrl(project.id, a.type === "video" ? ((_a2 = project.videos[a.id]) == null ? void 0 : _a2.videoUrl) || ((_b2 = project.backgrounds[a.id]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.images[a.id]) == null ? void 0 : _c2.videoUrl) || null : ((_d2 = project.images[a.id]) == null ? void 0 : _d2.imageUrl) || ((_e2 = project.backgrounds[a.id]) == null ? void 0 : _e2.imageUrl) || null);
     };
     const renderButton = (choice, index, fill) => {
       var _a2, _b2;
@@ -8890,9 +9160,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       onSubmit(inputValue);
     };
     const interpolatedPrompt = interpolateVariables(textInput.prompt, variables, project);
-    const inputBoxUrl = (projectUI == null ? void 0 : projectUI.inputBoxImage) ? projectUI.inputBoxImage.type === "video" ? (_a = project.videos[projectUI.inputBoxImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[projectUI.inputBoxImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[projectUI.inputBoxImage.id]) == null ? void 0 : _c.imageUrl) : null;
+    const inputBoxUrl = (projectUI == null ? void 0 : projectUI.inputBoxImage) ? resolveFieldUrl(
+      project.id,
+      projectUI.inputBoxImage.type === "video" ? (_a = project.videos[projectUI.inputBoxImage.id]) == null ? void 0 : _a.videoUrl : ((_b = project.images[projectUI.inputBoxImage.id]) == null ? void 0 : _b.imageUrl) || ((_c = project.backgrounds[projectUI.inputBoxImage.id]) == null ? void 0 : _c.imageUrl)
+    ) : null;
     const isInputBoxVideo = ((_d = projectUI == null ? void 0 : projectUI.inputBoxImage) == null ? void 0 : _d.type) === "video";
-    const inputBorderUrl = (projectUI == null ? void 0 : projectUI.inputBoxBorderImage) ? ((_e = project.images[projectUI.inputBoxBorderImage.id]) == null ? void 0 : _e.imageUrl) || ((_f = project.backgrounds[projectUI.inputBoxBorderImage.id]) == null ? void 0 : _f.imageUrl) : null;
+    const inputBorderUrl = (projectUI == null ? void 0 : projectUI.inputBoxBorderImage) ? resolveFieldUrl(project.id, ((_e = project.images[projectUI.inputBoxBorderImage.id]) == null ? void 0 : _e.imageUrl) || ((_f = project.backgrounds[projectUI.inputBoxBorderImage.id]) == null ? void 0 : _f.imageUrl)) : null;
     const inputBorderPadding = (projectUI == null ? void 0 : projectUI.inputBorderPadding) ?? 8;
     const inputBoxWidth = (projectUI == null ? void 0 : projectUI.inputBoxWidth) || 0;
     const inputBoxPadding = (projectUI == null ? void 0 : projectUI.inputBoxPadding) ?? 24;
@@ -8906,7 +9179,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const promptStyle = (projectUI == null ? void 0 : projectUI.inputPromptFont) ? { ...fontSettingsToStyle(projectUI.inputPromptFont), textAlign: projectUI.inputPromptFont.align || "center" } : { color: "#FFFFFF", textAlign: "center" };
     const fieldStyle = (projectUI == null ? void 0 : projectUI.inputFieldFont) ? fontSettingsToStyle(projectUI.inputFieldFont) : { color: "#FFFFFF" };
     const submitStyle = (projectUI == null ? void 0 : projectUI.inputSubmitFont) ? fontSettingsToStyle(projectUI.inputSubmitFont) : { color: "#FFFFFF" };
-    const inputSubmitUrl = (projectUI == null ? void 0 : projectUI.inputSubmitImage) ? ((_g = project.images[projectUI.inputSubmitImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.inputSubmitImage.id]) == null ? void 0 : _h.imageUrl) : null;
+    const inputSubmitUrl = (projectUI == null ? void 0 : projectUI.inputSubmitImage) ? resolveFieldUrl(project.id, ((_g = project.images[projectUI.inputSubmitImage.id]) == null ? void 0 : _g.imageUrl) || ((_h = project.backgrounds[projectUI.inputSubmitImage.id]) == null ? void 0 : _h.imageUrl)) : null;
     const submitRadius = (projectUI == null ? void 0 : projectUI.inputSubmitBorderRadius) ?? Math.max(4, inputBorderRadius - 4);
     const submitLabel = (projectUI == null ? void 0 : projectUI.inputSubmitLabel) || "Submit";
     const gameW = ((_i = project.gameResolution) == null ? void 0 : _i.width) || 1920;
@@ -9896,10 +10169,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       )
     ] });
   };
-  const HotZoneImageMapRenderer = ({ el, imageUrl, assetResolver, evaluateConditions: evaluateConditions2, variables, playSound, handleLocalAction }) => {
+  const HotZonedraggableImageElementRenderer = ({ el, imageUrl, assetResolver, evaluateConditions: evaluateConditions2, variables, playSound, handleLocalAction }) => {
     const [hoveredRegionId, setHoveredRegionId] = React2.useState(null);
     const hoverImageUrl = el.hoverImageId ? assetResolver(el.hoverImageId, "image") : null;
-    const regions = el.imageMapRegions || [];
+    const regions = el.draggableImageElementRegions || [];
     const hoveredRegion = hoveredRegionId ? regions.find((r) => r.id === hoveredRegionId) : null;
     let hoverClipPath;
     if (hoveredRegion) {
@@ -10280,8 +10553,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   playSound,
                   font: elFont
                 }
-              ) : elType === "imageMap" ? /* @__PURE__ */ jsxRuntime2.jsx(
-                HotZoneImageMapRenderer,
+              ) : elType === "draggableImageElement" ? /* @__PURE__ */ jsxRuntime2.jsx(
+                HotZonedraggableImageElementRenderer,
                 {
                   el,
                   imageUrl,
@@ -10361,7 +10634,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       screenId,
       " not found."
     ] });
-    const isPassThrough = screen.passThrough ?? screenId === project.ui.gameHudScreenId;
+    const isPassThrough = screen.passThrough ?? (screenId === project.ui.gameHudScreenId || !!screen.hudNonBlocking);
     const screenBgScale = (depth) => {
       var _a2;
       if (!depth) return 1;
@@ -10408,6 +10681,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       buildBgPlane(screen.background, screen.backgroundParallaxDepth ?? 0, screen.backgroundLayer ?? 0, "main-bg", backgroundVideoRef, screen.backgroundTransition, screen.backgroundTransitionDuration),
       (screen.additionalBackgrounds || []).map((b) => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, void 0, b.transition, b.transitionDuration))
     ] });
+    const meterPrevRef = React2.useRef({});
     const renderElement = (element, variables2, project2, onCommitVariables2) => {
       var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w;
       runtimeDebugLog("🎯 renderElement called:", element.type, element.name, element.id);
@@ -10705,11 +10979,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           let hasVideo = false;
           let videoLoop = false;
           if (character.baseVideoUrl) {
-            videoUrls.push(character.baseVideoUrl);
+            videoUrls.push(resolveFieldUrl(project2.id, character.baseVideoUrl) || character.baseVideoUrl);
             hasVideo = true;
             videoLoop = !!character.baseVideoLoop;
           } else if (character.baseImageUrl) {
-            imageUrls.push(character.baseImageUrl);
+            imageUrls.push(resolveFieldUrl(project2.id, character.baseImageUrl) || character.baseImageUrl);
           }
           const defaultExpression = el.expressionId ? character.expressions[el.expressionId] : null;
           Object.entries(character.layers).forEach(([layerId, layer]) => {
@@ -10739,11 +11013,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             }
             if (asset) {
               if (asset.videoUrl) {
-                videoUrls.push(asset.videoUrl);
+                videoUrls.push(resolveFieldUrl(project2.id, asset.videoUrl) || asset.videoUrl);
                 hasVideo = true;
                 videoLoop = videoLoop || !!asset.loop;
               } else if (asset.imageUrl) {
-                imageUrls.push(asset.imageUrl);
+                imageUrls.push(resolveFieldUrl(project2.id, asset.imageUrl) || asset.imageUrl);
               }
             }
           });
@@ -10985,40 +11259,149 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const fillBackground = fillImageUrl ? void 0 : el.fillColorEnd ? `linear-gradient(${dir === "up" ? "0deg" : "90deg"}, ${el.fillColor || "#a78bfa"}, ${el.fillColorEnd})` : el.fillColor || "#a78bfa";
           const valueText = el.valueFormat === "percent" ? `${Math.round(pct * 100)}%` : el.valueFormat === "valueMax" ? `${raw}/${max}` : `${raw}`;
           const radius = el.borderRadius ?? 6;
-          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { ...style, display: "flex", flexDirection: "column", gap: 2 }, children: [
-            el.showLabel && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }, children: el.label || (boundVar == null ? void 0 : boundVar.name) || "" }),
-            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
-              position: "relative",
-              flex: 1,
-              minHeight: 4,
-              overflow: "hidden",
-              borderRadius: radius,
-              backgroundColor: el.backgroundColor || "rgba(0,0,0,0.4)",
-              ...bgImageUrl ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
-              ...el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}
-            }, children: [
-              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
-                position: "absolute",
-                inset: 0,
-                clipPath,
-                background: fillBackground,
-                ...fillImageUrl ? { backgroundImage: `url(${fillImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+          const prevRaw = meterPrevRef.current[el.id];
+          meterPrevRef.current[el.id] = raw;
+          const changeDir = prevRaw === void 0 || prevRaw === raw ? "none" : raw > prevRaw ? "up" : "down";
+          const lowThresh = (el.lowThresholdPct ?? 25) / 100;
+          const lowFx = el.lowAnimations || [];
+          const lowActive = lowFx.length > 0 && !!el.variableId && pct <= lowThresh;
+          const changeAnim = changeDir === "up" ? el.changeAnimationUp : changeDir === "down" ? el.changeAnimationDown : void 0;
+          const alignToFlex = (a) => a === "center" ? "center" : a === "right" || a === "bottom" ? "flex-end" : "flex-start";
+          const wrapFx = (inner, opts) => {
+            const whole = (opts == null ? void 0 : opts.animateWhole) !== false;
+            let node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "100%", height: "100%", display: "flex", flexDirection: "column", gap: 2, justifyContent: alignToFlex(el.alignY) }, children: inner });
+            if (whole && lowActive) {
+              if (lowFx.includes("wave")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "100%", height: "100%", animation: "vnMeterWave 1.3s ease-in-out infinite", transformOrigin: "center" }, children: node });
+              if (lowFx.includes("pulse")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "100%", height: "100%", animation: "vnMeterPulse 0.9s ease-in-out infinite", transformOrigin: "center" }, children: node });
+              if (lowFx.includes("shake")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "100%", height: "100%", animation: "vnMeterShake 0.4s ease-in-out infinite", transformOrigin: "center" }, children: node });
+            }
+            if (whole && changeDir !== "none" && changeAnim && changeAnim !== "none" && changeAnim !== "flash") {
+              const kf = changeAnim === "pop" ? "vnMeterPop 0.4s ease" : changeAnim === "shake" ? "vnMeterChangeShake 0.4s ease" : changeAnim === "wave" ? "vnMeterChangeWave 0.5s ease" : "";
+              if (kf) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "100%", height: "100%", animation: kf, transformOrigin: "center" }, children: node }, `mfx-${raw}`);
+            }
+            const lowFlash = whole && lowActive && lowFx.includes("flash") ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, background: el.lowFlashColor || "#ef4444", borderRadius: radius, pointerEvents: "none", animation: "vnMeterFlashOverlay 0.9s ease-in-out infinite" } }, "mlowflash") : null;
+            const changeFlash = whole && changeDir !== "none" && changeAnim === "flash" ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, background: changeDir === "up" ? el.changeFlashColorUp || "#4ade80" : el.changeFlashColorDown || "#ef4444", borderRadius: radius, pointerEvents: "none", animation: "vnMeterFlashOverlay 0.5s ease" } }, `mchgflash-${raw}`) : null;
+            return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...style, overflow: "visible" }, children: /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", width: "100%", height: "100%" }, children: [
+              node,
+              lowFlash,
+              changeFlash
+            ] }) }, el.id);
+          };
+          const animateIcon = (child) => {
+            let node = child;
+            if (lowActive) {
+              if (lowFx.includes("wave")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "inline-block", animation: "vnMeterWave 1.3s ease-in-out infinite", transformOrigin: "center" }, children: node });
+              if (lowFx.includes("pulse")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "inline-block", animation: "vnMeterPulse 0.9s ease-in-out infinite", transformOrigin: "center" }, children: node });
+              if (lowFx.includes("shake")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "inline-block", animation: "vnMeterShake 0.4s ease-in-out infinite", transformOrigin: "center" }, children: node });
+              if (lowFx.includes("flash")) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "inline-block", ["--glow"]: el.lowFlashColor || "#ef4444", animation: "vnMeterGlow 0.9s ease-in-out infinite" }, children: node });
+            }
+            if (changeDir !== "none" && changeAnim && changeAnim !== "none") {
+              if (changeAnim === "flash") {
+                node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "inline-block", ["--glow"]: changeDir === "up" ? el.changeFlashColorUp || "#4ade80" : el.changeFlashColorDown || "#ef4444", animation: "vnMeterGlowOnce 0.5s ease" }, children: node }, `icf-${raw}`);
+              } else {
+                const kf = changeAnim === "pop" ? "vnMeterPop 0.4s ease" : changeAnim === "shake" ? "vnMeterChangeShake 0.4s ease" : changeAnim === "wave" ? "vnMeterChangeWave 0.5s ease" : "";
+                if (kf) node = /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "inline-block", animation: kf, transformOrigin: "center" }, children: node }, `icx-${raw}`);
+              }
+            }
+            return node;
+          };
+          if (el.style === "icons") {
+            const n = Math.max(1, el.iconCount ?? 3);
+            const stepSize = el.iconStep === "quarter" ? 0.25 : el.iconStep === "half" ? 0.5 : 1;
+            const fullUrl = el.iconImage ? getElementAssetUrl(el.iconImage) : null;
+            const emptyUrl = el.iconEmptyImage ? getElementAssetUrl(el.iconEmptyImage) : null;
+            const iconSize = el.iconSize ?? 24;
+            const iconGap = el.iconGap ?? 4;
+            const filledUnits = pct * n;
+            const labelEl = el.showLabel ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }, children: el.label || (boundVar == null ? void 0 : boundVar.name) || "" }) : null;
+            const fracs = Array.from({ length: n }).map((_, i) => {
+              const f = Math.max(0, Math.min(1, filledUnits - i));
+              return Math.round(f / stepSize) * stepSize;
+            });
+            let edgeIdx = 0;
+            for (let i = 0; i < n; i++) if (fracs[i] > 0) edgeIdx = i;
+            return wrapFx(
+              /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                labelEl,
+                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexWrap: "wrap", gap: iconGap, alignItems: "center", justifyContent: alignToFlex(el.alignX) }, children: [
+                  Array.from({ length: n }).map((_, i) => {
+                    const frac = fracs[i];
+                    const heart = /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", width: iconSize, height: iconSize, flexShrink: 0 }, children: [
+                      emptyUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: emptyUrl, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" } }) : fullUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: fullUrl, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", opacity: 0.25, filter: "grayscale(1)" } }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, borderRadius: 4, border: `1px solid ${el.borderColor || el.fillColor || "#a78bfa"}`, opacity: 0.3 } }),
+                      frac > 0 && (fullUrl ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: fullUrl, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", clipPath: `inset(0 ${(1 - frac) * 100}% 0 0)`, transition: "clip-path 0.3s ease" } }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, borderRadius: 4, background: fillBackground, clipPath: `inset(0 ${(1 - frac) * 100}% 0 0)`, transition: "clip-path 0.3s ease" } }))
+                    ] });
+                    return /* @__PURE__ */ jsxRuntime2.jsx(React2.Fragment, { children: i === edgeIdx ? animateIcon(heart) : heart }, i);
+                  }),
+                  el.showValue && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...fontSettingsToStyle(el.valueFont), marginLeft: 4, textShadow: "0 1px 2px rgba(0,0,0,0.6)" }, children: valueText })
+                ] })
+              ] }),
+              { animateWhole: false }
+            );
+          }
+          if (el.style === "battery" || el.style === "segments") {
+            const fc = el.borderColor || el.fillColor || "#a78bfa";
+            const labelEl = el.showLabel ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }, children: el.label || (boundVar == null ? void 0 : boundVar.name) || "" }) : null;
+            const valueEl = el.showValue ? /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", ...fontSettingsToStyle(el.valueFont), textShadow: "0 1px 2px rgba(0,0,0,0.6)" }, children: valueText }) : null;
+            let body;
+            if (el.style === "battery") {
+              body = /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "stretch", flex: 1, minHeight: 6, gap: 1 }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", flex: 1, borderRadius: Math.min(radius, 4), overflow: "hidden", border: `2px solid ${fc}`, backgroundColor: el.backgroundColor || "rgba(0,0,0,0.35)" }, children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { position: "absolute", top: 0, bottom: 0, left: 0, width: `${pct * 100}%`, background: fillBackground, transition: "width 0.3s ease" } }),
+                  valueEl
+                ] }),
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { alignSelf: "center", width: 4, height: "45%", minHeight: 4, borderRadius: "0 2px 2px 0", backgroundColor: fc } })
+              ] });
+            } else {
+              const n = Math.max(1, el.segmentCount ?? 10);
+              const filled = Math.round(pct * n);
+              body = /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "relative", display: "flex", flex: 1, minHeight: 6, gap: el.segmentGap ?? 2 }, children: [
+                Array.from({ length: n }).map((_, i) => /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { flex: 1, borderRadius: Math.min(radius, 4), border: `1px solid ${fc}`, background: i < filled ? fillBackground : el.backgroundColor || "rgba(0,0,0,0.35)", transition: "background 0.3s ease" } }, i)),
+                valueEl
+              ] });
+            }
+            return wrapFx(
+              /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+                labelEl,
+                body
+              ] })
+            );
+          }
+          return wrapFx(
+            /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+              el.showLabel && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }, children: el.label || (boundVar == null ? void 0 : boundVar.name) || "" }),
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+                position: "relative",
+                flex: 1,
+                minHeight: 4,
+                overflow: "hidden",
                 borderRadius: radius,
-                // Tween the fill colour too when an appearance state with a transition is active
-                // (e.g. HP bar eases green→red). Solid fills animate via background-color.
-                transition: `clip-path 0.3s ease${(activeState == null ? void 0 : activeState.transitionMs) ? `, background-color ${activeState.transitionMs}ms ease, background ${activeState.transitionMs}ms ease` : ""}`
-              } }),
-              el.showValue && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                ...fontSettingsToStyle(el.valueFont),
-                textShadow: "0 1px 2px rgba(0,0,0,0.6)"
-              }, children: valueText })
+                backgroundColor: el.backgroundColor || "rgba(0,0,0,0.4)",
+                ...bgImageUrl ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+                ...el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}
+              }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                  position: "absolute",
+                  inset: 0,
+                  clipPath,
+                  background: fillBackground,
+                  ...fillImageUrl ? { backgroundImage: `url(${fillImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {},
+                  borderRadius: radius,
+                  // Tween the fill colour too when an appearance state with a transition is active
+                  // (e.g. HP bar eases green→red). Solid fills animate via background-color.
+                  transition: `clip-path 0.3s ease${(activeState == null ? void 0 : activeState.transitionMs) ? `, background-color ${activeState.transitionMs}ms ease, background ${activeState.transitionMs}ms ease` : ""}`
+                } }),
+                el.showValue && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: {
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  ...fontSettingsToStyle(el.valueFont),
+                  textShadow: "0 1px 2px rgba(0,0,0,0.6)"
+                }, children: valueText })
+              ] })
             ] })
-          ] }, el.id);
+          );
         }
         default:
           return null;
@@ -11052,11 +11435,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           !isPassThrough && getBackgroundElement(),
           Object.values(screen.elements).map((element) => {
             const el = element;
-            if (el.type === "HotSpot" || el.type === "ImageMap" || el.draggable === true) return null;
+            if (el.type === "HotSpot" || el.type === "draggableImageElement" || el.draggable === true) return null;
             return renderElement(element, variables, project, onCommitVariables);
           }),
           (Object.values(screen.elements || {}).some(
-            (el) => el.type === "HotSpot" || el.type === "ImageMap" || el.draggable === true
+            (el) => el.type === "HotSpot" || el.type === "draggableImageElement" || el.draggable === true
           ) || !!screen.winCondition) && /* @__PURE__ */ jsxRuntime2.jsx(
             InteractiveRuntime,
             {
@@ -11233,8 +11616,207 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
     );
   };
+  const PhoneGlyph = ({ name }) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.4em", lineHeight: 1 }, children: name && PHONE_GLYPHS[name] || "●" });
+  function resolvePhonePortrait(source, character, assetResolver) {
+    var _a, _b;
+    const baseUrl = (character == null ? void 0 : character.id) ? assetResolver(character.id, "image") : null;
+    const mode = (source == null ? void 0 : source.mode) || "base";
+    if (mode === "custom") {
+      const ci = source == null ? void 0 : source.customImage;
+      const url = ci ? assetResolver(ci.id, ci.type === "video" ? "video" : "image") : null;
+      return url ? [url] : baseUrl ? [baseUrl] : [];
+    }
+    if (mode === "expression" && character) {
+      const stack = [];
+      if (!(source == null ? void 0 : source.hideBase) && baseUrl) stack.push(baseUrl);
+      const expr = (source == null ? void 0 : source.expressionId) ? (_a = character.expressions) == null ? void 0 : _a[source.expressionId] : void 0;
+      if (expr) {
+        for (const layer of Object.values(character.layers || {})) {
+          const assetId = (_b = expr.layerConfiguration) == null ? void 0 : _b[layer.id];
+          if (!assetId) continue;
+          const url = assetResolver(assetId, "image");
+          if (url) stack.push(url);
+        }
+      }
+      return stack;
+    }
+    return baseUrl ? [baseUrl] : [];
+  }
+  function renderPhoneBadge(ui) {
+    const size = ui.phoneBadgeSize ?? 16;
+    const shape = ui.phoneBadgeShape || "dot";
+    const color = ui.phoneBadgeColor || "#ef4444";
+    const textColor = ui.phoneBadgeTextColor || "#fff";
+    const base = { minWidth: size, height: size, display: "inline-flex", alignItems: "center", justifyContent: "center", color: textColor, fontSize: size * 0.7, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.4)" };
+    let shapeEl;
+    if (shape === "ring") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: "9999px", border: `${Math.max(2, size * 0.18)}px solid ${color}`, background: "transparent", boxShadow: "none" } });
+    else if (shape === "square") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: Math.max(3, size * 0.25), background: color } });
+    else if (shape === "count") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, padding: "0 5px", borderRadius: "9999px", background: color }, children: "1" });
+    else if (shape === "icon") shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: "9999px", background: color, fontSize: size * 0.62 }, children: ui.phoneBadgeIcon && PHONE_GLYPHS[ui.phoneBadgeIcon] || "💬" });
+    else if (shape === "pulse") shapeEl = /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { position: "relative", display: "inline-flex" }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `@keyframes vn-badge-pulse{0%{transform:scale(1);opacity:.6}70%{transform:scale(2.2);opacity:0}100%{opacity:0}}` }),
+      /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", inset: 0, borderRadius: "9999px", background: color, animation: "vn-badge-pulse 1.4s ease-out infinite" } }),
+      /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: "9999px", background: color } })
+    ] });
+    else shapeEl = /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { ...base, width: size, borderRadius: "9999px", background: color } });
+    if (!ui.phoneBadgeLabel) return shapeEl;
+    return /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
+      shapeEl,
+      /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: Math.max(9, size * 0.62), fontWeight: 600, color: ui.phoneBadgeLabelColor || textColor, whiteSpace: "nowrap", textShadow: "0 1px 3px rgba(0,0,0,0.6)" }, children: ui.phoneBadgeLabel })
+    ] });
+  }
+  const PhonePortrait = ({ urls, size }) => {
+    if (urls.length === 0) return null;
+    return /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: size, height: size, borderRadius: "9999px", overflow: "hidden", flexShrink: 0, position: "relative", background: "rgba(0,0,0,0.2)" }, children: urls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }, i)) });
+  };
+  const PhonePanel = ({ ui, project, phone, variables, assetResolver, evaluateConditions: evaluateConditions2, onAction, onReply }) => {
+    const scrollRef = React2.useRef(null);
+    React2.useEffect(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [phone.messages.length, phone.pendingChoices]);
+    const pos = ui.phonePosition || "bottom-right";
+    const scale = (ui.phoneScale ?? 100) / 100;
+    const w = (ui.phoneWidth ?? 26) * scale;
+    const h = (ui.phoneHeight ?? 82) * scale;
+    const x = ui.phoneX ?? (pos === "center" ? (100 - w) / 2 : pos.includes("right") ? 100 - w - 2 : 2);
+    const y = ui.phoneY ?? (pos === "center" ? (100 - h) / 2 : pos.includes("top") ? 2 : 100 - h - 2);
+    const shellImg = ui.phoneShellImage ? assetResolver(ui.phoneShellImage.id, "image") : null;
+    const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
+    const titleFont = ui.phoneTitleFont ? fontSettingsToStyle(ui.phoneTitleFont) : {};
+    const buttons = (ui.phoneButtons || []).filter((b) => {
+      var _a;
+      return b.show !== false && (!((_a = b.conditions) == null ? void 0 : _a.length) || evaluateConditions2(b.conditions, variables));
+    });
+    const batteryPct = ui.phoneBatteryVariableId != null ? Math.max(0, Math.min(100, Number(variables[ui.phoneBatteryVariableId] ?? 100))) : 100;
+    const signalBars = Math.max(1, Math.min(8, ui.phoneSignalBars ?? 4));
+    const signalFilled = ui.phoneSignalVariableId != null ? Math.max(0, Math.min(signalBars, Math.round(Number(variables[ui.phoneSignalVariableId] ?? signalBars)))) : signalBars;
+    const signalColor = ui.phoneSignalColor || ui.phoneStatusIconColor || "#fff";
+    const batteryColor = ui.phoneBatteryColor || ui.phoneStatusIconColor || "#fff";
+    const bezel = ui.phoneBezelWidth ?? 8;
+    const casingRadius = ui.phoneBorderRadius ?? 28;
+    const screenRadius = Math.max(casingRadius - bezel, 6);
+    const showHome = ui.phoneShowHomeButton !== false;
+    const effectiveReplies = phone.pendingReplies && phone.pendingReplies.length ? phone.pendingReplies : (phone.pendingChoices || []).map((o) => ({ id: o.id, text: o.text, conditions: o.conditions, actions: o.actions }));
+    const view = phone.view || "chat";
+    const showHistory = view === "history";
+    const isHome = view === "home";
+    return (
+      // Casing (phone body): the screen is inset by the bezel so it reads as a separate panel.
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+        position: "absolute",
+        left: `${x}%`,
+        top: `${y}%`,
+        width: `${w}%`,
+        height: `${h}%`,
+        zIndex: 60,
+        borderRadius: casingRadius,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        padding: bezel,
+        boxSizing: "border-box",
+        backgroundColor: shellImg ? "transparent" : ui.phoneShellColor || "#16181d",
+        opacity: (ui.phoneOpacity ?? 100) / 100,
+        ...shellImg ? { backgroundImage: `url(${shellImg})`, backgroundSize: "100% 100%", backgroundRepeat: "no-repeat" } : {},
+        boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+        animation: "fade-in 0.2s ease-out"
+      }, children: [
+        /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: {
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          borderRadius: screenRadius,
+          border: `1px solid ${ui.phoneScreenBorderColor || "rgba(255,255,255,0.12)"}`,
+          background: ui.phoneScreenColor || "#0b0d12",
+          ...bodyFont,
+          position: "relative"
+        }, children: [
+          ui.phoneShowStatusBar !== false && /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 14px", fontSize: "0.8em", color: ui.phoneStatusIconColor || "#fff", backgroundColor: ui.phoneStatusBarColor || "transparent", flexShrink: 0 }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("span", { children: interpolateVariables(ui.phoneClockText || "", variables, project) }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { display: "inline-flex", gap: 8, alignItems: "center" }, children: [
+              ui.phoneShowSignal && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { display: "inline-flex", alignItems: "flex-end", gap: "0.1em", height: "0.85em" }, "aria-hidden": true, title: "Signal", children: Array.from({ length: signalBars }).map((_, i) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: "0.18em", height: `${30 + i / (signalBars - 1 || 1) * 70}%`, borderRadius: 1, background: signalColor, opacity: i < signalFilled ? 1 : 0.28 } }, i)) }),
+              ui.phoneShowBattery && /* @__PURE__ */ jsxRuntime2.jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: 1 }, title: `${Math.round(batteryPct)}%`, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { display: "inline-block", width: "1.5em", height: "0.8em", border: `1px solid ${ui.phoneStatusIconColor || "#fff"}`, borderRadius: 2, position: "relative" }, children: /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { position: "absolute", top: 1, bottom: 1, left: 1, width: `calc(${batteryPct}% - 2px)`, background: batteryColor, borderRadius: 1 } }) }),
+                /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { display: "inline-block", width: 2, height: "0.45em", background: ui.phoneStatusIconColor || "#fff", borderRadius: "0 1px 1px 0" } })
+              ] })
+            ] })
+          ] }),
+          ui.phoneHeaderText && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "2px 16px 6px", ...titleFont }, children: ui.phoneHeaderText }),
+          /* @__PURE__ */ jsxRuntime2.jsx("style", { children: `@keyframes vn-phone-typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}` }),
+          /* @__PURE__ */ jsxRuntime2.jsx("div", { ref: scrollRef, style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 8 }, children: isHome ? null : showHistory ? /* @__PURE__ */ jsxRuntime2.jsx(jsxRuntime2.Fragment, { children: phone.callLog && phone.callLog.length > 0 ? [...phone.callLog].reverse().map((entry) => {
+            const caller = entry.callerId === "player" ? null : project.characters[entry.callerId];
+            const purls = resolvePhonePortrait(entry.portrait, caller, assetResolver);
+            const icon = entry.status === "missed" ? "↙" : entry.status === "accepted" ? "↗" : "⊘";
+            const tint = entry.status === "missed" ? "#ef4444" : entry.status === "accepted" ? "#22c55e" : "#9ca3af";
+            return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 10, background: ui.phoneHistoryRowColor || "rgba(255,255,255,0.05)", color: ui.phoneHistoryTextColor || "#fff" }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: purls, size: "2em" }),
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: (caller == null ? void 0 : caller.name) || "Unknown" }),
+                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { fontSize: "0.7em", opacity: 0.8, color: tint }, children: [
+                  icon,
+                  " ",
+                  entry.status
+                ] })
+              ] })
+            ] }, entry.id);
+          }) : /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.5, textAlign: "center", marginTop: 12, fontSize: "0.8em" }, children: "No recent calls" }) }) : /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
+            phone.messages.map((m) => {
+              const mine = m.senderId === "player";
+              const char = mine ? null : project.characters[m.senderId];
+              const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
+              return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", flexDirection: mine ? "row-reverse" : "row", gap: 6, alignItems: "flex-end" }, children: [
+                ui.phoneShowAvatars !== false && !mine && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: portraitUrls, size: "2.2em" }),
+                /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { maxWidth: "76%" }, children: [
+                  !mine && (char == null ? void 0 : char.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.7em", opacity: 0.75, marginBottom: 1, color: char.color }, children: char.name }),
+                  /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "6px 10px", borderRadius: 14, wordBreak: "break-word", background: mine ? ui.phoneOutgoingBubbleColor || "#2f6bff" : ui.phoneIncomingBubbleColor || "#2a2f3a", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(m.text, variables, project) })
+                ] })
+              ] }, m.id);
+            }),
+            phone.typing && (() => {
+              const tchar = phone.typing.senderId === "player" ? null : project.characters[phone.typing.senderId];
+              const turls = tchar ? resolvePhonePortrait(void 0, tchar, assetResolver) : [];
+              return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 6, alignItems: "flex-end" }, children: [
+                ui.phoneShowAvatars !== false && /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: turls, size: "2.2em" }),
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { padding: "8px 12px", borderRadius: 14, background: ui.phoneIncomingBubbleColor || "#2a2f3a", display: "inline-flex", gap: 4, alignItems: "center" }, children: [0, 1, 2].map((i) => /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { width: 6, height: 6, borderRadius: "9999px", background: ui.phoneTypingColor || ui.phoneBubbleTextColor || "#fff", animation: `vn-phone-typing 1s ${i * 0.2}s infinite` } }, i)) })
+              ] });
+            })(),
+            effectiveReplies.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }, children: effectiveReplies.filter((o) => {
+              var _a;
+              return !((_a = o.conditions) == null ? void 0 : _a.length) || evaluateConditions2(o.conditions, variables);
+            }).map((o) => /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onReply(o), style: { alignSelf: "flex-end", maxWidth: "82%", padding: "6px 12px", borderRadius: 14, border: "none", cursor: "pointer", ...bodyFont, background: ui.phoneOutgoingBubbleColor || "#2f6bff", color: ui.phoneBubbleTextColor || "#fff" }, children: interpolateVariables(o.text, variables, project) }, o.id)) })
+          ] }) }),
+          isHome && ui.phoneButtonLayout === "free" && buttons.map((b) => {
+            const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
+            return /* @__PURE__ */ jsxRuntime2.jsxs(
+              "button",
+              {
+                onClick: () => b.action && onAction(b.action),
+                title: b.label || "",
+                style: { position: "absolute", left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: "size", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4cqmin", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", zIndex: 5 },
+                children: [
+                  customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "64cqmin", height: "64cqmin", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "58cqmin", lineHeight: 1 }, children: b.builtinIcon && PHONE_GLYPHS[b.builtinIcon] || "●" }),
+                  b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { whiteSpace: "nowrap", fontSize: "20cqmin", lineHeight: 1 }, children: b.label })
+                ]
+              },
+              b.id
+            );
+          }),
+          isHome && ui.phoneButtonLayout !== "free" && buttons.length > 0 && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-around", gap: 4, padding: "6px 4px", backgroundColor: ui.phoneButtonBarColor || "rgba(0,0,0,0.35)", flexShrink: 0 }, children: buttons.map((b) => {
+            const customIcon = b.iconImage ? assetResolver(b.iconImage.id, "image") : null;
+            return /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => b.action && onAction(b.action), title: b.label || "", style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 2px", background: "transparent", border: "none", cursor: "pointer", color: ui.phoneButtonIconColor || "#cbd5e1", fontSize: "0.7em" }, children: [
+              customIcon ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: customIcon, alt: "", style: { width: "1.6em", height: "1.6em", objectFit: "contain" } }) : /* @__PURE__ */ jsxRuntime2.jsx(PhoneGlyph, { name: b.builtinIcon }),
+              b.label && /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { whiteSpace: "nowrap" }, children: b.label })
+            ] }, b.id);
+          }) })
+        ] }),
+        showHome && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: bezel * 0.6 }, children: /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: () => onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone }), "aria-label": "Home", title: "Home", style: { width: "1.5em", height: "1.5em", borderRadius: "9999px", border: `2px solid ${ui.phoneHomeButtonColor || "rgba(255,255,255,0.28)"}`, background: "transparent", cursor: "pointer", flexShrink: 0 } }) })
+      ] })
+    );
+  };
   const LivePreview = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     const { project } = useProject();
     const toast = useToast();
     const notify = React2.useCallback((message, type = "info") => {
@@ -11364,7 +11946,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const font = projectFonts[fontId];
           if ((font == null ? void 0 : font.fontUrl) && (font == null ? void 0 : font.fontFamily)) {
             try {
-              const fontFace = new FontFace(font.fontFamily, `url(${font.fontUrl})`);
+              const fontFace = new FontFace(font.fontFamily, `url(${resolveFieldUrl(project.id, font.fontUrl)})`);
               await fontFace.load();
               document.fonts.add(fontFace);
               runtimeDebugLog(`✓ Loaded project font: ${font.fontFamily}`);
@@ -11377,7 +11959,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const char = project.characters[charId];
           if (char.fontUrl && char.fontFamily) {
             try {
-              const fontFace = new FontFace(char.fontFamily, `url(${char.fontUrl})`);
+              const fontFace = new FontFace(char.fontFamily, `url(${resolveFieldUrl(project.id, char.fontUrl)})`);
               await fontFace.load();
               document.fonts.add(fontFace);
               runtimeDebugLog(`✓ Loaded custom font: ${char.fontFamily}`);
@@ -11484,6 +12066,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const variableStoreRef = React2.useRef(null);
     const uiDirtyVariableIdsRef = React2.useRef(/* @__PURE__ */ new Set());
     const activeEffectTimeoutsRef = React2.useRef([]);
+    const activeCallCmdRef = React2.useRef(null);
+    const callRingAudioRef = React2.useRef(null);
+    const callTimeoutRef = React2.useRef(null);
+    const callRingStartRef = React2.useRef(0);
+    const callRingRemainingRef = React2.useRef(0);
+    const phoneTimersRef = React2.useRef([]);
     const activeFlashRef = React2.useRef(null);
     const activeShakeRef = React2.useRef(null);
     const [flashTrigger, setFlashTrigger] = React2.useState(0);
@@ -11523,41 +12111,44 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     }, [flashlight == null ? void 0 : flashlight.on, flashlight == null ? void 0 : flashlight.radius, flashlight == null ? void 0 : flashlight.softness, flashlight == null ? void 0 : flashlight.darkness, flashlight == null ? void 0 : flashlight.color]);
     const [activeCreditRoll, setActiveCreditRoll] = React2.useState(null);
     const assetResolver = React2.useCallback((assetId, type) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2;
       if (!assetId) return null;
-      switch (type) {
-        case "audio":
-          return ((_a2 = project.audio[assetId]) == null ? void 0 : _a2.audioUrl) || null;
-        case "video":
-          return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.backgrounds[assetId]) == null ? void 0 : _c2.videoUrl) || ((_e2 = (_d2 = project.images) == null ? void 0 : _d2[assetId]) == null ? void 0 : _e2.videoUrl) || null;
-        case "image": {
-          if (project.backgrounds[assetId]) {
-            const bg = project.backgrounds[assetId];
-            return bg.videoUrl || bg.imageUrl || null;
-          }
-          if (project.images && project.images[assetId]) {
-            const img = project.images[assetId];
-            return img.videoUrl || img.imageUrl || null;
-          }
-          if (project.videos[assetId]) {
-            return ((_f2 = project.videos[assetId]) == null ? void 0 : _f2.videoUrl) || null;
-          }
-          for (const charId in project.characters) {
-            const char = project.characters[charId];
-            if (char.id === assetId) {
-              return char.baseVideoUrl || char.baseImageUrl || null;
+      const raw = (() => {
+        var _a2, _b2, _c2, _d2, _e2, _f2;
+        switch (type) {
+          case "audio":
+            return ((_a2 = project.audio[assetId]) == null ? void 0 : _a2.audioUrl) || null;
+          case "video":
+            return ((_b2 = project.videos[assetId]) == null ? void 0 : _b2.videoUrl) || ((_c2 = project.backgrounds[assetId]) == null ? void 0 : _c2.videoUrl) || ((_e2 = (_d2 = project.images) == null ? void 0 : _d2[assetId]) == null ? void 0 : _e2.videoUrl) || null;
+          case "image": {
+            if (project.backgrounds[assetId]) {
+              const bg = project.backgrounds[assetId];
+              return bg.videoUrl || bg.imageUrl || null;
             }
-            for (const layerId in char.layers) {
-              const layer = char.layers[layerId];
-              if (layer.assets[assetId]) {
-                const asset = layer.assets[assetId];
-                return asset.videoUrl || asset.imageUrl || null;
+            if (project.images && project.images[assetId]) {
+              const img = project.images[assetId];
+              return img.videoUrl || img.imageUrl || null;
+            }
+            if (project.videos[assetId]) {
+              return ((_f2 = project.videos[assetId]) == null ? void 0 : _f2.videoUrl) || null;
+            }
+            for (const charId in project.characters) {
+              const char = project.characters[charId];
+              if (char.id === assetId) return char.baseVideoUrl || char.baseImageUrl || null;
+              for (const layerId in char.layers) {
+                const layer = char.layers[layerId];
+                if (layer.assets[assetId]) {
+                  const asset = layer.assets[assetId];
+                  return asset.videoUrl || asset.imageUrl || null;
+                }
               }
             }
+            return null;
           }
-          return null;
+          default:
+            return null;
         }
-      }
+      })();
+      return resolveFieldUrl(project.id, raw);
     }, [project]);
     const getAssetMetadata = React2.useCallback((assetId, type) => {
       if (!assetId) return { isVideo: false, loop: false };
@@ -11804,7 +12395,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             inventorySlots: playerState.inventorySlots,
             selectedItemId: playerState.selectedItemId,
             selectedElementId: playerState.selectedElementId,
-            pickedUpItems: playerState.pickedUpItems
+            pickedUpItems: playerState.pickedUpItems,
+            phone: playerState.uiState.phone ?? void 0
           }
         };
         try {
@@ -11832,6 +12424,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       void doDelete();
     };
     const loadGame = (slotNumber) => {
+      clearPhoneTimers();
+      stopRingtone();
+      activeCallCmdRef.current = null;
       const audio = musicAudioRef.current;
       if (audioFadeInterval.current) {
         clearInterval(audioFadeInterval.current);
@@ -11853,7 +12448,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       }
       menuMusicUrlRef.current = null;
       const doLoad = async () => {
-        var _a2;
+        var _a2, _b2;
         const saves = savesPersistentRef.current ? await getGameSaves() : inMemorySavesRef.current;
         const saveData = saves[slotNumber];
         if (!saveData) return;
@@ -11873,13 +12468,15 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           pickedUpItems: saveData.playerStateData.pickedUpItems,
           history: [],
           savedInputs: {},
-          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
+          uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ?? null },
           musicState: saveData.playerStateData.musicState
         });
         setScreenStack([]);
         setHudStack([]);
         setClosingScreens(/* @__PURE__ */ new Set());
         setIsJustLoaded(true);
+        const savedCall = (_b2 = saveData.playerStateData.phone) == null ? void 0 : _b2.incomingCall;
+        if ((savedCall == null ? void 0 : savedCall.phase) === "ringing" && savedCall.cmd) rearmIncomingCall(savedCall.cmd);
         try {
           pluginManager.invokeHook("onLoadAfterSave", saveData);
         } catch {
@@ -11890,6 +12487,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     const startNewGame = React2.useCallback(() => {
       var _a2;
       stopAndResetMusic();
+      clearPhoneTimers();
+      stopRingtone();
+      activeCallCmdRef.current = null;
       restockPrevConditionRef.current = {};
       restockPrevWatchRef.current = {};
       const initialVariables = { ...menuVariables };
@@ -11960,7 +12560,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: "transparent", zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
         history: [],
         savedInputs: {},
-        uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
+        uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: null },
         musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false }
       });
       setScreenStack([]);
@@ -12830,7 +13430,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           pluginManager.invokeHook("onRuntimeTick", 120);
         } catch {
         }
-        if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
+        const blockingHudOpen = hudStackRef.current.some((id) => {
+          var _a3;
+          return !((_a3 = project.uiScreens[id]) == null ? void 0 : _a3.hudNonBlocking);
+        });
+        if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || blockingHudOpen) return;
         const events = Object.values(project.commonEvents || {});
         const active = events.filter((ce) => ce.enabled && ce.trigger === "parallel" && ce.commands && ce.commands.length > 0 && (!ce.conditionVariableId || isTruthy(ps.variables[ce.conditionVariableId])));
         const activeIds = new Set(active.map((c) => c.id));
@@ -13040,7 +13644,10 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       if (scenePaused) {
         return;
       }
-      if (hudStack.length > 0) {
+      if (hudStack.some((id) => {
+        var _a3;
+        return !((_a3 = project.uiScreens[id]) == null ? void 0 : _a3.hudNonBlocking);
+      })) {
         return;
       }
       const baseVariables = mergeDirtyUiVariables(playerState.variables);
@@ -13352,7 +13959,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             if (result.updates || result.stagePatch) {
               const isSceneChange = ((_c2 = result.updates) == null ? void 0 : _c2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId;
               updatePlayerState((p) => {
-                var _a5, _b3, _c3, _d3, _e2, _f2, _g2, _h2, _i, _j;
+                var _a5, _b3, _c3, _d3, _e2, _f2, _g2, _h2, _i2, _j2;
                 if (!p) return null;
                 let mergedVariables = ((_a5 = result.updates) == null ? void 0 : _a5.variables) && variableStore2 ? variableStore2.snapshot().globals : { ...p.variables, ...((_b3 = result.updates) == null ? void 0 : _b3.variables) ?? {} };
                 if (isSceneChange) {
@@ -13372,8 +13979,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                   ...((_g2 = result.updates) == null ? void 0 : _g2.commandStack) !== void 0 ? { commandStack: result.updates.commandStack } : {},
                   ...((_h2 = result.updates) == null ? void 0 : _h2.variables) !== void 0 || isSceneChange ? { variables: mergedVariables } : {},
                   ...nextStage !== void 0 ? { stageState: nextStage } : {},
-                  ...((_i = result.updates) == null ? void 0 : _i.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
-                  ...((_j = result.updates) == null ? void 0 : _j.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
+                  ...((_i2 = result.updates) == null ? void 0 : _i2.musicState) !== void 0 ? { musicState: { ...p.musicState, ...result.updates.musicState } } : {},
+                  ...((_j2 = result.updates) == null ? void 0 : _j2.uiState) !== void 0 ? { uiState: { ...p.uiState, ...result.updates.uiState } } : {}
                 };
               });
               if (((_d2 = result.updates) == null ? void 0 : _d2.currentSceneId) !== void 0 && result.updates.currentSceneId !== previousSceneId) {
@@ -13836,6 +14443,35 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               applyResult({ advance: true, stagePatch: () => ({ lights: [] }) });
               break;
             }
+            case CommandType.ShowPhone: {
+              applyResult(handleShowPhone(command, commandContext));
+              break;
+            }
+            case CommandType.HidePhone: {
+              applyResult(handleHidePhone(command, commandContext));
+              break;
+            }
+            case CommandType.ShowPhoneText: {
+              applyResult(handleShowPhoneText(command, commandContext));
+              break;
+            }
+            case CommandType.HidePhoneText: {
+              applyResult(handleHidePhoneText(command, commandContext));
+              break;
+            }
+            case CommandType.PhoneIncomingText: {
+              const cmd = command;
+              const pausesForReply = cmd.presentation === "open" && !!(cmd.replies && cmd.replies.length > 0);
+              if (pausesForReply) instantAdvance = false;
+              startIncomingText(cmd);
+              break;
+            }
+            case CommandType.PhoneIncomingCall: {
+              const cmd = command;
+              if ((cmd.mode || "modal") === "modal") instantAdvance = false;
+              startIncomingCall(cmd);
+              break;
+            }
             case CommandType.Flashlight: {
               const cmd = command;
               if (cmd.enabled) {
@@ -13897,8 +14533,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               break;
             }
             case CommandType.ShowScreen: {
-              instantAdvance = false;
               const cmd = command;
+              const screenToShow = project.uiScreens[cmd.screenId];
+              if (!(screenToShow == null ? void 0 : screenToShow.hudNonBlocking)) {
+                instantAdvance = false;
+              }
               updatePlayerState((p) => p ? {
                 ...p,
                 uiState: {
@@ -14044,11 +14683,11 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
               const customDef = pluginManager.getCommand(command.type);
               if (customDef) {
                 const ownerId = pluginManager.getCommandOwner(command.type);
-                const api = ownerId ? pluginManager.getApi(ownerId) : void 0;
-                if (api) {
+                const api2 = ownerId ? pluginManager.getApi(ownerId) : void 0;
+                if (api2) {
                   try {
                     const params = command.params || command.parameters || {};
-                    const ret = customDef.handler(params, api);
+                    const ret = customDef.handler(params, api2);
                     if (ret && typeof ret.then === "function") {
                       ret.catch((e) => console.error(`[Custom command ${command.type}] handler error:`, e));
                     } else if (ret && ret.advance === false) {
@@ -14089,7 +14728,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       })();
     }, [playerState, project, assetResolver, playSound, playVoice, evaluateConditions2, fadeAudio, settings.musicVolume, startNewGame, stopAndResetMusic, stopAllSfx, stopSfx, hudStack]);
     const handleDialogueAdvance = () => {
+      var _a2, _b2;
       if (scenePaused) return;
+      if (((_b2 = (_a2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _a2.incomingCall) == null ? void 0 : _b2.phase) === "ringing" && playerState.uiState.phone.incomingCall.modal) return;
       stopVoice();
       updatePlayerState((p) => {
         if (!p || !p.uiState.dialogue) return p;
@@ -14375,7 +15016,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       executeUIAction(action, opts);
     };
     const executeUIAction = (action, opts) => {
-      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i, _j, _k, _l, _m;
+      var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2;
       if (action.type === UIActionType.StartNewGame) {
         startNewGameWithFade();
       } else if (!playerState && action.type === UIActionType.ContinueGame) {
@@ -14395,6 +15036,8 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         const closingScreen = closingId ? project.uiScreens[closingId] : null;
         const transOut = (closingScreen == null ? void 0 : closingScreen.transitionOut) || "fade";
         const transDur = (closingScreen == null ? void 0 : closingScreen.transitionOutDuration) ?? (closingScreen == null ? void 0 : closingScreen.transitionDuration) ?? 300;
+        const closeBehavior = (closingScreen == null ? void 0 : closingScreen.onCloseBehavior) || "default";
+        const advanceOnReturn = closeBehavior === "advance" || closeBehavior === "default" && !wasPaused && !(closingScreen == null ? void 0 : closingScreen.hudNonBlocking);
         const finishReturn = () => {
           updatePlayerState((p) => p ? { ...p, mode: "playing" } : null);
           setScreenStack([]);
@@ -14402,9 +15045,9 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (wasPaused && musicAudioRef.current && musicAudioRef.current.paused && playerState.musicState.isPlaying) {
             musicAudioRef.current.play().catch((e) => console.error("Failed to resume music:", e));
           }
-          if ((closingScreen == null ? void 0 : closingScreen.onCloseBehavior) === "runActions") {
-            (closingScreen.onCloseActions || []).forEach((a) => executeUIAction(a));
-          } else if ((closingScreen == null ? void 0 : closingScreen.onCloseBehavior) === "advance") {
+          if (closeBehavior === "runActions") {
+            ((closingScreen == null ? void 0 : closingScreen.onCloseActions) || []).forEach((a) => executeUIAction(a));
+          } else if (advanceOnReturn) {
             updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
           }
         };
@@ -14553,7 +15196,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
             const effectiveTransitionOut = (closingScreen == null ? void 0 : closingScreen.transitionOut) || "fade";
             const hasTransition = effectiveTransitionOut !== "none";
             const closeBehavior = (closingScreen == null ? void 0 : closingScreen.onCloseBehavior) || "default";
-            const advanceOnClose = closeBehavior === "default" || closeBehavior === "advance";
+            const advanceOnClose = closeBehavior === "advance" || closeBehavior === "default" && !(closingScreen == null ? void 0 : closingScreen.hudNonBlocking);
             const runCloseActions = () => {
               if (closeBehavior === "runActions") ((closingScreen == null ? void 0 : closingScreen.onCloseActions) || []).forEach((a) => executeUIAction(a));
             };
@@ -14768,6 +15411,19 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         saveGame(action.slotNumber);
       } else if (action.type === UIActionType.DeleteSave) {
         deleteGameSaveSlot(action.slotNumber);
+      } else if (action.type === UIActionType.ShowPhone) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "home", notification: null, unread: false } } } : null);
+      } else if (action.type === UIActionType.ShowPhoneText) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "chat", notification: null, unread: false } } } : null);
+      } else if (action.type === UIActionType.ShowPhoneHistory) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: true, view: "history", notification: null, unread: false } } } : null);
+      } else if (action.type === UIActionType.HidePhone) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, open: false, waiting: false, pendingChoices: void 0, notification: null } } } : null);
+        if (project.ui.phoneOnCloseBehavior === "advance" && (playerState == null ? void 0 : playerState.mode) === "playing") {
+          updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+        }
+      } else if (action.type === UIActionType.HidePhoneText) {
+        updatePlayerState((p) => p ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone || { open: false, messages: [] }, messages: [], waiting: false, pendingChoices: void 0, pendingReplies: void 0, typing: null } } } : null);
       } else if (action.type === UIActionType.LoadGame) {
         loadGame(action.slotNumber);
       } else if (action.type === UIActionType.JumpToScene) {
@@ -15267,7 +15923,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         if (item) executeUIAction(a.all ? { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "set", value: 0 } : { type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: a.quantity ?? 1 });
       } else if (action.type === UIActionType.UseSelectedItem) {
         const selId = (_h2 = playerStateRef.current) == null ? void 0 : _h2.selectedItemId;
-        const item = selId ? (_i = project.items) == null ? void 0 : _i[selId] : void 0;
+        const item = selId ? (_i2 = project.items) == null ? void 0 : _i2[selId] : void 0;
         if (item && item.usable) {
           if (item.consumeOnUse !== false) executeUIAction({ type: UIActionType.SetVariable, variableId: item.countVariableId, operator: "subtract", value: 1 });
           (item.useEffect || []).forEach((eff) => executeUIAction(eff));
@@ -15276,7 +15932,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         startCarry(action.itemId);
       } else if (action.type === UIActionType.RestockCollection) {
         const a = action;
-        const collection = (_j = project.itemCollections) == null ? void 0 : _j[a.collectionId];
+        const collection = (_j2 = project.itemCollections) == null ? void 0 : _j2[a.collectionId];
         if (collection) {
           const restocked = computeCollectionRestock(collection, project.variables);
           Object.entries(restocked).forEach(([varId, val]) => {
@@ -15285,12 +15941,12 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         }
       } else if (action.type === UIActionType.BuyItem || action.type === UIActionType.SellItem || action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem) {
         const a = action;
-        const collection = (_k = project.itemCollections) == null ? void 0 : _k[a.collectionId];
+        const collection = (_k2 = project.itemCollections) == null ? void 0 : _k2[a.collectionId];
         const isBuy = action.type === UIActionType.BuyItem || action.type === UIActionType.BuySelectedItem;
         const isSelected = action.type === UIActionType.BuySelectedItem || action.type === UIActionType.SellSelectedItem;
-        const itemId = isSelected ? (_l = playerStateRef.current) == null ? void 0 : _l.selectedItemId : a.itemId;
+        const itemId = isSelected ? (_l2 = playerStateRef.current) == null ? void 0 : _l2.selectedItemId : a.itemId;
         if (collection && itemId) {
-          const curVars = ((_m = playerStateRef.current) == null ? void 0 : _m.variables) || {};
+          const curVars = ((_m2 = playerStateRef.current) == null ? void 0 : _m2.variables) || {};
           const res = isBuy ? computeBuy(itemId, collection, project, curVars) : computeSell(itemId, collection, project, curVars);
           if (!("blocked" in res)) {
             Object.entries(res.updates).forEach(([varId, val]) => {
@@ -15382,6 +16038,186 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         pickedUpItems: overlay.pickUpOnceId ? [...p.pickedUpItems || [], overlay.pickUpOnceId] : p.pickedUpItems
       } : null);
     };
+    const phoneNavigates = (acts) => acts.some((a) => a.type === UIActionType.JumpToScene || a.type === UIActionType.JumpToLabel || a.type === UIActionType.GoToScreen || a.type === UIActionType.CallCommonEvent || a.type === UIActionType.StartNewGame || a.type === UIActionType.LoadGame || a.type === UIActionType.QuitToTitle);
+    const clearPhoneTimers = () => {
+      phoneTimersRef.current.forEach((id) => clearTimeout(id));
+      phoneTimersRef.current = [];
+    };
+    const pushPhoneTimer = (fn, ms) => {
+      const id = window.setTimeout(fn, ms);
+      phoneTimersRef.current.push(id);
+      return id;
+    };
+    const appendPhoneMessage = (m, open) => {
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open, view: "chat", messages: [...ph.messages, m], typing: null } } };
+      });
+    };
+    const playPhoneFollowUps = (followUps, onDone) => {
+      if (!followUps.length) {
+        onDone();
+        return;
+      }
+      let delay = 0;
+      followUps.forEach((f, idx) => {
+        const typeMs = Math.max(0, f.delayMs ?? 900);
+        delay += 150;
+        pushPhoneTimer(() => updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, typing: { senderId: f.senderId } } } } : p), delay);
+        delay += typeMs;
+        pushPhoneTimer(() => {
+          appendPhoneMessage({ id: `fu-${Date.now()}-${idx}`, senderId: f.senderId, text: f.text, ...f.portrait ? { portrait: f.portrait } : {} }, true);
+          if (f.soundId) playSound(f.soundId, void 0, false);
+          if (idx === followUps.length - 1) pushPhoneTimer(onDone, 60);
+        }, delay);
+      });
+    };
+    const handlePhoneReply = (reply) => {
+      var _a2, _b2;
+      clearPhoneTimers();
+      const wasWaiting = !!((_b2 = (_a2 = playerStateRef.current) == null ? void 0 : _a2.uiState.phone) == null ? void 0 : _b2.waiting);
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: true, messages: [] };
+        const msgs = ph.messages;
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: ph.open ?? true, messages: [...msgs, { id: `reply-${msgs.length}`, senderId: "player", text: reply.text }], waiting: false, pendingChoices: void 0, pendingReplies: void 0 } } };
+      });
+      const acts = reply.actions || [];
+      acts.forEach((a) => handleUIAction(a));
+      const navigates = phoneNavigates(acts);
+      const resume = () => {
+        if (wasWaiting && !navigates) updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+      };
+      const followUps = reply.followUps || [];
+      if (followUps.length && !navigates) playPhoneFollowUps(followUps, resume);
+      else resume();
+    };
+    const startIncomingText = (cmd) => {
+      const presentation = cmd.presentation || "notify";
+      const replies = cmd.replies || [];
+      const hasReplies = replies.length > 0;
+      const msg = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...cmd.portrait ? { portrait: cmd.portrait } : {} };
+      const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
+      if (presentation === "notify") {
+        updatePlayerState((p) => {
+          if (!p) return null;
+          const ph = p.uiState.phone || { open: false, messages: [] };
+          return { ...p, uiState: { ...p.uiState, phone: { ...ph, messages: [...ph.messages, msg], notification: { senderId: cmd.senderId, text: cmd.text, portrait: cmd.portrait, visible: true }, unread: cmd.showBadge !== false ? true : ph.unread, waiting: false, pendingReplies: hasReplies ? replies : ph.pendingReplies } } };
+        });
+        if (ding) playSound(ding, void 0, false);
+        const autoMs = project.ui.phoneNotifAutoMs ?? 6e3;
+        if (autoMs > 0) pushPhoneTimer(() => updatePlayerState((p) => {
+          var _a2;
+          return p && ((_a2 = p.uiState.phone) == null ? void 0 : _a2.notification) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, notification: { ...p.uiState.phone.notification, visible: false } } } } : p;
+        }), autoMs);
+      } else {
+        const landMessage = () => {
+          updatePlayerState((p) => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "chat", messages: [...ph.messages, msg], waiting: hasReplies, pendingReplies: hasReplies ? replies : void 0, notification: null, typing: null } } };
+          });
+          if (ding) playSound(ding, void 0, false);
+        };
+        const typingMs = Math.max(0, cmd.typingMs ?? 0);
+        if (typingMs > 0) {
+          updatePlayerState((p) => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: "chat", notification: null, typing: { senderId: cmd.senderId } } } };
+          });
+          pushPhoneTimer(landMessage, typingMs);
+        } else {
+          landMessage();
+        }
+      }
+    };
+    const startIncomingCall = (cmd) => {
+      clearPhoneTimers();
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+      activeCallCmdRef.current = cmd;
+      const modal = (cmd.mode || "modal") === "modal";
+      const caller = project.characters[cmd.callerId];
+      const ringtone = cmd.ringtoneId ?? (caller == null ? void 0 : caller.phoneRingtoneAudioId) ?? project.ui.phoneCallRingtoneId ?? null;
+      if (ringtone) callRingAudioRef.current = playSound(ringtone, void 0, true);
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: { callerId: cmd.callerId, portrait: cmd.portrait, phase: "ringing", modal, cmd } } } };
+      });
+      const dur = cmd.ringDurationMs ?? 12e3;
+      callRingRemainingRef.current = dur;
+      callRingStartRef.current = Date.now();
+      callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), dur);
+    };
+    const rearmIncomingCall = (cmd) => {
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+      activeCallCmdRef.current = cmd;
+      const caller = project.characters[cmd.callerId];
+      const ringtone = cmd.ringtoneId ?? (caller == null ? void 0 : caller.phoneRingtoneAudioId) ?? project.ui.phoneCallRingtoneId ?? null;
+      if (ringtone) callRingAudioRef.current = playSound(ringtone, void 0, true);
+      const dur = cmd.ringDurationMs ?? 12e3;
+      callRingRemainingRef.current = dur;
+      callRingStartRef.current = Date.now();
+      callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), dur);
+    };
+    const stopRingtone = () => {
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+      const cmd = activeCallCmdRef.current;
+      const caller = cmd ? project.characters[cmd.callerId] : null;
+      const ringtone = cmd ? cmd.ringtoneId ?? (caller == null ? void 0 : caller.phoneRingtoneAudioId) ?? project.ui.phoneCallRingtoneId ?? null : null;
+      if (ringtone) stopSfx(ringtone);
+      callRingAudioRef.current = null;
+    };
+    const resolveIncomingCall = (outcome) => {
+      const cmd = activeCallCmdRef.current;
+      if (!cmd) return;
+      stopRingtone();
+      activeCallCmdRef.current = null;
+      updatePlayerState((p) => {
+        if (!p) return null;
+        const ph = p.uiState.phone || { open: false, messages: [] };
+        const log2 = ph.callLog || [];
+        const entry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log2.length };
+        return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: null, callLog: [...log2, entry], unread: outcome === "missed" && cmd.showBadge !== false ? true : ph.unread } } };
+      });
+      const acts = (outcome === "accepted" ? cmd.acceptActions : outcome === "declined" ? cmd.declineActions : cmd.onTimeout === "runActions" ? cmd.timeoutActions : []) || [];
+      acts.forEach((a) => handleUIAction(a));
+      const navigates = phoneNavigates(acts);
+      if ((cmd.mode || "modal") === "modal" && !navigates) updatePlayerState((p) => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+    };
+    React2.useEffect(() => {
+      var _a2, _b2, _c2, _d2;
+      const ringing = ((_b2 = (_a2 = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _a2.incomingCall) == null ? void 0 : _b2.phase) === "ringing";
+      if ((playerState == null ? void 0 : playerState.mode) !== "playing") {
+        try {
+          (_c2 = callRingAudioRef.current) == null ? void 0 : _c2.pause();
+        } catch {
+        }
+        if (ringing && callTimeoutRef.current) {
+          clearTimeout(callTimeoutRef.current);
+          callTimeoutRef.current = null;
+          callRingRemainingRef.current = Math.max(0, callRingRemainingRef.current - (Date.now() - callRingStartRef.current));
+        }
+      } else if (ringing) {
+        if ((_d2 = callRingAudioRef.current) == null ? void 0 : _d2.paused) callRingAudioRef.current.play().catch(() => {
+        });
+        if (callTimeoutRef.current === null) {
+          callRingStartRef.current = Date.now();
+          callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall("missed"), callRingRemainingRef.current);
+        }
+      }
+    }, [playerState == null ? void 0 : playerState.mode, (_d = (_c = playerState == null ? void 0 : playerState.uiState.phone) == null ? void 0 : _c.incomingCall) == null ? void 0 : _d.phase]);
     const handleVariableChange = (variableId, value) => {
       runtimeDebugLog("[handleVariableChange] Called with:", { variableId, value, hasPlayerState: !!playerState });
       if (playerState) {
@@ -15410,6 +16246,20 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         });
       }
     };
+    const setTestVariable = React2.useCallback((id, value) => {
+      if (playerStateRef.current) {
+        updatePlayerState((p) => p ? { ...p, variables: { ...p.variables, [id]: value } } : p);
+        if (uiDirtyVariableIdsRef.current.has(id)) {
+          setUiVariables((prev) => {
+            const n = { ...prev, [id]: value };
+            uiVariablesRef.current = n;
+            return n;
+          });
+        }
+      } else {
+        setMenuVariables((prev) => ({ ...prev, [id]: value }));
+      }
+    }, [updatePlayerState]);
     const mergeDirtyUiVariables = React2.useCallback((base) => {
       const dirtyIds = uiDirtyVariableIdsRef.current;
       if (dirtyIds.size === 0) {
@@ -15526,6 +16376,16 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           const typing = !!ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable);
           if (!typing) {
             const pressed = e.key.toLowerCase();
+            if (project.ui.phoneOpenHotkey && project.ui.phoneOpenHotkey.toLowerCase() === pressed) {
+              e.preventDefault();
+              updatePlayerState((p) => {
+                if (!p) return null;
+                const ph = p.uiState.phone || { open: false, messages: [] };
+                const opening = !ph.open;
+                return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...opening ? { view: "home", notification: null, unread: false } : {} } } };
+              });
+              return;
+            }
             const target = Object.values(project.uiScreens).find((s) => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
             if (target) {
               e.preventDefault();
@@ -16408,7 +17268,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
       const { uiState } = playerState;
       const currentHudScreenId = hudStack.length > 0 ? hudStack[hudStack.length - 1] : project.ui.gameHudScreenId;
       const currentHudScreen = currentHudScreenId ? project.uiScreens[currentHudScreenId] : null;
-      const isHudPassThrough = currentHudScreen ? currentHudScreen.passThrough ?? currentHudScreenId === project.ui.gameHudScreenId : false;
+      const isHudPassThrough = currentHudScreen ? currentHudScreen.passThrough ?? (currentHudScreenId === project.ui.gameHudScreenId || !!currentHudScreen.hudNonBlocking) : false;
       const shouldShowDialogueOnHud = (currentHudScreen == null ? void 0 : currentHudScreen.showDialogue) || isHudPassThrough;
       const movieExitDur = uiState.movieTransition && uiState.movieTransition !== "instant" ? uiState.movieTransitionDuration ?? 0.5 : 0;
       return /* @__PURE__ */ jsxRuntime2.jsxs(jsxRuntime2.Fragment, { children: [
@@ -16984,6 +17844,18 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     0%, 100% { opacity: 0; }
                     50% { opacity: 0.9; }
                 }
+
+                /* Meter resource animations — low-state loops + on-change one-shots (editor + standalone) */
+                @keyframes vnMeterShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-3px)} 40%{transform:translateX(3px)} 60%{transform:translateX(-2px)} 80%{transform:translateX(2px)} }
+                @keyframes vnMeterPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
+                @keyframes vnMeterWave { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(-4deg)} 75%{transform:rotate(4deg)} }
+                @keyframes vnMeterPop { 0%{transform:scale(1)} 40%{transform:scale(1.3)} 100%{transform:scale(1)} }
+                @keyframes vnMeterChangeShake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 50%{transform:translateX(5px)} 75%{transform:translateX(-3px)} }
+                @keyframes vnMeterChangeWave { 0%,100%{transform:rotate(0deg)} 30%{transform:rotate(-8deg)} 70%{transform:rotate(8deg)} }
+                @keyframes vnMeterFlashOverlay { 0%{opacity:0} 50%{opacity:0.55} 100%{opacity:0} }
+                /* Shape-hugging glow for icon/heart flashes (drop-shadow follows the image alpha, no rectangle) */
+                @keyframes vnMeterGlow { 0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))} 50%{filter:drop-shadow(0 0 6px var(--glow,#ef4444)) drop-shadow(0 0 3px var(--glow,#ef4444))} }
+                @keyframes vnMeterGlowOnce { 0%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))} 40%{filter:drop-shadow(0 0 8px var(--glow,#4ade80)) drop-shadow(0 0 4px var(--glow,#4ade80))} 100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))} }
                 /* Lightning flicker patterns (1 = single strike, 2 = double, 3 = stormy triple). */
                 @keyframes vn-lightning-1 {
                     0% { opacity: 0; }
@@ -17137,7 +18009,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
                     100% { background-position: 0% 0%; }
                 }
             ` }),
-      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_c = project.gameResolution) == null ? void 0 : _c.width) || 1920} / ${((_d = project.gameResolution) == null ? void 0 : _d.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_e = project.gameResolution) == null ? void 0 : _e.height) || 1080} / ${((_f = project.gameResolution) == null ? void 0 : _f.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_g = project.gameResolution) == null ? void 0 : _g.width) || 1920) : 1 }, children: [
+      /* @__PURE__ */ jsxRuntime2.jsxs("div", { ref: playContainerRef, className: "relative overflow-hidden", style: { width: `min(100vw, calc(100vh * ${((_e = project.gameResolution) == null ? void 0 : _e.width) || 1920} / ${((_f = project.gameResolution) == null ? void 0 : _f.height) || 1080}))`, height: `min(100vh, calc(100vw * ${((_g = project.gameResolution) == null ? void 0 : _g.height) || 1080} / ${((_h = project.gameResolution) == null ? void 0 : _h.width) || 1920}))`, "--font-scale": playContainerSize.width > 0 ? playContainerSize.width / (((_i = project.gameResolution) == null ? void 0 : _i.width) || 1920) : 1 }, children: [
         (playerState == null ? void 0 : playerState.mode) === "playing" ? renderStage() : null,
         (!playerState || playerState.mode === "paused") && (() => {
           const ordered = [];
@@ -17270,6 +18142,102 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           }
         )
       ] }),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_j = playerState.uiState.phone) == null ? void 0 : _j.open) && /* @__PURE__ */ jsxRuntime2.jsx(
+        PhonePanel,
+        {
+          ui: project.ui,
+          project,
+          phone: playerState.uiState.phone,
+          variables: screenVariables,
+          assetResolver,
+          evaluateConditions: evaluateConditions2,
+          onAction: handleUIAction,
+          onReply: handlePhoneReply
+        }
+      ),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_l = (_k = playerState.uiState.phone) == null ? void 0 : _k.notification) == null ? void 0 : _l.visible) && !playerState.uiState.phone.open && (() => {
+        const n = playerState.uiState.phone.notification;
+        const nchar = n.senderId === "player" ? null : project.characters[n.senderId];
+        const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
+        const freePos = project.ui.phoneNotifX != null || project.ui.phoneNotifY != null;
+        const atTop = (project.ui.phoneNotifPosition || "top") === "top";
+        const posStyle = freePos ? { left: `${project.ui.phoneNotifX ?? 50}%`, top: `${project.ui.phoneNotifY ?? 2}%` } : { left: "50%", transform: "translateX(-50%)", ...atTop ? { top: "2%" } : { bottom: "2%" } };
+        return /* @__PURE__ */ jsxRuntime2.jsxs(
+          "div",
+          {
+            onClick: () => updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: "chat", notification: null, unread: false } } } : p),
+            style: { position: "absolute", ...posStyle, zIndex: 65, cursor: "pointer", minWidth: "40%", maxWidth: "72%", display: "flex", gap: 10, alignItems: "center", padding: "10px 14px", borderRadius: 14, background: project.ui.phoneNotifColor || "rgba(18,20,26,0.96)", color: project.ui.phoneNotifTextColor || "#fff", boxShadow: "0 8px 30px rgba(0,0,0,0.5)", animation: "fade-in 0.25s ease-out", ...project.ui.phoneNotifFont ? fontSettingsToStyle(project.ui.phoneNotifFont) : {} },
+            children: [
+              /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: nurls, size: "2.4em" }),
+              /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+                (nchar == null ? void 0 : nchar.name) && /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontWeight: 700, fontSize: "0.85em" }, children: nchar.name }),
+                /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { fontSize: "0.85em", opacity: 0.92, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: interpolateVariables(n.text, screenVariables, project) })
+              ] }),
+              /* @__PURE__ */ jsxRuntime2.jsx("span", { style: { fontSize: "1.2em" }, children: "💬" })
+            ]
+          }
+        );
+      })(),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_n = (_m = playerState.uiState.phone) == null ? void 0 : _m.incomingCall) == null ? void 0 : _n.phase) === "ringing" && (() => {
+        const call = playerState.uiState.phone.incomingCall;
+        const cchar = call.callerId === "player" ? null : project.characters[call.callerId];
+        const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
+        const shape = project.ui.phoneCallPortraitShape || "circle";
+        const acceptImg = project.ui.phoneCallAcceptImage ? assetResolver(project.ui.phoneCallAcceptImage.id, "image") : null;
+        const declineImg = project.ui.phoneCallDeclineImage ? assetResolver(project.ui.phoneCallDeclineImage.id, "image") : null;
+        const acceptGlyph = acceptImg ? null : project.ui.phoneCallAcceptIcon && PHONE_GLYPHS[project.ui.phoneCallAcceptIcon] || "📞";
+        const declineGlyph = declineImg ? null : project.ui.phoneCallDeclineIcon && PHONE_GLYPHS[project.ui.phoneCallDeclineIcon] || "⊘";
+        const callBtn = (color) => ({ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "transparent", border: "none", cursor: "pointer", color: "#fff", fontSize: "0.85em" });
+        const circle = (color) => ({ width: "3em", height: "3em", borderRadius: "9999px", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3em" });
+        const acceptBtn = /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => resolveIncomingCall("accepted"), style: callBtn(project.ui.phoneCallAcceptColor || "#22c55e"), children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("span", { style: circle(project.ui.phoneCallAcceptColor || "#22c55e"), children: acceptImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: acceptImg, alt: "", style: { width: "1.4em", height: "1.4em", objectFit: "contain" } }) : acceptGlyph }),
+          /* @__PURE__ */ jsxRuntime2.jsx("span", { children: project.ui.phoneCallAcceptLabel || "Accept" })
+        ] });
+        const declineBtn = /* @__PURE__ */ jsxRuntime2.jsxs("button", { onClick: () => resolveIncomingCall("declined"), style: callBtn(project.ui.phoneCallDeclineColor || "#ef4444"), children: [
+          /* @__PURE__ */ jsxRuntime2.jsx("span", { style: circle(project.ui.phoneCallDeclineColor || "#ef4444"), children: declineImg ? /* @__PURE__ */ jsxRuntime2.jsx("img", { src: declineImg, alt: "", style: { width: "1.4em", height: "1.4em", objectFit: "contain" } }) : declineGlyph }),
+          /* @__PURE__ */ jsxRuntime2.jsx("span", { children: project.ui.phoneCallDeclineLabel || "Decline" })
+        ] });
+        const nameStyle = project.ui.phoneCallNameFont ? fontSettingsToStyle(project.ui.phoneCallNameFont) : { fontSize: "1.5em", fontWeight: 700 };
+        if (call.modal) {
+          const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, "image") : null;
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { onClick: (e) => e.stopPropagation(), style: { position: "absolute", inset: 0, zIndex: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, color: "#fff", background: bgImg ? `url(${bgImg}) center/cover no-repeat` : project.ui.phoneCallBgColor || "rgba(8,10,14,0.96)", animation: "fade-in 0.25s ease-out" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { width: "22%", aspectRatio: "1", borderRadius: shape === "circle" ? "9999px" : "16px", overflow: "hidden", position: "relative", background: "rgba(255,255,255,0.06)" }, children: curls.map((u, i) => /* @__PURE__ */ jsxRuntime2.jsx("img", { src: u, alt: "", style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" } }, i)) }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { textAlign: "center", ...nameStyle }, children: (cchar == null ? void 0 : cchar.name) || "Unknown" }),
+            /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.9em" }, children: "Incoming call…" }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 48, marginTop: 8 }, children: [
+              declineBtn,
+              acceptBtn
+            ] })
+          ] });
+        }
+        return /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { position: "absolute", right: "2%", top: "6%", zIndex: 80, width: "26%", minWidth: 180, display: "flex", flexDirection: "column", gap: 8, padding: "12px", borderRadius: 16, color: "#fff", background: project.ui.phoneCallBgColor || "rgba(8,10,14,0.96)", boxShadow: "0 10px 34px rgba(0,0,0,0.55)", animation: "fade-in 0.25s ease-out" }, children: [
+          /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", gap: 10, alignItems: "center" }, children: [
+            /* @__PURE__ */ jsxRuntime2.jsx(PhonePortrait, { urls: curls, size: "2.6em" }),
+            /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { minWidth: 0 }, children: [
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { ...nameStyle, fontSize: "1em" }, children: (cchar == null ? void 0 : cchar.name) || "Unknown" }),
+              /* @__PURE__ */ jsxRuntime2.jsx("div", { style: { opacity: 0.7, fontSize: "0.75em" }, children: "Incoming call…" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntime2.jsxs("div", { style: { display: "flex", justifyContent: "space-around", marginTop: 2 }, children: [
+            declineBtn,
+            acceptBtn
+          ] })
+        ] });
+      })(),
+      (playerState == null ? void 0 : playerState.mode) === "playing" && ((_o = playerState.uiState.phone) == null ? void 0 : _o.unread) && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+        const bx = project.ui.phoneBadgeX ?? 95;
+        const by = project.ui.phoneBadgeY ?? 4;
+        const badge = renderPhoneBadge(project.ui);
+        return /* @__PURE__ */ jsxRuntime2.jsx(
+          "div",
+          {
+            onClick: () => updatePlayerState((p) => p && p.uiState.phone ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: "chat", notification: null, unread: false } } } : p),
+            title: "New message",
+            style: { position: "absolute", left: `${bx}%`, top: `${by}%`, zIndex: 66, cursor: "pointer" },
+            children: badge
+          }
+        );
+      })(),
       confirmDialog && /* @__PURE__ */ jsxRuntime2.jsx(
         InGameConfirmDialog,
         {
@@ -17302,18 +18270,35 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
           if (defs.length === 0) return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-slate-400 italic", children: "No variables yet — add some in the Variables tab." }) });
           const liveVars = screenVariables;
           const scopeColor = { local: "bg-emerald-400", global: "bg-sky-400", persistent: "bg-amber-400" };
-          return /* @__PURE__ */ jsxRuntime2.jsx("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl", children: /* @__PURE__ */ jsxRuntime2.jsx("ul", { className: "space-y-1", children: defs.map((def) => {
-            const raw = def.id in liveVars ? liveVars[def.id] : def.defaultValue;
-            const bl = resolveBoolLabels(def, "Yes", "No");
-            const display = def.type === "boolean" ? raw ? bl.yes : bl.no : String(raw);
-            return /* @__PURE__ */ jsxRuntime2.jsxs("li", { className: "flex items-center justify-between gap-3", children: [
-              /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "flex items-center gap-1.5 min-w-0", children: [
-                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: `w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || "global"] || "bg-slate-400"}` }),
-                /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-slate-300 truncate", title: def.name, children: def.name })
-              ] }),
-              /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "font-mono text-white flex-shrink-0", children: display })
-            ] }, def.id);
-          }) }) });
+          return /* @__PURE__ */ jsxRuntime2.jsxs("div", { className: "bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl", children: [
+            /* @__PURE__ */ jsxRuntime2.jsx("p", { className: "text-[10px] text-slate-500 mb-1.5", children: "Tap −/＋ or Flip to change values live" }),
+            /* @__PURE__ */ jsxRuntime2.jsx("ul", { className: "space-y-1", children: defs.map((def) => {
+              const raw = def.id in liveVars ? liveVars[def.id] : def.defaultValue;
+              const bl = resolveBoolLabels(def, "Yes", "No");
+              const display = def.type === "boolean" ? raw ? bl.yes : bl.no : String(raw);
+              const isNum = def.type === "number";
+              const isBool = def.type === "boolean";
+              const clampNum = (val) => {
+                let r = val;
+                if (typeof def.min === "number") r = Math.max(def.min, r);
+                if (typeof def.max === "number") r = Math.min(def.max, r);
+                return r;
+              };
+              const btn = "w-5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-sky-600 active:bg-sky-500 text-white leading-none transition-colors";
+              return /* @__PURE__ */ jsxRuntime2.jsxs("li", { className: "flex items-center justify-between gap-3", children: [
+                /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "flex items-center gap-1.5 min-w-0", children: [
+                  /* @__PURE__ */ jsxRuntime2.jsx("span", { className: `w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || "global"] || "bg-slate-400"}` }),
+                  /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "text-slate-300 truncate", title: def.name, children: def.name })
+                ] }),
+                /* @__PURE__ */ jsxRuntime2.jsxs("span", { className: "flex items-center gap-1 flex-shrink-0", children: [
+                  isNum && /* @__PURE__ */ jsxRuntime2.jsx("button", { title: "−1", className: btn, onClick: () => setTestVariable(def.id, clampNum((Number(raw) || 0) - 1)), children: "−" }),
+                  /* @__PURE__ */ jsxRuntime2.jsx("span", { className: "font-mono text-white text-right", style: { minWidth: "2.75rem" }, children: display }),
+                  isNum && /* @__PURE__ */ jsxRuntime2.jsx("button", { title: "+1", className: btn, onClick: () => setTestVariable(def.id, clampNum((Number(raw) || 0) + 1)), children: "＋" }),
+                  isBool && /* @__PURE__ */ jsxRuntime2.jsx("button", { title: "Toggle", className: "px-1.5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-sky-600 active:bg-sky-500 text-white text-[10px] leading-none transition-colors", onClick: () => setTestVariable(def.id, !raw), children: "Flip" })
+                ] })
+              ] }, def.id);
+            }) })
+          ] });
         })()
       ] }),
       !hideCloseButton && /* @__PURE__ */ jsxRuntime2.jsx("button", { onClick: handleClose, className: "absolute top-4 right-4 bg-slate-800/50 p-2 rounded-full hover:bg-slate-700/80 transition-colors z-50", children: /* @__PURE__ */ jsxRuntime2.jsx(XMarkIcon, { className: "w-8 h-8" }) }),
@@ -17343,7 +18328,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
         /* @__PURE__ */ jsxRuntime2.jsx(
           "img",
           {
-            src: assetResolver(((_h = carriedItem.icon) == null ? void 0 : _h.id) || null, "image") || "",
+            src: assetResolver(((_p = carriedItem.icon) == null ? void 0 : _p.id) || null, "image") || "",
             alt: "",
             draggable: false,
             className: "fixed z-[10052] pointer-events-none select-none",
@@ -17502,7 +18487,7 @@ var GameEngine = (function(exports, jsxRuntime2, React2, ReactDOM2, reactDom) {
     /**
      * Get version information
      */
-    version: "3.1.0",
+    version: "3.2.1",
     /**
      * Check if the engine is ready
      */

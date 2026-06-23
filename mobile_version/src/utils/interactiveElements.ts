@@ -27,7 +27,7 @@ import {
     UITextElement,
     UIImageElement,
     UITextInputElement,
-    UIImageMapElement,
+    UIdraggableImageElementElement,
     UIHotSpotElement,
 } from '../features/ui/types';
 
@@ -38,7 +38,7 @@ export function isHotSpotElement(el: VNUIElement): el is UIHotSpotElement {
 
 /** Returns true if this element is an interactive element (handled by the
  *  interactive overlays/runtime rather than the standard renderer).
- *  - HotSpot / ImageMap entries are always interactive (no other editor renders them).
+ *  - HotSpot / draggableImageElement entries are always interactive (no other editor renders them).
  *  - Any element explicitly tagged `interactive: true` stays interactive even when
  *    its `draggable` flag is currently off — this prevents users from accidentally
  *    orphaning a migrated element by unchecking one box.
@@ -46,7 +46,7 @@ export function isHotSpotElement(el: VNUIElement): el is UIHotSpotElement {
  *    also treated as interactive, so projects predating the `interactive` flag
  *    still light up correctly until the recovery pass tags them. */
 export function isInteractiveElement(el: VNUIElement): boolean {
-    if (el.type === UIElementType.HotSpot || el.type === UIElementType.ImageMap) return true;
+    if (el.type === UIElementType.HotSpot || el.type === UIElementType.draggableImageElement) return true;
     const anyEl = el as any;
     if (anyEl.interactive === true) return true;
     if (anyEl.draggable === true) return true;
@@ -73,13 +73,13 @@ function hotSpotElementToLegacy(el: UIHotSpotElement): VNHotSpot {
 function elementToLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
     const anyEl = el as any;
     switch (el.type) {
-        case UIElementType.ImageMap: {
-            const m = el as UIImageMapElement;
+        case UIElementType.draggableImageElement: {
+            const m = el as UIdraggableImageElementElement;
             return {
-                id: m.id, name: m.name, elementType: 'imageMap',
+                id: m.id, name: m.name, elementType: 'draggableImageElement',
                 imageId: (m.image?.id ?? '') as VNID,
                 hoverImageId: m.hoverImage?.id,
-                imageMapRegions: m.imageMapRegions,
+                draggableImageElementRegions: m.draggableImageElementRegions,
                 x: m.x, y: m.y, width: m.width, height: m.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
@@ -173,7 +173,7 @@ export function deriveInteractiveElementsFromScreen(screen: VNUIScreen): Record<
     const out: Record<VNID, VNHotZoneElement> = {};
     for (const el of Object.values(screen.elements || {}) as VNUIElement[]) {
         if (el.type === UIElementType.HotSpot) continue;
-        if (el.type === UIElementType.ImageMap || (el as any).draggable === true) {
+        if (el.type === UIElementType.draggableImageElement || (el as any).draggable === true) {
             const legacy = elementToLegacyHotZoneElement(el);
             if (legacy) out[el.id] = legacy;
         }

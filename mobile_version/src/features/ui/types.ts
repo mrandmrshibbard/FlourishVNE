@@ -2,7 +2,7 @@ import { VNID } from '../../types';
 import type { VNScreenOverlayEffect } from '../../types';
 import { VNCondition, VNConditionOperator, VNUIAction, VNTextAlign, VNVAlign, VNParallaxSettings } from '../../types/shared';
 
-import { VNTextShadow, VNTextGradient, VNTextBorder, ImageMapRegion } from '../scene/types';
+import { VNTextShadow, VNTextGradient, VNTextBorder, draggableImageElementRegion } from '../scene/types';
 import type { VNCharacterTextbox } from '../character/types';
 
 /**
@@ -85,6 +85,40 @@ export interface QuickMenuCustomButton extends QuickMenuButtonConfig {
     label: string;
     /** Visible in the quick menu. Default true (undefined = shown). */
     show?: boolean;
+}
+
+/** Where a phone avatar / caller portrait image comes from, chosen per text/call so authors aren't
+ *  locked to the character's base sprite. `base` (default) = the character's base sprite; `expression`
+ *  = composite a chosen pose/expression (optionally hiding the base layer); `custom` = an uploaded
+ *  image. Additive-optional everywhere — unset/`base` keeps today's behavior. */
+export interface PhonePortraitSource {
+    mode?: 'base' | 'expression' | 'custom';
+    /** For mode 'expression': which expression/pose to composite. */
+    expressionId?: VNID;
+    /** For mode 'expression': hide the base sprite so a full standalone pose shows alone. */
+    hideBase?: boolean;
+    /** For mode 'custom': the uploaded image (or video frame). */
+    customImage?: { type: 'image' | 'video'; id: VNID } | null;
+}
+
+/** A button in the in-game Phone's bottom bar (Chat / Contacts / Gallery / Map / Close …). Each is a
+ *  fully configurable button: a built-in library icon OR a custom image, plus any UI action. */
+export interface PhoneButtonConfig {
+    id: VNID;
+    label?: string;
+    /** Built-in icon id from the phone icon library (e.g. 'chat','contacts','gallery','map','close','phone'). */
+    builtinIcon?: string;
+    /** Custom icon image — overrides builtinIcon when set. */
+    iconImage?: { type: 'image' | 'video'; id: VNID } | null;
+    /** What clicking does — any UI action (e.g. ShowPhoneText to open chat, HidePhone to close). */
+    action?: VNUIAction;
+    /** Only shown when all conditions pass. */
+    conditions?: VNCondition[];
+    /** Visible in the bar. Default true (undefined = shown). */
+    show?: boolean;
+    /** Free-layout placement on the phone screen (percent of the screen area) — used when
+     *  `phoneButtonLayout: 'free'`. Ignored in the default bottom-bar layout. Additive-optional. */
+    x?: number; y?: number; width?: number; height?: number;
 }
 
 export interface VNProjectUI {
@@ -216,6 +250,100 @@ export interface VNProjectUI {
     // ─── Confirmation Dialogs ────────────────────────────────────────── //
     /** Settings for in-game confirmation popups (quit, new game, etc.) */
     confirmDialogs?: VNConfirmDialogSettings;
+
+    // ─── In-game Phone (built-in chrome; messaging) ──────────────────── //
+    /** Master on/off for the phone feature (shows the chrome + enables Phone commands/actions). */
+    phoneEnabled?: boolean;
+    /** Where the phone sits when open (used to derive x/y if not explicitly set). */
+    phonePosition?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'center';
+    phoneX?: number; phoneY?: number; phoneWidth?: number; phoneHeight?: number; // screen-percent
+    phoneScale?: number;            // overall size multiplier (%), default 100 — scales width+height together
+    phoneShellColor?: string;       // the casing/body color (frame around the screen)
+    phoneShellImage?: { type: 'image'; id: VNID } | null;
+    phoneBorderRadius?: number;
+    phoneOpacity?: number;          // 0-100
+    // Casing → screen separation (makes the inner screen look inset in the phone body)
+    phoneBezelWidth?: number;       // px gap between casing edge and screen (default 8)
+    phoneScreenColor?: string;      // inner screen background (default '#0b0d12')
+    phoneScreenBorderColor?: string;// thin border around the inner screen (default 'rgba(255,255,255,0.12)')
+    // Home button (decorative + closes the phone) on the bottom-center chin
+    phoneShowHomeButton?: boolean;  // default true
+    phoneHomeButtonColor?: string;  // default 'rgba(255,255,255,0.28)'
+    /** Keyboard key that toggles the phone open/closed (e.g. "p"). */
+    phoneOpenHotkey?: string;
+    /** What closing the phone (home button / Hide Phone action) does to the story: 'resume'/unset =
+     *  nothing (the player advances normally); 'advance' = step the scene forward one beat on close,
+     *  so reading + closing the phone continues the story without an extra click. Additive-optional. */
+    phoneOnCloseBehavior?: 'resume' | 'advance';
+    // Status / notification bar
+    phoneShowStatusBar?: boolean;
+    phoneStatusBarColor?: string;
+    phoneStatusIconColor?: string;
+    phoneClockText?: string;        // shown at left; supports {variable} interpolation (liveText)
+    phoneShowSignal?: boolean;
+    phoneSignalBars?: number;       // how many signal bars (default 4)
+    phoneSignalVariableId?: VNID;   // optional: drive how many bars are filled from a number variable (live → conditionals)
+    phoneSignalColor?: string;      // signal bars color (default = status icon color)
+    phoneShowBattery?: boolean;
+    phoneBatteryVariableId?: VNID;  // optional: drive the battery icon level from a number variable
+    phoneBatteryColor?: string;     // battery fill color (default = status icon color)
+    // Header + fonts
+    phoneHeaderText?: string;       // e.g. "MESSAGES"
+    phoneTitleFont?: VNFontSettings;
+    phoneFont?: VNFontSettings;     // chat/body font
+    // Chat bubbles
+    phoneIncomingBubbleColor?: string;
+    phoneOutgoingBubbleColor?: string;
+    phoneBubbleTextColor?: string;
+    phoneShowAvatars?: boolean;
+    // Bottom button bar
+    phoneButtons?: PhoneButtonConfig[];
+    /** App-button layout: 'bar' (default) = fixed bottom bar; 'free' = each button placed by its
+     *  own x/y on the phone screen (home-screen app icons the player can be given anywhere). */
+    phoneButtonLayout?: 'bar' | 'free';
+    phoneButtonBarColor?: string;
+    phoneButtonIconColor?: string;
+    phoneButtonActiveColor?: string;
+    // ─── Dynamic events: incoming-text banner, badge, typing dots, call screen, history (Track B/C/D/E) ─── //
+    // Incoming-text notification banner (non-blocking arrival)
+    phoneNotifPosition?: 'top' | 'bottom';     // where the banner slides in (default top)
+    phoneNotifColor?: string;                  // banner background
+    phoneNotifTextColor?: string;
+    phoneNotifFont?: VNFontSettings;
+    phoneNotifSoundId?: VNID | null;           // default ding when a text arrives
+    phoneNotifAutoMs?: number;                 // auto-dismiss after N ms (default 6000; 0 = stay)
+    phoneNotifX?: number; phoneNotifY?: number;// optional free banner position (screen-%); overrides the top/bottom preset
+    // Notification badge (on the dialogue box / phone HUD icon)
+    phoneBadgeColor?: string;                  // dot/badge color (default red)
+    phoneBadgeTextColor?: string;
+    phoneBadgeSize?: number;                   // px (default 14)
+    /** Badge appearance: 'dot' (plain), 'count' (unread number), 'ring' (hollow), 'square' (rounded
+     *  square), 'icon' (a glyph from phoneBadgeIcon), 'pulse' (dot with a pulsing halo). */
+    phoneBadgeShape?: 'dot' | 'count' | 'ring' | 'square' | 'icon' | 'pulse';
+    phoneBadgeIcon?: string;                   // built-in glyph id when shape='icon' (e.g. 'chat','phone')
+    phoneBadgeLabel?: string;                  // optional caption under the badge (e.g. "Messages", "Missed call")
+    phoneBadgeLabelColor?: string;
+    phoneBadgeX?: number; phoneBadgeY?: number;// screen-% position (default top-right area)
+    // Typing indicator
+    phoneTypingColor?: string;                 // dots color (default = incoming bubble)
+    // Incoming-call screen
+    phoneCallBgColor?: string;                 // call overlay background (default dark)
+    phoneCallBgImage?: { type: 'image'; id: VNID } | null;
+    phoneCallNameFont?: VNFontSettings;
+    phoneCallRingtoneId?: VNID | null;         // default ringtone (per-call / per-character override)
+    phoneCallAcceptColor?: string;             // accept button color (default green)
+    phoneCallAcceptLabel?: string;             // default "Accept"
+    phoneCallAcceptIcon?: string;              // built-in glyph id
+    phoneCallAcceptImage?: { type: 'image'; id: VNID } | null;
+    phoneCallDeclineColor?: string;            // decline button color (default red)
+    phoneCallDeclineLabel?: string;            // default "Decline"
+    phoneCallDeclineIcon?: string;
+    phoneCallDeclineImage?: { type: 'image'; id: VNID } | null;
+    phoneCallPortraitShape?: 'circle' | 'square';
+    // Recents / history view
+    phoneHistoryHeader?: string;               // default "Recents"
+    phoneHistoryRowColor?: string;
+    phoneHistoryTextColor?: string;
 }
 
 /**
@@ -310,7 +438,7 @@ export enum UIElementType {
     CGGallery = 'CGGallery',
     Inventory = 'Inventory',
     HotSpot = 'HotSpot',
-    ImageMap = 'ImageMap',
+    draggableImageElement = 'draggableImageElement',
     Meter = 'Meter',
 }
 
@@ -724,12 +852,12 @@ export interface UIHotSpotElement extends BaseUIElement {
 }
 
 /** Image map — an image with clickable polygon/rect/circle regions. */
-export interface UIImageMapElement extends BaseUIElement {
-    type: UIElementType.ImageMap;
+export interface UIdraggableImageElementElement extends BaseUIElement {
+    type: UIElementType.draggableImageElement;
     image: UIAsset | null;
     /** Optional alternate image rendered, clipped to the currently-hovered region (Ren'Py-style) */
     hoverImage?: UIAsset | null;
-    imageMapRegions?: ImageMapRegion[];
+    draggableImageElementRegions?: draggableImageElementRegion[];
 }
 
 /** A progress-bar bound to a number variable (stat vars included): affection meters, HP bars,
@@ -761,12 +889,40 @@ export interface UIMeterElement extends BaseUIElement {
     showValue?: boolean;
     valueFormat?: 'value' | 'valueMax' | 'percent';
     valueFont?: VNFontSettings;
+    /** Visual style of the meter. 'bar' (default) = the classic clip-path fill; 'battery' = a phone-
+     *  style battery (rounded body + terminal nub); 'segments' = N discrete cells; 'icons' = a symbol
+     *  repeated N times (e.g. a hearts lives system). Additive-optional; unset/'bar' renders byte-
+     *  identically to existing meters. */
+    style?: 'bar' | 'battery' | 'segments' | 'icons';
+    segmentCount?: number;   // for 'segments' (default 10)
+    segmentGap?: number;     // px between segments (default 2)
+    /** 'icons' style: repeat a symbol/image to make a lives/hearts display. */
+    iconImage?: UIAsset | null;        // the "full" symbol (e.g. a full heart)
+    iconEmptyImage?: UIAsset | null;   // optional empty/background symbol; absent → the full symbol dimmed
+    iconCount?: number;                // how many symbols to show (default 3)
+    iconStep?: 'full' | 'half' | 'quarter'; // smallest fill increment per symbol (default 'full')
+    iconSize?: number;                 // symbol size in px (default 24)
+    iconGap?: number;                  // px between symbols (default 4)
+    /** Resource animations. The LOW-state set plays continuously while fill ≤ lowThresholdPct; the
+     *  on-change animations play once when the value rises/falls. All optional → meters without them
+     *  render exactly as before. */
+    lowThresholdPct?: number;          // fill % at/below which the meter is "low" (default 25)
+    lowAnimations?: Array<'shake' | 'pulse' | 'flash' | 'wave'>; // combine any
+    lowFlashColor?: string;            // color for the 'flash' low effect (default red)
+    changeAnimationUp?: 'none' | 'pop' | 'flash' | 'shake' | 'wave';   // when the value increases
+    changeAnimationDown?: 'none' | 'pop' | 'flash' | 'shake' | 'wave'; // when the value decreases
+    changeFlashColorUp?: string;       // flash color for an increase (default green)
+    changeFlashColorDown?: string;     // flash color for a decrease (default red)
+    /** Alignment of the content inside the element's bounding box. Most useful for the 'icons' style so
+     *  hearts can sit centered and don't clip the edges; default left/top. */
+    alignX?: 'left' | 'center' | 'right';
+    alignY?: 'top' | 'center' | 'bottom';
 }
 
 export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
     | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIInventoryGridElement
-    | UIHotSpotElement | UIImageMapElement | UIMeterElement;
+    | UIHotSpotElement | UIdraggableImageElementElement | UIMeterElement;
 
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
 export interface VNScreenBackgroundLayer {
@@ -838,6 +994,12 @@ export interface VNUIScreen {
      *  skip, and manual advance are all suspended (the scene stays visible but paused) until the
      *  overlay closes. Default (unset) = the scene keeps running behind it. Additive-optional. */
     pauseSceneWhileOpen?: boolean;
+    /** When true, the `Show Screen` COMMAND shows this screen as a non-blocking HUD overlay: the
+     *  story keeps playing (the command advances immediately, parallel events keep running, and
+     *  closing it does NOT advance the scene). Default (unset) = modal — `Show Screen` pauses the
+     *  scene on this command until the screen is closed (today's behavior, so old projects are
+     *  unchanged). Use for HP bars / status overlays that update as the game runs. Additive-optional. */
+    hudNonBlocking?: boolean;
     /** When true (default for new screens), opening this screen clears any runtime Show/Hide-Element
      *  overrides for its elements, so `startHidden` pages reset to their defaults each time it opens
      *  (a re-opened document starts on page 1). Set false to make reveals cumulative/persistent
@@ -894,7 +1056,7 @@ export interface VNHotSpot {
     visible?: boolean; // Whether to show the spot visually (default false)
 }
 
-export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput' | 'imageMap';
+export type HotZoneElementType = 'image' | 'text' | 'button' | 'video' | 'textInput' | 'draggableImageElement';
 
 export interface VNHotZoneElement {
     id: VNID;
@@ -930,8 +1092,8 @@ export interface VNHotZoneElement {
     actions?: VNUIAction[]; // Actions on click (when not dragging)
     clickSoundId?: VNID | null;
     hoverSoundId?: VNID | null;
-    hoverImageId?: VNID; // Hover state image (for imageMap type, Ren'Py-style)
-    imageMapRegions?: ImageMapRegion[]; // Clickable regions (for imageMap type)
+    hoverImageId?: VNID; // Hover state image (for draggableImageElement type, Ren'Py-style)
+    draggableImageElementRegions?: draggableImageElementRegion[]; // Clickable regions (for draggableImageElement type)
 }
 
 export interface VNHotZoneWinCondition {

@@ -25,7 +25,7 @@ const rid = () => Math.random().toString(36).substring(2, 9);
 
 const MODE_LABELS: Record<InteractionMode, string> = {
     buttonGrid: 'Button grid — cards with click buttons',
-    imageMap: 'Image map — clickable regions over one artwork',
+    draggableImageElement: 'Image map — clickable regions over one artwork',
     dragDrop: 'Drag & drop — drag items onto a target',
 };
 
@@ -65,7 +65,7 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
     const handleGenerate = () => {
         const result: SystemWizardResult = {
             kind, screenName, backgroundColor, mode, columns,
-            boardImageAssetId: (mode === 'imageMap' || mode === 'dragDrop') ? boardImageAssetId : null,
+            boardImageAssetId: (mode === 'draggableImageElement' || mode === 'dragDrop') ? boardImageAssetId : null,
             hideUnowned: !isShop ? hideUnowned : undefined,
             inventoryOutput: !isShop ? inventoryOutput : undefined,
             currency: isShop ? { name: currencyName, icon: currencyIcon, startAmount } : undefined,
@@ -117,8 +117,8 @@ const SystemWizard: React.FC<Props> = ({ isOpen, kind, project, onClose, onGener
                     <ColorInput value={backgroundColor} onChange={v => setBackgroundColor(v)} /></label>
             </div>
 
-            {(mode === 'imageMap' || mode === 'dragDrop') && (
-                <AssetSelector label={mode === 'imageMap' ? 'Board artwork (regions overlay this)' : 'Board artwork (optional backdrop)'} assetType="images" value={boardImageAssetId} onChange={setBoardImageAssetId} />
+            {(mode === 'draggableImageElement' || mode === 'dragDrop') && (
+                <AssetSelector label={mode === 'draggableImageElement' ? 'Board artwork (regions overlay this)' : 'Board artwork (optional backdrop)'} assetType="images" value={boardImageAssetId} onChange={setBoardImageAssetId} />
             )}
 
             {!isShop && (

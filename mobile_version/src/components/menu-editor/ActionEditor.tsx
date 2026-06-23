@@ -26,6 +26,7 @@ const MENU_ACTION_TYPES: UIActionType[] = [
     UIActionType.BuyItem, UIActionType.SellItem, UIActionType.BuySelectedItem, UIActionType.SellSelectedItem,
     UIActionType.ShowLog, UIActionType.ToggleAutoAdvance, UIActionType.ToggleSkip, UIActionType.SkipBackward,
     UIActionType.OpenPauseMenu,
+    UIActionType.ShowPhone, UIActionType.HidePhone, UIActionType.ShowPhoneText, UIActionType.HidePhoneText, UIActionType.ShowPhoneHistory,
 ];
 
 const ActionEditor: React.FC<{

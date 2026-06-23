@@ -443,7 +443,7 @@
     "pickUpOnce": "记住（只拾取一次）",
     "pickUpOnceHint": "一旦拾取，玩家再次访问此场景时它不会重新出现，且拾取会被保存。关闭以使拾取物可重生。"
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "图像映射背景",
     "hoverStateImage": "悬停状态图像",
     "hoverStateHint": "当悬停于某区域时，此图像会被裁剪显示在该区域（Ren'Py 风格的悬停效果）。",
@@ -479,9 +479,9 @@
     "addAction": "+ 添加动作",
     "regionConditions": "区域条件",
     "regionConditionsHint": "仅在满足条件时区域才处于活动状态。",
-    "targetImageMap": "要隐藏的目标图像映射",
-    "selectImageMap": "选择图像映射……",
-    "imageMapOption": "图像映射（{{count}} 个区域）（ID：{{id}}）"
+    "targetdraggableImageElement": "要隐藏的目标图像映射",
+    "selectdraggableImageElement": "选择图像映射……",
+    "draggableImageElementOption": "图像映射（{{count}} 个区域）（ID：{{id}}）"
   },
   "credit": {
     "entries": "字幕条目",
@@ -628,7 +628,7 @@
     "typeImage": "图像叠加",
     "typeText": "文本叠加",
     "typeButton": "按钮叠加",
-    "typeImageMap": "图像映射",
+    "typedraggableImageElement": "图像映射",
     "typeMovie": "视频（播放视频）",
     "typeScreen": "屏幕",
     "targetId": "目标 ID",
@@ -658,7 +658,7 @@
     "panY": "平移 Y (%)",
     "screen": "屏幕",
     "imageLabel": "图像（{{id}}…）",
-    "imageMapLabel": "图像映射（{{id}}…）"
+    "draggableImageElementLabel": "图像映射（{{id}}…）"
   },
   "hotspot": {
     "name": "名称",

@@ -21,7 +21,42 @@ export type ProgressCallback = (progress: BuildProgress) => void;
  * Fetches a URL and returns it as a base64 data URL.
  * Works for both relative file paths and absolute URLs.
  */
+// ext → mime for reconstructing a data: URL from raw file bytes.
+function extToMime(ext: string): string {
+  const e = ext.toLowerCase();
+  const map: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp',
+    mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime', m4v: 'video/x-m4v',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
+    ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+  };
+  return map[e] || 'application/octet-stream';
+}
+
+function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+  }
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
 async function fetchAsDataURL(url: string): Promise<string> {
+  // Managed file-backed assets: read via the IPC bridge (a cross-origin fetch() of flourish-asset://
+  // from the editor page is CORS-blocked, which would silently leave the URL unresolved in builds).
+  if (url.startsWith('flourish-asset:')) {
+    const api = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (api?.readProjectAsset) {
+      try {
+        const u = new URL(url);
+        const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+        const res = await api.readProjectAsset(u.hostname, rel);
+        if (res?.success) return bytesToDataUrl(new Uint8Array(res.data), extToMime(rel.split('.').pop() || 'bin'));
+      } catch (e) { console.warn(`Failed to read managed asset: ${url}`, e); }
+    }
+    return url;
+  }
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -51,7 +86,8 @@ export async function resolveProjectAssets(
   const resolved: VNProject = JSON.parse(JSON.stringify(project));
 
   const isFilePath = (url: string | undefined | null): url is string =>
-    !!url && !url.startsWith('data:') && !url.startsWith('blob:') && !url.startsWith('http') && url.length > 0;
+    !!url && !url.startsWith('data:') && !url.startsWith('blob:') && !url.startsWith('http')
+    && !url.startsWith('assets/') /* already a bundled relative path (managed assets) */ && url.length > 0;
 
   // Collect all URL fields that need resolving
   const tasks: { obj: any; key: string; url: string }[] = [];
@@ -123,6 +159,51 @@ export async function resolveProjectAssets(
 }
 
 /**
+ * Stream every file-backed asset (flourish-asset:// URL) straight from the managed store into the
+ * build via `addFile(relPath, bytes)`, and rewrite each field to its relative `assets/…` path. This
+ * bundles them WITHOUT re-inlining to base64 — so even multi-GB projects build without blowing memory,
+ * and EVERY asset (images, video, audio, character sprites, custom TTF/OTF fonts, …) is accounted for.
+ * Returns the rewritten project (refs → relative paths). No-op without the desktop store.
+ */
+export async function streamManagedAssets(
+  project: VNProject,
+  addFile: (relPath: string, bytes: Uint8Array) => void,
+): Promise<VNProject> {
+  const api = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+  if (!api?.readProjectAsset) return project;
+  const clone: VNProject = JSON.parse(JSON.stringify(project)); // small — fields are refs, not bytes
+  const written = new Set<string>();
+  const handle = async (val: string): Promise<string> => {
+    if (!val.startsWith('flourish-asset:')) return val;
+    try {
+      const u = new URL(val);
+      const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+      if (!written.has(rel)) {
+        const res = await api.readProjectAsset(u.hostname, rel);
+        if (res?.success) { addFile(rel, new Uint8Array(res.data)); written.add(rel); }
+        else { console.warn('streamManagedAssets: missing', val); return val; }
+      }
+      return rel; // relative path the game loads from its assets/ folder
+    } catch (e) { console.warn('streamManagedAssets failed', val, e); return val; }
+  };
+  const walk = async (node: any): Promise<void> => {
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i++) {
+        if (typeof node[i] === 'string') node[i] = await handle(node[i]);
+        else if (node[i] && typeof node[i] === 'object') await walk(node[i]);
+      }
+    } else if (node && typeof node === 'object') {
+      for (const k in node) {
+        if (typeof node[k] === 'string') node[k] = await handle(node[k]);
+        else if (node[k] && typeof node[k] === 'object') await walk(node[k]);
+      }
+    }
+  };
+  await walk(clone);
+  return clone;
+}
+
+/**
  * Bundles the entire game into a single downloadable ZIP file
  * that can be uploaded directly to itch.io or any web host
  */
@@ -132,8 +213,12 @@ export async function buildStandaloneGame(
 ): Promise<Blob> {
   const zip = new JSZip();
 
-  // Step 0: Resolve any file-path assets to data URLs (5-10%)
-  const resolvedProject = await resolveProjectAssets(project, onProgress);
+  // Step 0a: Stream file-backed (flourish-asset://) media straight into the zip's assets/ folder
+  // (no base64 re-inline → handles huge projects + guarantees every asset incl. fonts is bundled).
+  const streamedProject = await streamManagedAssets(project, (rel, bytes) => { zip.file(rel, bytes); });
+
+  // Step 0b: Resolve any remaining file-path / base64 assets to data URLs (5-10%)
+  const resolvedProject = await resolveProjectAssets(streamedProject, onProgress);
 
   // Step 1: Prepare project data (10%)
   onProgress?.({
@@ -1081,7 +1166,7 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
     });
 
     // Post-unification: walk `screen.elements` for the asset references that
-    // used to live on `hotZoneElements` / `hotSpots`. UIImageMapElement gets
+    // used to live on `hotZoneElements` / `hotSpots`. UIdraggableImageElementElement gets
     // its image / hoverImage / per-region actions; UIHotSpotElement gets its
     // actions; any element with clickSoundId / hoverSoundId gets those.
     Object.values(screen.elements || {}).forEach((element: any) => {
@@ -1093,7 +1178,7 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
         const audio = project.audio?.[element.hoverSoundId];
         if (audio) addAsset(audio.audioUrl, 'audio');
       }
-      if (element.type === 'ImageMap') {
+      if (element.type === 'draggableImageElement') {
         if (element.image?.id) {
           const img = project.images?.[element.image.id];
           if (img) addAsset(img.imageUrl, 'ui');
@@ -1120,7 +1205,7 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
       if (Array.isArray(element.actions)) collectActionAssets(element.actions);
     });
     // Legacy hot zone action collection (see note above). Unified actions on
-    // the migrated typed elements (HotSpot, ImageMap, draggable images) are
+    // the migrated typed elements (HotSpot, draggableImageElement, draggable images) are
     // already picked up by the standard `screen.elements` walk a few lines up.
     Object.values((screen as any).hotZoneElements || {}).forEach((el: any) => {
       if (Array.isArray(el.actions)) collectActionAssets(el.actions);
@@ -1128,10 +1213,10 @@ export function collectAllAssets(project: VNProject): Record<string, string> {
     Object.values((screen as any).hotSpots || {}).forEach((spot: any) => {
       if (Array.isArray(spot.actions)) collectActionAssets(spot.actions);
     });
-    // Image-map region actions (for migrated UIImageMapElement entries)
+    // Image-map region actions (for migrated UIdraggableImageElementElement entries)
     Object.values(screen.elements || {}).forEach((element: any) => {
-      if (element.type === 'ImageMap' && Array.isArray(element.imageMapRegions)) {
-        for (const region of element.imageMapRegions) {
+      if (element.type === 'draggableImageElement' && Array.isArray(element.draggableImageElementRegions)) {
+        for (const region of element.draggableImageElementRegions) {
           if (Array.isArray(region.actions)) collectActionAssets(region.actions);
         }
       }

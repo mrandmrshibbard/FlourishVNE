@@ -11,7 +11,8 @@ import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { RangeInput, ColorInput } from './ui/Form';
 import { CollapsibleSection } from './ui/CollapsibleSection';
 import { VNProject } from '../types/project';
-import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantStyle, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton } from '../features/ui/types';
+import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantStyle, QuickMenuButtonKey, QuickMenuButtonConfig, QuickMenuCustomButton, PhoneButtonConfig } from '../features/ui/types';
+import { PHONE_GLYPHS, PHONE_ICON_KEYS } from '../features/ui/phoneIcons';
 import { VNID } from '../types';
 import { useProject } from '../contexts/ProjectContext';
 import FontEditor, { defaultFontSettings } from './ui/FontEditor';
@@ -26,7 +27,7 @@ import ActionEditor from './menu-editor/ActionEditor';
 import { UIActionType, VNUIAction } from '../types/shared';
 import {
     ChatBubbleIcon, BookmarkSquareIcon, SparklesIcon, PencilIcon,
-    ChevronDownIcon, QuestionMarkIcon,
+    ChevronDownIcon, QuestionMarkIcon, TrashIcon, PlusIcon,
 } from './icons';
 
 /* ------------------------------------------------------------------ */
@@ -40,6 +41,7 @@ export type InGameUIElement =
     | 'inputBox'
     | 'quickMenu'
     | 'confirmDialogs'
+    | 'phone'
     | 'textboxThemes';
 
 interface ElementConfig {
@@ -56,6 +58,7 @@ const ELEMENTS: ElementConfig[] = [
     { id: 'inputBox',      label: 'Text Input',      icon: <PencilIcon className="w-4 h-4" />,           description: 'Player text input prompt box' },
     { id: 'quickMenu',     label: 'Quick Menu',      icon: <ChevronDownIcon className="w-4 h-4" />,      description: 'Skip, Auto, Log, Back buttons' },
     { id: 'confirmDialogs', label: 'Confirm Dialogs', icon: <QuestionMarkIcon className="w-4 h-4" />, description: 'Quit & New Game confirmation popups' },
+    { id: 'phone', label: 'Phone', icon: <ChatBubbleIcon className="w-4 h-4" />, description: 'In-game cellphone & messaging' },
     { id: 'textboxThemes', label: 'Textbox Themes', icon: <BookmarkSquareIcon className="w-4 h-4" />, description: 'Reusable per-character dialogue box designs' },
 ];
 
@@ -161,6 +164,31 @@ function getInputRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
     const x = ui.inputBoxX ?? (50 - w / 2);
     const y = ui.inputBoxY ?? 40;
     return { x, y, width: w, height: h };
+}
+
+function getPhoneRect(ui: VNProjectUI, _gameW = 1920, _gameH = 1080) {
+    const scale = (ui.phoneScale ?? 100) / 100;
+    const w = (ui.phoneWidth ?? 26) * scale;
+    const h = (ui.phoneHeight ?? 82) * scale;
+    const pos = ui.phonePosition || 'bottom-right';
+    const x = ui.phoneX ?? (pos === 'center' ? (100 - w) / 2 : pos.includes('right') ? (100 - w - 2) : 2);
+    const y = ui.phoneY ?? (pos === 'center' ? (100 - h) / 2 : pos.includes('top') ? 2 : (100 - h - 2));
+    return { x, y, width: w, height: h };
+}
+
+/** Canvas-% rects for each visible free-layout phone app button (phone rect + button%). */
+function getPhoneButtonRects(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
+    const phone = getPhoneRect(ui, gameW, gameH);
+    return (ui.phoneButtons || []).filter(b => b.show !== false).map(b => ({
+        id: b.id,
+        label: b.label,
+        rect: {
+            x: phone.x + ((b.x ?? 8) / 100) * phone.width,
+            y: phone.y + ((b.y ?? 12) / 100) * phone.height,
+            width: ((b.width ?? 22) / 100) * phone.width,
+            height: ((b.height ?? 16) / 100) * phone.height,
+        },
+    }));
 }
 
 function getQuickMenuRect(ui: VNProjectUI, gameW = 1920, gameH = 1080) {
@@ -541,6 +569,160 @@ const CONFIRM_TEXT_DEFAULTS: Record<ConfirmVariant, { title: string; message: st
 };
 const confirmVariantLabel = (v: ConfirmVariant, t: any): string =>
     v === 'quit' ? t('inGameUi.quitConfirmation') : v === 'newGame' ? t('inGameUi.newGameConfirmation') : t('inGameUi.eraseSaveConfirmation', 'Erase Save');
+
+/** Live canvas preview of the themed in-game phone (static sample). Mirrors the runtime PhonePanel.
+ *  Rendered inside a ResizableDraggable (which owns position + size + scale), so it just fills its
+ *  parent — every change to project.ui.phone* re-renders it live. */
+const PhonePreview: React.FC<{ ui: VNProjectUI; project: VNProject; hideFreeButtons?: boolean }> = ({ ui, project, hideFreeButtons }) => {
+    const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
+    const url = (a?: { id: string } | null) => a?.id ? (allAssets[a.id]?.imageUrl || null) : null;
+    const shellImg = url(ui.phoneShellImage as any);
+    const sample = (Object.values(project.characters) as any[])[0];
+    const buttons = (ui.phoneButtons || []).filter(b => b.show !== false);
+    const bezel = ui.phoneBezelWidth ?? 8;
+    const casingRadius = ui.phoneBorderRadius ?? 28;
+    const screenRadius = Math.max(casingRadius - bezel, 6);
+    const showHome = ui.phoneShowHomeButton !== false;
+    // Chat bubble font size honors the configured phone font size (scaled to the preview), so size
+    // changes reflect on the canvas instead of being pinned to a hardcoded value.
+    const chatFontPx = ui.phoneFont?.fontSize ?? 12;
+    const chatFontSize = `calc(var(--font-scale,1) * ${chatFontPx}px)`;
+    return (
+        <div style={{
+            position: 'relative', width: '100%', height: '100%', pointerEvents: 'none',
+            borderRadius: `calc(var(--font-scale,1) * ${casingRadius}px)`, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
+            padding: `calc(var(--font-scale,1) * ${bezel}px)`,
+            background: shellImg ? `url(${shellImg}) center / 100% 100% no-repeat` : (ui.phoneShellColor || '#16181d'),
+            opacity: (ui.phoneOpacity ?? 100) / 100, boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+        }}>
+        <div style={{
+            flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative',
+            borderRadius: `calc(var(--font-scale,1) * ${screenRadius}px)`, border: `1px solid ${ui.phoneScreenBorderColor || 'rgba(255,255,255,0.12)'}`,
+            background: ui.phoneScreenColor || '#0b0d12', ...(ui.phoneFont ? fontToStyle(ui.phoneFont) : {}),
+        }}>
+            {ui.phoneShowStatusBar !== false && (() => {
+                const sBars = Math.max(1, Math.min(8, ui.phoneSignalBars ?? 4));
+                const sColor = ui.phoneSignalColor || ui.phoneStatusIconColor || '#fff';
+                const bColor = ui.phoneBatteryColor || ui.phoneStatusIconColor || '#fff';
+                return (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', fontSize: 'calc(var(--font-scale,1) * 11px)', color: ui.phoneStatusIconColor || '#fff', background: ui.phoneStatusBarColor || 'transparent' }}>
+                    <span>{ui.phoneClockText || '08:30'}</span>
+                    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {ui.phoneShowSignal && (
+                            <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '0.1em', height: '0.85em' }}>
+                                {Array.from({ length: sBars }).map((_, i) => <span key={i} style={{ width: '0.18em', height: `${30 + (i / (sBars - 1 || 1)) * 70}%`, borderRadius: 1, background: sColor }} />)}
+                            </span>
+                        )}
+                        {ui.phoneShowBattery && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                                <span style={{ display: 'inline-block', width: '1.5em', height: '0.8em', border: `1px solid ${ui.phoneStatusIconColor || '#fff'}`, borderRadius: 2, position: 'relative' }}>
+                                    <span style={{ position: 'absolute', top: 1, bottom: 1, left: 1, right: '35%', background: bColor, borderRadius: 1 }} />
+                                </span>
+                                <span style={{ display: 'inline-block', width: 2, height: '0.45em', background: ui.phoneStatusIconColor || '#fff', borderRadius: '0 1px 1px 0' }} />
+                            </span>
+                        )}
+                    </span>
+                </div>
+                );
+            })()}
+            {ui.phoneHeaderText && <div style={{ padding: '2px 14px', ...(ui.phoneTitleFont ? fontToStyle(ui.phoneTitleFont) : { fontWeight: 700, color: '#fff' }) }}>{ui.phoneHeaderText}</div>}
+            <div style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                    {ui.phoneShowAvatars !== false && sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: '2em', height: '2em', borderRadius: '9999px', objectFit: 'cover' }} />}
+                    <div style={{ padding: '6px 10px', borderRadius: 14, fontSize: chatFontSize, background: ui.phoneIncomingBubbleColor || '#2a2f3a', color: ui.phoneBubbleTextColor || '#fff' }}>alo tudo bom, onde vc esta?</div>
+                </div>
+                <div style={{ alignSelf: 'flex-end', padding: '6px 10px', borderRadius: 14, fontSize: chatFontSize, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>a caminho!</div>
+            </div>
+            {!hideFreeButtons && ui.phoneButtonLayout === 'free' && buttons.map(b => { const ci = url(b.iconImage as any); return (
+                <div key={b.id} style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4cqmin', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
+                    {ci ? <img src={ci} alt="" style={{ width: '64cqmin', height: '64cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '58cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
+                    {b.label && <span style={{ fontSize: '20cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{b.label}</span>}
+                </div>
+            ); })}
+            {ui.phoneButtonLayout !== 'free' && buttons.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px', background: ui.phoneButtonBarColor || 'rgba(0,0,0,0.35)' }}>
+                    {buttons.map(b => { const ci = url(b.iconImage as any); return (
+                        <div key={b.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: 'calc(var(--font-scale,1) * 9px)' }}>
+                            {ci ? <img src={ci} alt="" style={{ width: '1.4em', height: '1.4em', objectFit: 'contain' }} /> : <span style={{ fontSize: 'calc(var(--font-scale,1) * 16px)' }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
+                            {b.label && <span>{b.label}</span>}
+                        </div>
+                    ); })}
+                </div>
+            )}
+        </div>
+        {showHome && (
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: `calc(var(--font-scale,1) * ${bezel * 0.6}px)` }}>
+                <div style={{ width: 'calc(var(--font-scale,1) * 18px)', height: 'calc(var(--font-scale,1) * 18px)', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}` }} />
+            </div>
+        )}
+        </div>
+    );
+};
+
+/** Canvas preview of the incoming-text notification banner (mirrors the runtime banner). `fill`
+ *  fills its parent (used inside a draggable); otherwise it positions itself like the runtime. */
+const PhoneBannerPreview: React.FC<{ ui: VNProjectUI; project: VNProject; fill?: boolean }> = ({ ui, project, fill }) => {
+    const sample = (Object.values(project.characters) as any[])[0];
+    const atTop = (ui.phoneNotifPosition || 'top') === 'top';
+    const posStyle: React.CSSProperties = fill
+        ? { position: 'relative', width: '100%', height: '100%' }
+        : { position: 'absolute', left: '50%', transform: 'translateX(-50%)', [atTop ? 'top' : 'bottom']: '4%', width: '60%' } as React.CSSProperties;
+    return (
+        <div style={{ ...posStyle, display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 14, pointerEvents: 'none', boxSizing: 'border-box', background: ui.phoneNotifColor || '#12141a', color: ui.phoneNotifTextColor || '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.5)', ...(ui.phoneNotifFont ? fontToStyle(ui.phoneNotifFont) : {}) }}>
+            {sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: '2.4em', height: '2.4em', borderRadius: '9999px', objectFit: 'cover' }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9em' }}>{sample?.name || 'Marte'}</div>
+                <div style={{ fontSize: '0.85em', opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>alo tudo bom, onde vc esta?</div>
+            </div>
+            <span style={{ fontSize: '1.2em' }}>💬</span>
+        </div>
+    );
+};
+
+/** Canvas preview of the unread badge styled per phoneBadgeShape. `fill` centers it in its parent
+ *  (used inside a draggable); otherwise it positions itself at the configured x/y. */
+const PhoneBadgePreview: React.FC<{ ui: VNProjectUI; fill?: boolean }> = ({ ui, fill }) => {
+    const size = ui.phoneBadgeSize ?? 16;
+    const shape = ui.phoneBadgeShape || 'dot';
+    const color = ui.phoneBadgeColor || '#ef4444';
+    const textColor = ui.phoneBadgeTextColor || '#fff';
+    const isCount = shape === 'count';
+    const isIcon = shape === 'icon';
+    const inner: React.CSSProperties = {
+        minWidth: size, width: shape === 'count' ? undefined : size, height: size, padding: isCount ? '0 5px' : 0,
+        borderRadius: shape === 'square' ? Math.max(3, size * 0.25) : '9999px',
+        background: shape === 'ring' ? 'transparent' : color,
+        border: shape === 'ring' ? `${Math.max(2, size * 0.18)}px solid ${color}` : undefined,
+        color: textColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * (isIcon ? 0.62 : 0.7), fontWeight: 700, boxShadow: shape === 'ring' ? 'none' : '0 2px 8px rgba(0,0,0,0.4)',
+    };
+    const content = isCount ? '1' : isIcon ? ((ui.phoneBadgeIcon && PHONE_GLYPHS[ui.phoneBadgeIcon]) || '💬') : '';
+    const wrap: React.CSSProperties = fill
+        ? { position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, pointerEvents: 'none' }
+        : { position: 'absolute', left: `${ui.phoneBadgeX ?? 95}%`, top: `${ui.phoneBadgeY ?? 4}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pointerEvents: 'none' };
+    return <div style={wrap}><div style={inner}>{content}</div>{ui.phoneBadgeLabel && <div style={{ fontSize: Math.max(9, size * 0.62), fontWeight: 600, color: ui.phoneBadgeLabelColor || textColor, whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{ui.phoneBadgeLabel}</div>}</div>;
+};
+
+/** Canvas preview of the full-screen incoming-call screen (mirrors the runtime modal call). */
+const PhoneCallPreview: React.FC<{ ui: VNProjectUI; project: VNProject }> = ({ ui, project }) => {
+    const sample = (Object.values(project.characters) as any[])[0];
+    const allAssets = { ...project.images, ...project.backgrounds } as Record<string, any>;
+    const bgImg = ui.phoneCallBgImage?.id ? (allAssets[ui.phoneCallBgImage.id]?.imageUrl || null) : null;
+    const shape = ui.phoneCallPortraitShape || 'circle';
+    const circle = (color: string) => ({ width: '3em', height: '3em', borderRadius: '9999px', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' } as React.CSSProperties);
+    return (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, pointerEvents: 'none', color: '#fff', background: bgImg ? `url(${bgImg}) center/cover no-repeat` : (ui.phoneCallBgColor || 'rgba(8,10,14,0.96)') }}>
+            <div style={{ width: '20%', aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
+                {sample?.baseImageUrl && <img src={sample.baseImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            </div>
+            <div style={{ ...(ui.phoneCallNameFont ? fontToStyle(ui.phoneCallNameFont) : { fontSize: '1.5em', fontWeight: 700 }) }}>{sample?.name || 'Marte'}</div>
+            <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Incoming call…</div>
+            <div style={{ display: 'flex', gap: 48 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><span style={circle(ui.phoneCallDeclineColor || '#ef4444')}>{(ui.phoneCallDeclineIcon && PHONE_GLYPHS[ui.phoneCallDeclineIcon]) || '⊘'}</span><span style={{ fontSize: '0.8em' }}>{ui.phoneCallDeclineLabel || 'Decline'}</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><span style={circle(ui.phoneCallAcceptColor || '#22c55e')}>{(ui.phoneCallAcceptIcon && PHONE_GLYPHS[ui.phoneCallAcceptIcon]) || '📞'}</span><span style={{ fontSize: '0.8em' }}>{ui.phoneCallAcceptLabel || 'Accept'}</span></div>
+            </div>
+        </div>
+    );
+};
 
 const ConfirmDialogPreview: React.FC<{ ui: VNProjectUI; project: VNProject; variant?: ConfirmVariant }> = ({ ui, project, variant = 'quit' }) => {
     const { t } = useTranslation('ui');
@@ -1333,6 +1515,301 @@ const InGameUIPropsEditor: React.FC<PropsEditorProps> = ({ ui, element, project,
         );
     }
 
+    /* Phone properties */
+    if (element === 'phone') {
+        const numberVars = Object.values(project.variables).filter((v: any) => v.type === 'number');
+        const buttons = ui.phoneButtons || [];
+        const updateBtn = (i: number, patch: Partial<PhoneButtonConfig>) => onUpdate({ phoneButtons: buttons.map((b, idx) => idx === i ? { ...b, ...patch } : b) });
+        const addBtn = () => onUpdate({ phoneButtons: [...buttons, { id: `pb-${Math.random().toString(36).slice(2, 9)}`, label: '', builtinIcon: 'chat', action: { type: UIActionType.ShowPhoneText } as VNUIAction }] });
+        const removeBtn = (i: number) => onUpdate({ phoneButtons: buttons.filter((_, idx) => idx !== i) });
+        return (
+            <div className="p-3 space-y-2">
+                <h4 className="text-sm font-bold text-white border-b border-[var(--border-subtle)] pb-1 mb-1">Phone</h4>
+                <p className="text-[10px] text-[var(--text-muted)]">In-game cellphone + messaging. It appears whenever it's opened — by the hotkey below, a Phone command (Show/Hide Phone, Show/Hide Text), or any button's phone action. Theme it here; no separate enable switch needed.</p>
+
+                <CollapsibleSection title="Shell & position" defaultOpen>
+                    <div className="space-y-2">
+                        <Field label="Position">
+                            <select className={inputCls} value={ui.phonePosition || 'bottom-right'} onChange={e => onUpdate({ phonePosition: e.target.value as any })}>
+                                <option value="bottom-right">Bottom right</option>
+                                <option value="bottom-left">Bottom left</option>
+                                <option value="top-right">Top right</option>
+                                <option value="top-left">Top left</option>
+                                <option value="center">Center</option>
+                            </select>
+                        </Field>
+                        <Field label="Scale">
+                            <div className="flex items-center gap-2">
+                                <RangeInput min={30} max={200} value={ui.phoneScale ?? 100} onChange={e => onUpdate({ phoneScale: parseInt(e.target.value) })} className="flex-1 accent-sky-500" />
+                                <span className="text-xs text-[var(--text-secondary)] w-10 text-right">{ui.phoneScale ?? 100}%</span>
+                            </div>
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label="Width (%)" value={ui.phoneWidth} fallback={26} min={10} max={100} onChange={v => onUpdate({ phoneWidth: v })} />
+                            <NumInput label="Height (%)" value={ui.phoneHeight} fallback={82} min={20} max={100} onChange={v => onUpdate({ phoneHeight: v })} />
+                            <NumInput label="X (%)" value={ui.phoneX} fallback={72} min={0} max={100} onChange={v => onUpdate({ phoneX: v })} />
+                            <NumInput label="Y (%)" value={ui.phoneY} fallback={16} min={0} max={100} onChange={v => onUpdate({ phoneY: v })} />
+                        </div>
+                        <ColorField label="Shell color" value={ui.phoneShellColor ?? '#0b0d12'} onChange={v => onUpdate({ phoneShellColor: v })} />
+                        <Field label="Shell image">
+                            <select className={inputCls} value={ui.phoneShellImage?.id || ''} onChange={e => onUpdate({ phoneShellImage: e.target.value ? { type: 'image', id: e.target.value as VNID } : null })}>
+                                <option value="">None (solid color)</option>
+                                {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                            </select>
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label="Corner radius" value={ui.phoneBorderRadius} fallback={28} min={0} max={80} onChange={v => onUpdate({ phoneBorderRadius: v })} />
+                            <OpacityField label="Opacity" value={ui.phoneOpacity ?? 100} onChange={v => onUpdate({ phoneOpacity: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumInput label="Bezel width (px)" value={ui.phoneBezelWidth} fallback={8} min={0} max={40} onChange={v => onUpdate({ phoneBezelWidth: v })} />
+                            <ColorField label="Screen color" value={ui.phoneScreenColor ?? '#0b0d12'} onChange={v => onUpdate({ phoneScreenColor: v })} />
+                        </div>
+                        <ColorField label="Screen border" value={ui.phoneScreenBorderColor ?? '#ffffff1f'} onChange={v => onUpdate({ phoneScreenBorderColor: v })} />
+                        <Field label="Home button">
+                            <input type="checkbox" checked={ui.phoneShowHomeButton !== false} onChange={e => onUpdate({ phoneShowHomeButton: e.target.checked })} className="cursor-pointer" />
+                            <span className="text-xs text-[var(--text-secondary)] ml-2">A round button on the chin (also closes the phone).</span>
+                        </Field>
+                        {ui.phoneShowHomeButton !== false && (
+                            <ColorField label="Home button color" value={ui.phoneHomeButtonColor ?? '#ffffff47'} onChange={v => onUpdate({ phoneHomeButtonColor: v })} />
+                        )}
+                        <Field label="Open hotkey">
+                            <input className={inputCls} maxLength={1} value={ui.phoneOpenHotkey ?? ''} placeholder="e.g. p" onChange={e => onUpdate({ phoneOpenHotkey: e.target.value || undefined })} />
+                        </Field>
+                        <Field label="On close">
+                            <select className={inputCls} value={ui.phoneOnCloseBehavior || 'resume'} onChange={e => onUpdate({ phoneOnCloseBehavior: e.target.value === 'resume' ? undefined : e.target.value as any })}>
+                                <option value="resume">Do nothing (player advances)</option>
+                                <option value="advance">Advance the story one step</option>
+                            </select>
+                        </Field>
+                        <p className="text-[10px] text-[var(--text-muted)] -mt-1">Choose what happens when the player closes the phone (home button / Hide Phone). "Advance" continues the scene so they don't need an extra click.</p>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Status bar">
+                    <div className="space-y-2">
+                        <Field label="Show status bar">
+                            <input type="checkbox" checked={ui.phoneShowStatusBar !== false} onChange={e => onUpdate({ phoneShowStatusBar: e.target.checked })} className="cursor-pointer" />
+                        </Field>
+                        <Field label="Clock text">
+                            <input className={inputCls} value={ui.phoneClockText ?? ''} placeholder="08:30 or {time}" onChange={e => onUpdate({ phoneClockText: e.target.value || undefined })} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label="Bar color" value={ui.phoneStatusBarColor ?? '#00000000'} onChange={v => onUpdate({ phoneStatusBarColor: v })} />
+                            <ColorField label="Icon/text color" value={ui.phoneStatusIconColor ?? '#ffffff'} onChange={v => onUpdate({ phoneStatusIconColor: v })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <Field label="Signal icon"><input type="checkbox" checked={!!ui.phoneShowSignal} onChange={e => onUpdate({ phoneShowSignal: e.target.checked })} className="cursor-pointer" /></Field>
+                            <Field label="Battery icon"><input type="checkbox" checked={!!ui.phoneShowBattery} onChange={e => onUpdate({ phoneShowBattery: e.target.checked })} className="cursor-pointer" /></Field>
+                        </div>
+                        {ui.phoneShowSignal && (
+                            <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/30 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <NumInput label="Signal bars" value={ui.phoneSignalBars} fallback={4} min={1} max={8} onChange={v => onUpdate({ phoneSignalBars: v })} />
+                                    <ColorField label="Signal color" value={ui.phoneSignalColor ?? (ui.phoneStatusIconColor || '#ffffff')} onChange={v => onUpdate({ phoneSignalColor: v })} />
+                                </div>
+                                <Field label="Bars filled from variable">
+                                    <select className={inputCls} value={ui.phoneSignalVariableId || ''} onChange={e => onUpdate({ phoneSignalVariableId: (e.target.value || undefined) as VNID | undefined })}>
+                                        <option value="">All bars filled</option>
+                                        {numberVars.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                    </select>
+                                </Field>
+                                <p className="text-[10px] text-[var(--text-muted)] -mt-1">The variable's value = how many bars are lit. Change it with Set Variable (gated by conditions) to raise/drop signal during the story.</p>
+                            </div>
+                        )}
+                        {ui.phoneShowBattery && (
+                            <div className="pl-2 border-l-2 border-[var(--accent-lavender)]/30 space-y-2">
+                                <ColorField label="Battery color" value={ui.phoneBatteryColor ?? (ui.phoneStatusIconColor || '#ffffff')} onChange={v => onUpdate({ phoneBatteryColor: v })} />
+                                <Field label="Battery % from variable">
+                                    <select className={inputCls} value={ui.phoneBatteryVariableId || ''} onChange={e => onUpdate({ phoneBatteryVariableId: (e.target.value || undefined) as VNID | undefined })}>
+                                        <option value="">Full (100%)</option>
+                                        {numberVars.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                    </select>
+                                </Field>
+                            </div>
+                        )}
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Header & chat bubbles">
+                    <div className="space-y-2">
+                        <Field label="Header text"><input className={inputCls} value={ui.phoneHeaderText ?? ''} placeholder="MESSAGES" onChange={e => onUpdate({ phoneHeaderText: e.target.value || undefined })} /></Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label="Incoming bubble" value={ui.phoneIncomingBubbleColor ?? '#2a2f3a'} onChange={v => onUpdate({ phoneIncomingBubbleColor: v })} />
+                            <ColorField label="Your bubble" value={ui.phoneOutgoingBubbleColor ?? '#2f6bff'} onChange={v => onUpdate({ phoneOutgoingBubbleColor: v })} />
+                        </div>
+                        <ColorField label="Bubble text" value={ui.phoneBubbleTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBubbleTextColor: v })} />
+                        <Field label="Show avatars"><input type="checkbox" checked={ui.phoneShowAvatars !== false} onChange={e => onUpdate({ phoneShowAvatars: e.target.checked })} className="cursor-pointer" /></Field>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Buttons">
+                    <div className="space-y-2">
+                        <Field label="Layout">
+                            <select className={inputCls} value={ui.phoneButtonLayout || 'bar'} onChange={e => onUpdate({ phoneButtonLayout: e.target.value === 'bar' ? undefined : e.target.value as any })}>
+                                <option value="bar">Bottom bar (evenly spaced)</option>
+                                <option value="free">Free placement (app icons anywhere)</option>
+                            </select>
+                        </Field>
+                        <p className="text-[10px] text-[var(--text-muted)] -mt-1">Free placement positions each button by its own X/Y on the phone screen — like home-screen app icons. Each still runs any button action.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <ColorField label="Bar color" value={ui.phoneButtonBarColor ?? '#00000059'} onChange={v => onUpdate({ phoneButtonBarColor: v })} />
+                            <ColorField label="Icon color" value={ui.phoneButtonIconColor ?? '#cbd5e1'} onChange={v => onUpdate({ phoneButtonIconColor: v })} />
+                        </div>
+                        {buttons.map((b, i) => (
+                            <div key={b.id} className="border border-[var(--border-subtle)] rounded p-2 space-y-1.5">
+                                <div className="flex items-center gap-1">
+                                    <input className={inputCls} value={b.label ?? ''} placeholder="Label (optional)" onChange={e => updateBtn(i, { label: e.target.value || undefined })} />
+                                    <button onClick={() => removeBtn(i)} className="p-1 text-red-400 hover:text-red-300" title="Remove"><TrashIcon className="w-4 h-4" /></button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Field label="Icon">
+                                        <select className={inputCls} value={b.builtinIcon || ''} onChange={e => updateBtn(i, { builtinIcon: e.target.value || undefined })}>
+                                            {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
+                                        </select>
+                                    </Field>
+                                    <Field label="Custom icon">
+                                        <select className={inputCls} value={b.iconImage?.id || ''} onChange={e => updateBtn(i, { iconImage: e.target.value ? { type: 'image', id: e.target.value as VNID } : null })}>
+                                            <option value="">Use built-in</option>
+                                            {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                                        </select>
+                                    </Field>
+                                </div>
+                                {ui.phoneButtonLayout === 'free' && (
+                                    <div className="grid grid-cols-4 gap-1">
+                                        <NumInput label="X %" value={b.x} fallback={8} min={0} max={100} onChange={v => updateBtn(i, { x: v })} />
+                                        <NumInput label="Y %" value={b.y} fallback={12} min={0} max={100} onChange={v => updateBtn(i, { y: v })} />
+                                        <NumInput label="W %" value={b.width} fallback={22} min={4} max={100} onChange={v => updateBtn(i, { width: v })} />
+                                        <NumInput label="H %" value={b.height} fallback={16} min={4} max={100} onChange={v => updateBtn(i, { height: v })} />
+                                    </div>
+                                )}
+                                <div>
+                                    <span className="text-[10px] text-[var(--text-secondary)]">Action when tapped</span>
+                                    <ActionEditor action={b.action ?? { type: UIActionType.None } as VNUIAction} onActionChange={(a) => updateBtn(i, { action: a.type === UIActionType.None ? undefined : a })} />
+                                </div>
+                            </div>
+                        ))}
+                        <button onClick={addBtn} className="w-full p-1.5 text-xs rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center gap-1"><PlusIcon className="w-3 h-3" /> Add button</button>
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Fonts">
+                    <div className="space-y-2">
+                        <FontEditor label="Header font" font={(ui.phoneTitleFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneTitleFont: { ...((ui.phoneTitleFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                        <FontEditor label="Chat font" font={(ui.phoneFont as VNFontSettings) ?? defaultFontSettings} onFontChange={(prop, value) => onUpdate({ phoneFont: { ...((ui.phoneFont as VNFontSettings) ?? defaultFontSettings), [prop]: value } })} />
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Incoming text & badge">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Used by the "Incoming Text" command. The banner slides in when a text arrives; the badge marks unread.</p>
+                    <Field label="Banner position">
+                        <select className={inputCls} value={ui.phoneNotifPosition || 'top'} onChange={e => onUpdate({ phoneNotifPosition: e.target.value as any })}>
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                        </select>
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Banner color" value={ui.phoneNotifColor ?? '#12141a'} onChange={v => onUpdate({ phoneNotifColor: v })} />
+                        <ColorField label="Banner text" value={ui.phoneNotifTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneNotifTextColor: v })} />
+                    </div>
+                    <Field label="Default ding sound">
+                        <select className={inputCls} value={ui.phoneNotifSoundId || ''} onChange={e => onUpdate({ phoneNotifSoundId: (e.target.value || null) as any })}>
+                            <option value="">None</option>
+                            {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </select>
+                    </Field>
+                    <NumInput label="Auto-dismiss (ms, 0 = stay)" value={ui.phoneNotifAutoMs} fallback={6000} min={0} max={60000} onChange={v => onUpdate({ phoneNotifAutoMs: v })} />
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Badge color" value={ui.phoneBadgeColor ?? '#ef4444'} onChange={v => onUpdate({ phoneBadgeColor: v })} />
+                        <ColorField label="Badge text" value={ui.phoneBadgeTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBadgeTextColor: v })} />
+                    </div>
+                    <Field label="Badge style">
+                        <select className={inputCls} value={ui.phoneBadgeShape || 'dot'} onChange={e => onUpdate({ phoneBadgeShape: e.target.value as any })}>
+                            <option value="dot">Dot</option>
+                            <option value="count">Count</option>
+                            <option value="ring">Ring (hollow)</option>
+                            <option value="square">Rounded square</option>
+                            <option value="icon">Icon</option>
+                            <option value="pulse">Pulsing dot</option>
+                        </select>
+                    </Field>
+                    {ui.phoneBadgeShape === 'icon' && (
+                        <Field label="Badge icon">
+                            <select className={inputCls} value={ui.phoneBadgeIcon || ''} onChange={e => onUpdate({ phoneBadgeIcon: e.target.value || undefined })}>
+                                <option value="">💬 default</option>
+                                {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
+                            </select>
+                        </Field>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Caption (under badge)"><input className={inputCls} value={ui.phoneBadgeLabel ?? ''} placeholder='e.g. "Messages"' onChange={e => onUpdate({ phoneBadgeLabel: e.target.value || undefined })} /></Field>
+                        <ColorField label="Caption color" value={ui.phoneBadgeLabelColor ?? '#ffffff'} onChange={v => onUpdate({ phoneBadgeLabelColor: v })} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <NumInput label="Badge size (px)" value={ui.phoneBadgeSize} fallback={16} min={6} max={48} onChange={v => onUpdate({ phoneBadgeSize: v })} />
+                        <NumInput label="Badge X (%)" value={ui.phoneBadgeX} fallback={95} min={0} max={100} onChange={v => onUpdate({ phoneBadgeX: v })} />
+                        <NumInput label="Badge Y (%)" value={ui.phoneBadgeY} fallback={4} min={0} max={100} onChange={v => onUpdate({ phoneBadgeY: v })} />
+                    </div>
+                    <ColorField label="Typing dots color" value={ui.phoneTypingColor ?? '#ffffff'} onChange={v => onUpdate({ phoneTypingColor: v })} />
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Incoming call">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Used by the "Incoming Call" command (full-screen accept/decline, or a corner ring).</p>
+                    <ColorField label="Call background" value={ui.phoneCallBgColor ?? '#080a0e'} onChange={v => onUpdate({ phoneCallBgColor: v })} />
+                    <Field label="Call background image">
+                        <select className={inputCls} value={ui.phoneCallBgImage?.id || ''} onChange={e => onUpdate({ phoneCallBgImage: e.target.value ? { type: 'image', id: e.target.value as VNID } : null })}>
+                            <option value="">None (solid color)</option>
+                            {allImages.map((img: any) => <option key={img.id} value={img.id}>{img.name || img.id}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Default ringtone">
+                        <select className={inputCls} value={ui.phoneCallRingtoneId || ''} onChange={e => onUpdate({ phoneCallRingtoneId: (e.target.value || null) as any })}>
+                            <option value="">None</option>
+                            {(Object.values(project.audio || {}) as any[]).map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Caller portrait shape">
+                        <select className={inputCls} value={ui.phoneCallPortraitShape || 'circle'} onChange={e => onUpdate({ phoneCallPortraitShape: e.target.value as any })}>
+                            <option value="circle">Circle</option>
+                            <option value="square">Rounded square</option>
+                        </select>
+                    </Field>
+                    <hr className="border-[var(--border-subtle)] my-2" />
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Accept label"><input className={inputCls} value={ui.phoneCallAcceptLabel ?? ''} placeholder="Accept" onChange={e => onUpdate({ phoneCallAcceptLabel: e.target.value })} /></Field>
+                        <ColorField label="Accept color" value={ui.phoneCallAcceptColor ?? '#22c55e'} onChange={v => onUpdate({ phoneCallAcceptColor: v })} />
+                    </div>
+                    <Field label="Accept icon">
+                        <select className={inputCls} value={ui.phoneCallAcceptIcon || ''} onChange={e => onUpdate({ phoneCallAcceptIcon: e.target.value || undefined })}>
+                            <option value="">📞 default</option>
+                            {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
+                        </select>
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Field label="Decline label"><input className={inputCls} value={ui.phoneCallDeclineLabel ?? ''} placeholder="Decline" onChange={e => onUpdate({ phoneCallDeclineLabel: e.target.value })} /></Field>
+                        <ColorField label="Decline color" value={ui.phoneCallDeclineColor ?? '#ef4444'} onChange={v => onUpdate({ phoneCallDeclineColor: v })} />
+                    </div>
+                    <Field label="Decline icon">
+                        <select className={inputCls} value={ui.phoneCallDeclineIcon || ''} onChange={e => onUpdate({ phoneCallDeclineIcon: e.target.value || undefined })}>
+                            <option value="">⊘ default</option>
+                            {PHONE_ICON_KEYS.map(k => <option key={k} value={k}>{PHONE_GLYPHS[k]} {k}</option>)}
+                        </select>
+                    </Field>
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Recents (history)">
+                    <p className="text-[10px] text-[var(--text-muted)] mb-1">The call log view, opened by a phone button with the "Show Phone History" action.</p>
+                    <Field label="Header"><input className={inputCls} value={ui.phoneHistoryHeader ?? ''} placeholder="Recents" onChange={e => onUpdate({ phoneHistoryHeader: e.target.value })} /></Field>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ColorField label="Row color" value={ui.phoneHistoryRowColor ?? '#ffffff10'} onChange={v => onUpdate({ phoneHistoryRowColor: v })} />
+                        <ColorField label="Row text" value={ui.phoneHistoryTextColor ?? '#ffffff'} onChange={v => onUpdate({ phoneHistoryTextColor: v })} />
+                    </div>
+                </CollapsibleSection>
+            </div>
+        );
+    }
+
     /* Confirm Dialogs properties */
     if (element === 'confirmDialogs') {
         const cd = ui.confirmDialogs || {} as VNConfirmDialogSettings;
@@ -1627,6 +2104,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     const [selectedThemeId, setSelectedThemeId] = useState<VNID | null>(null);
     // Which confirmation the preview shows (Quit vs New Game). Default to New Game so it's visible.
     const [confirmPreviewVariant, setConfirmPreviewVariant] = useState<ConfirmVariant>('newGame');
+    // Which phone "view" the canvas previews so each dynamic surface can be seen + themed live.
+    const [phonePreviewView, setPhonePreviewView] = useState<'phone' | 'notification' | 'badge' | 'call'>('phone');
     const [showSnapGuides, setShowSnapGuides] = useState(false);
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -1665,6 +2144,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
     const choiceRect = useMemo(() => getChoiceRect(ui, gameW, gameH), [ui, gameW, gameH]);
     const inputRect = useMemo(() => getInputRect(ui, gameW, gameH), [ui, gameW, gameH]);
     const quickMenuRect = useMemo(() => getQuickMenuRect(ui, gameW, gameH), [ui, gameW, gameH]);
+    const phoneRect = useMemo(() => getPhoneRect(ui, gameW, gameH), [ui, gameW, gameH]);
+    const phoneButtonRects = useMemo(() => getPhoneButtonRects(ui, gameW, gameH), [ui, gameW, gameH]);
 
     /* ─── Drag update handlers ─── */
     const handleDragDialogue = useCallback((u: { x: number; y: number; width: number; height: number }) => {
@@ -1702,6 +2183,33 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
         updateUI({ quickMenuX: u.x, quickMenuY: u.y, quickMenuWidth: u.width, quickMenuHeight: u.height });
     }, [updateUI]);
 
+    const handleDragPhone = useCallback((u: { x: number; y: number; width: number; height: number }) => {
+        // Resize/move reports the on-screen (scaled) size; store the BASE width/height so the scale
+        // slider stays an independent multiplier (rect = base × scale).
+        const scale = (ui.phoneScale ?? 100) / 100 || 1;
+        updateUI({ phoneX: u.x, phoneY: u.y, phoneWidth: u.width / scale, phoneHeight: u.height / scale });
+    }, [updateUI, ui.phoneScale]);
+
+    // Drag/resize a free-layout phone app button — convert canvas-% back to phone-screen-%.
+    const handleDragPhoneButton = useCallback((id: string, u: { x: number; y: number; width: number; height: number }) => {
+        const phone = getPhoneRect(ui, gameW, gameH);
+        if (!phone.width || !phone.height) return;
+        const x = ((u.x - phone.x) / phone.width) * 100;
+        const y = ((u.y - phone.y) / phone.height) * 100;
+        const width = (u.width / phone.width) * 100;
+        const height = (u.height / phone.height) * 100;
+        updateUI({ phoneButtons: (ui.phoneButtons || []).map(b => b.id === id ? { ...b, x, y, width, height } : b) });
+    }, [updateUI, ui, gameW, gameH]);
+
+    // Drag/resize the badge — writes its position AND size (size derived from the dragged box height).
+    const handleDragBadge = useCallback((u: { x: number; y: number; width: number; height: number }) => {
+        const sizePx = Math.max(6, Math.min(96, Math.round((u.height / 100) * gameH)));
+        updateUI({ phoneBadgeX: u.x, phoneBadgeY: u.y, phoneBadgeSize: sizePx });
+    }, [updateUI, gameH]);
+    const handleDragBanner = useCallback((u: { x: number; y: number }) => {
+        updateUI({ phoneNotifX: u.x, phoneNotifY: u.y });
+    }, [updateUI]);
+
     const handleDragQuickMenuButton = useCallback((key: string, isCustom: boolean, u: { x: number; y: number; width: number; height: number }) => {
         if (isCustom) {
             const customs = ui.quickMenuCustomButtons || [];
@@ -1714,6 +2222,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
     const quickMenuButtonRects = useMemo(() => getQuickMenuButtonRects(ui, gameW, gameH), [ui, gameW, gameH]);
     const quickMenuIndependent = !!ui.quickMenuIndependentLayout && selectedElement === 'quickMenu' && ui.quickMenuPosition !== 'hidden';
+    // Free-layout phone app buttons: show the phone as static context + one draggable per button
+    // (so buttons drag/resize cleanly without lagging behind the shell). Mirrors quickMenuIndependent.
+    const phoneButtonsIndependent = selectedElement === 'phone' && phonePreviewView === 'phone' && ui.phoneButtonLayout === 'free';
 
     // Confirm-dialog free layout: drag/resize the box + each button independently (screen-%), PER variant.
     const confirmEff = { ...(ui.confirmDialogs || {}), ...(ui.confirmDialogs?.variants?.[confirmPreviewVariant] || {}) };
@@ -1741,8 +2252,9 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
         choiceButtons: { rect: choiceRect,     handler: handleDragChoice,    preview: <ChoiceButtonsPreview ui={ui} project={project} /> },
         inputBox:      { rect: inputRect,      handler: handleDragInput,     preview: <InputBoxPreview ui={ui} project={project} /> },
         quickMenu:     { rect: quickMenuRect,  handler: handleDragQuickMenu, preview: <QuickMenuPreview ui={ui} project={project} /> },
-    }), [dialogueRect, nameboxRect, choiceRect, inputRect, quickMenuRect, ui, project,
-         handleDragDialogue, handleDragNamebox, handleDragChoice, handleDragInput, handleDragQuickMenu]);
+        phone:         { rect: phoneRect,      handler: handleDragPhone,     preview: <PhonePreview ui={ui} project={project} /> },
+    }), [dialogueRect, nameboxRect, choiceRect, inputRect, quickMenuRect, phoneRect, ui, project,
+         handleDragDialogue, handleDragNamebox, handleDragChoice, handleDragInput, handleDragQuickMenu, handleDragPhone]);
 
     const activeEl = selectedElement && !isHidden(selectedElement) ? elementRects[selectedElement] ?? null : null;
 
@@ -1846,7 +2358,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
                     {/* Only render the currently selected element (single grouped draggable).
                         Skipped for the Quick Menu when independent per-button layout is active. */}
-                    {activeEl && !quickMenuIndependent && (
+                    {activeEl && !quickMenuIndependent && !phoneButtonsIndependent && !(selectedElement === 'phone' && phonePreviewView !== 'phone') && (
                         <ResizableDraggable
                             x={activeEl.rect.x} y={activeEl.rect.y}
                             width={activeEl.rect.width} height={activeEl.rect.height}
@@ -1860,6 +2372,66 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         >
                             {activeEl.preview}
                         </ResizableDraggable>
+                    )}
+
+                    {/* Phone: the phone shell renders via the draggable path above; a view switcher lets
+                        the author preview + theme the other dynamic surfaces (banner / badge / call). */}
+                    {selectedElement === 'phone' && (
+                        <>
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-1 bg-[var(--bg-secondary)]/90 backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-lg">
+                                {([['phone', 'Phone'], ['notification', 'Banner'], ['badge', 'Badge'], ['call', 'Call']] as const).map(([v, lbl]) => (
+                                    <button key={v} onClick={() => setPhonePreviewView(v)}
+                                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${phonePreviewView === v ? 'bg-[var(--accent-lavender)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                                        {lbl}
+                                    </button>
+                                ))}
+                            </div>
+                            {/* Free app-button editing: phone shown as static context + one draggable
+                                per button (icon scales to the box via container-query units). */}
+                            {phoneButtonsIndependent && (
+                                <div className="absolute pointer-events-none" style={{ left: `${phoneRect.x}%`, top: `${phoneRect.y}%`, width: `${phoneRect.width}%`, height: `${phoneRect.height}%`, opacity: 0.85, zIndex: 0 }}>
+                                    <PhonePreview ui={ui} project={project} hideFreeButtons />
+                                </div>
+                            )}
+                            {phoneButtonsIndependent && phoneButtonRects.map(b => {
+                                const cfg = (ui.phoneButtons || []).find(x => x.id === b.id);
+                                const ci = cfg?.iconImage?.id ? ((project.images as any)[cfg.iconImage.id]?.imageUrl || (project.backgrounds as any)[cfg.iconImage.id]?.imageUrl) : null;
+                                return (
+                                <ResizableDraggable key={b.id}
+                                    x={b.rect.x} y={b.rect.y} width={b.rect.width} height={b.rect.height}
+                                    anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                    onSelect={e => e.stopPropagation()} onUpdate={u => handleDragPhoneButton(b.id, u)}
+                                    snapGrid={1} label={b.label || 'App'}>
+                                    <div style={{ width: '100%', height: '100%', containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4cqmin', color: ui.phoneButtonIconColor || '#cbd5e1' } as React.CSSProperties}>
+                                        {ci ? <img src={ci} alt="" style={{ width: '64cqmin', height: '64cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '58cqmin', lineHeight: 1 }}>{(cfg?.builtinIcon && PHONE_GLYPHS[cfg.builtinIcon]) || '●'}</span>}
+                                        {cfg?.label && <span style={{ fontSize: '20cqmin', lineHeight: 1, whiteSpace: 'nowrap' }}>{cfg.label}</span>}
+                                    </div>
+                                </ResizableDraggable>
+                                );
+                            })}
+                            {/* Banner view: drag/resize the notification banner. */}
+                            {phonePreviewView === 'notification' && (
+                                <ResizableDraggable
+                                    x={ui.phoneNotifX ?? 20} y={ui.phoneNotifY ?? 4} width={60} height={12}
+                                    anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                    onSelect={e => e.stopPropagation()} onUpdate={u => handleDragBanner(u)}
+                                    snapGrid={1} label="Banner">
+                                    <PhoneBannerPreview ui={ui} project={project} fill />
+                                </ResizableDraggable>
+                            )}
+                            {/* Badge view: drag to position, resize to set its size. */}
+                            {phonePreviewView === 'badge' && (
+                                <ResizableDraggable
+                                    x={ui.phoneBadgeX ?? 95} y={ui.phoneBadgeY ?? 4}
+                                    width={((ui.phoneBadgeSize ?? 16) / gameH) * 100} height={((ui.phoneBadgeSize ?? 16) / gameH) * 100}
+                                    anchorX={0} anchorY={0} parentSize={stageSize} isSelected={true}
+                                    onSelect={e => e.stopPropagation()} onUpdate={u => handleDragBadge(u)}
+                                    snapGrid={1} label="Badge">
+                                    <PhoneBadgePreview ui={ui} fill />
+                                </ResizableDraggable>
+                            )}
+                            {phonePreviewView === 'call' && <PhoneCallPreview ui={ui} project={project} />}
+                        </>
                     )}
 
                     {/* Confirm Dialogs preview – full-canvas overlay, not draggable. A toggle lets the

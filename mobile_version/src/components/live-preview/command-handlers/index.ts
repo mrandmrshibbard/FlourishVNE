@@ -19,3 +19,4 @@ export * from './scriptHandler';
 export * from './particleHandler';
 export * from './commonEventHandler';
 export * from './tweenHandler';
+export * from './phoneHandler';

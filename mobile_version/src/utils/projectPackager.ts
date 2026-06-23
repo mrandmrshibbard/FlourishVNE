@@ -4,6 +4,7 @@ declare var saveAs: any;
 
 import { VNProject } from '../types/project';
 import { VNID } from '../types';
+import type { MigrationProgress } from './assetMigration';
 import { IS_MOBILE } from './platform';
 import { writeProjectFile } from './mobileFiles';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../features/character/types';
@@ -150,7 +151,15 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
     }
 
     const zip = new JSZip();
-    const projectClone = JSON.parse(JSON.stringify(project)) as VNProject;
+    // Deep-clone via structuredClone, NOT JSON.parse(JSON.stringify(...)): a big project (lots of
+    // embedded base64 media) would blow past V8's max string length here and throw "Invalid string
+    // length" BEFORE we ever extract the assets. structuredClone copies the graph without building one
+    // giant string; the asset data URLs below are then replaced with file paths, so the final
+    // JSON.stringify(projectClone) is small. (The project is already structured-cloneable — IDB
+    // autosave clones it the same way.) Fall back to the JSON round-trip only if unavailable.
+    const projectClone = (typeof structuredClone === 'function'
+        ? structuredClone(project)
+        : JSON.parse(JSON.stringify(project))) as VNProject;
     const assetFolder = zip.folder('assets');
     if (!assetFolder) throw new Error("Could not create assets folder in zip");
 
@@ -934,7 +943,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
     return { saved: true };
 };
 
-export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
+export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array, onProgress?: (p: MigrationProgress) => void): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
     const zip = await JSZip.loadAsync(file);
     const projectFile = zip.file('project.json');
 
@@ -1067,39 +1076,52 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
         return relativePath; // Return path if not found
     };
 
-    const hydrationPromises: Promise<any>[] = [];
-    
+    // Collect every asset-URL field first (read/write/label) so we can report accurate progress.
+    type HydrateField = { label: string; get: () => any; set: (v: string) => void };
+    const fields: HydrateField[] = [];
+
     const collections: (keyof VNProject)[] = ['backgrounds', 'images', 'audio', 'videos'];
     const urlKeys = { backgrounds: 'imageUrl', images: 'imageUrl', audio: 'audioUrl', videos: 'videoUrl' };
-
     for (const collectionName of collections) {
         const collection = project[collectionName] as Record<VNID, { id: VNID, name: string, [key: string]: any }>;
         if (!collection) continue;
+        const urlKey = urlKeys[collectionName as keyof typeof urlKeys];
         for (const asset of Object.values(collection)) {
-            const urlKey = urlKeys[collectionName as keyof typeof urlKeys];
-            hydrationPromises.push(hydrateAsset(asset[urlKey]).then(dataUrl => { asset[urlKey] = dataUrl; }));
+            fields.push({ label: asset.name || asset.id, get: () => asset[urlKey], set: v => { asset[urlKey] = v; } });
         }
+    }
+
+    // Project-level fonts — hoisted OUT of the character loop (it used to be nested, so fonts were
+    // hydrated once per character AND skipped entirely for projects with no characters).
+    for (const font of Object.values(project.fonts || {}) as any[]) {
+        fields.push({ label: `${font.name || font.id} font`, get: () => font.fontUrl, set: v => { font.fontUrl = v; } });
     }
 
     for (const char of Object.values(project.characters) as VNCharacter[]) {
-        hydrationPromises.push(hydrateAsset(char.baseImageUrl).then(dataUrl => { char.baseImageUrl = dataUrl; }));
-        hydrationPromises.push(hydrateAsset(char.fontUrl).then(dataUrl => { char.fontUrl = dataUrl; }));
-
-            // Hydrate project-level fonts
-            for (const font of Object.values(project.fonts || {}) as any[]) {
-                hydrationPromises.push(hydrateAsset(font.fontUrl).then((dataUrl) => { font.fontUrl = dataUrl; }));
-            }
+        fields.push({ label: char.name || char.id, get: () => char.baseImageUrl, set: v => { char.baseImageUrl = v; } });
+        fields.push({ label: `${char.name || char.id} font`, get: () => char.fontUrl, set: v => { char.fontUrl = v; } });
         for (const layer of Object.values(char.layers) as VNCharacterLayer[]) {
             for (const asset of Object.values(layer.assets) as VNLayerAsset[]) {
-                hydrationPromises.push(hydrateAsset(asset.imageUrl).then(dataUrl => { asset.imageUrl = dataUrl; }));
+                fields.push({ label: char.name || char.id, get: () => asset.imageUrl, set: v => { asset.imageUrl = v; } });
             }
         }
     }
-    
-    // Dialogue box and choice button images are now asset references, not direct URLs
-    // They are hydrated as part of the backgrounds/videos collections
 
-    await Promise.all(hydrationPromises);
+    // Dialogue box and choice button images are now asset references, not direct URLs;
+    // they are hydrated as part of the backgrounds/videos collections above.
+
+    // A field counts toward progress when it points at a bundled asset file (not already inline base64).
+    const needsWork = (v: any): boolean => typeof v === 'string' && !!v && !v.startsWith('data:') && !!zip.file(v);
+    const total = fields.filter(f => needsWork(f.get())).length;
+    let done = 0;
+    if (total > 0) onProgress?.({ done: 0, total, bytes: 0, label: '' });
+
+    await Promise.all(fields.map(async (f) => {
+        const counts = needsWork(f.get());
+        const hydrated = await hydrateAsset(f.get());
+        f.set(hydrated);
+        if (counts) { done++; onProgress?.({ done, total, bytes: 0, label: f.label }); }
+    }));
     
     // All saving logic has been removed. The app now manages the project state
     // in-memory. The returned project object should be passed to the main app state.

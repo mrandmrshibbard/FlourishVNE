@@ -11,6 +11,8 @@ import {
     ChevronRightIcon, XMarkIcon, UploadIcon, CheckIcon,
 } from './icons';
 import { fileToBase64 } from '../utils/file';
+import { formatBytes, LARGE_ASSET_WARN_BYTES } from '../utils/projectAssetSize';
+import { ingestUpload, resolveFieldUrl, refToRelPath, getProjectAssetSizes, isElectronAssetStore } from '../utils/assetStore';
 import { AssetType } from '../features/assets/state/assetReducer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -218,6 +220,15 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
     const project = projectProp || ctxProject;
     const toast = useToast();
 
+    // Real on-disk sizes of file-backed assets (relPath → bytes); refreshed when the asset set changes.
+    const [assetSizes, setAssetSizes] = useState<Record<string, number>>({});
+    useEffect(() => {
+        if (!isElectronAssetStore()) { setAssetSizes({}); return; }
+        let cancelled = false;
+        getProjectAssetSizes(project.id).then(r => { if (!cancelled) setAssetSizes(r.sizes); });
+        return () => { cancelled = true; };
+    }, [project.id, project.images, project.backgrounds, project.audio, project.videos]);
+
     // Core state
     const [selectedCategory, setSelectedCategory] = useState<AssetCategory>('backgrounds');
     const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
@@ -321,10 +332,10 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
 
     // ═══ Actions ═════════════════════════════════════════════════════════════
 
-    const addAsset = useCallback((category: AssetCategory, name: string, url: string, path: string = '') => {
-        const newAsset: any = { id: `${category.slice(0, 4)}-${Math.random().toString(36).substring(2, 9)}`, name, path };
-        const isVideo = url.startsWith('data:video/') || /\.(mp4|webm|ogg|mov)$/i.test(name);
-
+    // `url` is either a base64 data: URL or a managed ref ("assets/…"). `isVideo` is detected from the
+    // source file (can't sniff a ref). `id` is pre-generated so the stored filename matches the asset.
+    const addAsset = useCallback((category: AssetCategory, name: string, url: string, path: string = '', isVideo = false, id?: string) => {
+        const newAsset: any = { id: id || `${category.slice(0, 4)}-${Math.random().toString(36).substring(2, 9)}`, name, path };
         if (category === 'backgrounds' || category === 'images') {
             if (isVideo) { newAsset.videoUrl = url; newAsset.isVideo = true; newAsset.loop = true; }
             else newAsset.imageUrl = url;
@@ -346,14 +357,23 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             if (!categorized.has(cat)) categorized.set(cat, []);
             categorized.get(cat)!.push(f);
         }
+        const largeNames: string[] = [];
         for (const [cat, catFiles] of categorized) {
             for (const f of catFiles) {
                 try {
-                    const base64 = await fileToBase64(f);
-                    addAsset(cat, f.name.replace(/\.[^/.]+$/, ''), base64, currentPath);
+                    if (f.size > LARGE_ASSET_WARN_BYTES) largeNames.push(`${f.name} (${formatBytes(f.size)})`);
+                    const isVideo = f.type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(f.name);
+                    const id = `${cat.slice(0, 4)}-${Math.random().toString(36).substring(2, 9)}`;
+                    // Write to the managed file store (desktop) or fall back to base64 (web).
+                    const url = await ingestUpload(ctxProject.id, cat as any, id, f);
+                    addAsset(cat, f.name.replace(/\.[^/.]+$/, ''), url, currentPath, isVideo, id);
                     ok++;
                 } catch { fail++; }
             }
+        }
+        // Heads-up: large media bloats the project + slows exports. Non-blocking, informational.
+        if (largeNames.length > 0) {
+            toast.warning(t('toastLargeAsset', 'Large file added: {{files}}. Large media slows the editor and makes exports big — consider compressing it.', { files: largeNames.join(', ') }), { duration: 8000 });
         }
         if (fail > 0) toast.warning(t('toastUploadPartial', { ok, fail }));
         else if (ok > 0) {
@@ -361,7 +381,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             const base = t('toastUploaded', { count: ok });
             toast.success(cats.length > 1 ? base + t('toastAcross', { cats: cats.map(c => t(`categoriesLower.${c}`)).join(', ') }) : base);
         }
-    }, [addAsset, currentPath, toast, selectedCategory, t]);
+    }, [addAsset, currentPath, toast, selectedCategory, t, ctxProject.id]);
 
     const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -378,24 +398,25 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
             const file = e.target?.files?.[0];
             if (!file) return;
             try {
-                const base64 = await fileToBase64(file);
-                const isVideo = base64.startsWith('data:video/');
+                const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(file.name);
+                // Reuse the asset's id so the stored file is replaced in place.
+                const url = await ingestUpload(ctxProject.id, assetType as any, assetId as any, file);
                 let updates: any = {};
                 if (assetType === 'backgrounds' || assetType === 'images') {
                     updates = isVideo
-                        ? { videoUrl: base64, imageUrl: null, isVideo: true, loop: true }
-                        : { imageUrl: base64, videoUrl: null, isVideo: false };
+                        ? { videoUrl: url, imageUrl: null, isVideo: true, loop: true }
+                        : { imageUrl: url, videoUrl: null, isVideo: false };
                 } else if (assetType === 'audio') {
-                    updates = { audioUrl: base64 };
+                    updates = { audioUrl: url };
                 } else {
-                    updates = { videoUrl: base64 };
+                    updates = { videoUrl: url };
                 }
                 dispatch({ type: 'UPDATE_ASSET', payload: { assetType, assetId, updates } });
                 toast.success(t('toastReplaced'));
             } catch { toast.error(t('toastReplaceFailed')); }
         };
         input.click();
-    }, [dispatch, toast, t]);
+    }, [dispatch, toast, t, ctxProject.id]);
 
     const handleDeleteAsset = useCallback((assetId: string, assetName: string) => {
         setDeleteTarget({ type: 'asset', id: assetId, name: assetName });
@@ -791,6 +812,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ project: projectProp }) => 
                                 {filteredAssets.map(asset => (
                                     <AssetCard
                                         key={asset.id} asset={asset} assetType={selectedCategory}
+                                        sizeBytes={assetSizes[refToRelPath(getAssetUrl(asset)) || ''] }
                                         viewMode={viewMode} isSelected={selectedAssetIds.has(asset.id)}
                                         isRenaming={renamingId === asset.id}
                                         onSelect={e => handleSelectAsset(asset.id, e)}
@@ -903,16 +925,21 @@ const AssetCard: React.FC<{
     onDragStart: () => void;
     onDragEnd: () => void;
     showPath?: boolean;
-}> = React.memo(({ asset, assetType, viewMode, isSelected, isRenaming, onSelect, onStartRenaming, onCommitRename, onDelete, onReplace, onMove, onDragStart, onDragEnd, showPath = false }) => {
+    sizeBytes?: number;
+}> = React.memo(({ asset, assetType, viewMode, isSelected, isRenaming, onSelect, onStartRenaming, onCommitRename, onDelete, onReplace, onMove, onDragStart, onDragEnd, showPath = false, sizeBytes }) => {
     const { t } = useTranslation('assets');
+    const { project: cardProject } = useProject();
     const { inputProps: renameInputProps } = useInlineRename(asset.name, onCommitRename);
-    const size = estimateDataUrlSize(getAssetUrl(asset));
+    // Real on-disk size for file-backed assets; falls back to the data:-URL estimate (web / base64).
+    const size = sizeBytes ?? estimateDataUrlSize(getAssetUrl(asset));
+    const rImg = resolveFieldUrl(cardProject.id, asset.imageUrl) || undefined;
+    const rVid = resolveFieldUrl(cardProject.id, asset.videoUrl) || undefined;
 
     const thumbnail = useMemo(() => {
-        if (asset.imageUrl) return <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover" loading="lazy" />;
+        if (asset.imageUrl) return <img src={rImg} alt={asset.name} className="w-full h-full object-cover" loading="lazy" />;
         if (asset.videoUrl) return (
             <div className="w-full h-full relative">
-                <video src={asset.videoUrl} className="w-full h-full object-cover" muted preload="metadata" />
+                <video src={rVid} className="w-full h-full object-cover" muted preload="metadata" />
                 <div className="absolute bottom-1 right-1 bg-black/70 rounded px-1 py-0.5"><FilmIcon className="w-3 h-3 text-white" /></div>
             </div>
         );
@@ -1236,8 +1263,8 @@ const AssetInspector: React.FC<{
                 {(asset.imageUrl || asset.videoUrl) && (
                     <div className="bg-[var(--bg-primary)] rounded-lg overflow-hidden">
                         {asset.videoUrl
-                            ? <video src={asset.videoUrl} controls loop={asset.loop} className="w-full rounded-lg" />
-                            : <img src={asset.imageUrl} alt={asset.name} className="w-full rounded-lg object-contain max-h-[300px]" />
+                            ? <video src={resolveFieldUrl(project.id, asset.videoUrl) || undefined} controls loop={asset.loop} className="w-full rounded-lg" />
+                            : <img src={resolveFieldUrl(project.id, asset.imageUrl) || undefined} alt={asset.name} className="w-full rounded-lg object-contain max-h-[300px]" />
                         }
                     </div>
                 )}
@@ -1248,7 +1275,7 @@ const AssetInspector: React.FC<{
                                 <MusicalNoteIcon className="w-8 h-8 text-green-400" />
                             </div>
                         </div>
-                        <audio src={asset.audioUrl} controls className="w-full" />
+                        <audio src={resolveFieldUrl(project.id, asset.audioUrl) || undefined} controls className="w-full" />
                     </div>
                 )}
 

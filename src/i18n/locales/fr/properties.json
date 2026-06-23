@@ -443,7 +443,7 @@
     "pickUpOnce": "Mémoriser (ramasser une seule fois)",
     "pickUpOnceHint": "Une fois collecté, il ne réapparaîtra pas lorsque le joueur revisitera cette scène, et le ramassage est enregistré. Désactivez pour des ramassages réapparaissants."
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "Arrière-plan de la carte d'images",
     "hoverStateImage": "Image de l'état au survol",
     "hoverStateHint": "Lorsqu'une région est survolée, cette image est affichée découpée selon cette région (effet de survol à la manière de Ren'Py).",
@@ -479,9 +479,9 @@
     "addAction": "+ Ajouter une action",
     "regionConditions": "Conditions de la région",
     "regionConditionsHint": "La région n'est active que lorsque les conditions sont remplies.",
-    "targetImageMap": "Carte d'images cible à masquer",
-    "selectImageMap": "Sélectionner une carte d'images...",
-    "imageMapOption": "Carte d'images ({{count}} régions) (ID : {{id}})"
+    "targetdraggableImageElement": "Carte d'images cible à masquer",
+    "selectdraggableImageElement": "Sélectionner une carte d'images...",
+    "draggableImageElementOption": "Carte d'images ({{count}} régions) (ID : {{id}})"
   },
   "credit": {
     "entries": "Entrées de crédits",
@@ -628,7 +628,7 @@
     "typeImage": "Superposition d'image",
     "typeText": "Superposition de texte",
     "typeButton": "Superposition de bouton",
-    "typeImageMap": "Carte d'images",
+    "typedraggableImageElement": "Carte d'images",
     "typeMovie": "Vidéo (lire la vidéo)",
     "typeScreen": "Écran",
     "targetId": "ID de la cible",
@@ -658,7 +658,7 @@
     "panY": "Panoramique Y (%)",
     "screen": "Écran",
     "imageLabel": "Image ({{id}}…)",
-    "imageMapLabel": "Carte d'images ({{id}}…)"
+    "draggableImageElementLabel": "Carte d'images ({{id}}…)"
   },
   "hotspot": {
     "name": "Nom",

@@ -120,7 +120,8 @@ export const characterReducer = (state: VNProject, action: CharacterAction): VNP
         const { characterId, layerId, name, imageUrl, videoUrl, isVideo, loop, autoplay } = action.payload;
         const character = state.characters[characterId];
         if (!character?.layers[layerId]) return state;
-        const newAssetId = `asset-${generateId()}`;
+        // Honor a caller-supplied id so the file-store filename matches the asset (file-backed assets).
+        const newAssetId = (action.payload as any).id || `asset-${generateId()}`;
         const newAsset: VNLayerAsset = { 
             id: newAssetId, 
             name, 

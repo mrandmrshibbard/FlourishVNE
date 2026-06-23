@@ -443,7 +443,7 @@
     "pickUpOnce": "Lembrar (coletar uma vez)",
     "pickUpOnceHint": "Depois de coletado, não reaparecerá quando o jogador revisitar esta cena, e a coleta é salva. Desative para itens que reaparecem."
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "Fundo do Mapa de Imagem",
     "hoverStateImage": "Imagem do Estado de Hover",
     "hoverStateHint": "Quando uma região recebe o cursor, esta imagem é exibida recortada nessa região (efeito de hover estilo Ren'Py).",
@@ -479,9 +479,9 @@
     "addAction": "+ Adicionar Ação",
     "regionConditions": "Condições da Região",
     "regionConditionsHint": "Região ativa apenas quando as condições forem atendidas.",
-    "targetImageMap": "Mapa de Imagem Alvo para Ocultar",
-    "selectImageMap": "Selecionar Mapa de Imagem...",
-    "imageMapOption": "Mapa de Imagem ({{count}} regiões) (ID: {{id}})"
+    "targetdraggableImageElement": "Mapa de Imagem Alvo para Ocultar",
+    "selectdraggableImageElement": "Selecionar Mapa de Imagem...",
+    "draggableImageElementOption": "Mapa de Imagem ({{count}} regiões) (ID: {{id}})"
   },
   "credit": {
     "entries": "Entradas de Créditos",
@@ -628,7 +628,7 @@
     "typeImage": "Sobreposição de Imagem",
     "typeText": "Sobreposição de Texto",
     "typeButton": "Sobreposição de Botão",
-    "typeImageMap": "Mapa de Imagem",
+    "typedraggableImageElement": "Mapa de Imagem",
     "typeMovie": "Vídeo (Reproduzir Vídeo)",
     "typeScreen": "Tela",
     "targetId": "ID do Alvo",
@@ -658,7 +658,7 @@
     "panY": "Pan Y (%)",
     "screen": "Tela",
     "imageLabel": "Imagem ({{id}}…)",
-    "imageMapLabel": "Mapa de Imagem ({{id}}…)"
+    "draggableImageElementLabel": "Mapa de Imagem ({{id}}…)"
   },
   "hotspot": {
     "name": "Nome",

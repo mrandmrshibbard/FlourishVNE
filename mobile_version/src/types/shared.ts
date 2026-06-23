@@ -42,6 +42,14 @@ export enum UIActionType {
     /** Erases a save slot (clears it for both the Save and Load screens). Confirmed via the
      *  customizable "Erase Save" confirmation dialog. */
     DeleteSave = 'DeleteSave',
+    /** In-game phone: open / close the phone, or show / clear the chat view. So any button (incl. the
+     *  phone's own bottom buttons) can drive the phone. ShowPhoneText (no message) just opens the chat. */
+    ShowPhone = 'ShowPhone',
+    HidePhone = 'HidePhone',
+    ShowPhoneText = 'ShowPhoneText',
+    HidePhoneText = 'HidePhoneText',
+    /** Open the phone's recents/history (call log + chat) view. */
+    ShowPhoneHistory = 'ShowPhoneHistory',
     ReturnToGame = 'ReturnToGame',
     ReturnToPreviousScreen = 'ReturnToPreviousScreen',
     QuitToTitle = 'QuitToTitle',
@@ -122,6 +130,11 @@ export interface PlaySoundAction extends BaseUIAction { type: UIActionType.PlayS
 export interface LoadGameAction extends BaseUIAction { type: UIActionType.LoadGame; slotNumber: number; }
 export interface SaveGameAction extends BaseUIAction { type: UIActionType.SaveGame; slotNumber: number; }
 export interface DeleteSaveAction extends BaseUIAction { type: UIActionType.DeleteSave; slotNumber: number; }
+export interface ShowPhoneAction extends BaseUIAction { type: UIActionType.ShowPhone; }
+export interface HidePhoneAction extends BaseUIAction { type: UIActionType.HidePhone; }
+export interface ShowPhoneTextAction extends BaseUIAction { type: UIActionType.ShowPhoneText; }
+export interface HidePhoneTextAction extends BaseUIAction { type: UIActionType.HidePhoneText; }
+export interface ShowPhoneHistoryAction extends BaseUIAction { type: UIActionType.ShowPhoneHistory; }
 export interface CycleLayerAssetAction extends BaseUIAction { type: UIActionType.CycleLayerAsset; characterId: VNID; layerId: VNID; variableId: VNID; direction: 'next' | 'prev'; }
 export interface ToggleScreenAction extends BaseUIAction { type: UIActionType.ToggleScreen; targetScreenId: VNID; }
 export interface OpenURLAction extends BaseUIAction { type: UIActionType.OpenURL; url: string; newTab?: boolean; }
@@ -141,4 +154,4 @@ export interface SellItemAction extends BaseUIAction { type: UIActionType.SellIt
 export interface BuySelectedItemAction extends BaseUIAction { type: UIActionType.BuySelectedItem; collectionId: VNID; }
 export interface SellSelectedItemAction extends BaseUIAction { type: UIActionType.SellSelectedItem; collectionId: VNID; }
 
-export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction;
+export type VNUIAction = BaseUIAction | GoToScreenAction | JumpToSceneAction | JumpToLabelAction | SetVariableAction | ResetVariableAction | PlaySoundAction | LoadGameAction | SaveGameAction | CycleLayerAssetAction | ToggleScreenAction | OpenURLAction | PlayAnimationAction | ChangeImageAction | ShowElementAction | HideElementAction | CallCommonEventAction | GiveItemAction | UseItemAction | DestroyItemAction | UseSelectedItemAction | CarryItemAction | RestockCollectionAction | BuyItemAction | SellItemAction | BuySelectedItemAction | SellSelectedItemAction | DeleteSaveAction | ShowPhoneAction | HidePhoneAction | ShowPhoneTextAction | HidePhoneTextAction | ShowPhoneHistoryAction;

@@ -16,14 +16,18 @@ import {
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
-    VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey
+    VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey, VNProjectUI, PhonePortraitSource
 } from '../features/ui/types';
+import { PHONE_GLYPHS } from '../features/ui/phoneIcons';
+import { resolveFieldUrl } from '../utils/assetStore';
 import { VNItem, VNItemCollection } from '../features/items/types';
 import {
     VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LightningCommand, FlashlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
+    ShowPhoneCommand, HidePhoneCommand, ShowPhoneTextCommand, HidePhoneTextCommand,
+    PhoneIncomingTextCommand, PhoneIncomingCallCommand, PhoneReply, PhoneFollowUp,
     ShowButtonCommand, HideButtonCommand, ShowItemCommand, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, SetScreenOverlayEffectCommand,
     CreditRollCommand, CreditBackground, CreditMedia, RunScriptCommand,
     SpawnParticlesCommand, StopParticlesCommand,
@@ -240,6 +244,10 @@ import {
     handleShowButton,
     handleHideButton,
     handleShowItem,
+    handleShowPhone,
+    handleHidePhone,
+    handleShowPhoneText,
+    handleHidePhoneText,
     handleJump,
     handleJumpToLabel,
     handleLabel,
@@ -285,6 +293,8 @@ import {
     PlayerState,
     GameSettings,
     HistoryEntry,
+    PhoneMessage,
+    PhoneCallLogEntry,
 } from './live-preview/types/gameState';
 
 type StageSize = { width: number; height: number };
@@ -1006,6 +1016,7 @@ interface GameStateSave {
         selectedItemId?: VNID | null;
         selectedElementId?: VNID | null;
         pickedUpItems?: VNID[];
+        phone?: PlayerState['uiState']['phone'];
     }
 }
 
@@ -1289,7 +1300,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     // Resolve dialogue box image/video URL (character override, else global)
     const boxImage = charTb?.dialogueBoxImage ?? projectUI.dialogueBoxImage;
     const dialogueBoxUrl = boxImage
-        ? (boxImage.type === 'video'
+        ? resolveFieldUrl(project.id, boxImage.type === 'video'
             ? project.videos[boxImage.id]?.videoUrl
             : (project.images[boxImage.id]?.imageUrl || project.backgrounds[boxImage.id]?.imageUrl)
           )
@@ -1299,7 +1310,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     // Resolve dialogue box border image URL (character override, else global)
     const borderImage = charTb?.dialogueBoxBorderImage ?? projectUI.dialogueBoxBorderImage;
     const dialogueBorderUrl = borderImage
-        ? (project.images[borderImage.id]?.imageUrl || project.backgrounds[borderImage.id]?.imageUrl)
+        ? resolveFieldUrl(project.id, project.images[borderImage.id]?.imageUrl || project.backgrounds[borderImage.id]?.imageUrl)
         : null;
     const dialogueBorderPadding = charTb?.dialogueBorderPadding ?? projectUI.dialogueBorderPadding ?? 12;
 
@@ -1319,7 +1330,7 @@ const DialogueBox: React.FC<{ dialogue: PlayerState['uiState']['dialogue'], sett
     // Namebox settings (character override, else global)
     const nameboxImage = charTb?.nameboxImage ?? projectUI.nameboxImage;
     const nameboxImageUrl = nameboxImage
-        ? (project.images[nameboxImage.id]?.imageUrl || project.backgrounds[nameboxImage.id]?.imageUrl)
+        ? resolveFieldUrl(project.id, project.images[nameboxImage.id]?.imageUrl || project.backgrounds[nameboxImage.id]?.imageUrl)
         : null;
     const nameboxColor = charTb?.nameboxColor ?? projectUI.nameboxColor ?? '#0f172a';
     const nameboxOpacity = charTb?.nameboxOpacity ?? projectUI.nameboxOpacity ?? 92;
@@ -1549,9 +1560,9 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     
     // Resolve choice button image/video URL
-    const choiceButtonUrl = projectUI.choiceButtonImage 
-        ? (projectUI.choiceButtonImage.type === 'video' 
-            ? project.videos[projectUI.choiceButtonImage.id]?.videoUrl 
+    const choiceButtonUrl = projectUI.choiceButtonImage
+        ? resolveFieldUrl(project.id, projectUI.choiceButtonImage.type === 'video'
+            ? project.videos[projectUI.choiceButtonImage.id]?.videoUrl
             : (project.images[projectUI.choiceButtonImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonImage.id]?.imageUrl)
           )
         : null;
@@ -1559,7 +1570,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
 
     // Resolve choice button border image URL
     const choiceBorderUrl = projectUI.choiceButtonBorderImage
-        ? (project.images[projectUI.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonBorderImage.id]?.imageUrl)
+        ? resolveFieldUrl(project.id, project.images[projectUI.choiceButtonBorderImage.id]?.imageUrl || project.backgrounds[projectUI.choiceButtonBorderImage.id]?.imageUrl)
         : null;
     const choiceBorderPadding = projectUI.choiceBorderPadding ?? 8;
 
@@ -1578,7 +1589,7 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
 
     // Resolve hover image
     const choiceHoverUrl = projectUI.choiceHoverImage
-        ? (project.images[projectUI.choiceHoverImage.id]?.imageUrl || project.backgrounds[projectUI.choiceHoverImage.id]?.imageUrl)
+        ? resolveFieldUrl(project.id, project.images[projectUI.choiceHoverImage.id]?.imageUrl || project.backgrounds[projectUI.choiceHoverImage.id]?.imageUrl)
         : null;
 
     const hasCustomChoiceImage = choiceButtonUrl || choiceBorderUrl;
@@ -1596,9 +1607,9 @@ const ChoiceMenu: React.FC<{ choices: ChoiceOption[], projectUI: any, onSelect: 
     // Resolve a per-option art asset (image/video) to a URL.
     const resolveChoiceImg = (a?: { type: 'image' | 'video'; id: VNID } | null): string | null => {
         if (!a) return null;
-        return a.type === 'video'
+        return resolveFieldUrl(project.id, a.type === 'video'
             ? (project.videos[a.id]?.videoUrl || (project.backgrounds[a.id] as any)?.videoUrl || (project.images[a.id] as any)?.videoUrl || null)
-            : (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null);
+            : (project.images[a.id]?.imageUrl || project.backgrounds[a.id]?.imageUrl || null));
     };
 
     // Render one choice button. Per-option overrides (art / colors / fontSize / radius) fall back to
@@ -1735,7 +1746,7 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
 
     // Resolve input box image/video URL
     const inputBoxUrl = projectUI?.inputBoxImage
-        ? (projectUI.inputBoxImage.type === 'video'
+        ? resolveFieldUrl(project.id, projectUI.inputBoxImage.type === 'video'
             ? project.videos[projectUI.inputBoxImage.id]?.videoUrl
             : (project.images[projectUI.inputBoxImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxImage.id]?.imageUrl)
           )
@@ -1744,7 +1755,7 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
 
     // Resolve input box border image URL
     const inputBorderUrl = projectUI?.inputBoxBorderImage
-        ? (project.images[projectUI.inputBoxBorderImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxBorderImage.id]?.imageUrl)
+        ? resolveFieldUrl(project.id, project.images[projectUI.inputBoxBorderImage.id]?.imageUrl || project.backgrounds[projectUI.inputBoxBorderImage.id]?.imageUrl)
         : null;
     const inputBorderPadding = projectUI?.inputBorderPadding ?? 8;
     const inputBoxWidth = projectUI?.inputBoxWidth || 0;
@@ -1772,7 +1783,7 @@ const TextInputForm: React.FC<{ textInput: PlayerState['uiState']['textInput'], 
         : { color: '#FFFFFF' };
     // Submit button appearance (all additive-optional → fall back to the original look).
     const inputSubmitUrl = projectUI?.inputSubmitImage
-        ? (project.images[projectUI.inputSubmitImage.id]?.imageUrl || project.backgrounds[projectUI.inputSubmitImage.id]?.imageUrl)
+        ? resolveFieldUrl(project.id, project.images[projectUI.inputSubmitImage.id]?.imageUrl || project.backgrounds[projectUI.inputSubmitImage.id]?.imageUrl)
         : null;
     const submitRadius = projectUI?.inputSubmitBorderRadius ?? Math.max(4, inputBorderRadius - 4);
     const submitLabel = projectUI?.inputSubmitLabel || 'Submit';
@@ -2927,8 +2938,8 @@ const HotZoneTextInput: React.FC<{
     );
 };
 
-/** Renders an imageMap element in HotZone runtime with Ren'Py-style hover support */
-const HotZoneImageMapRenderer: React.FC<{
+/** Renders an draggableImageElement element in HotZone runtime with Ren'Py-style hover support */
+const HotZonedraggableImageElementRenderer: React.FC<{
     el: VNHotZoneElement;
     imageUrl: string | null;
     assetResolver: (assetId: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
@@ -2939,7 +2950,7 @@ const HotZoneImageMapRenderer: React.FC<{
 }> = ({ el, imageUrl, assetResolver, evaluateConditions, variables, playSound, handleLocalAction }) => {
     const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
     const hoverImageUrl = (el as any).hoverImageId ? assetResolver((el as any).hoverImageId, 'image') : null;
-    const regions: any[] = (el as any).imageMapRegions || [];
+    const regions: any[] = (el as any).draggableImageElementRegions || [];
 
     // Compute clip-path for the hovered region
     const hoveredRegion = hoveredRegionId ? regions.find((r: any) => r.id === hoveredRegionId) : null;
@@ -3350,8 +3361,8 @@ const InteractiveRuntime: React.FC<{
                                 playSound={playSound}
                                 font={elFont}
                             />
-                        ) : elType === 'imageMap' ? (
-                            <HotZoneImageMapRenderer
+                        ) : elType === 'draggableImageElement' ? (
+                            <HotZonedraggableImageElementRenderer
                                 el={el}
                                 imageUrl={imageUrl}
                                 assetResolver={assetResolver}
@@ -3454,7 +3465,7 @@ const UIScreenRenderer: React.FC<{
 
     // Pass-through (transparent HUD) screens let clicks fall through empty areas to the
     // scene; only visible elements capture input. Defaults to on for the Game HUD screen.
-    const isPassThrough = screen.passThrough ?? (screenId === project.ui.gameHudScreenId);
+    const isPassThrough = screen.passThrough ?? (screenId === project.ui.gameHudScreenId || !!screen.hudNonBlocking);
 
     // Over-scale a parallaxed screen background just enough that the max drift never reveals
     // its edges: scale-1 = 2 × (depth × PARALLAX_MAX_PX × intensity) / smaller rendered dim.
@@ -3515,6 +3526,10 @@ const UIScreenRenderer: React.FC<{
         {(screen.additionalBackgrounds || []).map(b => buildBgPlane(b.background, b.parallaxDepth ?? 0, b.layer ?? 0, b.id, undefined, b.transition, b.transitionDuration))}
     </>;
     
+    // Last-seen meter values (per element id) so a Meter can detect up/down changes and play a
+    // one-shot animation. Written during render (read-then-store) — a cache, not reactive state.
+    const meterPrevRef = useRef<Record<string, number>>({});
+
     const renderElement = (element: VNUIElement, variables: Record<VNID, string | number | boolean>, project: VNProject, onCommitVariables?: () => void) => {
         runtimeDebugLog('🎯 renderElement called:', element.type, element.name, element.id);
         
@@ -3881,13 +3896,13 @@ const UIScreenRenderer: React.FC<{
                 let hasVideo = false;
                 let videoLoop = false;
                 
-                // Add base image/video
+                // Add base image/video (managed refs → flourish-asset:// URLs)
                 if (character.baseVideoUrl) {
-                    videoUrls.push(character.baseVideoUrl);
+                    videoUrls.push(resolveFieldUrl(project.id, character.baseVideoUrl) || character.baseVideoUrl);
                     hasVideo = true;
                     videoLoop = !!character.baseVideoLoop;
                 } else if (character.baseImageUrl) {
-                    imageUrls.push(character.baseImageUrl);
+                    imageUrls.push(resolveFieldUrl(project.id, character.baseImageUrl) || character.baseImageUrl);
                 }
                 
                 // Get the default expression if specified
@@ -3927,11 +3942,11 @@ const UIScreenRenderer: React.FC<{
                     
                     if (asset) {
                         if (asset.videoUrl) {
-                            videoUrls.push(asset.videoUrl);
+                            videoUrls.push(resolveFieldUrl(project.id, asset.videoUrl) || asset.videoUrl);
                             hasVideo = true;
                             videoLoop = videoLoop || !!asset.loop;
                         } else if (asset.imageUrl) {
-                            imageUrls.push(asset.imageUrl);
+                            imageUrls.push(resolveFieldUrl(project.id, asset.imageUrl) || asset.imageUrl);
                         }
                     }
                 });
@@ -4210,8 +4225,163 @@ const UIScreenRenderer: React.FC<{
                     : el.valueFormat === 'valueMax' ? `${raw}/${max}`
                     : `${raw}`;
                 const radius = el.borderRadius ?? 6;
-                return (
-                    <div key={el.id} style={{ ...style, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                // ── Resource animations: detect change direction + low-state, then wrap the meter ──
+                const prevRaw = meterPrevRef.current[el.id];
+                meterPrevRef.current[el.id] = raw;
+                const changeDir: 'up' | 'down' | 'none' = (prevRaw === undefined || prevRaw === raw) ? 'none' : (raw > prevRaw ? 'up' : 'down');
+                const lowThresh = (el.lowThresholdPct ?? 25) / 100;
+                const lowFx = el.lowAnimations || [];
+                const lowActive = lowFx.length > 0 && !!el.variableId && pct <= lowThresh;
+                const changeAnim = changeDir === 'up' ? el.changeAnimationUp : changeDir === 'down' ? el.changeAnimationDown : undefined;
+                const alignToFlex = (a?: string) => a === 'center' ? 'center' : (a === 'right' || a === 'bottom') ? 'flex-end' : 'flex-start';
+                // Wraps a meter's inner content in the positioned container (overflow visible so scaled
+                // symbols/glows aren't clipped). When `animateWhole` (default — bar/battery/segments) the
+                // WHOLE meter gets the low/change animations; the icons style passes false and animates only
+                // the relevant symbol instead. Transform effects nest so combos don't fight over `transform`.
+                const wrapFx = (inner: React.ReactNode, opts?: { animateWhole?: boolean }): React.ReactNode => {
+                    const whole = opts?.animateWhole !== false;
+                    let node: React.ReactNode = <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: 2, justifyContent: alignToFlex(el.alignY) }}>{inner}</div>;
+                    if (whole && lowActive) {
+                        if (lowFx.includes('wave')) node = <div style={{ width: '100%', height: '100%', animation: 'vnMeterWave 1.3s ease-in-out infinite', transformOrigin: 'center' }}>{node}</div>;
+                        if (lowFx.includes('pulse')) node = <div style={{ width: '100%', height: '100%', animation: 'vnMeterPulse 0.9s ease-in-out infinite', transformOrigin: 'center' }}>{node}</div>;
+                        if (lowFx.includes('shake')) node = <div style={{ width: '100%', height: '100%', animation: 'vnMeterShake 0.4s ease-in-out infinite', transformOrigin: 'center' }}>{node}</div>;
+                    }
+                    if (whole && changeDir !== 'none' && changeAnim && changeAnim !== 'none' && changeAnim !== 'flash') {
+                        const kf = changeAnim === 'pop' ? 'vnMeterPop 0.4s ease' : changeAnim === 'shake' ? 'vnMeterChangeShake 0.4s ease' : changeAnim === 'wave' ? 'vnMeterChangeWave 0.5s ease' : '';
+                        if (kf) node = <div key={`mfx-${raw}`} style={{ width: '100%', height: '100%', animation: kf, transformOrigin: 'center' }}>{node}</div>;
+                    }
+                    const lowFlash = (whole && lowActive && lowFx.includes('flash')) ? (
+                        <div key="mlowflash" style={{ position: 'absolute', inset: 0, background: el.lowFlashColor || '#ef4444', borderRadius: radius, pointerEvents: 'none', animation: 'vnMeterFlashOverlay 0.9s ease-in-out infinite' }} />
+                    ) : null;
+                    const changeFlash = (whole && changeDir !== 'none' && changeAnim === 'flash') ? (
+                        <div key={`mchgflash-${raw}`} style={{ position: 'absolute', inset: 0, background: changeDir === 'up' ? (el.changeFlashColorUp || '#4ade80') : (el.changeFlashColorDown || '#ef4444'), borderRadius: radius, pointerEvents: 'none', animation: 'vnMeterFlashOverlay 0.5s ease' }} />
+                    ) : null;
+                    return (
+                        <div key={el.id} style={{ ...style, overflow: 'visible' }}>
+                            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                                {node}
+                                {lowFlash}
+                                {changeFlash}
+                            </div>
+                        </div>
+                    );
+                };
+                // Per-symbol animation for the 'icons' style: applied to ONE symbol (the edge/last-filled
+                // heart) so only it reacts — matching how most games pulse just the last heart when low.
+                // Flashes use a shape-hugging drop-shadow glow (not a rectangle) so hearts stay heart-shaped.
+                const animateIcon = (child: React.ReactNode): React.ReactNode => {
+                    let node = child;
+                    if (lowActive) {
+                        if (lowFx.includes('wave')) node = <div style={{ display: 'inline-block', animation: 'vnMeterWave 1.3s ease-in-out infinite', transformOrigin: 'center' }}>{node}</div>;
+                        if (lowFx.includes('pulse')) node = <div style={{ display: 'inline-block', animation: 'vnMeterPulse 0.9s ease-in-out infinite', transformOrigin: 'center' }}>{node}</div>;
+                        if (lowFx.includes('shake')) node = <div style={{ display: 'inline-block', animation: 'vnMeterShake 0.4s ease-in-out infinite', transformOrigin: 'center' }}>{node}</div>;
+                        if (lowFx.includes('flash')) node = <div style={{ display: 'inline-block', ['--glow' as any]: el.lowFlashColor || '#ef4444', animation: 'vnMeterGlow 0.9s ease-in-out infinite' }}>{node}</div>;
+                    }
+                    if (changeDir !== 'none' && changeAnim && changeAnim !== 'none') {
+                        if (changeAnim === 'flash') {
+                            node = <div key={`icf-${raw}`} style={{ display: 'inline-block', ['--glow' as any]: changeDir === 'up' ? (el.changeFlashColorUp || '#4ade80') : (el.changeFlashColorDown || '#ef4444'), animation: 'vnMeterGlowOnce 0.5s ease' }}>{node}</div>;
+                        } else {
+                            const kf = changeAnim === 'pop' ? 'vnMeterPop 0.4s ease' : changeAnim === 'shake' ? 'vnMeterChangeShake 0.4s ease' : changeAnim === 'wave' ? 'vnMeterChangeWave 0.5s ease' : '';
+                            if (kf) node = <div key={`icx-${raw}`} style={{ display: 'inline-block', animation: kf, transformOrigin: 'center' }}>{node}</div>;
+                        }
+                    }
+                    return node;
+                };
+                // Repeated-symbol style: a hearts / lives display (e.g. 3 hearts that empty as HP drops).
+                if (el.style === 'icons') {
+                    const n = Math.max(1, el.iconCount ?? 3);
+                    const stepSize = el.iconStep === 'quarter' ? 0.25 : el.iconStep === 'half' ? 0.5 : 1;
+                    const fullUrl = el.iconImage ? getElementAssetUrl(el.iconImage) : null;
+                    const emptyUrl = el.iconEmptyImage ? getElementAssetUrl(el.iconEmptyImage) : null;
+                    const iconSize = el.iconSize ?? 24;
+                    const iconGap = el.iconGap ?? 4;
+                    const filledUnits = pct * n; // how many symbols' worth of value is filled (fractional)
+                    const labelEl = el.showLabel ? (
+                        <div style={{ ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }}>{el.label || boundVar?.name || ''}</div>
+                    ) : null;
+                    // Snap each symbol's fill once, then find the edge symbol (last with any fill) — that's
+                    // the only one the low/change animations touch.
+                    const fracs = Array.from({ length: n }).map((_, i) => {
+                        const f = Math.max(0, Math.min(1, filledUnits - i));
+                        return Math.round(f / stepSize) * stepSize;
+                    });
+                    let edgeIdx = 0;
+                    for (let i = 0; i < n; i++) if (fracs[i] > 0) edgeIdx = i;
+                    return wrapFx(
+                        <>
+                            {labelEl}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: iconGap, alignItems: 'center', justifyContent: alignToFlex(el.alignX) }}>
+                                {Array.from({ length: n }).map((_, i) => {
+                                    const frac = fracs[i];
+                                    const heart = (
+                                        <div style={{ position: 'relative', width: iconSize, height: iconSize, flexShrink: 0 }}>
+                                            {/* Empty / background layer */}
+                                            {emptyUrl ? (
+                                                <img src={emptyUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+                                            ) : fullUrl ? (
+                                                <img src={fullUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.25, filter: 'grayscale(1)' }} />
+                                            ) : (
+                                                <div style={{ position: 'absolute', inset: 0, borderRadius: 4, border: `1px solid ${el.borderColor || el.fillColor || '#a78bfa'}`, opacity: 0.3 }} />
+                                            )}
+                                            {/* Filled layer, clipped left-to-right to `frac` */}
+                                            {frac > 0 && (fullUrl ? (
+                                                <img src={fullUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', clipPath: `inset(0 ${(1 - frac) * 100}% 0 0)`, transition: 'clip-path 0.3s ease' }} />
+                                            ) : (
+                                                <div style={{ position: 'absolute', inset: 0, borderRadius: 4, background: fillBackground, clipPath: `inset(0 ${(1 - frac) * 100}% 0 0)`, transition: 'clip-path 0.3s ease' }} />
+                                            ))}
+                                        </div>
+                                    );
+                                    return <React.Fragment key={i}>{i === edgeIdx ? animateIcon(heart) : heart}</React.Fragment>;
+                                })}
+                                {el.showValue && (
+                                    <div style={{ ...fontSettingsToStyle(el.valueFont), marginLeft: 4, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{valueText}</div>
+                                )}
+                            </div>
+                        </>,
+                        { animateWhole: false }
+                    );
+                }
+                // Battery / segments styles (e.g. phone status-bar battery, affection bars).
+                if (el.style === 'battery' || el.style === 'segments') {
+                    const fc = el.borderColor || el.fillColor || '#a78bfa';
+                    const labelEl = el.showLabel ? (
+                        <div style={{ ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }}>{el.label || boundVar?.name || ''}</div>
+                    ) : null;
+                    const valueEl = el.showValue ? (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', ...fontSettingsToStyle(el.valueFont), textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{valueText}</div>
+                    ) : null;
+                    let body: React.ReactNode;
+                    if (el.style === 'battery') {
+                        body = (
+                            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, minHeight: 6, gap: 1 }}>
+                                <div style={{ position: 'relative', flex: 1, borderRadius: Math.min(radius, 4), overflow: 'hidden', border: `2px solid ${fc}`, backgroundColor: el.backgroundColor || 'rgba(0,0,0,0.35)' }}>
+                                    <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${pct * 100}%`, background: fillBackground, transition: 'width 0.3s ease' }} />
+                                    {valueEl}
+                                </div>
+                                <div style={{ alignSelf: 'center', width: 4, height: '45%', minHeight: 4, borderRadius: '0 2px 2px 0', backgroundColor: fc }} />
+                            </div>
+                        );
+                    } else {
+                        const n = Math.max(1, el.segmentCount ?? 10);
+                        const filled = Math.round(pct * n);
+                        body = (
+                            <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 6, gap: el.segmentGap ?? 2 }}>
+                                {Array.from({ length: n }).map((_, i) => (
+                                    <div key={i} style={{ flex: 1, borderRadius: Math.min(radius, 4), border: `1px solid ${fc}`, background: i < filled ? fillBackground : (el.backgroundColor || 'rgba(0,0,0,0.35)'), transition: 'background 0.3s ease' }} />
+                                ))}
+                                {valueEl}
+                            </div>
+                        );
+                    }
+                    return wrapFx(
+                        <>
+                            {labelEl}
+                            {body}
+                        </>
+                    );
+                }
+                return wrapFx(
+                    <>
                         {el.showLabel && (
                             <div style={{ ...fontSettingsToStyle(el.labelFont), lineHeight: 1.1, flexShrink: 0 }}>
                                 {el.label || boundVar?.name || ''}
@@ -4244,7 +4414,7 @@ const UIScreenRenderer: React.FC<{
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </>
                 );
             }
             default: return null;
@@ -4293,14 +4463,14 @@ const UIScreenRenderer: React.FC<{
             {/* Standard renderer skips interactive types — InteractiveRuntime owns them. */}
             {Object.values(screen.elements).map(element => {
                 const el = element as any;
-                if (el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true) return null;
+                if (el.type === 'HotSpot' || el.type === 'draggableImageElement' || el.draggable === true) return null;
                 return renderElement(element as VNUIElement, variables, project, onCommitVariables);
             })}
             {/* Hot zone runtime activates whenever the screen has any interactive content
                 (hot spots, image maps, draggable elements) or a win condition. */}
             {(
                 Object.values(screen.elements || {}).some((el: any) =>
-                    el.type === 'HotSpot' || el.type === 'ImageMap' || el.draggable === true
+                    el.type === 'HotSpot' || el.type === 'draggableImageElement' || el.draggable === true
                 ) ||
                 !!screen.winCondition
             ) && (
@@ -4499,6 +4669,269 @@ const InGameConfirmDialog: React.FC<{
     );
 };
 
+// --- In-Game Phone (built-in chrome) ---
+const PhoneGlyph: React.FC<{ name?: string }> = ({ name }) => (
+    <span style={{ fontSize: '1.4em', lineHeight: 1 }}>{(name && PHONE_GLYPHS[name]) || '●'}</span>
+);
+
+/** Resolve a phone avatar / caller portrait into a STACK of image URLs (rendered overlapped).
+ *  base → the character's base sprite; expression → base (unless hideBase) + the chosen pose's
+ *  layer assets; custom → the uploaded image. Returns [] when nothing resolves (caller hides it). */
+function resolvePhonePortrait(
+    source: PhonePortraitSource | undefined,
+    character: any,
+    assetResolver: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null,
+): string[] {
+    // Resolve through assetResolver (which maps managed refs → flourish-asset:// URLs). The base sprite
+    // resolves by the character's own id; layer assets by their asset id.
+    const baseUrl = character?.id ? assetResolver(character.id, 'image') : null;
+    const mode = source?.mode || 'base';
+    if (mode === 'custom') {
+        const ci = source?.customImage;
+        const url = ci ? assetResolver(ci.id, ci.type === 'video' ? 'video' : 'image') : null;
+        return url ? [url] : (baseUrl ? [baseUrl] : []);
+    }
+    if (mode === 'expression' && character) {
+        const stack: string[] = [];
+        if (!source?.hideBase && baseUrl) stack.push(baseUrl);
+        const expr = source?.expressionId ? character.expressions?.[source.expressionId] : undefined;
+        if (expr) {
+            for (const layer of Object.values(character.layers || {}) as any[]) {
+                const assetId = expr.layerConfiguration?.[layer.id];
+                if (!assetId) continue;
+                const url = assetResolver(assetId, 'image');
+                if (url) stack.push(url);
+            }
+        }
+        return stack;
+    }
+    return baseUrl ? [baseUrl] : [];
+}
+
+/** The unread badge, styled per `phoneBadgeShape`, with an optional caption underneath. Shared shape
+ *  so engine + editor preview match. */
+function renderPhoneBadge(ui: VNProjectUI): React.ReactNode {
+    const size = ui.phoneBadgeSize ?? 16;
+    const shape = ui.phoneBadgeShape || 'dot';
+    const color = ui.phoneBadgeColor || '#ef4444';
+    const textColor = ui.phoneBadgeTextColor || '#fff';
+    const base: React.CSSProperties = { minWidth: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: textColor, fontSize: size * 0.7, fontWeight: 700, boxShadow: '0 2px 8px rgba(0,0,0,0.4)' };
+    let shapeEl: React.ReactNode;
+    if (shape === 'ring') shapeEl = <span style={{ ...base, width: size, borderRadius: '9999px', border: `${Math.max(2, size * 0.18)}px solid ${color}`, background: 'transparent', boxShadow: 'none' }} />;
+    else if (shape === 'square') shapeEl = <span style={{ ...base, width: size, borderRadius: Math.max(3, size * 0.25), background: color }} />;
+    else if (shape === 'count') shapeEl = <span style={{ ...base, padding: '0 5px', borderRadius: '9999px', background: color }}>1</span>;
+    else if (shape === 'icon') shapeEl = <span style={{ ...base, width: size, borderRadius: '9999px', background: color, fontSize: size * 0.62 }}>{(ui.phoneBadgeIcon && PHONE_GLYPHS[ui.phoneBadgeIcon]) || '💬'}</span>;
+    else if (shape === 'pulse') shapeEl = (
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <style>{`@keyframes vn-badge-pulse{0%{transform:scale(1);opacity:.6}70%{transform:scale(2.2);opacity:0}100%{opacity:0}}`}</style>
+            <span style={{ position: 'absolute', inset: 0, borderRadius: '9999px', background: color, animation: 'vn-badge-pulse 1.4s ease-out infinite' }} />
+            <span style={{ ...base, width: size, borderRadius: '9999px', background: color }} />
+        </span>
+    );
+    else shapeEl = <span style={{ ...base, width: size, borderRadius: '9999px', background: color }} />; // dot
+    if (!ui.phoneBadgeLabel) return shapeEl;
+    return (
+        <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            {shapeEl}
+            <span style={{ fontSize: Math.max(9, size * 0.62), fontWeight: 600, color: ui.phoneBadgeLabelColor || textColor, whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{ui.phoneBadgeLabel}</span>
+        </span>
+    );
+}
+
+/** A round phone avatar that overlaps a resolved portrait stack (base + pose layers, or custom). */
+const PhonePortrait: React.FC<{ urls: string[]; size: string }> = ({ urls, size }) => {
+    if (urls.length === 0) return null;
+    return (
+        <div style={{ width: size, height: size, borderRadius: '9999px', overflow: 'hidden', flexShrink: 0, position: 'relative', background: 'rgba(0,0,0,0.2)' }}>
+            {urls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />)}
+        </div>
+    );
+};
+
+const PhonePanel: React.FC<{
+    ui: VNProjectUI;
+    project: VNProject;
+    phone: NonNullable<PlayerState['uiState']['phone']>;
+    variables: Record<VNID, string | number | boolean>;
+    assetResolver: (id: VNID | null, type: 'audio' | 'video' | 'image') => string | null;
+    evaluateConditions: (c: VNCondition[] | undefined, v: Record<VNID, string | number | boolean>) => boolean;
+    onAction: (a: VNUIAction) => void;
+    onReply: (reply: PhoneReply) => void;
+}> = ({ ui, project, phone, variables, assetResolver, evaluateConditions, onAction, onReply }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [phone.messages.length, phone.pendingChoices]);
+    const pos = ui.phonePosition || 'bottom-right';
+    const scale = (ui.phoneScale ?? 100) / 100;
+    const w = (ui.phoneWidth ?? 26) * scale;
+    const h = (ui.phoneHeight ?? 82) * scale;
+    const x = ui.phoneX ?? (pos === 'center' ? (100 - w) / 2 : pos.includes('right') ? (100 - w - 2) : 2);
+    const y = ui.phoneY ?? (pos === 'center' ? (100 - h) / 2 : pos.includes('top') ? 2 : (100 - h - 2));
+    const shellImg = ui.phoneShellImage ? assetResolver(ui.phoneShellImage.id, 'image') : null;
+    const bodyFont = ui.phoneFont ? fontSettingsToStyle(ui.phoneFont) : {};
+    const titleFont = ui.phoneTitleFont ? fontSettingsToStyle(ui.phoneTitleFont) : {};
+    const buttons = (ui.phoneButtons || []).filter(b => b.show !== false && (!b.conditions?.length || evaluateConditions(b.conditions, variables)));
+    const batteryPct = ui.phoneBatteryVariableId != null ? Math.max(0, Math.min(100, Number(variables[ui.phoneBatteryVariableId] ?? 100))) : 100;
+    const signalBars = Math.max(1, Math.min(8, ui.phoneSignalBars ?? 4));
+    const signalFilled = ui.phoneSignalVariableId != null ? Math.max(0, Math.min(signalBars, Math.round(Number(variables[ui.phoneSignalVariableId] ?? signalBars)))) : signalBars;
+    const signalColor = ui.phoneSignalColor || ui.phoneStatusIconColor || '#fff';
+    const batteryColor = ui.phoneBatteryColor || ui.phoneStatusIconColor || '#fff';
+    const bezel = ui.phoneBezelWidth ?? 8;
+    const casingRadius = ui.phoneBorderRadius ?? 28;
+    const screenRadius = Math.max(casingRadius - bezel, 6);
+    const showHome = ui.phoneShowHomeButton !== false;
+    // Reply buttons come from the richer pendingReplies (incoming texts) or the legacy pendingChoices
+    // (Show Text command) mapped into the same shape.
+    const effectiveReplies: PhoneReply[] = (phone.pendingReplies && phone.pendingReplies.length)
+        ? phone.pendingReplies
+        : (phone.pendingChoices || []).map(o => ({ id: o.id, text: o.text, conditions: o.conditions, actions: o.actions as unknown as VNUIAction[] }));
+    const view = phone.view || 'chat';
+    const showHistory = view === 'history';
+    const isHome = view === 'home';
+    return (
+        // Casing (phone body): the screen is inset by the bezel so it reads as a separate panel.
+        <div style={{
+            position: 'absolute', left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, zIndex: 60,
+            borderRadius: casingRadius, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            padding: bezel, boxSizing: 'border-box',
+            backgroundColor: shellImg ? 'transparent' : (ui.phoneShellColor || '#16181d'), opacity: (ui.phoneOpacity ?? 100) / 100,
+            ...(shellImg ? { backgroundImage: `url(${shellImg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' } : {}),
+            boxShadow: '0 12px 40px rgba(0,0,0,0.6)', animation: 'fade-in 0.2s ease-out',
+        }}>
+            {/* Inner screen */}
+            <div style={{
+                flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                borderRadius: screenRadius, border: `1px solid ${ui.phoneScreenBorderColor || 'rgba(255,255,255,0.12)'}`,
+                background: ui.phoneScreenColor || '#0b0d12', ...bodyFont, position: 'relative',
+            }}>
+            {/* Status bar */}
+            {ui.phoneShowStatusBar !== false && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 14px', fontSize: '0.8em', color: ui.phoneStatusIconColor || '#fff', backgroundColor: ui.phoneStatusBarColor || 'transparent', flexShrink: 0 }}>
+                    <span>{interpolateVariables(ui.phoneClockText || '', variables, project)}</span>
+                    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                        {ui.phoneShowSignal && (
+                            <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '0.1em', height: '0.85em' }} aria-hidden title="Signal">
+                                {Array.from({ length: signalBars }).map((_, i) => (
+                                    <span key={i} style={{ width: '0.18em', height: `${30 + (i / (signalBars - 1 || 1)) * 70}%`, borderRadius: 1, background: signalColor, opacity: i < signalFilled ? 1 : 0.28 }} />
+                                ))}
+                            </span>
+                        )}
+                        {ui.phoneShowBattery && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }} title={`${Math.round(batteryPct)}%`}>
+                                <span style={{ display: 'inline-block', width: '1.5em', height: '0.8em', border: `1px solid ${ui.phoneStatusIconColor || '#fff'}`, borderRadius: 2, position: 'relative' }}>
+                                    <span style={{ position: 'absolute', top: 1, bottom: 1, left: 1, width: `calc(${batteryPct}% - 2px)`, background: batteryColor, borderRadius: 1 }} />
+                                </span>
+                                <span style={{ display: 'inline-block', width: 2, height: '0.45em', background: ui.phoneStatusIconColor || '#fff', borderRadius: '0 1px 1px 0' }} />
+                            </span>
+                        )}
+                    </span>
+                </div>
+            )}
+            {/* Header */}
+            {ui.phoneHeaderText && <div style={{ padding: '2px 16px 6px', ...titleFont }}>{ui.phoneHeaderText}</div>}
+            <style>{`@keyframes vn-phone-typing{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-3px);opacity:1}}`}</style>
+            {/* Home (app buttons only — content area stays empty), chat, or recents/history. */}
+            <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {isHome ? null : showHistory ? (
+                    <>
+                        {(phone.callLog && phone.callLog.length > 0) ? [...phone.callLog].reverse().map(entry => {
+                            const caller = entry.callerId === 'player' ? null : project.characters[entry.callerId];
+                            const purls = resolvePhonePortrait(entry.portrait, caller, assetResolver);
+                            const icon = entry.status === 'missed' ? '↙' : entry.status === 'accepted' ? '↗' : '⊘';
+                            const tint = entry.status === 'missed' ? '#ef4444' : entry.status === 'accepted' ? '#22c55e' : '#9ca3af';
+                            return (
+                                <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 10, background: ui.phoneHistoryRowColor || 'rgba(255,255,255,0.05)', color: ui.phoneHistoryTextColor || '#fff' }}>
+                                    <PhonePortrait urls={purls} size="2em" />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{caller?.name || 'Unknown'}</div>
+                                        <div style={{ fontSize: '0.7em', opacity: 0.8, color: tint }}>{icon} {entry.status}</div>
+                                    </div>
+                                </div>
+                            );
+                        }) : <div style={{ opacity: 0.5, textAlign: 'center', marginTop: 12, fontSize: '0.8em' }}>No recent calls</div>}
+                    </>
+                ) : (
+                <>
+                {phone.messages.map(m => {
+                    const mine = m.senderId === 'player';
+                    const char = mine ? null : project.characters[m.senderId];
+                    const portraitUrls = mine ? [] : resolvePhonePortrait(m.portrait, char, assetResolver);
+                    return (
+                        <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', gap: 6, alignItems: 'flex-end' }}>
+                            {ui.phoneShowAvatars !== false && !mine && <PhonePortrait urls={portraitUrls} size="2.2em" />}
+                            <div style={{ maxWidth: '76%' }}>
+                                {!mine && char?.name && <div style={{ fontSize: '0.7em', opacity: 0.75, marginBottom: 1, color: char.color }}>{char.name}</div>}
+                                <div style={{ padding: '6px 10px', borderRadius: 14, wordBreak: 'break-word', background: mine ? (ui.phoneOutgoingBubbleColor || '#2f6bff') : (ui.phoneIncomingBubbleColor || '#2a2f3a'), color: ui.phoneBubbleTextColor || '#fff' }}>
+                                    {interpolateVariables(m.text, variables, project)}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+                {/* "…" typing indicator */}
+                {phone.typing && (() => {
+                    const tchar = phone.typing.senderId === 'player' ? null : project.characters[phone.typing.senderId];
+                    const turls = tchar ? resolvePhonePortrait(undefined, tchar, assetResolver) : [];
+                    return (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                            {ui.phoneShowAvatars !== false && <PhonePortrait urls={turls} size="2.2em" />}
+                            <div style={{ padding: '8px 12px', borderRadius: 14, background: ui.phoneIncomingBubbleColor || '#2a2f3a', display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                {[0, 1, 2].map(i => <span key={i} style={{ width: 6, height: 6, borderRadius: '9999px', background: ui.phoneTypingColor || ui.phoneBubbleTextColor || '#fff', animation: `vn-phone-typing 1s ${i * 0.2}s infinite` }} />)}
+                            </div>
+                        </div>
+                    );
+                })()}
+                {/* Reply options (in-phone) */}
+                {effectiveReplies.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                        {effectiveReplies.filter(o => !o.conditions?.length || evaluateConditions(o.conditions, variables)).map(o => (
+                            <button key={o.id} onClick={() => onReply(o)} style={{ alignSelf: 'flex-end', maxWidth: '82%', padding: '6px 12px', borderRadius: 14, border: 'none', cursor: 'pointer', ...bodyFont, background: ui.phoneOutgoingBubbleColor || '#2f6bff', color: ui.phoneBubbleTextColor || '#fff' }}>
+                                {interpolateVariables(o.text, variables, project)}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                </>
+                )}
+            </div>
+            {/* App buttons appear ONLY on the home screen (not over chat / history / other apps).
+                Icon + label scale to the button box (container-query units) so resizing actually
+                changes the icon size. */}
+            {isHome && ui.phoneButtonLayout === 'free' && buttons.map(b => {
+                const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
+                return (
+                    <button key={b.id} onClick={() => b.action && onAction(b.action)} title={b.label || ''}
+                        style={{ position: 'absolute', left: `${b.x ?? 8}%`, top: `${b.y ?? 12}%`, width: `${b.width ?? 14}%`, height: `${b.height ?? 14}%`, containerType: 'size', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4cqmin', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', zIndex: 5 } as React.CSSProperties}>
+                        {customIcon ? <img src={customIcon} alt="" style={{ width: '64cqmin', height: '64cqmin', objectFit: 'contain' }} /> : <span style={{ fontSize: '58cqmin', lineHeight: 1 }}>{(b.builtinIcon && PHONE_GLYPHS[b.builtinIcon]) || '●'}</span>}
+                        {b.label && <span style={{ whiteSpace: 'nowrap', fontSize: '20cqmin', lineHeight: 1 }}>{b.label}</span>}
+                    </button>
+                );
+            })}
+            {/* Bottom button bar (default layout) — home screen only */}
+            {isHome && ui.phoneButtonLayout !== 'free' && buttons.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 4, padding: '6px 4px', backgroundColor: ui.phoneButtonBarColor || 'rgba(0,0,0,0.35)', flexShrink: 0 }}>
+                    {buttons.map(b => {
+                        const customIcon = b.iconImage ? assetResolver(b.iconImage.id, 'image') : null;
+                        return (
+                            <button key={b.id} onClick={() => b.action && onAction(b.action)} title={b.label || ''} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 2px', background: 'transparent', border: 'none', cursor: 'pointer', color: ui.phoneButtonIconColor || '#cbd5e1', fontSize: '0.7em' }}>
+                                {customIcon ? <img src={customIcon} alt="" style={{ width: '1.6em', height: '1.6em', objectFit: 'contain' }} /> : <PhoneGlyph name={b.builtinIcon} />}
+                                {b.label && <span style={{ whiteSpace: 'nowrap' }}>{b.label}</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+            </div>
+            {/* Home button on the casing chin: from inside an app it returns to the home screen; from
+                the home screen it closes the phone (like a real phone's home/back button). */}
+            {showHome && (
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: bezel * 0.6 }}>
+                    <button onClick={() => onAction({ type: isHome ? UIActionType.HidePhone : UIActionType.ShowPhone } as VNUIAction)} aria-label="Home" title="Home" style={{ width: '1.5em', height: '1.5em', borderRadius: '9999px', border: `2px solid ${ui.phoneHomeButtonColor || 'rgba(255,255,255,0.28)'}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />
+                </div>
+            )}
+        </div>
+    );
+};
+
 // --- Main Player Component ---
 const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; autoStartMusic?: boolean; isStandalone?: boolean }> = ({ onClose, hideCloseButton = false, autoStartMusic = false, isStandalone = false }) => {
     const { project } = useProject();
@@ -4670,7 +5103,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const font = projectFonts[fontId];
                 if (font?.fontUrl && font?.fontFamily) {
                     try {
-                        const fontFace = new FontFace(font.fontFamily, `url(${font.fontUrl})`);
+                        const fontFace = new FontFace(font.fontFamily, `url(${resolveFieldUrl(project.id, font.fontUrl)})`);
                         await fontFace.load();
                         (document as any).fonts.add(fontFace);
                         runtimeDebugLog(`✓ Loaded project font: ${font.fontFamily}`);
@@ -4685,7 +5118,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 if (char.fontUrl && char.fontFamily) {
                     try {
                         // Create @font-face rule for custom font
-                        const fontFace = new FontFace(char.fontFamily, `url(${char.fontUrl})`);
+                        const fontFace = new FontFace(char.fontFamily, `url(${resolveFieldUrl(project.id, char.fontUrl)})`);
                         await fontFace.load();
                         (document as any).fonts.add(fontFace);
                         runtimeDebugLog(`✓ Loaded custom font: ${char.fontFamily}`);
@@ -4818,7 +5251,15 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const variableStoreRef = useRef<RuntimeVariableStore | null>(null);
     const uiDirtyVariableIdsRef = useRef<Set<VNID>>(new Set());
     const activeEffectTimeoutsRef = useRef<number[]>([]);
-    
+    // Phone dynamic events: the active incoming-call command (for accept/decline actions), its
+    // ringtone audio + timeout id, and pending follow-up/typing timers (cleared on teardown).
+    const activeCallCmdRef = useRef<PhoneIncomingCallCommand | null>(null);
+    const callRingAudioRef = useRef<HTMLAudioElement | null>(null);
+    const callTimeoutRef = useRef<number | null>(null);
+    const callRingStartRef = useRef<number>(0);      // when the current ring timeout was (re)started
+    const callRingRemainingRef = useRef<number>(0);  // ms left before the call times out (survives pause)
+    const phoneTimersRef = useRef<number[]>([]);
+
     // Use refs for visual effects to avoid triggering command loop re-execution
     const activeFlashRef = useRef<{ color: string; duration: number; key: number } | null>(null);
     const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
@@ -4870,52 +5311,48 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
 
     const assetResolver = useCallback((assetId: VNID | null, type: 'audio' | 'video' | 'image'): string | null => {
         if (!assetId) return null;
-        
-        switch(type) {
-            case 'audio': 
-                return project.audio[assetId]?.audioUrl || null;
-            case 'video':
-                // A "video" asset can live in the videos collection OR in backgrounds/images
-                // (a video uploaded under those Asset Manager tabs is stored there with a
-                // videoUrl). Resolve across all three so Play Video works regardless of where
-                // the asset was uploaded.
-                return project.videos[assetId]?.videoUrl
-                    || project.backgrounds[assetId]?.videoUrl
-                    || project.images?.[assetId]?.videoUrl
-                    || null;
-            case 'image': {
-                // Check backgrounds first (primary source for UI images)
-                if (project.backgrounds[assetId]) {
-                    const bg = project.backgrounds[assetId];
-                    return bg.videoUrl || bg.imageUrl || null;
-                }
-                // Check images collection
-                if (project.images && project.images[assetId]) {
-                    const img = project.images[assetId];
-                    return img.videoUrl || img.imageUrl || null;
-                }
-                // Check videos collection as fallback (in case type='image' was passed for a video asset)
-                if (project.videos[assetId]) {
-                    return project.videos[assetId]?.videoUrl || null;
-                }
-                // Check character assets as final fallback
-                for (const charId in project.characters) {
-                    const char = project.characters[charId];
-                    // Character's base image ID is the character's ID itself
-                    if (char.id === assetId) {
-                        return char.baseVideoUrl || char.baseImageUrl || null;
+        // Raw field value: a `data:` URL (legacy/in-flight) OR a managed ref like "assets/videos/<id>.mp4".
+        const raw = ((): string | null => {
+            switch (type) {
+                case 'audio':
+                    return project.audio[assetId]?.audioUrl || null;
+                case 'video':
+                    // A "video" asset can live in videos OR backgrounds/images (depends on the upload tab).
+                    return project.videos[assetId]?.videoUrl
+                        || project.backgrounds[assetId]?.videoUrl
+                        || project.images?.[assetId]?.videoUrl
+                        || null;
+                case 'image': {
+                    if (project.backgrounds[assetId]) {
+                        const bg = project.backgrounds[assetId];
+                        return bg.videoUrl || bg.imageUrl || null;
                     }
-                    for (const layerId in char.layers) {
-                        const layer = char.layers[layerId];
-                        if (layer.assets[assetId]) {
-                            const asset = layer.assets[assetId];
-                            return asset.videoUrl || asset.imageUrl || null;
+                    if (project.images && project.images[assetId]) {
+                        const img = project.images[assetId];
+                        return img.videoUrl || img.imageUrl || null;
+                    }
+                    if (project.videos[assetId]) {
+                        return project.videos[assetId]?.videoUrl || null;
+                    }
+                    for (const charId in project.characters) {
+                        const char = project.characters[charId];
+                        if (char.id === assetId) return char.baseVideoUrl || char.baseImageUrl || null;
+                        for (const layerId in char.layers) {
+                            const layer = char.layers[layerId];
+                            if (layer.assets[assetId]) {
+                                const asset = layer.assets[assetId];
+                                return asset.videoUrl || asset.imageUrl || null;
+                            }
                         }
                     }
+                    return null;
                 }
-                return null;
+                default:
+                    return null;
             }
-        }
+        })();
+        // Managed refs → flourish-asset:// URL (streamed from disk); data:/http/blob pass through.
+        return resolveFieldUrl(project.id, raw);
     }, [project]);
     
     // Helper to get asset metadata (is it a video, should it loop, etc.)
@@ -5194,6 +5631,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 selectedItemId: playerState.selectedItemId,
                 selectedElementId: playerState.selectedElementId,
                 pickedUpItems: playerState.pickedUpItems,
+                phone: playerState.uiState.phone ?? undefined,
             }
             };
 
@@ -5228,6 +5666,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     };
 
     const loadGame = (slotNumber: number) => {
+        // Tear down any in-flight phone event (ringing call / queued follow-ups) before loading.
+        clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
         // Immediately stop music without fade to avoid race condition where
         // old fade callback clears audio.src after the new track is loaded
         const audio = musicAudioRef.current;
@@ -5260,13 +5700,16 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 pickedUpItems: saveData.playerStateData.pickedUpItems,
                 history: [],
                 savedInputs: {},
-                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
+                uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: saveData.playerStateData.phone ?? null },
                 musicState: saveData.playerStateData.musicState,
             });
             setScreenStack([]);
             setHudStack([]);
             setClosingScreens(new Set()); // drop any stale fade-out flags from a prior session
             setIsJustLoaded(true);
+            // Re-arm a call that was ringing when the game was saved (ringtone + timeout restart).
+            const savedCall = saveData.playerStateData.phone?.incomingCall;
+            if (savedCall?.phase === 'ringing' && savedCall.cmd) rearmIncomingCall(savedCall.cmd);
             // Plugin hook: a save has just been loaded (state applied).
             try { pluginManager.invokeHook('onLoadAfterSave', saveData); } catch { /* isolated */ }
         };
@@ -5278,6 +5721,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // --- State Initialization ---
     const startNewGame = useCallback(() => {
         stopAndResetMusic();
+        // Tear down any in-flight phone event (ringing call / queued follow-ups) for the fresh start.
+        clearPhoneTimers(); stopRingtone(); activeCallCmdRef.current = null;
         // Re-arm reactive-restock guards for the fresh playthrough (record-only on first observation).
         restockPrevConditionRef.current = {};
         restockPrevWatchRef.current = {};
@@ -5358,7 +5803,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             stageState: { backgroundUrl: null, characters: {}, textOverlays: [], imageOverlays: [], buttonOverlays: [], movieOverlays: [], screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] }, particleEffects: {} },
             history: [],
             savedInputs: {},
-            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false },
+            uiState: { dialogue: null, choices: null, textInput: null, movieUrl: null, movieLoop: false, isWaitingForInput: false, isTransitioning: false, transitionElement: null, flash: null, showHistory: false, screenSceneId: null, isSkipping: false, phone: null },
             musicState: { audioId: null, loop: false, currentTime: 0, isPlaying: false },
         });
         setScreenStack([]);
@@ -6317,7 +6762,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             if (!ps || ps.mode !== 'playing') return;
             // Plugin heartbeat (~120ms). Fires during play even when no parallel CEs are active.
             try { pluginManager.invokeHook('onRuntimeTick', 120); } catch { /* isolated */ }
-            if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || hudStackRef.current.length > 0) return;
+            // A blocking (modal) HUD halts parallel events; a non-blocking HUD (hudNonBlocking)
+            // lets them keep running so overlays like an HP bar update as the game progresses.
+            const blockingHudOpen = hudStackRef.current.some(id => !project.uiScreens[id]?.hudNonBlocking);
+            if (ps.uiState.isTransitioning || ps.uiState.choices || ps.uiState.textInput || blockingHudOpen) return;
 
             const events = Object.values(project.commonEvents || {}) as VNCommonEvent[];
             const active = events.filter(ce => ce.enabled && ce.trigger === 'parallel'
@@ -6505,8 +6953,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             return;
         }
 
-        // Pause command execution while any HUD screen is shown
-        if (hudStack.length > 0) {
+        // Pause command execution while a BLOCKING (modal) HUD screen is open. Non-blocking HUD
+        // overlays (hudNonBlocking — e.g. an HP bar) let the scene keep running behind them.
+        // (`scenePaused` above already covers screens flagged pauseSceneWhileOpen.)
+        if (hudStack.some(id => !project.uiScreens[id]?.hudNonBlocking)) {
             return;
         }
 
@@ -7416,6 +7866,27 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     applyResult({ advance: true, stagePatch: () => ({ lights: [] }) });
                     break;
                 }
+                case CommandType.ShowPhone: { applyResult(handleShowPhone(command as ShowPhoneCommand, commandContext)); break; }
+                case CommandType.HidePhone: { applyResult(handleHidePhone(command as HidePhoneCommand, commandContext)); break; }
+                case CommandType.ShowPhoneText: { applyResult(handleShowPhoneText(command as ShowPhoneTextCommand, commandContext)); break; }
+                case CommandType.HidePhoneText: { applyResult(handleHidePhoneText(command as HidePhoneTextCommand, commandContext)); break; }
+                case CommandType.PhoneIncomingText: {
+                    // 'open' WITH replies pauses the scene (the reply resumes it); everything else is
+                    // non-blocking (a banner/ding arrives and the story keeps playing).
+                    const cmd = command as PhoneIncomingTextCommand;
+                    const pausesForReply = cmd.presentation === 'open' && !!(cmd.replies && cmd.replies.length > 0);
+                    if (pausesForReply) instantAdvance = false;
+                    startIncomingText(cmd);
+                    break;
+                }
+                case CommandType.PhoneIncomingCall: {
+                    // Modal calls pause the scene until answered/declined/timed-out; non-blocking calls
+                    // ring in the corner while the story continues.
+                    const cmd = command as PhoneIncomingCallCommand;
+                    if ((cmd.mode || 'modal') === 'modal') instantAdvance = false;
+                    startIncomingCall(cmd);
+                    break;
+                }
                 case CommandType.Flashlight: {
                     const cmd = command as FlashlightCommand;
                     if (cmd.enabled) {
@@ -7479,8 +7950,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     break;
                 }
                 case CommandType.ShowScreen: {
-                    instantAdvance = false; // Pause execution when showing a screen/menu
                     const cmd = command as any;
+                    const screenToShow = project.uiScreens[cmd.screenId];
+                    // Non-blocking HUD overlays (e.g. an HP bar) let the story keep playing: the
+                    // command advances immediately and the overlay persists. Modal screens (the
+                    // default) pause execution until they're closed.
+                    if (!screenToShow?.hudNonBlocking) {
+                        instantAdvance = false; // Pause execution when showing a modal screen/menu
+                    }
                     // Store the current scene ID so UI actions can reference it later
                     updatePlayerState(p => p ? {
                         ...p,
@@ -7679,6 +8156,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     const handleDialogueAdvance = () => {
         // Frozen behind a pausing overlay — ignore all advance attempts (click/key/auto/skip).
         if (scenePaused) return;
+        // A modal incoming call is ringing — the call overlay owns input until answered/declined.
+        if (playerState?.uiState.phone?.incomingCall?.phase === 'ringing' && playerState.uiState.phone.incomingCall.modal) return;
         // Advancing past a line cuts off its voice clip so it doesn't bleed into the next line.
         stopVoice();
         updatePlayerState(p => {
@@ -8097,6 +8576,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
              const closingScreen = closingId ? project.uiScreens[closingId] : null;
              const transOut = closingScreen?.transitionOut || 'fade';
              const transDur = closingScreen?.transitionOutDuration ?? closingScreen?.transitionDuration ?? 300;
+             // A screen shown DURING play (mode 'playing', on the hud stack — e.g. the pause screen
+             // opened via a Show Screen command) leaves the scene frozen on that command, so closing
+             // it must advance past the command to resume — same as the back button
+             // (ReturnToPreviousScreen). The REAL pause menu (wasPaused) only resumes, never advances;
+             // a non-blocking HUD already advanced when it was shown.
+             const closeBehavior = closingScreen?.onCloseBehavior || 'default';
+             const advanceOnReturn = closeBehavior === 'advance'
+                 || (closeBehavior === 'default' && !wasPaused && !closingScreen?.hudNonBlocking);
              const finishReturn = () => {
                  updatePlayerState(p => p ? { ...p, mode: 'playing' } : null);
                  setScreenStack([]);
@@ -8106,9 +8593,9 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                      musicAudioRef.current.play().catch(e => console.error('Failed to resume music:', e));
                  }
                  // Honor the closing screen's on-close behavior.
-                 if (closingScreen?.onCloseBehavior === 'runActions') {
-                     (closingScreen.onCloseActions || []).forEach(a => executeUIAction(a));
-                 } else if (closingScreen?.onCloseBehavior === 'advance') {
+                 if (closeBehavior === 'runActions') {
+                     (closingScreen?.onCloseActions || []).forEach(a => executeUIAction(a));
+                 } else if (advanceOnReturn) {
                      updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
                  }
              };
@@ -8288,8 +8775,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     const effectiveTransitionOut = closingScreen?.transitionOut || 'fade';
                     const hasTransition = effectiveTransitionOut !== 'none';
                     // Configurable on-close behavior (default preserves today's "advance on last hud").
+                    // A non-blocking HUD already advanced when it was shown, so closing it must NOT
+                    // advance again (that would skip a command) — only 'advance' forces it.
                     const closeBehavior = closingScreen?.onCloseBehavior || 'default';
-                    const advanceOnClose = closeBehavior === 'default' || closeBehavior === 'advance';
+                    const advanceOnClose = closeBehavior === 'advance'
+                        || (closeBehavior === 'default' && !closingScreen?.hudNonBlocking);
                     const runCloseActions = () => { if (closeBehavior === 'runActions') (closingScreen?.onCloseActions || []).forEach(a => executeUIAction(a)); };
 
                     if (hasTransition) {
@@ -8525,6 +9015,24 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             saveGame((action as SaveGameAction).slotNumber);
         } else if (action.type === UIActionType.DeleteSave) {
             deleteGameSaveSlot((action as DeleteSaveAction).slotNumber);
+        } else if (action.type === UIActionType.ShowPhone) {
+            // Open the phone to its HOME screen (app buttons). Clears any banner/badge.
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'home', notification: null, unread: false } } } : null);
+        } else if (action.type === UIActionType.ShowPhoneText) {
+            // Open straight to the chat view (the scene command additionally appends a message).
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'chat', notification: null, unread: false } } } : null);
+        } else if (action.type === UIActionType.ShowPhoneHistory) {
+            // Open the phone to the recents / call-log view.
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: true, view: 'history', notification: null, unread: false } } } : null);
+        } else if (action.type === UIActionType.HidePhone) {
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), open: false, waiting: false, pendingChoices: undefined, notification: null } } } : null);
+            // Optional: closing the phone advances the story one beat (so reading + closing continues
+            // without an extra click). Opt-in via phoneOnCloseBehavior; default leaves the scene as-is.
+            if (project.ui.phoneOnCloseBehavior === 'advance' && playerState?.mode === 'playing') {
+                updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false, dialogue: null, isSkipping: false } } : null);
+            }
+        } else if (action.type === UIActionType.HidePhoneText) {
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, phone: { ...(p.uiState.phone || { open: false, messages: [] }), messages: [], waiting: false, pendingChoices: undefined, pendingReplies: undefined, typing: null } } } : null);
         } else if (action.type === UIActionType.LoadGame) {
             loadGame((action as LoadGameAction).slotNumber);
         } else if (action.type === UIActionType.JumpToScene) {
@@ -9243,6 +9751,183 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         } : null);
     };
 
+    // ─── Phone dynamic events (incoming text / call) shared helpers ─── //
+    const phoneNavigates = (acts: VNUIAction[]) => acts.some(a =>
+        a.type === UIActionType.JumpToScene || a.type === UIActionType.JumpToLabel || a.type === UIActionType.GoToScreen
+        || a.type === UIActionType.CallCommonEvent || a.type === UIActionType.StartNewGame || a.type === UIActionType.LoadGame || a.type === UIActionType.QuitToTitle);
+
+    const clearPhoneTimers = () => { phoneTimersRef.current.forEach(id => clearTimeout(id)); phoneTimersRef.current = []; };
+    const pushPhoneTimer = (fn: () => void, ms: number) => { const id = window.setTimeout(fn, ms); phoneTimersRef.current.push(id); return id; };
+
+    const appendPhoneMessage = (m: PhoneMessage, open?: boolean) => {
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: open ?? ph.open, view: 'chat', messages: [...ph.messages, m], typing: null } } };
+        });
+    };
+
+    // Play out a sequence of sender follow-ups, each preceded by a "…" typing indicator, then onDone.
+    const playPhoneFollowUps = (followUps: PhoneFollowUp[], onDone: () => void) => {
+        if (!followUps.length) { onDone(); return; }
+        let delay = 0;
+        followUps.forEach((f, idx) => {
+            const typeMs = Math.max(0, f.delayMs ?? 900);
+            delay += 150;
+            pushPhoneTimer(() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, typing: { senderId: f.senderId } } } } : p), delay);
+            delay += typeMs;
+            pushPhoneTimer(() => {
+                appendPhoneMessage({ id: `fu-${Date.now()}-${idx}`, senderId: f.senderId, text: f.text, ...(f.portrait ? { portrait: f.portrait } : {}) }, true);
+                if (f.soundId) playSound(f.soundId, undefined, false);
+                if (idx === followUps.length - 1) pushPhoneTimer(onDone, 60);
+            }, delay);
+        });
+    };
+
+    // Player tapped a phone chat reply: echo it as an outgoing bubble, clear the prompt, run the
+    // reply's actions, optionally play the sender's follow-ups (with typing dots), then advance past
+    // the paused command — but only if the scene was actually WAITING on it (non-blocking arrivals
+    // already advanced, so replying must not skip a command).
+    const handlePhoneReply = (reply: PhoneReply) => {
+        clearPhoneTimers();
+        const wasWaiting = !!playerStateRef.current?.uiState.phone?.waiting;
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: true, messages: [] };
+            const msgs = ph.messages;
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: ph.open ?? true, messages: [...msgs, { id: `reply-${msgs.length}`, senderId: 'player' as const, text: reply.text }], waiting: false, pendingChoices: undefined, pendingReplies: undefined } } };
+        });
+        const acts = (reply.actions || []) as VNUIAction[];
+        acts.forEach(a => handleUIAction(a));
+        const navigates = phoneNavigates(acts);
+        const resume = () => { if (wasWaiting && !navigates) updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null); };
+        const followUps = reply.followUps || [];
+        if (followUps.length && !navigates) playPhoneFollowUps(followUps, resume); else resume();
+    };
+
+    // A text "arrives". 'notify' = non-blocking banner + ding + badge (tap to read); 'open' = open
+    // the phone straight to the message (pauses only if it carries replies).
+    const startIncomingText = (cmd: PhoneIncomingTextCommand) => {
+        const presentation = cmd.presentation || 'notify';
+        const replies = cmd.replies || [];
+        const hasReplies = replies.length > 0;
+        const msg: PhoneMessage = { id: `it-${Date.now()}`, senderId: cmd.senderId, text: cmd.text, ...(cmd.portrait ? { portrait: cmd.portrait } : {}) };
+        const ding = cmd.soundId ?? project.ui.phoneNotifSoundId ?? null;
+        if (presentation === 'notify') {
+            updatePlayerState(p => {
+                if (!p) return null;
+                const ph = p.uiState.phone || { open: false, messages: [] };
+                return { ...p, uiState: { ...p.uiState, phone: { ...ph, messages: [...ph.messages, msg], notification: { senderId: cmd.senderId, text: cmd.text, portrait: cmd.portrait, visible: true }, unread: cmd.showBadge !== false ? true : ph.unread, waiting: false, pendingReplies: hasReplies ? replies : ph.pendingReplies } } };
+            });
+            if (ding) playSound(ding, undefined, false);
+            const autoMs = project.ui.phoneNotifAutoMs ?? 6000;
+            if (autoMs > 0) pushPhoneTimer(() => updatePlayerState(p => (p && p.uiState.phone?.notification) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, notification: { ...p.uiState.phone.notification, visible: false } } } } : p), autoMs);
+        } else {
+            const landMessage = () => {
+                updatePlayerState(p => {
+                    if (!p) return null;
+                    const ph = p.uiState.phone || { open: false, messages: [] };
+                    return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'chat', messages: [...ph.messages, msg], waiting: hasReplies, pendingReplies: hasReplies ? replies : undefined, notification: null, typing: null } } };
+                });
+                if (ding) playSound(ding, undefined, false);
+            };
+            const typingMs = Math.max(0, cmd.typingMs ?? 0);
+            if (typingMs > 0) {
+                // Open the phone and show a "…" typing beat from the sender, then land the message.
+                updatePlayerState(p => {
+                    if (!p) return null;
+                    const ph = p.uiState.phone || { open: false, messages: [] };
+                    return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: true, view: 'chat', notification: null, typing: { senderId: cmd.senderId } } } };
+                });
+                pushPhoneTimer(landMessage, typingMs);
+            } else {
+                landMessage();
+            }
+        }
+    };
+
+    // A call rings. Starts the ringtone loop + a timeout, and shows the call overlay. Accept/Decline/
+    // timeout are resolved by resolveIncomingCall.
+    const startIncomingCall = (cmd: PhoneIncomingCallCommand) => {
+        clearPhoneTimers();
+        if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
+        activeCallCmdRef.current = cmd;
+        const modal = (cmd.mode || 'modal') === 'modal';
+        const caller = project.characters[cmd.callerId as VNID];
+        const ringtone = cmd.ringtoneId ?? caller?.phoneRingtoneAudioId ?? project.ui.phoneCallRingtoneId ?? null;
+        if (ringtone) callRingAudioRef.current = playSound(ringtone, undefined, true);
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: { callerId: cmd.callerId, portrait: cmd.portrait, phase: 'ringing', modal, cmd } } } };
+        });
+        const dur = cmd.ringDurationMs ?? 12000;
+        callRingRemainingRef.current = dur;
+        callRingStartRef.current = Date.now();
+        callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall('missed'), dur);
+    };
+
+    // Re-arm a ringing call after a load: restore the active command + ringtone + timeout.
+    const rearmIncomingCall = (cmd: PhoneIncomingCallCommand) => {
+        if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
+        activeCallCmdRef.current = cmd;
+        const caller = project.characters[cmd.callerId as VNID];
+        const ringtone = cmd.ringtoneId ?? caller?.phoneRingtoneAudioId ?? project.ui.phoneCallRingtoneId ?? null;
+        if (ringtone) callRingAudioRef.current = playSound(ringtone, undefined, true);
+        const dur = cmd.ringDurationMs ?? 12000;
+        callRingRemainingRef.current = dur;
+        callRingStartRef.current = Date.now();
+        callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall('missed'), dur);
+    };
+
+    const stopRingtone = () => {
+        if (callTimeoutRef.current) { clearTimeout(callTimeoutRef.current); callTimeoutRef.current = null; }
+        const cmd = activeCallCmdRef.current;
+        const caller = cmd ? project.characters[cmd.callerId as VNID] : null;
+        const ringtone = cmd ? (cmd.ringtoneId ?? caller?.phoneRingtoneAudioId ?? project.ui.phoneCallRingtoneId ?? null) : null;
+        if (ringtone) stopSfx(ringtone);
+        callRingAudioRef.current = null;
+    };
+
+    const resolveIncomingCall = (outcome: 'accepted' | 'declined' | 'missed') => {
+        const cmd = activeCallCmdRef.current;
+        if (!cmd) return;
+        stopRingtone();
+        activeCallCmdRef.current = null;
+        updatePlayerState(p => {
+            if (!p) return null;
+            const ph = p.uiState.phone || { open: false, messages: [] };
+            const log = ph.callLog || [];
+            const entry: PhoneCallLogEntry = { id: `call-${Date.now()}`, callerId: cmd.callerId, status: outcome, portrait: cmd.portrait, order: log.length };
+            return { ...p, uiState: { ...p.uiState, phone: { ...ph, incomingCall: null, callLog: [...log, entry], unread: outcome === 'missed' && cmd.showBadge !== false ? true : ph.unread } } };
+        });
+        const acts = ((outcome === 'accepted' ? cmd.acceptActions : outcome === 'declined' ? cmd.declineActions : (cmd.onTimeout === 'runActions' ? cmd.timeoutActions : [])) || []) as VNUIAction[];
+        acts.forEach(a => handleUIAction(a));
+        const navigates = phoneNavigates(acts);
+        if ((cmd.mode || 'modal') === 'modal' && !navigates) updatePlayerState(p => p ? { ...p, currentIndex: p.currentIndex + 1, uiState: { ...p.uiState, isWaitingForInput: false } } : null);
+    };
+
+    // While the game isn't actively playing (e.g. the pause menu is open), freeze a ringing call:
+    // pause its ringtone AND its timeout (so it can't auto-miss under a menu). Resume both — with the
+    // remaining time — when play resumes. Keeps an in-progress call exactly as it was.
+    useEffect(() => {
+        const ringing = playerState?.uiState.phone?.incomingCall?.phase === 'ringing';
+        if (playerState?.mode !== 'playing') {
+            try { callRingAudioRef.current?.pause(); } catch { /* ignore */ }
+            if (ringing && callTimeoutRef.current) {
+                clearTimeout(callTimeoutRef.current);
+                callTimeoutRef.current = null;
+                callRingRemainingRef.current = Math.max(0, callRingRemainingRef.current - (Date.now() - callRingStartRef.current));
+            }
+        } else if (ringing) {
+            if (callRingAudioRef.current?.paused) callRingAudioRef.current.play().catch(() => { /* ignore */ });
+            if (callTimeoutRef.current === null) {
+                callRingStartRef.current = Date.now();
+                callTimeoutRef.current = window.setTimeout(() => resolveIncomingCall('missed'), callRingRemainingRef.current);
+            }
+        }
+    }, [playerState?.mode, playerState?.uiState.phone?.incomingCall?.phase]);
+
     const handleVariableChange = (variableId: VNID, value: string | number | boolean) => {
         runtimeDebugLog('[handleVariableChange] Called with:', { variableId, value, hasPlayerState: !!playerState });
         if (playerState) {
@@ -9273,6 +9958,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             });
         }
     };
+
+    // Editor-only: let the Variable Tracker change a variable live during test-play. Writes to the
+    // canonical store the active context reads (playerState.variables in-game, menuVariables pre-game),
+    // and keeps any uncommitted UI-screen overlay in sync so screens/meters/conditions react at once.
+    const setTestVariable = useCallback((id: VNID, value: string | number | boolean) => {
+        if (playerStateRef.current) {
+            updatePlayerState(p => (p ? { ...p, variables: { ...p.variables, [id]: value } } : p));
+            if (uiDirtyVariableIdsRef.current.has(id)) {
+                setUiVariables(prev => { const n = { ...prev, [id]: value }; uiVariablesRef.current = n; return n; });
+            }
+        } else {
+            setMenuVariables(prev => ({ ...prev, [id]: value }));
+        }
+    }, [updatePlayerState]);
 
     const mergeDirtyUiVariables = useCallback((base: PlayerState['variables']) => {
         const dirtyIds = uiDirtyVariableIdsRef.current;
@@ -9413,6 +10112,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 const typing = !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
                 if (!typing) {
                     const pressed = e.key.toLowerCase();
+                    // Phone toggle hotkey (built-in chrome).
+                    if (project.ui.phoneOpenHotkey && project.ui.phoneOpenHotkey.toLowerCase() === pressed) {
+                        e.preventDefault();
+                        updatePlayerState(p => {
+                            if (!p) return null;
+                            const ph = p.uiState.phone || { open: false, messages: [] };
+                            const opening = !ph.open;
+                            return { ...p, uiState: { ...p.uiState, phone: { ...ph, open: opening, ...(opening ? { view: 'home' as const, notification: null, unread: false } : {}) } } };
+                        });
+                        return;
+                    }
                     const target = (Object.values(project.uiScreens) as VNUIScreen[]).find(s => !!s.openHotkey && s.openHotkey.toLowerCase() === pressed);
                     if (target) {
                         e.preventDefault();
@@ -10537,7 +11247,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         // A pass-through HUD (e.g. an inventory bar) is a transparent overlay, not a full
         // screen — it must NOT hide the dialogue box. Only an opaque HUD without showDialogue
         // suppresses dialogue.
-        const isHudPassThrough = currentHudScreen ? (currentHudScreen.passThrough ?? (currentHudScreenId === project.ui.gameHudScreenId)) : false;
+        const isHudPassThrough = currentHudScreen ? (currentHudScreen.passThrough ?? (currentHudScreenId === project.ui.gameHudScreenId || !!currentHudScreen.hudNonBlocking)) : false;
         const shouldShowDialogueOnHud = currentHudScreen?.showDialogue || isHudPassThrough;
         // Fullscreen movie fade-out duration (0 = no fade) — when a transition is set, the movie
         // layer fades to transparent on end before clearing, revealing the scene beneath.
@@ -11147,6 +11857,18 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     0%, 100% { opacity: 0; }
                     50% { opacity: 0.9; }
                 }
+
+                /* Meter resource animations — low-state loops + on-change one-shots (editor + standalone) */
+                @keyframes vnMeterShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-3px)} 40%{transform:translateX(3px)} 60%{transform:translateX(-2px)} 80%{transform:translateX(2px)} }
+                @keyframes vnMeterPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
+                @keyframes vnMeterWave { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(-4deg)} 75%{transform:rotate(4deg)} }
+                @keyframes vnMeterPop { 0%{transform:scale(1)} 40%{transform:scale(1.3)} 100%{transform:scale(1)} }
+                @keyframes vnMeterChangeShake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 50%{transform:translateX(5px)} 75%{transform:translateX(-3px)} }
+                @keyframes vnMeterChangeWave { 0%,100%{transform:rotate(0deg)} 30%{transform:rotate(-8deg)} 70%{transform:rotate(8deg)} }
+                @keyframes vnMeterFlashOverlay { 0%{opacity:0} 50%{opacity:0.55} 100%{opacity:0} }
+                /* Shape-hugging glow for icon/heart flashes (drop-shadow follows the image alpha, no rectangle) */
+                @keyframes vnMeterGlow { 0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))} 50%{filter:drop-shadow(0 0 6px var(--glow,#ef4444)) drop-shadow(0 0 3px var(--glow,#ef4444))} }
+                @keyframes vnMeterGlowOnce { 0%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))} 40%{filter:drop-shadow(0 0 8px var(--glow,#4ade80)) drop-shadow(0 0 4px var(--glow,#4ade80))} 100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))} }
                 /* Lightning flicker patterns (1 = single strike, 2 = double, 3 = stormy triple). */
                 @keyframes vn-lightning-1 {
                     0% { opacity: 0; }
@@ -11481,6 +12203,98 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     />
                 )}
             </div>
+            {/* In-game phone (built-in chrome). Shows whenever something opens it (command / action /
+                hotkey) — no separate "enabled" gate, so it works out of the box. */}
+            {playerState?.mode === 'playing' && playerState.uiState.phone?.open && (
+                <PhonePanel
+                    ui={project.ui}
+                    project={project}
+                    phone={playerState.uiState.phone}
+                    variables={screenVariables}
+                    assetResolver={assetResolver}
+                    evaluateConditions={evaluateConditions}
+                    onAction={handleUIAction}
+                    onReply={handlePhoneReply}
+                />
+            )}
+            {/* Incoming-text notification banner (non-blocking; tap to open the phone to the message) */}
+            {playerState?.mode === 'playing' && playerState.uiState.phone?.notification?.visible && !playerState.uiState.phone.open && (() => {
+                const n = playerState.uiState.phone.notification!;
+                const nchar = n.senderId === 'player' ? null : project.characters[n.senderId];
+                const nurls = resolvePhonePortrait(n.portrait, nchar, assetResolver);
+                // Free position (phoneNotifX/Y) overrides the top/bottom preset when set.
+                const freePos = project.ui.phoneNotifX != null || project.ui.phoneNotifY != null;
+                const atTop = (project.ui.phoneNotifPosition || 'top') === 'top';
+                const posStyle: React.CSSProperties = freePos
+                    ? { left: `${project.ui.phoneNotifX ?? 50}%`, top: `${project.ui.phoneNotifY ?? 2}%` }
+                    : { left: '50%', transform: 'translateX(-50%)', ...(atTop ? { top: '2%' } : { bottom: '2%' }) };
+                return (
+                    <div onClick={() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: 'chat', notification: null, unread: false } } } : p)}
+                        style={{ position: 'absolute', ...posStyle, zIndex: 65, cursor: 'pointer', minWidth: '40%', maxWidth: '72%', display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 14, background: project.ui.phoneNotifColor || 'rgba(18,20,26,0.96)', color: project.ui.phoneNotifTextColor || '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.5)', animation: 'fade-in 0.25s ease-out', ...(project.ui.phoneNotifFont ? fontSettingsToStyle(project.ui.phoneNotifFont) : {}) }}>
+                        <PhonePortrait urls={nurls} size="2.4em" />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            {nchar?.name && <div style={{ fontWeight: 700, fontSize: '0.85em' }}>{nchar.name}</div>}
+                            <div style={{ fontSize: '0.85em', opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{interpolateVariables(n.text, screenVariables, project)}</div>
+                        </div>
+                        <span style={{ fontSize: '1.2em' }}>💬</span>
+                    </div>
+                );
+            })()}
+            {/* Incoming-call overlay: full-screen accept/decline for modal calls, a corner card for
+                non-blocking calls (the scene keeps playing behind it). */}
+            {playerState?.mode === 'playing' && playerState.uiState.phone?.incomingCall?.phase === 'ringing' && (() => {
+                const call = playerState.uiState.phone.incomingCall!;
+                const cchar = call.callerId === 'player' ? null : project.characters[call.callerId];
+                const curls = resolvePhonePortrait(call.portrait, cchar, assetResolver);
+                const shape = project.ui.phoneCallPortraitShape || 'circle';
+                const acceptImg = project.ui.phoneCallAcceptImage ? assetResolver(project.ui.phoneCallAcceptImage.id, 'image') : null;
+                const declineImg = project.ui.phoneCallDeclineImage ? assetResolver(project.ui.phoneCallDeclineImage.id, 'image') : null;
+                const acceptGlyph = acceptImg ? null : (project.ui.phoneCallAcceptIcon && PHONE_GLYPHS[project.ui.phoneCallAcceptIcon]) || '📞';
+                const declineGlyph = declineImg ? null : (project.ui.phoneCallDeclineIcon && PHONE_GLYPHS[project.ui.phoneCallDeclineIcon]) || '⊘';
+                const callBtn = (color: string) => ({ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '0.85em' });
+                const circle = (color: string) => ({ width: '3em', height: '3em', borderRadius: '9999px', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3em' });
+                const acceptBtn = <button onClick={() => resolveIncomingCall('accepted')} style={callBtn(project.ui.phoneCallAcceptColor || '#22c55e')}><span style={circle(project.ui.phoneCallAcceptColor || '#22c55e')}>{acceptImg ? <img src={acceptImg} alt="" style={{ width: '1.4em', height: '1.4em', objectFit: 'contain' }} /> : acceptGlyph}</span><span>{project.ui.phoneCallAcceptLabel || 'Accept'}</span></button>;
+                const declineBtn = <button onClick={() => resolveIncomingCall('declined')} style={callBtn(project.ui.phoneCallDeclineColor || '#ef4444')}><span style={circle(project.ui.phoneCallDeclineColor || '#ef4444')}>{declineImg ? <img src={declineImg} alt="" style={{ width: '1.4em', height: '1.4em', objectFit: 'contain' }} /> : declineGlyph}</span><span>{project.ui.phoneCallDeclineLabel || 'Decline'}</span></button>;
+                const nameStyle = project.ui.phoneCallNameFont ? fontSettingsToStyle(project.ui.phoneCallNameFont) : { fontSize: '1.5em', fontWeight: 700 };
+                if (call.modal) {
+                    const bgImg = project.ui.phoneCallBgImage ? assetResolver(project.ui.phoneCallBgImage.id, 'image') : null;
+                    return (
+                        <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, color: '#fff', background: bgImg ? `url(${bgImg}) center/cover no-repeat` : (project.ui.phoneCallBgColor || 'rgba(8,10,14,0.96)'), animation: 'fade-in 0.25s ease-out' }}>
+                            <div style={{ width: '22%', aspectRatio: '1', borderRadius: shape === 'circle' ? '9999px' : '16px', overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.06)' }}>
+                                {curls.map((u, i) => <img key={i} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />)}
+                            </div>
+                            <div style={{ textAlign: 'center', ...nameStyle }}>{cchar?.name || 'Unknown'}</div>
+                            <div style={{ opacity: 0.7, fontSize: '0.9em' }}>Incoming call…</div>
+                            <div style={{ display: 'flex', gap: 48, marginTop: 8 }}>{declineBtn}{acceptBtn}</div>
+                        </div>
+                    );
+                }
+                // Non-blocking corner card
+                return (
+                    <div style={{ position: 'absolute', right: '2%', top: '6%', zIndex: 80, width: '26%', minWidth: 180, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', borderRadius: 16, color: '#fff', background: project.ui.phoneCallBgColor || 'rgba(8,10,14,0.96)', boxShadow: '0 10px 34px rgba(0,0,0,0.55)', animation: 'fade-in 0.25s ease-out' }}>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <PhonePortrait urls={curls} size="2.6em" />
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ ...nameStyle, fontSize: '1em' }}>{cchar?.name || 'Unknown'}</div>
+                                <div style={{ opacity: 0.7, fontSize: '0.75em' }}>Incoming call…</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 2 }}>{declineBtn}{acceptBtn}</div>
+                    </div>
+                );
+            })()}
+            {/* Unread notification badge (dialogue-box / HUD): a tappable badge that opens the phone */}
+            {playerState?.mode === 'playing' && playerState.uiState.phone?.unread && !playerState.uiState.phone.open && !playerState.uiState.phone.incomingCall && (() => {
+                const bx = project.ui.phoneBadgeX ?? 95;
+                const by = project.ui.phoneBadgeY ?? 4;
+                const badge = renderPhoneBadge(project.ui);
+                return (
+                    <div onClick={() => updatePlayerState(p => (p && p.uiState.phone) ? { ...p, uiState: { ...p.uiState, phone: { ...p.uiState.phone, open: true, view: 'chat', notification: null, unread: false } } } : p)}
+                        title="New message" style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, zIndex: 66, cursor: 'pointer' }}>
+                        {badge}
+                    </div>
+                );
+            })()}
             {/* In-game confirmation dialog */}
             {confirmDialog && (
                 <InGameConfirmDialog
@@ -11526,18 +12340,39 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         const scopeColor: Record<string, string> = { local: 'bg-emerald-400', global: 'bg-sky-400', persistent: 'bg-amber-400' };
                         return (
                             <div className="bg-black/85 backdrop-blur-sm p-2.5 rounded-lg text-xs w-full max-h-[60vh] overflow-y-auto border border-white/10 shadow-xl">
+                                <p className="text-[10px] text-slate-500 mb-1.5">Tap −/＋ or Flip to change values live</p>
                                 <ul className="space-y-1">
                                     {defs.map(def => {
                                         const raw = (def.id in liveVars) ? liveVars[def.id] : def.defaultValue;
                                         const bl = resolveBoolLabels(def, 'Yes', 'No');
                                         const display = def.type === 'boolean' ? (raw ? bl.yes : bl.no) : String(raw);
+                                        const isNum = def.type === 'number';
+                                        const isBool = def.type === 'boolean';
+                                        const clampNum = (val: number) => {
+                                            let r = val;
+                                            if (typeof def.min === 'number') r = Math.max(def.min, r);
+                                            if (typeof def.max === 'number') r = Math.min(def.max, r);
+                                            return r;
+                                        };
+                                        const btn = 'w-5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-sky-600 active:bg-sky-500 text-white leading-none transition-colors';
                                         return (
                                             <li key={def.id} className="flex items-center justify-between gap-3">
                                                 <span className="flex items-center gap-1.5 min-w-0">
                                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${scopeColor[def.scope || 'global'] || 'bg-slate-400'}`} />
                                                     <span className="text-slate-300 truncate" title={def.name}>{def.name}</span>
                                                 </span>
-                                                <span className="font-mono text-white flex-shrink-0">{display}</span>
+                                                <span className="flex items-center gap-1 flex-shrink-0">
+                                                    {isNum && (
+                                                        <button title="−1" className={btn} onClick={() => setTestVariable(def.id, clampNum((Number(raw) || 0) - 1))}>−</button>
+                                                    )}
+                                                    <span className="font-mono text-white text-right" style={{ minWidth: '2.75rem' }}>{display}</span>
+                                                    {isNum && (
+                                                        <button title="+1" className={btn} onClick={() => setTestVariable(def.id, clampNum((Number(raw) || 0) + 1))}>＋</button>
+                                                    )}
+                                                    {isBool && (
+                                                        <button title="Toggle" className="px-1.5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-sky-600 active:bg-sky-500 text-white text-[10px] leading-none transition-colors" onClick={() => setTestVariable(def.id, !raw)}>Flip</button>
+                                                    )}
+                                                </span>
                                             </li>
                                         );
                                     })}

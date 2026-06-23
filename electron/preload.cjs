@@ -49,6 +49,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveProjectExport: (data, filename, filePath) =>
     ipcRenderer.invoke('save-project-export', { data, filename, filePath }),
 
+  // Streaming project export: open a write stream (dialog or given path), append chunks, finalize.
+  // Lets huge projects export without holding the whole archive in memory.
+  exportStreamStart: (filename, filePath) =>
+    ipcRenderer.invoke('export-stream-start', { filename, filePath }),
+  exportStreamChunk: (chunk) =>
+    ipcRenderer.invoke('export-stream-chunk', chunk),
+  exportStreamEnd: () =>
+    ipcRenderer.invoke('export-stream-end'),
+  exportStreamAbort: () =>
+    ipcRenderer.invoke('export-stream-abort'),
+
+  // Managed project asset library (file-backed media via the flourish-asset:// protocol).
+  writeProjectAsset: (projectId, type, id, ext, data) =>
+    ipcRenderer.invoke('write-project-asset', { projectId, type, id, ext, data }),
+  readProjectAsset: (projectId, relPath) =>
+    ipcRenderer.invoke('read-project-asset', { projectId, relPath }),
+  deleteProjectAsset: (projectId, relPath) =>
+    ipcRenderer.invoke('delete-project-asset', { projectId, relPath }),
+  deleteProjectAssetFolder: (projectId) =>
+    ipcRenderer.invoke('delete-project-asset-folder', { projectId }),
+  copyProjectAssetFolder: (fromProjectId, toProjectId) =>
+    ipcRenderer.invoke('copy-project-asset-folder', { fromProjectId, toProjectId }),
+  listProjectAssets: (projectId) =>
+    ipcRenderer.invoke('list-project-assets', { projectId }),
+  getProjectAssetSizes: (projectId) =>
+    ipcRenderer.invoke('get-project-asset-sizes', { projectId }),
+
   setHubActive: (isActive) =>
     ipcRenderer.send('set-hub-active', isActive),
 

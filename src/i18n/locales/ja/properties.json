@@ -443,7 +443,7 @@
     "pickUpOnce": "記憶する（一度だけ入手）",
     "pickUpOnceHint": "一度入手すると、プレイヤーがこのシーンを再訪しても再出現せず、入手は保存されます。再出現するアイテムにはオフにしてください。"
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "イメージマップの背景",
     "hoverStateImage": "ホバー状態の画像",
     "hoverStateHint": "領域にホバーすると、この画像がその領域に切り取られて表示されます（Ren'Py風のホバー効果）。",
@@ -479,9 +479,9 @@
     "addAction": "+ アクションを追加",
     "regionConditions": "領域の条件",
     "regionConditionsHint": "領域は条件が満たされた場合にのみ有効になります。",
-    "targetImageMap": "非表示にするターゲットイメージマップ",
-    "selectImageMap": "イメージマップを選択...",
-    "imageMapOption": "イメージマップ（{{count}}領域）（ID：{{id}}）"
+    "targetdraggableImageElement": "非表示にするターゲットイメージマップ",
+    "selectdraggableImageElement": "イメージマップを選択...",
+    "draggableImageElementOption": "イメージマップ（{{count}}領域）（ID：{{id}}）"
   },
   "credit": {
     "entries": "クレジット項目",
@@ -628,7 +628,7 @@
     "typeImage": "画像オーバーレイ",
     "typeText": "テキストオーバーレイ",
     "typeButton": "ボタンオーバーレイ",
-    "typeImageMap": "イメージマップ",
+    "typedraggableImageElement": "イメージマップ",
     "typeMovie": "動画（動画を再生）",
     "typeScreen": "画面",
     "targetId": "ターゲットID",
@@ -658,7 +658,7 @@
     "panY": "Pan Y（%）",
     "screen": "画面",
     "imageLabel": "画像（{{id}}…）",
-    "imageMapLabel": "イメージマップ（{{id}}…）"
+    "draggableImageElementLabel": "イメージマップ（{{id}}…）"
   },
   "hotspot": {
     "name": "名前",

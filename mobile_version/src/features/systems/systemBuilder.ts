@@ -1,6 +1,6 @@
 /**
  * systemBuilder — turns a high-level Inventory/Shop config into a plain VNUIScreen
- * made entirely of native primitives (Text / Image / Button / HotSpot / ImageMap
+ * made entirely of native primitives (Text / Image / Button / HotSpot / draggableImageElement
  * elements + SetVariable actions + conditions). Nothing here is a bespoke runtime
  * mechanic: every element this emits is something a user could place and wire by
  * hand in the UI screen editor, which keeps generated systems fully re-customizable.
@@ -11,14 +11,14 @@ import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import {
     VNUIScreen, VNUIElement, UIElementType, VNFontSettings,
-    UIButtonElement, UITextElement, UIImageElement, UIHotSpotElement, UIImageMapElement,
+    UIButtonElement, UITextElement, UIImageElement, UIHotSpotElement, UIdraggableImageElementElement,
 } from '../ui/types';
 import { UIActionType, VNUIAction, VNCondition } from '../../types/shared';
 
 let _seq = 0;
 const eid = (): VNID => `elem-${Date.now().toString(36)}-${(_seq++).toString(36)}`;
 
-export type InteractionMode = 'buttonGrid' | 'imageMap' | 'dragDrop';
+export type InteractionMode = 'buttonGrid' | 'draggableImageElement' | 'dragDrop';
 
 /** One resolved item the builder lays out (already linked to its count variable). */
 export interface BuiltItemRef {
@@ -44,7 +44,7 @@ export interface ShopBuildConfig {
     columns?: number;
     currency: { variableId: VNID; name: string; icon?: string };
     items: BuiltItemRef[];
-    /** image asset for imageMap / dragDrop board (mode-dependent). */
+    /** image asset for draggableImageElement / dragDrop board (mode-dependent). */
     boardImageAssetId?: VNID | null;
     closeAction?: VNUIAction;
 }
@@ -167,7 +167,7 @@ export function buildShopScreen(project: VNProject, config: ShopBuildConfig): VN
             const cardEls = shopCard(project, slot, item, icon, price, config.currency.variableId, buyActions);
             els.push(...cardEls);
         });
-    } else if (config.mode === 'imageMap') {
+    } else if (config.mode === 'draggableImageElement') {
         // One artwork; each item gets an invisible click hot spot laid over its art.
         if (config.boardImageAssetId) {
             els.push(imageEl({ x: 50, y: 55, w: 90, h: 70, assetId: config.boardImageAssetId, name: 'Shop Board' }));
@@ -246,7 +246,7 @@ export function buildInventoryScreen(project: VNProject, config: InventoryBuildC
 
     els.push(textEl({ x: 50, y: 5, w: 80, h: 8, text: config.screenName, font: titleFont(project), name: 'Inventory Title' }));
 
-    if (config.mode === 'imageMap' && config.boardImageAssetId) {
+    if (config.mode === 'draggableImageElement' && config.boardImageAssetId) {
         els.push(imageEl({ x: 50, y: 55, w: 90, h: 70, assetId: config.boardImageAssetId, name: 'Inventory Board' }));
     }
 

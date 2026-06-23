@@ -27,3 +27,15 @@ build-tools
 *.njsproj
 *.sln
 *.sw?
+
+# Planning / scratch notes (root-level only; product docs in docs/ and tutorial-doc.md stay tracked)
+/*_PLAN.md
+/*_BRAINSTORM.md
+/*_ROADMAP.md
+/*_PROGRESS.md
+/*_REVAMP.md
+/*_REVAMP_PLAN.md
+/*_audit.md
+/deep_audit.md
+/redundancy_verification.md
+/CHARACTER_SYSTEM_REVAMP_PLAN.md

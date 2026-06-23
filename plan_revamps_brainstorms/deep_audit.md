@@ -174,7 +174,7 @@ General, Fonts, Screens, Accessibility, Analytics, CG Gallery — some quite tec
 
 ### 3H. Command Palette Has 39 Commands Across 9 Categories
 
-All 39 commands are visible at once in the palette. For a beginner, many commands (`SpawnParticles`, `PanZoomScreen`, `ShowImageMap`, `CreditRoll`, `RunScript`) are advanced and intimidating.
+All 39 commands are visible at once in the palette. For a beginner, many commands (`SpawnParticles`, `PanZoomScreen`, `ShowdraggableImageElement`, `CreditRoll`, `RunScript`) are advanced and intimidating.
 
 > **Simplification:**
 > - Default view: show "Essential" commands — Dialogue, Choice, SetBackground, ShowCharacter, HideCharacter, PlayMusic, Jump, Wait  

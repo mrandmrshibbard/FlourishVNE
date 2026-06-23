@@ -43,6 +43,20 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
     const isChildWindow = isManagerWindow();
     const { t } = useTranslation('nav');
 
+    // Tab-label display mode. Default (compact) = icon-only, with the label springing open only for
+    // the active tab (the space-saving redesign). Expanded = ALL tabs show their labels (the older,
+    // roomier look) — a per-user choice persisted across sessions.
+    const [labelsExpanded, setLabelsExpanded] = React.useState<boolean>(() => {
+        try { return localStorage.getItem('flourish-nav-tabs-expanded') === '1'; } catch { return false; }
+    });
+    const toggleLabelsExpanded = React.useCallback(() => {
+        setLabelsExpanded(prev => {
+            const next = !prev;
+            try { localStorage.setItem('flourish-nav-tabs-expanded', next ? '1' : '0'); } catch { /* ignore */ }
+            return next;
+        });
+    }, []);
+
     type TabConfig = {
         id: NavigationTab;
         label: string;
@@ -246,7 +260,22 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                     animation: 'shimmer 3s linear infinite'
                 }}
             />
-            
+
+            {/* Expand / collapse all tab labels — lets users pick the roomy labeled look or the
+                compact icon-only one. Preference persists (localStorage). */}
+            <button
+                onClick={toggleLabelsExpanded}
+                aria-pressed={labelsExpanded}
+                title={labelsExpanded ? t('collapseLabels', 'Collapse tabs to icons') : t('expandLabels', 'Show all tab labels')}
+                className="relative z-10 flex-shrink-0 flex items-center justify-center w-7 h-7 xl:w-8 xl:h-8 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-all duration-300"
+                style={{ border: '1px solid var(--border-subtle)' }}
+            >
+                <svg className={`w-4 h-4 transition-transform duration-300 ${labelsExpanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7 4l6 6-6 6" />
+                    <path d="M3 4l6 6-6 6" opacity="0.5" />
+                </svg>
+            </button>
+
             {tabs.map((tab, index) => {
                 const label = t(`tabs.${tab.id}`);
                 const description = t(`desc.${tab.id}`);
@@ -307,24 +336,27 @@ const NavigationTabs: React.FC<NavigationTabsProps> = ({
                             
                             {/* Label — tabs are icon-only by default so the bar stays compact and
                                 left-packed (it can never clip under the right-hand controls). The name
-                                SPRINGS open for the ACTIVE ("highlighted") tab and on hover, and springs
-                                closed otherwise. It animates max-width/opacity/margin (which pushes the
-                                neighbouring tabs) plus a translateX that uses an overshooting spring
-                                easing for the bounce. Collapsed = max-w-0 + ml-0 so it reserves no width. */}
+                                SPRINGS open ONLY for the ACTIVE ("highlighted") tab (animates
+                                max-width/opacity/margin + an overshooting translateX for the bounce) and
+                                springs closed when it's deselected. Inactive tabs deliberately do NOT
+                                expand on hover: an inline hover-reveal pushed every neighbouring tab
+                                sideways, so sweeping the mouse across the bar made the whole row jitter
+                                ("shake"). The name is still surfaced on hover via the button's title
+                                tooltip, with zero layout shift. */}
                             <span
                                 className={`relative z-10 whitespace-nowrap overflow-hidden transition-all duration-300 ${
-                                    isActive
+                                    (isActive || labelsExpanded)
                                         ? 'max-w-[10rem] opacity-100 ml-2 translate-x-0'
                                         : 'max-w-0 opacity-0 ml-0 -translate-x-2'
                                 }`}
                                 style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
                             >{label}</span>
 
-                            {/* Count badge — only on the active tab (inactive hover-reveal caused the
-                                tab bar to jitter as the mouse swept across it). */}
+                            {/* Count badge — shown on the active tab, or on every tab when labels are
+                                expanded (the roomy look has space for it without reflow jitter). */}
                             {tab.count > 0 && (
                                 <span
-                                    className={`${isActive ? 'inline-block ml-1.5' : 'hidden'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                    className={`${(isActive || labelsExpanded) ? 'inline-block ml-1.5' : 'hidden'} relative z-10 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all duration-300 ${
                                         isActive
                                             ? 'bg-white/30 text-white shadow-sm'
                                             : 'text-[var(--text-secondary)]'

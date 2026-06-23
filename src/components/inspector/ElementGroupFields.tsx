@@ -908,6 +908,44 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             <FormField label="Maximum"><TextInput type="number" value={el.maxValue ?? ''} placeholder={String((boundVar as any)?.max ?? 100)} onChange={e => updateElement({ maxValue: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0) })} /></FormField>
                         </div>
                         <p className="text-[9px] text-slate-500 -mt-1">Blank = use the variable's own range.</p>
+                        <FormField label="Bar style">
+                            <Select value={el.style || 'bar'} onChange={e => updateElement({ style: e.target.value as 'bar' | 'battery' | 'segments' | 'icons' })}>
+                                <option value="bar">Bar (classic fill)</option>
+                                <option value="battery">Battery</option>
+                                <option value="segments">Segments</option>
+                                <option value="icons">Hearts / repeated image</option>
+                            </Select>
+                        </FormField>
+                        {el.style === 'segments' && (
+                            <div className="grid grid-cols-2 gap-2">
+                                <FormField label="Segments"><TextInput type="number" min="1" max="50" value={el.segmentCount ?? 10} onChange={e => updateElement({ segmentCount: parseInt(e.target.value) || 10 })} /></FormField>
+                                <FormField label="Gap (px)"><TextInput type="number" min="0" max="20" value={el.segmentGap ?? 2} onChange={e => updateElement({ segmentGap: parseInt(e.target.value) || 0 })} /></FormField>
+                            </div>
+                        )}
+                        {el.style === 'icons' && (
+                            <div className="space-y-2 p-2 rounded-md bg-slate-800/40 border border-slate-700/50">
+                                <p className="text-[10px] text-slate-400">Show a symbol repeated across the bar — perfect for a hearts / lives system.</p>
+                                <AssetSelector label="Symbol image (full)" assetType="images" value={el.iconImage?.id || null} onChange={id => updateElement({ iconImage: id ? { type: 'image', id } : null })} />
+                                <AssetSelector label="Empty symbol (optional)" assetType="images" value={el.iconEmptyImage?.id || null} onChange={id => updateElement({ iconEmptyImage: id ? { type: 'image', id } : null })} />
+                                <p className="text-[9px] text-slate-500 -mt-1">No empty image → the full symbol shows dimmed for empty slots. With no image at all, colored boxes are used.</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <FormField label="How many"><TextInput type="number" min="1" max="20" value={el.iconCount ?? 3} onChange={e => updateElement({ iconCount: parseInt(e.target.value) || 3 })} /></FormField>
+                                    <FormField label="Steps per symbol">
+                                        <Select value={el.iconStep || 'full'} onChange={e => updateElement({ iconStep: e.target.value as 'full' | 'half' | 'quarter' })}>
+                                            <option value="full">Whole only</option>
+                                            <option value="half">Half (½)</option>
+                                            <option value="quarter">Quarter (¼)</option>
+                                        </Select>
+                                    </FormField>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <FormField label="Size (px)"><TextInput type="number" min="8" max="128" value={el.iconSize ?? 24} onChange={e => updateElement({ iconSize: parseInt(e.target.value) || 24 })} /></FormField>
+                                    <FormField label="Gap (px)"><TextInput type="number" min="0" max="40" value={el.iconGap ?? 4} onChange={e => updateElement({ iconGap: parseInt(e.target.value) || 0 })} /></FormField>
+                                </div>
+                                <p className="text-[9px] text-slate-500">Tip: set Maximum to your number of lives so each symbol = 1 (use Half/Quarter for partial hearts).</p>
+                            </div>
+                        )}
+                        {el.style !== 'battery' && el.style !== 'segments' && el.style !== 'icons' && (
                         <FormField label="Fill direction">
                             <Select value={el.direction || 'ltr'} onChange={e => updateElement({ direction: e.target.value as 'ltr' | 'rtl' | 'up' })}>
                                 <option value="ltr">Left → right</option>
@@ -915,6 +953,19 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                                 <option value="up">Bottom → top</option>
                             </Select>
                         </FormField>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                            <FormField label="Align X">
+                                <Select value={el.alignX || 'left'} onChange={e => updateElement({ alignX: e.target.value as 'left' | 'center' | 'right' })}>
+                                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                                </Select>
+                            </FormField>
+                            <FormField label="Align Y">
+                                <Select value={el.alignY || 'top'} onChange={e => updateElement({ alignY: e.target.value as 'top' | 'center' | 'bottom' })}>
+                                    <option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option>
+                                </Select>
+                            </FormField>
+                        </div>
                         <FormField label="Show label"><input type="checkbox" checked={el.showLabel !== false} onChange={e => updateElement({ showLabel: e.target.checked })} /></FormField>
                         {el.showLabel !== false && (
                             <FormField label="Label text"><TextInput value={el.label || ''} onChange={e => updateElement({ label: e.target.value || undefined })} placeholder={boundVar?.name || 'Variable name'} /></FormField>
@@ -951,6 +1002,43 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </div>
                         </FormField>
                         <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="32" value={String(el.borderRadius ?? 6)} onChange={e => updateElement({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        <div className="space-y-2 p-2 rounded-md bg-slate-800/40 border border-slate-700/50">
+                            <p className="text-[10px] text-slate-400 font-semibold">Resource animations</p>
+                            <FormField label="Low when ≤ (% full)"><TextInput type="number" min="0" max="100" value={String(el.lowThresholdPct ?? 25)} onChange={e => updateElement({ lowThresholdPct: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })} /></FormField>
+                            <div>
+                                <p className="text-[10px] text-slate-400 mb-1">Animate while low (combine any):</p>
+                                <div className="grid grid-cols-2 gap-1">
+                                    {(['shake', 'pulse', 'flash', 'wave'] as const).map(fx => {
+                                        const on = (el.lowAnimations || []).includes(fx);
+                                        return <label key={fx} className="flex items-center gap-1.5 text-xs text-slate-300 capitalize">
+                                            <input type="checkbox" checked={on} onChange={e => {
+                                                const cur = new Set(el.lowAnimations || []);
+                                                if (e.target.checked) cur.add(fx); else cur.delete(fx);
+                                                updateElement({ lowAnimations: Array.from(cur) });
+                                            }} />{fx}
+                                        </label>;
+                                    })}
+                                </div>
+                            </div>
+                            {(el.lowAnimations || []).includes('flash') && (
+                                <FormField label="Low flash color"><ColorInput value={el.lowFlashColor || '#ef4444'} onChange={v => updateElement({ lowFlashColor: v })} /></FormField>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">
+                                <FormField label="On increase">
+                                    <Select value={el.changeAnimationUp || 'none'} onChange={e => updateElement({ changeAnimationUp: e.target.value as 'none' | 'pop' | 'flash' | 'shake' | 'wave' })}>
+                                        <option value="none">None</option><option value="pop">Pop</option><option value="flash">Flash</option><option value="shake">Shake</option><option value="wave">Wave</option>
+                                    </Select>
+                                </FormField>
+                                <FormField label="On decrease">
+                                    <Select value={el.changeAnimationDown || 'none'} onChange={e => updateElement({ changeAnimationDown: e.target.value as 'none' | 'pop' | 'flash' | 'shake' | 'wave' })}>
+                                        <option value="none">None</option><option value="pop">Pop</option><option value="flash">Flash</option><option value="shake">Shake</option><option value="wave">Wave</option>
+                                    </Select>
+                                </FormField>
+                            </div>
+                            {el.changeAnimationUp === 'flash' && <FormField label="Increase flash color"><ColorInput value={el.changeFlashColorUp || '#4ade80'} onChange={v => updateElement({ changeFlashColorUp: v })} /></FormField>}
+                            {el.changeAnimationDown === 'flash' && <FormField label="Decrease flash color"><ColorInput value={el.changeFlashColorDown || '#ef4444'} onChange={v => updateElement({ changeFlashColorDown: v })} /></FormField>}
+                            <p className="text-[9px] text-slate-500">Plays in test-play & the built game (the canvas stays still).</p>
+                        </div>
                         {el.showLabel !== false && el.labelFont && (
                             <><h4 className="font-bold my-2 text-slate-400 text-xs">Label font</h4>
                             <FontEditor font={el.labelFont} onFontChange={(prop, value) => updateElement({ labelFont: { ...el.labelFont!, [prop]: value } })} /></>

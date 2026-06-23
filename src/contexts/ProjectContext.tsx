@@ -10,6 +10,9 @@ import { migrateProjectToUnifiedScreens } from '../utils/unifiedScreenMigration'
 import { migrateProjectRemoveLegacyCommands } from '../utils/legacyCommandMigration';
 import { migrateItemCountVariableBounds, migrateStatVariables, repairOrphanBranchMarkers } from '../utils/itemVariableMigration';
 import { pluginManager } from '../features/plugins/PluginManagerService';
+import { externalizeProjectAssets, type MigrationProgress } from '../utils/assetMigration';
+import { isElectronAssetStore } from '../utils/assetStore';
+import MigrationStatusBar from '../components/MigrationStatusBar';
 
 interface UndoRedoState {
   past: VNProject[];
@@ -54,6 +57,7 @@ export const ProjectProvider: React.FC<{
   }));
   const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [migration, setMigration] = useState<MigrationProgress | null>(null);
 
   const isSyncing = useRef(false);
   const historyRef = useRef(history);
@@ -101,6 +105,36 @@ export const ProjectProvider: React.FC<{
       return newHistory;
     });
   }, []);
+
+  // On desktop, normalize a project's media to the managed file store on open: write any embedded
+  // base64 to files AND upgrade older bare "assets/…" refs to flourish-asset:// URLs (so editor
+  // canvases that read the field directly can load them). Idempotent + cheap when already normalized;
+  // only re-saves when something actually changed. No-op on web/mobile (assets stay base64).
+  useEffect(() => {
+    if (!isElectronAssetStore()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { project: migrated, changed, migratedCount } = await externalizeProjectAssets(
+          historyRef.current.present,
+          (p) => { if (!cancelled) setMigration(p); },
+        );
+        if (cancelled) return;
+        setMigration(null);
+        if (!changed) return;
+        setHistory(prev => ({ ...prev, present: { ...migrated } }));
+        try { await saveProjectToIDB(migrated); } catch { /* autosave will retry */ }
+        if (migratedCount > 0) {
+          try { toast.success(`Moved ${migratedCount} asset${migratedCount === 1 ? '' : 's'} into the new project storage`); } catch { /* no-op */ }
+        }
+      } catch (err) {
+        log.warn('Asset externalization failed:', err);
+        if (!cancelled) setMigration(null);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProject.id]);
 
   useEffect(() => {
     if ((window as any).electronAPI?.onProjectStateUpdate) {
@@ -251,6 +285,7 @@ export const ProjectProvider: React.FC<{
       markSaved
     }}>
       {children}
+      <MigrationStatusBar status={migration} />
     </ProjectContext.Provider>
   );
 };

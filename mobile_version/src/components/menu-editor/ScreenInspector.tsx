@@ -76,11 +76,13 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
     // visible if the screen already has any overlay setting, so nothing gets orphaned/hidden.
     const screenCategory = getScreenCategory(screen, project);
     const hasOverlaySettings = !!(screen.passThrough || screen.hudAboveDialogue || screen.pauseSceneWhileOpen
+        || screen.hudNonBlocking || screenId === project.ui.gameHudScreenId
         || screen.backdropOpacity || screen.backdropBlur
         || screen.resetElementVisibilityOnOpen === false
         || (screen.onCloseBehavior && screen.onCloseBehavior !== 'default')
         || (screen.onCloseActions && screen.onCloseActions.length));
     const showOpenBehavior = screenCategory === 'hud' || screenCategory === 'overlay' || hasOverlaySettings;
+    const isGameHud = screenId === project.ui.gameHudScreenId;
 
     const currentEffects = screen.effects ?? [];
     const getIntensity = (type: VNScreenOverlayEffectType): number => {
@@ -368,6 +370,25 @@ const ScreenInspector: React.FC<{ screenId: VNID }> = ({ screenId }) => {
 
                 {showOpenBehavior && (
                 <CollapsibleSection title={t('screenInspector.overlayBehavior')}>
+                    <FormField label={t('screenInspector.gameHud')}>
+                        <input
+                            type="checkbox"
+                            checked={isGameHud}
+                            onChange={e => dispatch({ type: 'UPDATE_UI_CONFIG', payload: { key: 'gameHudScreenId', value: e.target.checked ? screenId : null } })}
+                            className="w-5 h-5"
+                        />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.gameHudHint')}</p>
+                    <FormField label={t('screenInspector.hudNonBlocking')}>
+                        <input
+                            type="checkbox"
+                            checked={!!screen.hudNonBlocking}
+                            onChange={e => updateScreen({ hudNonBlocking: e.target.checked || undefined })}
+                            className="w-5 h-5"
+                        />
+                    </FormField>
+                    <p className="text-[10px] text-slate-500 -mt-1">{t('screenInspector.hudNonBlockingHint')}</p>
+                    <hr className="border-[var(--border-subtle)] my-2" />
                     <FormField label={t('screenInspector.passThrough')}>
                         <input
                             type="checkbox"

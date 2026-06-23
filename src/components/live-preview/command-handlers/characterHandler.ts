@@ -3,6 +3,7 @@ import { VNCharacterLayer } from '../../../features/character/types';
 import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
+import { resolveFieldUrl } from '../../../utils/assetStore';
 
 /**
  * Handles showing a character with expression, layers, and transitions
@@ -27,14 +28,16 @@ export function handleShowCharacter(
   const videoUrls: string[] = [];
   let hasVideo = false;
   let videoLoop = false;
+  // Managed asset refs ("assets/…") → flourish-asset:// URL; data:/http pass through.
+  const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
 
   // Check base image/video
   if (charData.baseVideoUrl) {
-    videoUrls.push(charData.baseVideoUrl);
+    videoUrls.push(wrap(charData.baseVideoUrl));
     hasVideo = true;
     videoLoop = !!charData.baseVideoLoop;
   } else if (charData.baseImageUrl) {
-    imageUrls.push(charData.baseImageUrl);
+    imageUrls.push(wrap(charData.baseImageUrl));
   }
 
   // Build layer variable bindings by finding which variables contain asset IDs from which layers
@@ -124,11 +127,11 @@ export function handleShowCharacter(
 
     if (asset) {
       if (asset.videoUrl) {
-        videoUrls.push(asset.videoUrl);
+        videoUrls.push(wrap(asset.videoUrl));
         hasVideo = true;
         videoLoop = videoLoop || !!asset.loop;
       } else if (asset.imageUrl) {
-        imageUrls.push(asset.imageUrl);
+        imageUrls.push(wrap(asset.imageUrl));
       }
     }
   });

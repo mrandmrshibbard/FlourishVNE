@@ -15,7 +15,7 @@ import {
     VNUIElement,
     UIElementType,
     UIHotSpotElement,
-    UIImageMapElement,
+    UIdraggableImageElementElement,
     UIImageElement,
     UIButtonElement,
     UITextElement,
@@ -23,7 +23,7 @@ import {
     VNHotZoneElement,
     HotSpotTrigger,
 } from '../../features/ui/types';
-import { ImageMapRegion } from '../../features/scene/types';
+import { draggableImageElementRegion } from '../../features/scene/types';
 import ResizableDraggable from '../menu-editor/ResizableDraggable';
 
 /** Renders a Hot Spot overlay on the canvas. Takes a unified `UIHotSpotElement`
@@ -87,13 +87,13 @@ export const HotSpotOverlay: React.FC<{
 function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
     const anyEl = el as any;
     switch (el.type) {
-        case UIElementType.ImageMap: {
-            const m = el as UIImageMapElement;
+        case UIElementType.draggableImageElement: {
+            const m = el as UIdraggableImageElementElement;
             return {
-                id: m.id, name: m.name, elementType: 'imageMap',
+                id: m.id, name: m.name, elementType: 'draggableImageElement',
                 imageId: (m.image?.id ?? '') as VNID,
                 hoverImageId: m.hoverImage?.id,
-                imageMapRegions: m.imageMapRegions,
+                draggableImageElementRegions: m.draggableImageElementRegions,
                 x: m.x, y: m.y, width: m.width, height: m.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop,
@@ -166,7 +166,7 @@ function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
 
 /** Polygon region overlay with per-vertex drag handles and body drag-to-move */
 export const PolyRegionOverlay: React.FC<{
-    region: ImageMapRegion;
+    region: draggableImageElementRegion;
     parentSize: { width: number; height: number };
     isRegionSelected: boolean;
     onSelect: () => void;
@@ -354,7 +354,7 @@ export const InteractiveElementOverlay: React.FC<{
             onContextMenu={onContextMenu}
             zIndex={zIndex}
             snapGrid={1}
-            allowChildInteraction={elType === 'imageMap' && isSelected}
+            allowChildInteraction={elType === 'draggableImageElement' && isSelected}
         >
             <div className="w-full h-full relative">
                 {elType === 'text' ? (
@@ -400,14 +400,14 @@ export const InteractiveElementOverlay: React.FC<{
                             &#x2713;
                         </div>
                     </div>
-                ) : elType === 'imageMap' ? (
+                ) : elType === 'draggableImageElement' ? (
                     <div className="w-full h-full relative">
                         {imageUrl ? (
                             <img src={imageUrl} alt={element.name} className="w-full h-full object-contain" />
                         ) : (
                             <div className="w-full h-full bg-emerald-500/20 border-2 border-emerald-400 border-dashed rounded" />
                         )}
-                        {(element.imageMapRegions || []).map((region, idx) => {
+                        {(element.draggableImageElementRegions || []).map((region, idx) => {
                             const isRegionSelected = isSelected && selectedRegionIdx === idx;
                             const interactive = isSelected && !!onRegionUpdate;
 
@@ -566,7 +566,7 @@ export const InteractiveElementOverlay: React.FC<{
                             );
                         })}
                         <div className="absolute bottom-0 right-0 bg-emerald-500/80 text-white text-[8px] px-1 rounded-tl">
-                            Map ({(element.imageMapRegions || []).length})
+                            Map ({(element.draggableImageElementRegions || []).length})
                         </div>
                     </div>
                 ) : imageUrl ? (

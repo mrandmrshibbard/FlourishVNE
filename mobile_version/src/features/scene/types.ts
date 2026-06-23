@@ -3,6 +3,7 @@ import { VNSetVariableOperator } from '../variables/types';
 import { JumpToSceneAction, SetVariableAction, VNTextAlign, VNVAlign, VNCondition, VNUIAction, VNParallaxSettings } from '../../types/shared';
 import type { VNScreenOverlayEffectType, VNSnowAshVariant } from '../../types';
 import type { EasingType } from '../../components/live-preview/systems/easingFunctions';
+import type { PhonePortraitSource } from '../ui/types';
 
 /**
  * Command execution modifiers for parallel/async execution
@@ -96,6 +97,13 @@ export enum CommandType {
     Fireworks = 'Fireworks',   // One-shot fireworks burst/volley, optionally synced with a boom SFX
     PlaceLights = 'PlaceLights', // Place individually-positioned twinkling lights (candle/star/christmas)
     ClearLights = 'ClearLights', // Remove all placed lights
+    // ─── Phone (in-game cellphone / messaging) ─── //
+    ShowPhone = 'ShowPhone',         // Open the phone overlay
+    HidePhone = 'HidePhone',         // Close the phone overlay
+    ShowPhoneText = 'ShowPhoneText', // Append a message to the chat (auto-opens the phone). Labeled "Show Text"
+    HidePhoneText = 'HidePhoneText', // Clear the chat conversation. Labeled "Hide Text"
+    PhoneIncomingText = 'PhoneIncomingText', // A text "arrives": banner+ding (or auto-open), with replies/follow-ups
+    PhoneIncomingCall = 'PhoneIncomingCall', // A call rings: accept/decline overlay (or non-blocking ring)
 }
 
 /**
@@ -897,7 +905,7 @@ export interface CallCommonEventCommand extends BaseCommand {
 }
 
 /** A clickable region within an image map */
-export interface ImageMapRegion {
+export interface draggableImageElementRegion {
     id: VNID;
     name: string;
     shape: 'rect' | 'circle' | 'poly';
@@ -1010,7 +1018,76 @@ export type VNCommand =
   | SpawnParticlesCommand | StopParticlesCommand | CallCommonEventCommand
   | ShowHotSpotCommand | HideHotSpotCommand
   | TweenElementCommand
-  | GiveItemCommand | UseItemCommand | DestroyItemCommand | RestockCollectionCommand | BuyItemCommand | SellItemCommand;
+  | GiveItemCommand | UseItemCommand | DestroyItemCommand | RestockCollectionCommand | BuyItemCommand | SellItemCommand
+  | ShowPhoneCommand | HidePhoneCommand | ShowPhoneTextCommand | HidePhoneTextCommand
+  | PhoneIncomingTextCommand | PhoneIncomingCallCommand;
+
+/** Phone (in-game cellphone) commands. */
+export interface ShowPhoneCommand extends BaseCommand { type: CommandType.ShowPhone; }
+export interface HidePhoneCommand extends BaseCommand { type: CommandType.HidePhone; }
+/** Appends one chat message; auto-opens the phone. `senderId` = a character id, or 'player' for the
+ *  player's own (right-aligned) bubble. Optional `choices` present reply options (reuses ChoiceOption). */
+export interface ShowPhoneTextCommand extends BaseCommand {
+    type: CommandType.ShowPhoneText;
+    senderId: VNID | 'player';
+    text: string;
+    choices?: ChoiceOption[];
+    /** Optional avatar source for this message (base sprite / chosen pose / custom). Unset = base. */
+    portrait?: PhonePortraitSource;
+}
+/** Clears the chat conversation (the phone shell can stay open). */
+export interface HidePhoneTextCommand extends BaseCommand { type: CommandType.HidePhoneText; }
+
+/** A follow-up message the SENDER texts back (after the player picks a reply, or as a chained
+ *  arrival). Played in sequence with a brief "…" typing indicator before each one lands. */
+export interface PhoneFollowUp {
+    senderId: VNID | 'player';
+    text: string;
+    portrait?: PhonePortraitSource;
+    soundId?: VNID | null;   // optional ding for this follow-up
+    delayMs?: number;        // typing delay before it lands (default ~900ms)
+}
+
+/** One reply the player can tap on an incoming text. Beyond the player's own bubble, it can make the
+ *  sender text back (followUps) and/or run any UI actions (jumps/variables/etc.). */
+export interface PhoneReply {
+    id: VNID;
+    text: string;
+    conditions?: VNCondition[];
+    followUps?: PhoneFollowUp[];
+    actions?: VNUIAction[];
+}
+
+/** A text "arrives" mid-scene. `presentation:'notify'` (default) shows a non-blocking banner + ding +
+ *  badge and the story keeps playing (tap to read); `'open'` opens the phone straight to the message. */
+export interface PhoneIncomingTextCommand extends BaseCommand {
+    type: CommandType.PhoneIncomingText;
+    senderId: VNID | 'player';
+    text: string;
+    presentation?: 'notify' | 'open';
+    portrait?: PhonePortraitSource;
+    soundId?: VNID | null;       // ding; falls back to the themed default
+    showBadge?: boolean;         // dialogue-box / HUD notification badge
+    typingMs?: number;           // optional "…" beat before the message lands (0 = instant)
+    replies?: PhoneReply[];
+}
+
+/** A call rings. `mode:'modal'` (default) shows an accept/decline overlay that pauses the scene;
+ *  `'nonblocking'` rings in the corner while the scene continues. Accept/Decline each dismiss the call
+ *  AND run their own action list; on timeout the call is missed or runs timeout actions. */
+export interface PhoneIncomingCallCommand extends BaseCommand {
+    type: CommandType.PhoneIncomingCall;
+    callerId: VNID | 'player';
+    portrait?: PhonePortraitSource;
+    mode?: 'modal' | 'nonblocking';
+    ringtoneId?: VNID | null;    // falls back to the caller's character ringtone, then themed default
+    ringDurationMs?: number;     // time before timeout (default ~12000)
+    onTimeout?: 'missed' | 'runActions';
+    timeoutActions?: VNUIAction[];
+    acceptActions?: VNUIAction[];
+    declineActions?: VNUIAction[];
+    showBadge?: boolean;
+}
 
 /** Inventory item commands — sugar over the item's count variable. */
 export interface GiveItemCommand extends BaseCommand { type: CommandType.GiveItem; itemId: VNID; quantity?: number; }

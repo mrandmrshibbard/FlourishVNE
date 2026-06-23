@@ -25,7 +25,7 @@ import {
     HotZoneElementType,
     VNFontSettings,
 } from '../../features/ui/types';
-import { ImageMapRegion } from '../../features/scene/types';
+import { draggableImageElementRegion } from '../../features/scene/types';
 import { UIActionType } from '../../types/shared';
 import { PlusIcon, TrashIcon } from '../icons';
 import Panel from '../ui/Panel';
@@ -104,7 +104,7 @@ function hotZoneElementPatchToTyped(
             if ('maxLength' in patch) out.maxLength = patch.maxLength;
             break;
         }
-        case UIElementType.ImageMap: {
+        case UIElementType.draggableImageElement: {
             if ('imageId' in patch) {
                 const id = patch.imageId as VNID;
                 out.image = id ? { type: 'image', id } : null;
@@ -113,7 +113,7 @@ function hotZoneElementPatchToTyped(
                 const id = patch.hoverImageId as VNID | undefined;
                 out.hoverImage = id ? { type: 'image', id } : null;
             }
-            if ('imageMapRegions' in patch) out.imageMapRegions = patch.imageMapRegions;
+            if ('draggableImageElementRegions' in patch) out.draggableImageElementRegions = patch.draggableImageElementRegions;
             break;
         }
     }
@@ -125,12 +125,12 @@ function hotZoneElementPatchToTyped(
 function toLegacyHotZoneElement(el: VNUIElement): VNHotZoneElement | null {
     const anyEl = el as any;
     switch (el.type) {
-        case UIElementType.ImageMap: {
+        case UIElementType.draggableImageElement: {
             return {
-                id: el.id, name: el.name, elementType: 'imageMap',
+                id: el.id, name: el.name, elementType: 'draggableImageElement',
                 imageId: ((el as any).image?.id ?? '') as VNID,
                 hoverImageId: (el as any).hoverImage?.id,
-                imageMapRegions: (el as any).imageMapRegions,
+                draggableImageElementRegions: (el as any).draggableImageElementRegions,
                 x: el.x, y: el.y, width: el.width, height: el.height,
                 draggable: anyEl.draggable, snapBack: anyEl.snapBack,
                 snapToHotSpot: anyEl.snapToHotSpot, hideOnDrop: anyEl.hideOnDrop, dragTag: anyEl.dragTag, boundItemId: anyEl.boundItemId,
@@ -398,7 +398,7 @@ const CONVERT_DEFAULT_FONT: VNFontSettings = { family: 'sans-serif', size: 16, c
 const TYPE_SPECIFIC_FIELDS = [
     'background', 'image', 'objectFit', 'text', 'font', 'textAlign', 'verticalAlign',
     'action', 'hoverImage', 'backgroundColor', 'placeholder', 'variableId', 'borderColor',
-    'maxLength', 'imageMapRegions',
+    'maxLength', 'draggableImageElementRegions',
 ];
 
 /** Convert an interactive element to a different kind in place, preserving shared base
@@ -428,8 +428,8 @@ function convertInteractiveElementType(current: VNUIElement, newType: HotZoneEle
         case 'textInput':
             typed = { type: UIElementType.TextInput, placeholder: legacy?.placeholder || '', variableId: legacy?.variableId, font: legacy?.font || CONVERT_DEFAULT_FONT, backgroundColor: legacy?.backgroundColor, borderColor: legacy?.borderColor, maxLength: legacy?.maxLength };
             break;
-        case 'imageMap':
-            typed = { type: UIElementType.ImageMap, image: imgId ? { type: 'image', id: imgId } : null, hoverImage: legacy?.hoverImageId ? { type: 'image', id: legacy.hoverImageId } : null, imageMapRegions: legacy?.imageMapRegions || [] };
+        case 'draggableImageElement':
+            typed = { type: UIElementType.draggableImageElement, image: imgId ? { type: 'image', id: imgId } : null, hoverImage: legacy?.hoverImageId ? { type: 'image', id: legacy.hoverImageId } : null, draggableImageElementRegions: legacy?.draggableImageElementRegions || [] };
             break;
         default:
             typed = {};
@@ -471,7 +471,7 @@ export const InteractiveElementProperties: React.FC<{
 
     const elType = element.elementType || 'image';
     const defaultFont: VNFontSettings = { family: 'sans-serif', size: 16, color: '#ffffff', weight: 'normal', italic: false };
-    const panelTitle = elType === 'imageMap' ? t('hotZone.propsImageMap')
+    const panelTitle = elType === 'draggableImageElement' ? t('hotZone.propsdraggableImageElement')
         : element.draggable ? t('hotZone.propsDraggable')
         : t('hotZone.propsType', { type: `${elType.charAt(0).toUpperCase()}${elType.slice(1)}` });
 
@@ -509,13 +509,13 @@ export const InteractiveElementProperties: React.FC<{
                     <option value="button">{t('hotZone.typeButton')}</option>
                     <option value="video">{t('hotZone.typeVideo')}</option>
                     <option value="textInput">{t('hotZone.typeTextInput')}</option>
-                    <option value="imageMap">{t('hotZone.typeImageMap')}</option>
+                    <option value="draggableImageElement">{t('hotZone.typedraggableImageElement')}</option>
                 </select>
             </label>
 
-            {(elType === 'image' || elType === 'button' || elType === 'imageMap') && (
+            {(elType === 'image' || elType === 'button' || elType === 'draggableImageElement') && (
                 <label className="block">
-                    <span className="text-[var(--text-secondary)] text-xs">{elType === 'button' ? 'Background Image' : elType === 'imageMap' ? 'Map Background Image' : 'Image Asset'}</span>
+                    <span className="text-[var(--text-secondary)] text-xs">{elType === 'button' ? 'Background Image' : elType === 'draggableImageElement' ? 'Map Background Image' : 'Image Asset'}</span>
                     <select
                         value={element.imageId}
                         onChange={e => onUpdate({ imageId: e.target.value as VNID })}
@@ -529,7 +529,7 @@ export const InteractiveElementProperties: React.FC<{
                 </label>
             )}
 
-            {elType === 'imageMap' && (
+            {elType === 'draggableImageElement' && (
                 <label className="block">
                     <span className="text-[var(--text-secondary)] text-xs">{t('hotZone.hoverStateImage')}</span>
                     <select
@@ -625,10 +625,10 @@ export const InteractiveElementProperties: React.FC<{
                 </>
             )}
 
-            {elType === 'imageMap' && (() => {
-                const regions = element.imageMapRegions || [];
+            {elType === 'draggableImageElement' && (() => {
+                const regions = element.draggableImageElementRegions || [];
                 const addRegion = () => {
-                    const newRegion: ImageMapRegion = {
+                    const newRegion: draggableImageElementRegion = {
                         id: generateId('imr') as VNID,
                         name: `Region ${regions.length + 1}`,
                         shape: 'rect',
@@ -638,15 +638,15 @@ export const InteractiveElementProperties: React.FC<{
                         cursor: 'pointer',
                         highlightColor: 'rgba(16,185,129,0.3)',
                     };
-                    onUpdate({ imageMapRegions: [...regions, newRegion] });
+                    onUpdate({ draggableImageElementRegions: [...regions, newRegion] });
                 };
-                const updateRegion = (idx: number, patch: Partial<ImageMapRegion>) => {
+                const updateRegion = (idx: number, patch: Partial<draggableImageElementRegion>) => {
                     const newRegions = [...regions];
                     newRegions[idx] = { ...newRegions[idx], ...patch };
-                    onUpdate({ imageMapRegions: newRegions });
+                    onUpdate({ draggableImageElementRegions: newRegions });
                 };
                 const removeRegion = (idx: number) => {
-                    onUpdate({ imageMapRegions: regions.filter((_, i) => i !== idx) });
+                    onUpdate({ draggableImageElementRegions: regions.filter((_, i) => i !== idx) });
                 };
 
                 return (

@@ -443,7 +443,7 @@
     "pickUpOnce": "Recordar (recoger una vez)",
     "pickUpOnceHint": "Una vez recogido, no reaparecerá cuando el jugador revisite esta escena, y la recogida se guarda. Desactívalo para objetos que reaparecen."
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "Fondo del mapa de imagen",
     "hoverStateImage": "Imagen del estado de hover",
     "hoverStateHint": "Cuando el cursor pasa por una región, esta imagen se muestra recortada en esa región (efecto de hover estilo Ren'Py).",
@@ -479,9 +479,9 @@
     "addAction": "+ Añadir acción",
     "regionConditions": "Condiciones de la región",
     "regionConditionsHint": "La región solo está activa cuando se cumplen las condiciones.",
-    "targetImageMap": "Mapa de imagen objetivo a ocultar",
-    "selectImageMap": "Seleccionar mapa de imagen...",
-    "imageMapOption": "Mapa de imagen ({{count}} regiones) (ID: {{id}})"
+    "targetdraggableImageElement": "Mapa de imagen objetivo a ocultar",
+    "selectdraggableImageElement": "Seleccionar mapa de imagen...",
+    "draggableImageElementOption": "Mapa de imagen ({{count}} regiones) (ID: {{id}})"
   },
   "credit": {
     "entries": "Entradas de créditos",
@@ -628,7 +628,7 @@
     "typeImage": "Superposición de imagen",
     "typeText": "Superposición de texto",
     "typeButton": "Superposición de botón",
-    "typeImageMap": "Mapa de imagen",
+    "typedraggableImageElement": "Mapa de imagen",
     "typeMovie": "Vídeo (Reproducir vídeo)",
     "typeScreen": "Pantalla",
     "targetId": "ID del objetivo",
@@ -658,7 +658,7 @@
     "panY": "Pan Y (%)",
     "screen": "Pantalla",
     "imageLabel": "Imagen ({{id}}…)",
-    "imageMapLabel": "Mapa de imagen ({{id}}…)"
+    "draggableImageElementLabel": "Mapa de imagen ({{id}}…)"
   },
   "hotspot": {
     "name": "Nombre",

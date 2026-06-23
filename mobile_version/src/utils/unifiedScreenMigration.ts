@@ -43,7 +43,7 @@ import {
     UIImageElement,
     UITextInputElement,
     UIHotSpotElement,
-    UIImageMapElement,
+    UIdraggableImageElementElement,
     VNFontSettings,
 } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
@@ -146,13 +146,13 @@ function migrateHotZoneElement(hz: VNHotZoneElement): VNUIElement | null {
             };
             return out;
         }
-        case 'imageMap': {
-            const out: UIImageMapElement = {
+        case 'draggableImageElement': {
+            const out: UIdraggableImageElementElement = {
                 ...baseProps,
-                type: UIElementType.ImageMap,
+                type: UIElementType.draggableImageElement,
                 image: hz.imageId ? { type: 'image', id: hz.imageId } : null,
                 hoverImage: hz.hoverImageId ? { type: 'image', id: hz.hoverImageId } : null,
-                imageMapRegions: hz.imageMapRegions,
+                draggableImageElementRegions: hz.draggableImageElementRegions,
             };
             return out;
         }

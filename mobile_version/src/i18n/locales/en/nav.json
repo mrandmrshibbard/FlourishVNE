@@ -20,5 +20,7 @@
     "settings": "Configure project settings and preferences"
   },
   "rightClickHint": " | Right-click to focus manager window",
-  "openInWindow": "Open or focus {{label}} in separate window"
+  "openInWindow": "Open or focus {{label}} in separate window",
+  "expandLabels": "Show all tab labels",
+  "collapseLabels": "Collapse tabs to icons"
 }

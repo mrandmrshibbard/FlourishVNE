@@ -38,9 +38,13 @@ export async function buildDesktopGame(
 
   onProgress({ step: 'generate', progress: 20, message: 'Generating game files...' });
 
-  // Resolve file-path assets to data URLs before building
-  const { resolveProjectAssets } = await import('./gameBundler');
-  const resolvedProject = await resolveProjectAssets(project, onProgress);
+  // Stream file-backed media straight to disk files (no base64 re-inline) + resolve the rest.
+  const { resolveProjectAssets, streamManagedAssets } = await import('./gameBundler');
+  const gameFiles: Record<string, string | ArrayBuffer> = {};
+  const streamedProject = await streamManagedAssets(project, (rel, bytes) => {
+    gameFiles[rel] = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  });
+  const resolvedProject = await resolveProjectAssets(streamedProject, onProgress);
 
   // Strip data URLs from the project before inlining into HTML. The same
   // assets get written to disk under `assets/` and loaded lazily by the
@@ -55,9 +59,7 @@ export async function buildDesktopGame(
 
   // Asset writing follows below — the asset map was already built above
   onProgress({ step: 'assets', progress: 25, message: 'Collecting assets...' });
-  const gameFiles: Record<string, string | ArrayBuffer> = {
-    'index.html': htmlContent
-  };
+  gameFiles['index.html'] = htmlContent;
   
   // Convert assets to buffers
   let assetCount = 0;

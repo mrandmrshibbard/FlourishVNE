@@ -550,6 +550,38 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 : (m.fillColor || '#a78bfa');
             const radius = m.borderRadius ?? 6;
             const valueText = m.valueFormat === 'percent' ? `${Math.round(pct * 100)}%` : m.valueFormat === 'valueMax' ? `${raw}/${max}` : `${raw}`;
+            // Repeated-symbol / hearts style: show the chosen image N times so the canvas matches test-play.
+            if (m.style === 'icons') {
+                const n = Math.max(1, m.iconCount ?? 3);
+                const stepSize = m.iconStep === 'quarter' ? 0.25 : m.iconStep === 'half' ? 0.5 : 1;
+                const iconUrl = (a?: { id: VNID } | null) => a ? ((project.images[a.id] as any)?.imageUrl || (project.backgrounds[a.id] as any)?.imageUrl || null) : null;
+                const fullUrl = iconUrl(m.iconImage);
+                const emptyUrl = iconUrl(m.iconEmptyImage);
+                const iconSize = m.iconSize ?? 24;
+                const iconGap = m.iconGap ?? 4;
+                const filledUnits = pct * n;
+                const alignToFlex = (a?: string) => a === 'center' ? 'center' : (a === 'right' || a === 'bottom') ? 'flex-end' : 'flex-start';
+                return <div className="w-full h-full flex flex-col gap-0.5" style={{ justifyContent: alignToFlex(m.alignY), overflow: 'visible' }}>
+                    {m.showLabel && <div className="text-[10px] text-white leading-tight truncate">{m.label || boundVar?.name || 'Meter'}</div>}
+                    <div className="flex flex-wrap items-center" style={{ gap: iconGap, justifyContent: alignToFlex(m.alignX) }}>
+                        {Array.from({ length: n }).map((_, i) => {
+                            let frac = Math.max(0, Math.min(1, filledUnits - i));
+                            frac = Math.round(frac / stepSize) * stepSize;
+                            return <div key={i} style={{ position: 'relative', width: iconSize, height: iconSize, flexShrink: 0 }}>
+                                {emptyUrl
+                                    ? <img src={emptyUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    : fullUrl
+                                        ? <img src={fullUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.25, filter: 'grayscale(1)' }} />
+                                        : <div style={{ position: 'absolute', inset: 0, borderRadius: 4, border: `1px solid ${m.borderColor || m.fillColor || '#a78bfa'}`, opacity: 0.3 }} />}
+                                {frac > 0 && (fullUrl
+                                    ? <img src={fullUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', clipPath: `inset(0 ${(1 - frac) * 100}% 0 0)` }} />
+                                    : <div style={{ position: 'absolute', inset: 0, borderRadius: 4, background: fill, clipPath: `inset(0 ${(1 - frac) * 100}% 0 0)` }} />)}
+                            </div>;
+                        })}
+                        {m.showValue && <div className="text-[10px] text-white" style={{ marginLeft: 4, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{valueText}</div>}
+                    </div>
+                </div>;
+            }
             return <div className="w-full h-full flex flex-col gap-0.5">
                 {m.showLabel && <div className="text-[10px] text-white leading-tight truncate">{m.label || boundVar?.name || 'Meter'}</div>}
                 <div className="relative flex-1 overflow-hidden" style={{

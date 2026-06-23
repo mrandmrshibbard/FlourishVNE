@@ -443,7 +443,7 @@
     "pickUpOnce": "Remember (pick up once)",
     "pickUpOnceHint": "Once collected, it won't reappear when the player revisits this scene, and the pickup is saved. Turn off for respawning pickups."
   },
-  "imageMap": {
+  "draggableImageElement": {
     "background": "Image Map Background",
     "hoverStateImage": "Hover State Image",
     "hoverStateHint": "When a region is hovered, this image is shown clipped to that region (Ren'Py-style hover effect).",
@@ -479,9 +479,9 @@
     "addAction": "+ Add Action",
     "regionConditions": "Region Conditions",
     "regionConditionsHint": "Region only active when conditions are met.",
-    "targetImageMap": "Target Image Map to Hide",
-    "selectImageMap": "Select Image Map...",
-    "imageMapOption": "Image Map ({{count}} regions) (ID: {{id}})"
+    "targetdraggableImageElement": "Target Image Map to Hide",
+    "selectdraggableImageElement": "Select Image Map...",
+    "draggableImageElementOption": "Image Map ({{count}} regions) (ID: {{id}})"
   },
   "credit": {
     "entries": "Credit Entries",
@@ -628,7 +628,7 @@
     "typeImage": "Image Overlay",
     "typeText": "Text Overlay",
     "typeButton": "Button Overlay",
-    "typeImageMap": "Image Map",
+    "typedraggableImageElement": "Image Map",
     "typeMovie": "Video (Play Video)",
     "typeScreen": "Screen",
     "targetId": "Target ID",
@@ -658,7 +658,7 @@
     "panY": "Pan Y (%)",
     "screen": "Screen",
     "imageLabel": "Image ({{id}}…)",
-    "imageMapLabel": "Image Map ({{id}}…)"
+    "draggableImageElementLabel": "Image Map ({{id}}…)"
   },
   "hotspot": {
     "name": "Name",

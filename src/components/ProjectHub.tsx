@@ -107,6 +107,7 @@ export const ProjectHub: React.FC<{
     const [autoUpdateStatus, setAutoUpdateStatus] = useState<string | null>(null);
     const [autoUpdateError, setAutoUpdateError] = useState<string | null>(null);
     const [isImporting, setIsImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState<{ done: number; total: number; label: string } | null>(null);
     const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
     const [savedProjectFiles, setSavedProjectFiles] = useState<SavedProjectFile[]>([]);
     const [recoveryProjects, setRecoveryProjects] = useState<Array<{id: string; title: string; savedAt: number}>>([]);
@@ -367,7 +368,7 @@ export const ProjectHub: React.FC<{
             }
 
             // result.data is a Uint8Array (IPC-serialised Buffer)
-            const { project } = await importProject(result.data);
+            const { project } = await importProject(result.data, (p) => setImportProgress({ done: p.done, total: p.total, label: p.label }));
             if (api?.setHubActive) {
                 api.setHubActive(false);
             }
@@ -379,6 +380,7 @@ export const ProjectHub: React.FC<{
             toast.error(t('toast.openFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         } finally {
             setIsImporting(false);
+            setImportProgress(null);
         }
     };
 
@@ -401,7 +403,7 @@ export const ProjectHub: React.FC<{
                 return;
             }
 
-            const { project } = await importProject(result.data);
+            const { project } = await importProject(result.data, (p) => setImportProgress({ done: p.done, total: p.total, label: p.label }));
             if (api?.setHubActive) {
                 api.setHubActive(false);
             }
@@ -413,6 +415,7 @@ export const ProjectHub: React.FC<{
             toast.error(t('toast.openFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         } finally {
             setIsImporting(false);
+            setImportProgress(null);
         }
     };
 
@@ -438,7 +441,7 @@ export const ProjectHub: React.FC<{
         try {
             // importProject no longer saves to localStorage.
             // It just parses the file and returns the project object.
-            const { project } = await importProject(file);
+            const { project } = await importProject(file, (p) => setImportProgress({ done: p.done, total: p.total, label: p.label }));
             if ((window as any).electronAPI?.setHubActive) {
                 (window as any).electronAPI.setHubActive(false);
             }
@@ -451,6 +454,7 @@ export const ProjectHub: React.FC<{
             toast.error(t('toast.importFailed', { error: error instanceof Error ? error.message : 'Unknown error' }));
         } finally {
             setIsImporting(false);
+            setImportProgress(null);
         }
 
         // Reset file input
@@ -968,7 +972,12 @@ export const ProjectHub: React.FC<{
             <LoadingOverlay
                 isVisible={isImporting}
                 message={t('importingProject')}
-                subMessage={t('importingProjectSub')}
+                progress={importProgress && importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : undefined}
+                subMessage={
+                    importProgress && importProgress.total > 0
+                        ? `${importProgress.label ? `${importProgress.label} — ` : ''}${importProgress.done}/${importProgress.total}`
+                        : t('importingProjectSub')
+                }
             />
         </div>
     );

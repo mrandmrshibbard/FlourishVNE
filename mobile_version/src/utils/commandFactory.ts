@@ -168,6 +168,23 @@ export const createCommand = (type: CommandType | string, project: VNProject, op
             const command = { type };
             return command;
         }
+        case CommandType.ShowPhone:
+        case CommandType.HidePhone:
+        case CommandType.HidePhoneText: {
+            return { type };
+        }
+        case CommandType.ShowPhoneText: {
+            const command = { type, senderId: firstCharId || 'player', text: '', choices: [] as any[] };
+            return command;
+        }
+        case CommandType.PhoneIncomingText: {
+            const command = { type, senderId: firstCharId || 'player', text: '', presentation: 'notify', showBadge: true, replies: [] as any[] };
+            return command;
+        }
+        case CommandType.PhoneIncomingCall: {
+            const command = { type, callerId: firstCharId || 'player', mode: 'modal', ringDurationMs: 12000, onTimeout: 'missed', acceptActions: [] as any[], declineActions: [] as any[], timeoutActions: [] as any[], showBadge: true };
+            return command;
+        }
         case CommandType.Flashlight: {
             const command = { type, enabled: true, radius: 22, softness: 0.6, darkness: 0.85, color: '#000000', toggleKey: 'f', sfxId: null };
             return command;

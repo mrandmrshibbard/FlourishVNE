@@ -4,6 +4,8 @@ declare var saveAs: any;
 
 import { VNProject } from '../types/project';
 import { VNID } from '../types';
+import { refToRelPath } from './assetStore';
+import type { MigrationProgress } from './assetMigration';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../features/character/types';
 import { VNBackground, VNAudio, VNVideo, VNImage } from '../features/assets/types';
 // FIX: Removed GoToScreenAction as it is not exported from 'scene/types' and is unused.
@@ -148,7 +150,15 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
     }
 
     const zip = new JSZip();
-    const projectClone = JSON.parse(JSON.stringify(project)) as VNProject;
+    // Deep-clone via structuredClone, NOT JSON.parse(JSON.stringify(...)): a big project (lots of
+    // embedded base64 media) would blow past V8's max string length here and throw "Invalid string
+    // length" BEFORE we ever extract the assets. structuredClone copies the graph without building one
+    // giant string; the asset data URLs below are then replaced with file paths, so the final
+    // JSON.stringify(projectClone) is small. (The project is already structured-cloneable — IDB
+    // autosave clones it the same way.) Fall back to the JSON round-trip only if unavailable.
+    const projectClone = (typeof structuredClone === 'function'
+        ? structuredClone(project)
+        : JSON.parse(JSON.stringify(project))) as VNProject;
     const assetFolder = zip.folder('assets');
     if (!assetFolder) throw new Error("Could not create assets folder in zip");
 
@@ -895,15 +905,83 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
         }
     }
 
+    // --- 2b. MANAGED FILE-BACKED ASSETS ---
+    // Desktop file-backed assets are stored as refs ("assets/…") with the bytes in the managed library
+    // folder. Copy each referenced file into the zip at the SAME relative path so project.json's refs
+    // resolve in the exported game. (data: fields were already extracted above; web has no store.)
+    const electronAPIForAssets = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+    if (electronAPIForAssets?.readProjectAsset) {
+        const added = new Set<string>();
+        const handleStr = async (val: string): Promise<string> => {
+            const rel = refToRelPath(val);
+            if (!rel) return val;
+            if (!added.has(rel)) {
+                added.add(rel);
+                try {
+                    const res = await electronAPIForAssets.readProjectAsset(project.id, rel);
+                    if (res?.success) zip.file(rel, new Uint8Array(res.data));
+                } catch (e) { console.warn('export: missing managed asset', rel, e); }
+            }
+            return rel; // rewrite the field to a portable relative path for the bundled project.json
+        };
+        const walk = async (node: any): Promise<void> => {
+            if (Array.isArray(node)) {
+                for (let i = 0; i < node.length; i++) {
+                    if (typeof node[i] === 'string') node[i] = await handleStr(node[i]);
+                    else if (node[i] && typeof node[i] === 'object') await walk(node[i]);
+                }
+            } else if (node && typeof node === 'object') {
+                for (const k in node) {
+                    if (typeof node[k] === 'string') node[k] = await handleStr(node[k]);
+                    else if (node[k] && typeof node[k] === 'object') await walk(node[k]);
+                }
+            }
+        };
+        await walk(projectClone);
+    }
+
     // --- 3. SAVE PROJECT.JSON AND GENERATE ZIP ---
     zip.file('project.json', JSON.stringify(projectClone, null, 2));
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-    const archiveData = await zip.generateAsync({ type: 'uint8array' });
     const safeTitle = project.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const filename = `${safeTitle}.flourish`;
 
     const electronAPI = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
+
+    // Preferred path (desktop): STREAM the zip straight to disk in chunks. This never holds the whole
+    // archive in one ArrayBuffer, so it sidesteps V8's ~2GB single-buffer limit — large projects that
+    // would otherwise fail to export work fine.
+    if (electronAPI?.exportStreamStart && typeof (zip as any).generateInternalStream === 'function') {
+        const start = await electronAPI.exportStreamStart(filename, options?.overwritePath);
+        if (start?.canceled) return { saved: false };
+        if (!start?.success) throw new Error(start?.error || 'Could not open the file for writing.');
+        try {
+            const helper = (zip as any).generateInternalStream({ type: 'uint8array', streamFiles: true, compression: 'DEFLATE', compressionOptions: { level: 1 } });
+            await new Promise<void>((resolve, reject) => {
+                let chain: Promise<void> = Promise.resolve();
+                helper.on('data', (chunk: Uint8Array) => {
+                    helper.pause();
+                    chain = chain
+                        .then(() => electronAPI.exportStreamChunk(chunk))
+                        .then((res: any) => { if (!res?.success) throw new Error(res?.error || 'Write failed.'); helper.resume(); })
+                        .catch(reject);
+                });
+                helper.on('error', (e: any) => reject(e instanceof Error ? e : new Error(String(e))));
+                helper.on('end', () => { chain.then(() => resolve()).catch(reject); });
+                helper.resume();
+            });
+            const end = await electronAPI.exportStreamEnd();
+            if (!end?.success) throw new Error(end?.error || 'Could not finalize the file.');
+            return { saved: true, filePath: end.filePath || start.filePath };
+        } catch (err) {
+            try { await electronAPI.exportStreamAbort(); } catch { /* best-effort cleanup */ }
+            throw err;
+        }
+    }
+
+    // Fallback (older desktop builds / web): build the whole archive then write it in one go.
+    const archiveData = await zip.generateAsync({ type: 'uint8array' });
     if (electronAPI?.saveProjectExport) {
         // `overwritePath` (set when re-saving an unchanged-name project) writes straight to that
         // file — no save dialog, no overwrite prompt. Without it, the save dialog is shown.
@@ -924,7 +1002,7 @@ export const exportProject = async (project: VNProject, options?: { overwritePat
     return { saved: true };
 };
 
-export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
+export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array, onProgress?: (p: MigrationProgress) => void): Promise<{ project: VNProject; manifest?: ExportManifest }> => {
     const zip = await JSZip.loadAsync(file);
     const projectFile = zip.file('project.json');
 
@@ -1037,6 +1115,7 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
     }
     // --- END HYDRATION ---
 
+    const electronAPIForImport = typeof window !== 'undefined' ? (window as any).electronAPI : undefined;
     const hydrateAsset = async (relativePath: string | null | undefined): Promise<string> => {
         if (!relativePath || relativePath.startsWith('data:')) {
             return relativePath || '';
@@ -1044,6 +1123,20 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
         const assetFile = zip.file(relativePath);
         if (assetFile) {
             try {
+                // Desktop: write the file into the managed store and keep the ref (no base64 in the
+                // project). Reconstruct the same relative path from assets/<type>/<id>.<ext>.
+                if (electronAPIForImport?.writeProjectAsset && /^assets\//.test(relativePath)) {
+                    const parts = relativePath.split('/');
+                    const type = parts[1] || 'images';
+                    const fileName = parts[parts.length - 1] || 'asset.bin';
+                    const dot = fileName.lastIndexOf('.');
+                    const id = dot > 0 ? fileName.slice(0, dot) : fileName;
+                    const ext = dot > 0 ? fileName.slice(dot + 1) : 'bin';
+                    const bytes = await assetFile.async('uint8array');
+                    const res = await electronAPIForImport.writeProjectAsset(project.id, type, id, ext, bytes);
+                    if (res?.success) return `flourish-asset://${project.id}/${res.relPath}`;
+                }
+                // Web/mobile fallback: inline as base64 (self-contained project).
                 const blob = await assetFile.async('blob');
                 const extension = relativePath.split('.').pop() || 'bin';
                 const mimeType = extensionToMime(extension);
@@ -1057,39 +1150,52 @@ export const importProject = async (file: File | Blob | ArrayBuffer | Uint8Array
         return relativePath; // Return path if not found
     };
 
-    const hydrationPromises: Promise<any>[] = [];
-    
+    // Collect every asset-URL field first (read/write/label) so we can report accurate progress.
+    type HydrateField = { label: string; get: () => any; set: (v: string) => void };
+    const fields: HydrateField[] = [];
+
     const collections: (keyof VNProject)[] = ['backgrounds', 'images', 'audio', 'videos'];
     const urlKeys = { backgrounds: 'imageUrl', images: 'imageUrl', audio: 'audioUrl', videos: 'videoUrl' };
-
     for (const collectionName of collections) {
         const collection = project[collectionName] as Record<VNID, { id: VNID, name: string, [key: string]: any }>;
         if (!collection) continue;
+        const urlKey = urlKeys[collectionName as keyof typeof urlKeys];
         for (const asset of Object.values(collection)) {
-            const urlKey = urlKeys[collectionName as keyof typeof urlKeys];
-            hydrationPromises.push(hydrateAsset(asset[urlKey]).then(dataUrl => { asset[urlKey] = dataUrl; }));
+            fields.push({ label: asset.name || asset.id, get: () => asset[urlKey], set: v => { asset[urlKey] = v; } });
         }
+    }
+
+    // Project-level fonts — hoisted OUT of the character loop (it used to be nested, so fonts were
+    // hydrated once per character AND skipped entirely for projects with no characters).
+    for (const font of Object.values(project.fonts || {}) as any[]) {
+        fields.push({ label: `${font.name || font.id} font`, get: () => font.fontUrl, set: v => { font.fontUrl = v; } });
     }
 
     for (const char of Object.values(project.characters) as VNCharacter[]) {
-        hydrationPromises.push(hydrateAsset(char.baseImageUrl).then(dataUrl => { char.baseImageUrl = dataUrl; }));
-        hydrationPromises.push(hydrateAsset(char.fontUrl).then(dataUrl => { char.fontUrl = dataUrl; }));
-
-            // Hydrate project-level fonts
-            for (const font of Object.values(project.fonts || {}) as any[]) {
-                hydrationPromises.push(hydrateAsset(font.fontUrl).then((dataUrl) => { font.fontUrl = dataUrl; }));
-            }
+        fields.push({ label: char.name || char.id, get: () => char.baseImageUrl, set: v => { char.baseImageUrl = v; } });
+        fields.push({ label: `${char.name || char.id} font`, get: () => char.fontUrl, set: v => { char.fontUrl = v; } });
         for (const layer of Object.values(char.layers) as VNCharacterLayer[]) {
             for (const asset of Object.values(layer.assets) as VNLayerAsset[]) {
-                hydrationPromises.push(hydrateAsset(asset.imageUrl).then(dataUrl => { asset.imageUrl = dataUrl; }));
+                fields.push({ label: char.name || char.id, get: () => asset.imageUrl, set: v => { asset.imageUrl = v; } });
             }
         }
     }
-    
-    // Dialogue box and choice button images are now asset references, not direct URLs
-    // They are hydrated as part of the backgrounds/videos collections
 
-    await Promise.all(hydrationPromises);
+    // Dialogue box and choice button images are now asset references, not direct URLs;
+    // they are hydrated as part of the backgrounds/videos collections above.
+
+    // A field counts toward progress when it points at a bundled asset file (not already inline base64).
+    const needsWork = (v: any): boolean => typeof v === 'string' && !!v && !v.startsWith('data:') && !!zip.file(v);
+    const total = fields.filter(f => needsWork(f.get())).length;
+    let done = 0;
+    if (total > 0) onProgress?.({ done: 0, total, bytes: 0, label: '' });
+
+    await Promise.all(fields.map(async (f) => {
+        const counts = needsWork(f.get());
+        const hydrated = await hydrateAsset(f.get());
+        f.set(hydrated);
+        if (counts) { done++; onProgress?.({ done, total, bytes: 0, label: f.label }); }
+    }));
     
     // All saving logic has been removed. The app now manages the project state
     // in-memory. The returned project object should be passed to the main app state.

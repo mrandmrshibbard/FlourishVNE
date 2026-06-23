@@ -14,10 +14,13 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProject } from '../../contexts/ProjectContext';
 import { VNProject } from '../../types/project';
+import type { VNID } from '../../types';
 import {
     VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, REACTIVE_VISUAL_TYPES,
+    ShowPhoneTextCommand, ChoiceOption,
 } from '../../features/scene/types';
 import { VNUIAction, UIActionType } from '../../types/shared';
+import type { PhonePortraitSource } from '../../features/ui/types';
 import { FormField, Select, TextInput, TextArea, ColorInput, RangeInput } from '../ui/Form';
 import { TrashIcon, XMarkIcon, PlusIcon, ChevronUpIcon, ChevronDownIcon } from '../icons';
 import AssetSelector from '../ui/AssetSelector';
@@ -25,6 +28,7 @@ import ActionEditor from '../menu-editor/ActionEditor';
 import ActionCard from '../menu-editor/ActionCard';
 import ConditionsEditor from '../ui/ConditionsEditor';
 import SearchableSelect from '../ui/SearchableSelect';
+import UIActionsListEditor from '../ui/UIActionsListEditor';
 import { OrientationFields, TransitionFields, PositionInputs, CharacterVisualEffectsEditor } from './fields';
 import CollapsibleSection from '../ui/CollapsibleSection';
 import { InspectorGroupId, INSPECTOR_GROUPS, getCommandGroups } from './inspectorGroups';
@@ -140,6 +144,22 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     }
     if (command.type === CommandType.ShowHotSpot) {
         return <ShowHotSpotGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
+    }
+    if (command.type === CommandType.ShowPhoneText) {
+        return <ShowPhoneTextGroup groupId={groupId} cmd={command as ShowPhoneTextCommand} updateCommand={updateCommand} project={project} t={t} />;
+    }
+    if (command.type === CommandType.PhoneIncomingText) {
+        return <PhoneIncomingTextGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
+    }
+    if (command.type === CommandType.PhoneIncomingCall) {
+        return <PhoneIncomingCallGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
+    }
+    if (command.type === CommandType.ShowPhone || command.type === CommandType.HidePhone || command.type === CommandType.HidePhoneText) {
+        if (groupId !== 'content') return null;
+        const msg = command.type === CommandType.ShowPhone ? t('phoneCmd.showHint', 'Opens the phone overlay.')
+            : command.type === CommandType.HidePhone ? t('phoneCmd.hideHint', 'Closes the phone overlay.')
+            : t('phoneCmd.hideTextHint', 'Clears the chat conversation (the phone can stay open).');
+        return <p className="text-xs text-[var(--text-muted)]">{msg}</p>;
     }
     if (command.type === CommandType.CreditRoll) {
         return <CreditRollGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
@@ -1231,6 +1251,213 @@ const HideTargetGroup: React.FC<{ groupId: InspectorGroupId; command: VNCommand;
 // ─────────────────────────────────────────────────────────────────────────────
 // ShowHotSpot (invisible/visible interactive region with actions)
 // ─────────────────────────────────────────────────────────────────────────────
+// ─── Show Text (phone chat message) ─── //
+/** Reusable avatar/portrait source picker for phone texts & calls. Lets the author choose the base
+ *  sprite (default), a specific pose/expression (optionally hiding the base for full standalone
+ *  sprites), or a custom uploaded image — without touching the character's base/layer system. */
+export const PhonePortraitPicker: React.FC<{ senderId: VNID | 'player'; value?: PhonePortraitSource; onChange: (v: PhonePortraitSource | undefined) => void; project: VNProject; t: any }> = ({ senderId, value, onChange, project, t }) => {
+    if (senderId === 'player') return null; // player's own bubbles don't show an avatar
+    const character = (project.characters as any)?.[senderId];
+    const expressions = character ? Object.values(character.expressions || {}) as any[] : [];
+    const mode = value?.mode || 'base';
+    return (
+        <FormField label={t('phoneCmd.portrait', 'Avatar / portrait')}>
+            <Select value={mode} onChange={e => {
+                const m = e.target.value as 'base' | 'expression' | 'custom';
+                onChange(m === 'base' ? undefined : { ...value, mode: m });
+            }}>
+                <option value="base">{t('phoneCmd.portraitBase', 'Base sprite (default)')}</option>
+                <option value="expression">{t('phoneCmd.portraitPose', 'A pose / expression')}</option>
+                <option value="custom">{t('phoneCmd.portraitCustom', 'Custom image')}</option>
+            </Select>
+            {mode === 'expression' && (
+                <div className="mt-1 space-y-1">
+                    <Select value={value?.expressionId || ''} onChange={e => onChange({ ...value, mode: 'expression', expressionId: (e.target.value || undefined) as VNID })}>
+                        <option value="">{t('phoneCmd.portraitPosePick', 'Pick a pose…')}</option>
+                        {expressions.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                    </Select>
+                    <label className="flex items-center gap-1">
+                        <input type="checkbox" checked={!!value?.hideBase} onChange={e => onChange({ ...value, mode: 'expression', hideBase: e.target.checked || undefined })} className="w-4 h-4" />
+                        <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.portraitHideBase', 'Hide base sprite (pose is a full standalone sprite)')}</span>
+                    </label>
+                </div>
+            )}
+            {mode === 'custom' && (
+                <div className="mt-1">
+                    <AssetSelector label={t('phoneCmd.portraitImage', 'Portrait image')} assetType="images" value={value?.customImage?.id || null} allowVideo onChange={id => onChange({ ...value, mode: 'custom', customImage: id ? { type: 'image', id: id as VNID } : null })} />
+                </div>
+            )}
+        </FormField>
+    );
+};
+
+const ShowPhoneTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowPhoneTextCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    if (groupId !== 'content') return null;
+    const senderOptions = [
+        { value: 'player', label: t('phoneCmd.player', 'Player (you)') },
+        ...Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })),
+    ];
+    const choices = cmd.choices || [];
+    const updateChoice = (i: number, patch: Partial<ChoiceOption>) => updateCommand({ choices: choices.map((c, idx) => idx === i ? { ...c, ...patch } : c) } as any);
+    const addChoice = () => updateCommand({ choices: [...choices, { id: `pc-${Math.random().toString(36).slice(2, 9)}`, text: 'Reply', actions: [] }] } as any);
+    const removeChoice = (i: number) => updateCommand({ choices: choices.filter((_, idx) => idx !== i) } as any);
+    return <>
+        <FormField label={t('phoneCmd.sender', 'Sender')}>
+            <SearchableSelect options={senderOptions} value={cmd.senderId} onChange={(v) => updateCommand({ senderId: v } as any)} />
+        </FormField>
+        <FormField label={t('phoneCmd.message', 'Message')}>
+            <TextArea value={cmd.text} onChange={e => updateCommand({ text: e.target.value } as any)} />
+        </FormField>
+        <PhonePortraitPicker senderId={cmd.senderId} value={cmd.portrait} onChange={(p) => updateCommand({ portrait: p } as any)} project={project} t={t} />
+        <div className="mt-1">
+            <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('phoneCmd.replies', 'Reply options (optional)')}</span>
+                <button onClick={addChoice} className="p-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>
+            </div>
+            <p className="text-[10px] text-[var(--text-muted)] mb-1">{t('phoneCmd.repliesHint', 'If set, the player taps a reply in the phone; its actions run and the scene continues. Leave empty for a one-way message.')}</p>
+            {choices.map((c, i) => (
+                <div key={c.id} className="border border-[var(--border-subtle)] rounded p-1.5 mb-1 space-y-1">
+                    <div className="flex gap-1 items-center">
+                        <TextInput value={c.text} onChange={e => updateChoice(i, { text: e.target.value })} />
+                        <button onClick={() => removeChoice(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
+                    </div>
+                    <UIActionsListEditor actions={c.actions || []} project={project} onChange={(acts) => updateChoice(i, { actions: acts })} label={t('phoneCmd.replyActions', 'Reply actions')} />
+                </div>
+            ))}
+        </div>
+    </>;
+};
+
+/** Helper: sender/caller dropdown options (Player + all characters). */
+const phoneSenderOptions = (project: VNProject, t: any) => [
+    { value: 'player', label: t('phoneCmd.player', 'Player (you)') },
+    ...Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name })),
+];
+
+/** Editor for an Incoming Text — a text "arrives" with a banner/ding (or auto-opens), optional
+ *  replies, and per-reply follow-up messages (the sender texting back). */
+const PhoneIncomingTextGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    if (groupId !== 'content') return null;
+    const replies = cmd.replies || [];
+    const setReplies = (r: any[]) => updateCommand({ replies: r } as any);
+    const updateReply = (i: number, patch: any) => setReplies(replies.map((r: any, idx: number) => idx === i ? { ...r, ...patch } : r));
+    const addReply = () => setReplies([...replies, { id: `pr-${Math.random().toString(36).slice(2, 9)}`, text: 'Reply', followUps: [], actions: [] }]);
+    const removeReply = (i: number) => setReplies(replies.filter((_: any, idx: number) => idx !== i));
+    return <>
+        <FormField label={t('phoneCmd.sender', 'Sender')}>
+            <SearchableSelect options={phoneSenderOptions(project, t)} value={cmd.senderId} onChange={v => updateCommand({ senderId: v } as any)} />
+        </FormField>
+        <FormField label={t('phoneCmd.message', 'Message')}>
+            <TextArea value={cmd.text || ''} onChange={e => updateCommand({ text: e.target.value } as any)} />
+        </FormField>
+        <PhonePortraitPicker senderId={cmd.senderId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
+        <FormField label={t('phoneCmd.presentation', 'How it arrives')}>
+            <Select value={cmd.presentation || 'notify'} onChange={e => updateCommand({ presentation: e.target.value } as any)}>
+                <option value="notify">{t('phoneCmd.presentNotify', 'Banner + ding (keep playing)')}</option>
+                <option value="open">{t('phoneCmd.presentOpen', 'Open the phone to it')}</option>
+            </Select>
+        </FormField>
+        {cmd.presentation === 'open' && (
+            <FormField label={t('phoneCmd.typingMs', 'Typing time before it lands (ms)')}>
+                <TextInput type="number" min={0} value={cmd.typingMs ?? 0} onChange={e => updateCommand({ typingMs: Math.max(0, parseInt(e.target.value) || 0) } as any)} />
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t('phoneCmd.typingMsHint', '0 = appears instantly. Otherwise the sender shows “…” for this long, then the message arrives.')}</p>
+            </FormField>
+        )}
+        <FormField label={t('phoneCmd.ding', 'Notification sound')}>
+            <AssetSelector label="" assetType="audio" value={cmd.soundId || null} onChange={id => updateCommand({ soundId: id } as any)} />
+        </FormField>
+        <label className="flex items-center gap-1 mt-1">
+            <input type="checkbox" checked={cmd.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
+            <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadge', 'Show a notification badge')}</span>
+        </label>
+        <div className="mt-2">
+            <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('phoneCmd.replies', 'Reply options (optional)')}</span>
+                <button onClick={addReply} className="p-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addReply', 'Add reply')}><PlusIcon className="w-3 h-3" /></button>
+            </div>
+            {replies.map((r: any, i: number) => (
+                <div key={r.id} className="border border-[var(--border-subtle)] rounded p-1.5 mb-1 space-y-1">
+                    <div className="flex gap-1 items-center">
+                        <TextInput value={r.text} onChange={e => updateReply(i, { text: e.target.value })} />
+                        <button onClick={() => removeReply(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeReply', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
+                    </div>
+                    <PhoneFollowUpsEditor followUps={r.followUps || []} onChange={fu => updateReply(i, { followUps: fu })} project={project} t={t} />
+                    <UIActionsListEditor actions={r.actions || []} project={project} onChange={acts => updateReply(i, { actions: acts })} label={t('phoneCmd.replyActions', 'Reply actions')} />
+                </div>
+            ))}
+        </div>
+    </>;
+};
+
+/** Inline editor for the sender's follow-up messages (the character texting back, in sequence). */
+const PhoneFollowUpsEditor: React.FC<{ followUps: any[]; onChange: (fu: any[]) => void; project: VNProject; t: any }> = ({ followUps, onChange, project, t }) => {
+    const update = (i: number, patch: any) => onChange(followUps.map((f, idx) => idx === i ? { ...f, ...patch } : f));
+    const add = () => onChange([...followUps, { senderId: Object.keys(project.characters)[0] || 'player', text: '', delayMs: 900 }]);
+    const remove = (i: number) => onChange(followUps.filter((_, idx) => idx !== i));
+    return (
+        <div className="pl-1 border-l-2 border-[var(--border-subtle)]">
+            <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">{t('phoneCmd.followUps', 'Sender replies with…')}</span>
+                <button onClick={add} className="p-0.5 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)]" title={t('phoneCmd.addFollowUp', 'Add message')}><PlusIcon className="w-3 h-3" /></button>
+            </div>
+            {followUps.map((f, i) => (
+                <div key={i} className="mb-1.5">
+                    <div className="flex gap-1 items-center">
+                        <select className="bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs rounded px-1 py-0.5 border border-[var(--border-subtle)] max-w-[6rem]" value={f.senderId} onChange={e => update(i, { senderId: e.target.value })}>
+                            {phoneSenderOptions(project, t).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <TextInput value={f.text} onChange={e => update(i, { text: e.target.value })} />
+                        <button onClick={() => remove(i)} className="p-1 text-red-400 hover:text-red-300" title={t('phoneCmd.removeFollowUp', 'Remove')}><TrashIcon className="w-3 h-3" /></button>
+                    </div>
+                    <label className="flex items-center gap-1 mt-0.5 text-[10px] text-[var(--text-muted)]">
+                        {t('phoneCmd.typingDelay', 'Typing “…” before it (ms)')}
+                        <input type="number" min={0} className="bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded px-1 py-0.5 border border-[var(--border-subtle)] w-20" value={f.delayMs ?? 900} onChange={e => update(i, { delayMs: Math.max(0, parseInt(e.target.value) || 0) })} />
+                    </label>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+/** Editor for an Incoming Call — caller, portrait, modal/non-blocking, ringtone, timeout behavior,
+ *  and accept/decline/timeout action lists. */
+const PhoneIncomingCallGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    if (groupId !== 'content') return null;
+    return <>
+        <FormField label={t('phoneCmd.caller', 'Caller')}>
+            <SearchableSelect options={phoneSenderOptions(project, t)} value={cmd.callerId} onChange={v => updateCommand({ callerId: v } as any)} />
+        </FormField>
+        <PhonePortraitPicker senderId={cmd.callerId} value={cmd.portrait} onChange={p => updateCommand({ portrait: p } as any)} project={project} t={t} />
+        <FormField label={t('phoneCmd.callMode', 'Ring style')}>
+            <Select value={cmd.mode || 'modal'} onChange={e => updateCommand({ mode: e.target.value } as any)}>
+                <option value="modal">{t('phoneCmd.callModal', 'Full screen — accept / decline (pauses)')}</option>
+                <option value="nonblocking">{t('phoneCmd.callNonblocking', 'Corner — ring while the scene plays')}</option>
+            </Select>
+        </FormField>
+        <FormField label={t('phoneCmd.ringtone', 'Ringtone')}>
+            <AssetSelector label="" assetType="audio" value={cmd.ringtoneId || null} onChange={id => updateCommand({ ringtoneId: id } as any)} />
+        </FormField>
+        <FormField label={t('phoneCmd.ringDuration', 'Ring time before timeout (ms)')}>
+            <TextInput type="number" value={cmd.ringDurationMs ?? 12000} onChange={e => updateCommand({ ringDurationMs: parseInt(e.target.value) || 0 } as any)} />
+        </FormField>
+        <FormField label={t('phoneCmd.onTimeout', 'If unanswered')}>
+            <Select value={cmd.onTimeout || 'missed'} onChange={e => updateCommand({ onTimeout: e.target.value } as any)}>
+                <option value="missed">{t('phoneCmd.timeoutMissed', 'Mark as missed (continue)')}</option>
+                <option value="runActions">{t('phoneCmd.timeoutActions', 'Run “missed call” actions')}</option>
+            </Select>
+        </FormField>
+        {cmd.onTimeout === 'runActions' && (
+            <UIActionsListEditor actions={cmd.timeoutActions || []} project={project} onChange={acts => updateCommand({ timeoutActions: acts } as any)} label={t('phoneCmd.timeoutActionsLabel', 'Missed-call actions')} />
+        )}
+        <UIActionsListEditor actions={cmd.acceptActions || []} project={project} onChange={acts => updateCommand({ acceptActions: acts } as any)} label={t('phoneCmd.acceptActions', 'When accepted')} />
+        <UIActionsListEditor actions={cmd.declineActions || []} project={project} onChange={acts => updateCommand({ declineActions: acts } as any)} label={t('phoneCmd.declineActions', 'When declined')} />
+        <label className="flex items-center gap-1 mt-1">
+            <input type="checkbox" checked={cmd.showBadge !== false} onChange={e => updateCommand({ showBadge: e.target.checked } as any)} className="w-4 h-4" />
+            <span className="text-xs text-[var(--text-secondary)]">{t('phoneCmd.showBadgeMissed', 'Badge on missed call')}</span>
+        </label>
+    </>;
+};
+
 const ShowHotSpotGroup: React.FC<{ groupId: InspectorGroupId; cmd: any; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
     const acts = cmd.actions || [];
     // Drag-tag suggestions for the Accept-tag autocomplete: carry-to-use items + draggable screen
