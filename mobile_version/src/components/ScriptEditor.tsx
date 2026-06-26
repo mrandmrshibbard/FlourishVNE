@@ -39,6 +39,56 @@ const API_REFERENCE: Array<{ group: string; items: Array<{ sig: string; snippet:
         { sig: 'playMusic(name, loop?, vol?)', snippet: 'game.playMusic("", true)', desc: 'Play background music.' },
         { sig: 'stopMusic(fade?)', snippet: 'game.stopMusic(1)', desc: 'Stop music (fade seconds).' },
     ]},
+    { group: 'Stage (visuals)', items: [
+        { sig: 'await showCharacter(name, opts?)', snippet: 'await game.showCharacter("", { expression: "", position: "center", transition: "fade" })', desc: 'Show a character (runs the real command).' },
+        { sig: 'await hideCharacter(name, opts?)', snippet: 'await game.hideCharacter("", { transition: "fade" })', desc: 'Hide a character.' },
+        { sig: 'await setBackground(name, opts?)', snippet: 'await game.setBackground("", { transition: "fade", duration: 1 })', desc: 'Change the scene background.' },
+        { sig: 'await showImage(name, opts?)', snippet: 'await game.showImage("", { x: 50, y: 50 })', desc: 'Show an image overlay (x,y 0-100%).' },
+    ]},
+    { group: 'Ask the player (await)', items: [
+        { sig: 'await dialogue(speaker, text)', snippet: 'await game.dialogue("", "")', desc: 'Show a line, wait for advance. "" = Narrator.' },
+        { sig: 'const i = await choice([...])', snippet: 'const i = await game.choice(["Yes", "No"])', desc: 'Show choices; returns chosen index.' },
+        { sig: 'const s = await textInput(prompt)', snippet: 'const name = await game.textInput("Your name?")', desc: 'Prompt for text; returns the string.' },
+        { sig: 'await playMovie(name, opts?)', snippet: 'await game.playMovie("")', desc: 'Play a movie; waits for it to finish (click to skip).' },
+        { sig: 'stopMovie()', snippet: 'game.stopMovie()', desc: 'Stop the fullscreen movie + clear overlays.' },
+    ]},
+    { group: 'Effects', items: [
+        { sig: 'await shakeScreen(opts?)', snippet: 'await game.shakeScreen({ intensity: 5, duration: 0.5 })', desc: 'Shake the screen.' },
+        { sig: 'await flashScreen(opts?)', snippet: 'await game.flashScreen({ color: "#FFFFFF", duration: 0.4 })', desc: 'Flash a colour.' },
+        { sig: 'await tintScreen(color, opts?)', snippet: 'await game.tintScreen("#00000080", { duration: 1 })', desc: 'Tint the screen (hex + alpha).' },
+        { sig: 'await panZoom(opts?)', snippet: 'await game.panZoom({ zoom: 1.2, panX: 0, panY: 0, duration: 1 })', desc: 'Pan / zoom the screen.' },
+        { sig: 'await resetScreenEffects(opts?)', snippet: 'await game.resetScreenEffects({ duration: 1 })', desc: 'Clear tint/pan/zoom/overlays.' },
+        { sig: 'await spawnParticles(opts?)', snippet: 'await game.spawnParticles({})', desc: 'Spawn particles (opts = the command’s fields).' },
+        { sig: 'await stopParticles(opts?)', snippet: 'await game.stopParticles({})', desc: 'Stop particles.' },
+        { sig: 'await tween(opts?)', snippet: 'await game.tween({})', desc: 'Animate an element’s properties (Tween command fields).' },
+    ]},
+    { group: 'More stage commands', items: [
+        { sig: 'await setCharacterLayer(name, opts?)', snippet: 'await game.setCharacterLayer("", { layers: [] })', desc: 'Change a character\'s dress-up layers.' },
+        { sig: 'await showText(text, opts?)', snippet: 'await game.showText("Hello", { x: 50, y: 50, fontSize: 32 })', desc: 'Show on-screen text (x,y 0-100%).' },
+        { sig: 'await hideText(opts?)', snippet: 'await game.hideText()', desc: 'Hide on-screen text.' },
+        { sig: 'await hideImage(name)', snippet: 'await game.hideImage("")', desc: 'Hide an image overlay.' },
+        { sig: 'await stopSFX(name, fade?)', snippet: 'await game.stopSFX("")', desc: 'Stop a playing sound effect.' },
+        { sig: 'await lightning(opts?)', snippet: 'await game.lightning({ flashes: 2 })', desc: 'Lightning flash (+ thunder).' },
+        { sig: 'await fireworks(opts?)', snippet: 'await game.fireworks({ bursts: 3 })', desc: 'Fireworks burst.' },
+        { sig: 'await flashlight(opts?)', snippet: 'await game.flashlight({ radius: 22 })', desc: 'Flashlight on (flashlightOff() to end).' },
+        { sig: 'await screenOverlay(type, opts?)', snippet: 'await game.screenOverlay("fog", { intensity: 0.5 })', desc: 'Fog/haze/CRT… overlay effect.' },
+        { sig: 'await creditRoll(opts?)', snippet: 'await game.creditRoll()', desc: 'Roll the credits.' },
+    ]},
+    { group: 'UI & screens', items: [
+        { sig: 'goToScreen(name)', snippet: 'game.goToScreen("")', desc: 'Open a UI screen (menu/title/custom).' },
+        { sig: 'toggleScreen(name)', snippet: 'game.toggleScreen("")', desc: 'Toggle a screen open/closed.' },
+        { sig: 'returnToGame()', snippet: 'game.returnToGame()', desc: 'Close screens, back to gameplay.' },
+        { sig: 'showElement(id) / hideElement(id)', snippet: 'game.showElement("")', desc: 'Reveal / hide a screen element.' },
+        { sig: 'changeImage(id, image)', snippet: 'game.changeImage("", "")', desc: 'Swap a screen element\'s image.' },
+        { sig: 'playAnimation(id, anim, dur?)', snippet: 'game.playAnimation("", "shake")', desc: 'Animate a screen element.' },
+        { sig: 'saveGame(slot?) / loadGame(slot?)', snippet: 'game.saveGame(0)', desc: 'Save / load a slot (0 = auto).' },
+        { sig: 'quitToTitle() / exitGame()', snippet: 'game.quitToTitle()', desc: 'Quit to title / exit the game.' },
+        { sig: 'openURL(url, newTab?)', snippet: 'game.openURL("https://")', desc: 'Open a link.' },
+    ]},
+    { group: 'Anything (advanced)', items: [
+        { sig: 'await runCommand(type, params?)', snippet: 'await game.runCommand("ShowCharacter", { characterId: "", transition: "fade" })', desc: 'Run ANY scene command (full parity).' },
+        { sig: 'ui(actionType, params?)', snippet: 'game.ui("GoToScreen", { targetScreenId: "" })', desc: 'Fire ANY UI action by type.' },
+    ]},
     { group: 'Inventory', items: [
         { sig: 'getItemCount(item)', snippet: 'game.getItemCount("")', desc: 'How many the player owns.' },
         { sig: 'hasItem(item)', snippet: 'game.hasItem("")', desc: 'True if owned (count > 0).' },
@@ -496,7 +546,7 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ onClose }) => {
                                         onChange={e => setEditingCode(e.target.value)}
                                         onKeyDown={handleKeyDown}
                                         spellCheck={false}
-                                        className="absolute inset-0 w-full h-full resize-none p-4 text-sm leading-6 outline-none font-mono"
+                                        className="script-editor-textarea absolute inset-0 w-full h-full resize-none p-4 text-sm leading-6 outline-none font-mono"
                                         style={{
                                             background: '#0d1117',
                                             color: '#c9d1d9',

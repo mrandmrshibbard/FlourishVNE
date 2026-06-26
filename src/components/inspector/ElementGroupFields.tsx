@@ -10,18 +10,20 @@
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useProject } from '../../contexts/ProjectContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
 import { VNTextAlign } from '../../types/shared';
 import {
     VNUIElement, UIElementType, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
     UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement,
-    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, DropdownOption,
+    UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, DropdownOption,
     GameSetting, GameToggleSetting, UISlotRect, UIAppearanceState,
 } from '../../features/ui/types';
 import { VNVariable } from '../../features/variables/types';
 import { VNCharacter, VNCharacterLayer, VNLayerAsset } from '../../features/character/types';
 import { FormField, TextInput, Select, ColorInput, RangeInput } from '../ui/Form';
+import { pluginManager } from '../../features/plugins/PluginManagerService';
 import { TrashIcon } from '../icons';
 import FontEditor from '../ui/FontEditor';
 import ActionEditor from '../menu-editor/ActionEditor';
@@ -134,6 +136,7 @@ interface Props {
 /** Renders the fields for one (element, group) pair. */
 export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project, updateElement }) => {
     const { t } = useTranslation('ui');
+    const { dispatch } = useProject();
 
     // ── Common group fields (apply to every element type) ──────────────────────
     const renderTransformFields = () => (
@@ -886,6 +889,163 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                     </>,
                 };
             }
+            case UIElementType.Customizer: {
+                const el = element as UICustomizerElement;
+                const czChar = el.characterId ? project.characters[el.characterId] : undefined;
+                const czLayers = czChar ? Object.values(czChar.layers) : [];
+                // Build (or re-sync) one category per character layer, auto-creating a backing string
+                // variable for each — this is what makes the dress-up "just work" with no manual wiring.
+                const buildCategories = () => {
+                    if (!czChar) return;
+                    const cats = Object.values(czChar.layers).map((layer: any) => {
+                        const existing = (el.categories || []).find(c => c.layerId === layer.id);
+                        if (existing) return existing;
+                        const variableId: VNID = `cust-${Math.random().toString(36).slice(2, 9)}`;
+                        const firstAsset = Object.keys(layer.assets)[0] || '';
+                        dispatch({ type: 'ADD_VARIABLE', payload: { id: variableId, name: `${czChar.name} — ${layer.name}`, type: 'string', defaultValue: firstAsset } });
+                        return { layerId: layer.id, label: layer.name, variableId };
+                    });
+                    updateElement({ categories: cats });
+                };
+                const setOptionMeta = (assetId: VNID, patch: Partial<import('../../features/ui/types').UICustomizerOptionMeta>) => {
+                    const meta = { ...(el.optionMeta || {}) };
+                    meta[assetId] = { ...(meta[assetId] || {}), ...patch };
+                    updateElement({ optionMeta: meta });
+                };
+                return {
+                    content: <>
+                        <FormField label="Character">
+                            <Select value={el.characterId || ''} onChange={e => updateElement({ characterId: e.target.value, categories: [], expressionId: undefined })}>
+                                {Object.keys(project.characters).length === 0 && <option value="">No characters yet</option>}
+                                {!el.characterId && <option value="">Select a character…</option>}
+                                {Object.values(project.characters).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </Select>
+                        </FormField>
+                        {czChar && (
+                            <FormField label="Fallback expression">
+                                <Select value={el.expressionId || ''} onChange={e => updateElement({ expressionId: e.target.value || undefined })}>
+                                    <option value="">First expression</option>
+                                    {Object.values(czChar.expressions).map((ex: any) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                                </Select>
+                            </FormField>
+                        )}
+                        {czChar && (
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] text-slate-500">Categories come from the character's layers. Each gets its own picker + auto-variable.</p>
+                                <button onClick={buildCategories} className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1 bg-[var(--accent-cyan)]/10 hover:bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] flex-shrink-0">
+                                    {(el.categories || []).length === 0 ? 'Set up categories' : 'Re-sync layers'}
+                                </button>
+                            </div>
+                        )}
+                        {(el.categories || []).length > 0 && (
+                            <div className="space-y-1.5">
+                                {(el.categories || []).map(cat => {
+                                    const layerName = czChar?.layers[cat.layerId]?.name || '(missing layer)';
+                                    return (
+                                        <div key={cat.layerId} className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-500 w-20 truncate flex-shrink-0" title={layerName}>{layerName}</span>
+                                            <TextInput value={cat.label ?? ''} placeholder={layerName} onChange={e => updateElement({ categories: (el.categories || []).map(c => c.layerId === cat.layerId ? { ...c, label: e.target.value || undefined } : c) })} />
+                                            <Select value={cat.pickerStyle || 'swatches'} onChange={e => updateElement({ categories: (el.categories || []).map(c => c.layerId === cat.layerId ? { ...c, pickerStyle: e.target.value as 'swatches' | 'arrows' | 'buttons' | 'dropdown' } : c) })}>
+                                                <option value="swatches">Swatches</option>
+                                                <option value="arrows">Arrows</option>
+                                                <option value="buttons">Buttons</option>
+                                                <option value="dropdown">Dropdown</option>
+                                            </Select>
+                                            <button onClick={() => updateElement({ categories: (el.categories || []).filter(c => c.layerId !== cat.layerId) })} className="text-red-400 hover:text-red-300 text-xs flex-shrink-0" title="Remove category">✕</button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {czChar && czLayers.length === 0 && <p className="text-[10px] text-amber-400">This character has no layers yet — add some in the Characters tab.</p>}
+                        <div className="grid grid-cols-2 gap-2">
+                            <FormField label="Layout">
+                                <Select value={el.layout || 'preview-left'} onChange={e => updateElement({ layout: e.target.value as 'preview-left' | 'preview-right' | 'preview-top' })}>
+                                    <option value="preview-left">Preview left</option>
+                                    <option value="preview-right">Preview right</option>
+                                    <option value="preview-top">Preview top</option>
+                                </Select>
+                            </FormField>
+                            <FormField label="Preview size (%)"><TextInput type="number" min="20" max="80" value={String(el.previewPercent ?? 45)} onChange={e => updateElement({ previewPercent: Math.max(10, Math.min(90, parseInt(e.target.value, 10) || 45)) })} /></FormField>
+                        </div>
+                        <FormField label="Show category labels"><input type="checkbox" checked={el.showLabels !== false} onChange={e => updateElement({ showLabels: e.target.checked })} /></FormField>
+                        <div className="grid grid-cols-2 gap-2">
+                            <FormField label="Randomize button"><input type="checkbox" checked={!!el.showRandomize} onChange={e => updateElement({ showRandomize: e.target.checked })} /></FormField>
+                            <FormField label="Reset button"><input type="checkbox" checked={!!el.showReset} onChange={e => updateElement({ showReset: e.target.checked })} /></FormField>
+                        </div>
+                        {el.showRandomize && <FormField label="Randomize label"><TextInput value={el.randomizeLabel ?? ''} placeholder="Randomize" onChange={e => updateElement({ randomizeLabel: e.target.value || undefined })} /></FormField>}
+                        {el.showReset && <FormField label="Reset label"><TextInput value={el.resetLabel ?? ''} placeholder="Reset" onChange={e => updateElement({ resetLabel: e.target.value || undefined })} /></FormField>}
+                        {(el.categories || []).length > 0 && czChar && (
+                            <CollapsibleSection title="Options & rules" hint="Lock options behind conditions, hide incompatible ones, or give an option a custom swatch.">
+                                {(el.categories || []).map(cat => {
+                                    const layer = czChar.layers[cat.layerId];
+                                    if (!layer) return null;
+                                    const catAssets = Object.values(layer.assets) as any[];
+                                    return (
+                                        <div key={cat.layerId} className="mb-2">
+                                            <p className="text-[10px] font-semibold text-slate-300 mb-1">{cat.label || layer.name}</p>
+                                            <div className="space-y-1.5">
+                                                {catAssets.map(a => {
+                                                    const meta = el.optionMeta?.[a.id] || {};
+                                                    return (
+                                                        <div key={a.id} className="p-1.5 rounded border border-slate-700/50 bg-slate-800/30 space-y-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-slate-400 flex-1 truncate" title={a.name}>{a.name}</span>
+                                                                <Select value={meta.whenUnmet || 'hide'} onChange={e => setOptionMeta(a.id, { whenUnmet: e.target.value as 'hide' | 'lock' })}>
+                                                                    <option value="hide">Hide if unmet</option>
+                                                                    <option value="lock">Lock if unmet</option>
+                                                                </Select>
+                                                            </div>
+                                                            <AssetSelector label="Swatch (optional)" assetType="images" value={meta.swatchImage?.id || null} onChange={id => setOptionMeta(a.id, { swatchImage: id ? { type: 'image', id } : null })} />
+                                                            <ConditionsEditor collapsible title="Show / unlock when…" conditions={meta.conditions} project={project} onChange={cs => setOptionMeta(a.id, { conditions: cs })} />
+                                                        </div>
+                                                    );
+                                                })}
+                                                {catAssets.length === 0 && <p className="text-[9px] text-slate-500">No assets in this layer.</p>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </CollapsibleSection>
+                        )}
+                    </>,
+                    appearance: <>
+                        <FormField label="Panel background"><ColorInput value={el.backgroundColor || '#1e1e38'} onChange={v => updateElement({ backgroundColor: v })} /></FormField>
+                        <FormField label={t('elementInspector.borderColor')}>
+                            <div className="flex items-center gap-2">
+                                <ColorInput value={el.borderColor || '#4D3273'} onChange={v => updateElement({ borderColor: v })} />
+                                {el.borderColor && <button onClick={() => updateElement({ borderColor: undefined })} className="text-xs text-red-400 hover:text-red-300">Clear</button>}
+                            </div>
+                        </FormField>
+                        <FormField label={t('elementInspector.borderRadiusPx')}><TextInput type="number" min="0" max="40" value={String(el.borderRadius ?? 8)} onChange={e => updateElement({ borderRadius: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        <FormField label="Selected highlight"><ColorInput value={el.selectedColor || '#8a2be2'} onChange={v => updateElement({ selectedColor: v })} /></FormField>
+                        <div className="grid grid-cols-2 gap-2">
+                            <FormField label="Swatch size (px)"><TextInput type="number" min="16" max="160" value={String(el.swatchSize ?? 48)} onChange={e => updateElement({ swatchSize: parseInt(e.target.value, 10) || 48 })} /></FormField>
+                            <FormField label="Swatch gap (px)"><TextInput type="number" min="0" max="40" value={String(el.swatchGap ?? 6)} onChange={e => updateElement({ swatchGap: parseInt(e.target.value, 10) || 0 })} /></FormField>
+                        </div>
+                        <div className="space-y-2 p-2 rounded-md bg-slate-800/40 border border-slate-700/50">
+                            <p className="text-[10px] text-slate-400 font-semibold">Picker theming</p>
+                            <AssetSelector label="Frame image (optional)" assetType="images" value={el.backgroundImage?.id || null} onChange={id => updateElement({ backgroundImage: id ? { type: 'image', id } : null })} />
+                            <p className="text-[9px] text-slate-500 -mt-1">A panel/frame image behind the whole element.</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <FormField label="Arrow color"><ColorInput value={el.arrowColor || '#ffffff'} onChange={v => updateElement({ arrowColor: v })} /></FormField>
+                                <FormField label="Arrow size (px)"><TextInput type="number" min="8" max="96" value={String(el.arrowSize ?? 28)} onChange={e => updateElement({ arrowSize: parseInt(e.target.value, 10) || 28 })} /></FormField>
+                            </div>
+                            <AssetSelector label="Arrow image (optional)" assetType="images" value={el.arrowImage?.id || null} onChange={id => updateElement({ arrowImage: id ? { type: 'image', id } : null })} />
+                            <p className="text-[9px] text-slate-500 -mt-1">Used by the Arrows picker style (left side is mirrored).</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <FormField label="Button color"><ColorInput value={(el.buttonColor && el.buttonColor.startsWith('#')) ? el.buttonColor : '#334155'} onChange={v => updateElement({ buttonColor: v })} /></FormField>
+                                <FormField label="Button text"><ColorInput value={el.buttonTextColor || '#ffffff'} onChange={v => updateElement({ buttonTextColor: v })} /></FormField>
+                            </div>
+                            <p className="text-[9px] text-slate-500">Set each category's picker style (Swatches / Arrows / Buttons / Dropdown) in the Content tab.</p>
+                        </div>
+                        {el.font && (
+                            <><h4 className="font-bold my-2 text-slate-400 text-xs">Label font</h4>
+                            <FontEditor font={el.font} onFontChange={(prop, value) => updateElement({ font: { ...el.font!, [prop]: value } })} /></>
+                        )}
+                    </>,
+                };
+            }
             case UIElementType.Meter: {
                 const el = element as UIMeterElement;
                 const numberVariables = Object.values(project.variables).filter((v): v is VNVariable => (v as VNVariable).type === 'number');
@@ -1244,6 +1404,44 @@ export const ElementGroupFields: React.FC<Props> = ({ groupId, element, project,
                             </CollapsibleSection>
                         </div>
                     </>,
+                };
+            }
+            case UIElementType.Custom: {
+                const el = element as any;
+                const def = pluginManager.getUIElementType(el.pluginType);
+                const setProp = (k: string, v: any) => updateElement({ props: { ...(el.props || {}), [k]: v } } as any);
+                if (!def) {
+                    return { content: <p className="text-xs text-amber-400">{t('elementInspector.customMissing', "This custom element's extension isn't installed or enabled.")}</p> };
+                }
+                const flds = def.inspector || [];
+                return {
+                    content: (
+                        <div className="flex flex-col gap-2">
+                            {flds.length === 0 && <p className="text-xs text-[var(--text-muted)]">{t('elementInspector.customNoProps', 'This element has no editable properties.')}</p>}
+                            {flds.map((f: any) => {
+                                const val = (el.props || {})[f.key];
+                                return (
+                                    <FormField key={f.key} label={f.label}>
+                                        {f.type === 'textarea' ? (
+                                            <textarea value={String(val ?? '')} onChange={e => setProp(f.key, e.target.value)} className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] px-2 py-1 rounded border border-[var(--border-subtle)] text-xs outline-none" style={{ minHeight: 60, resize: 'vertical' }} />
+                                        ) : f.type === 'number' ? (
+                                            <TextInput type="number" value={Number(val ?? 0)} onChange={e => setProp(f.key, parseFloat(e.target.value) || 0)} />
+                                        ) : f.type === 'boolean' ? (
+                                            <input type="checkbox" checked={!!val} onChange={e => setProp(f.key, e.target.checked)} className="cursor-pointer" />
+                                        ) : f.type === 'color' ? (
+                                            <ColorInput value={String(val || '#ffffff')} onChange={v => setProp(f.key, v)} />
+                                        ) : f.type === 'select' ? (
+                                            <Select value={String(val ?? '')} onChange={e => setProp(f.key, e.target.value)}>
+                                                {(f.options || []).map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                            </Select>
+                                        ) : (
+                                            <TextInput value={String(val ?? '')} onChange={e => setProp(f.key, e.target.value)} />
+                                        )}
+                                    </FormField>
+                                );
+                            })}
+                        </div>
+                    ),
                 };
             }
             default:

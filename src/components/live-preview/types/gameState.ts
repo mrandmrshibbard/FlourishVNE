@@ -154,6 +154,10 @@ export interface HotSpotOverlay {
     highlightColor?: string;
     visible?: boolean;
     advanceOnTrigger?: boolean;
+    /** Stage stacking order (from the command's `layer`). When set, the spot uses the shared layer
+     *  band (1 + layer*100) so items/images can sit above it; when undefined it keeps the legacy
+     *  fixed z (above characters, below dialogue) for back-compat. */
+    layer?: number;
 }
 
 export interface StageCharacterTransition {
@@ -193,6 +197,9 @@ export interface StageCharacterState {
     /** Live (reactive) conditions: when `live`, the character is shown only while met. */
     conditions?: import('../../../types/shared').VNCondition[];
     live?: boolean;
+    /** Resolved per-layer asset selection (layerId → assetId|null) used to build the composite.
+     *  Lets `SetCharacterLayer` patch one layer mid-scene and rebuild without re-running ShowCharacter. */
+    layerSelections?: Record<VNID, VNID | null>;
 }
 
 /** A live (reactive) conditional background candidate (from a live Set Background). */

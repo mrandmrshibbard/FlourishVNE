@@ -1,4 +1,5 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
+import { pluginManager } from '../features/plugins/PluginManagerService';
 import { useTranslation } from 'react-i18next';
 import { useProject } from '../contexts/ProjectContext';
 import Header from './Header';
@@ -6,6 +7,8 @@ import PropertiesInspector from './PropertiesInspector';
 import { VNID } from '../types';
 import LivePreview from './LivePreview';
 import Panel from './ui/Panel';
+import InspectorPanel from './InspectorPanel';
+import { isManagerWindow, isMultiWindowSupported, openManagerWindow, syncEditorContext, onPanelWindowState, onEditorContextUpdate } from '../utils/windowManager';
 import NavigationTabs, { NavigationTab } from './NavigationTabs';
 import SceneManager from './SceneManager';
 import CharacterManager from './CharacterManager';
@@ -62,6 +65,8 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [selectedExpressionId, setSelectedExpressionId] = useState<VNID | null>(null);
     const [selectedVariableId, setSelectedVariableId] = useState<VNID | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    // Suspend any extensions flagged "Hide during test play" while the preview is open, restore after.
+    useEffect(() => { pluginManager.setTestPlayActive(isPlaying); }, [isPlaying]);
     const [activeTab, setActiveTab] = useState<NavigationTab>(initialTab || 'scenes');
     const [isSceneEditorCollapsed, setIsSceneEditorCollapsed] = useState(false);
     const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false);
@@ -70,6 +75,72 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
     const [uiEditorMode, setUiEditorMode] = useState<'screens' | 'ingame'>('screens');
     // One-shot deep link into the Systems tab (set by "Manage in Systems" links in the UI editor).
     const [systemsSelection, setSystemsSelection] = useState<{ system: 'items' | 'inventory' | 'stats'; id?: VNID } | null>(null);
+
+    // Broadcast the editor "context" (active scene/tab + current selection) so popped-out PANEL
+    // windows — currently the Properties Inspector — follow whatever editor the user is ACTIVELY
+    // working in (main OR a popped-out tab). Each full editor broadcasts only while it's the focused
+    // window, so the inspector tracks the last-focused editor. (Full editors never CONSUME context, so
+    // there's no feedback loop.) isFocusedRef is kept truthful by real focus/blur listeners below —
+    // we avoid `document.hasFocus()` at broadcast time because it reads false during DevTools/dialogs.
+    const isFocusedRef = useRef<boolean>(typeof document !== 'undefined' ? document.hasFocus() : true);
+    const ctxRef = useRef<any>(null);
+    useEffect(() => {
+        const ctx = {
+            activeTab,
+            uiEditorMode,
+            activeSceneId,
+            selectedCommandIndex,
+            activeMenuScreenId,
+            selectedUIElementIds,
+            activeCharacterId,
+            selectedVariableId,
+        };
+        ctxRef.current = ctx;
+        (window as any).__FLOURISH_EDITOR_CONTEXT__ = ctx;
+        if (isFocusedRef.current) syncEditorContext(ctx);
+    }, [activeTab, uiEditorMode, activeSceneId, selectedCommandIndex, activeMenuScreenId, selectedUIElementIds, activeCharacterId, selectedVariableId]);
+
+    // Re-broadcast this window's context when it gains focus, so switching windows (even without a new
+    // click) makes a popped-out panel follow the now-active editor.
+    useEffect(() => {
+        const onFocus = () => { isFocusedRef.current = true; if (ctxRef.current) syncEditorContext(ctxRef.current); };
+        const onBlur = () => { isFocusedRef.current = false; };
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
+        return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur); };
+    }, []);
+
+    // Adopt SELECTION broadcast by another window (e.g. selecting an element in the popped-out canvas)
+    // so this editor's Properties inspector follows it. Only while this window is NOT focused, and only
+    // within the SAME scene/screen (so it can't mis-select in a different one). Other navigation fields
+    // (active tab/scene/screen) stay under this window's own control.
+    useEffect(() => {
+        onEditorContextUpdate((incoming) => {
+            if (isFocusedRef.current) return;
+            const cur = ctxRef.current;
+            if (!cur || !incoming) return;
+            if (incoming.activeMenuScreenId && incoming.activeMenuScreenId === cur.activeMenuScreenId && Array.isArray(incoming.selectedUIElementIds)) {
+                setSelectedUIElementIds(incoming.selectedUIElementIds);
+            }
+            if (incoming.activeSceneId && incoming.activeSceneId === cur.activeSceneId && incoming.selectedCommandIndex !== undefined) {
+                setSelectedCommandIndex(incoming.selectedCommandIndex);
+            }
+        });
+    }, []);
+
+    // Which focused PANEL windows (inspector, canvas) are popped out — this editor hides the matching
+    // inline panel so the floating one can be docked beside it without a duplicate. Seeded for windows
+    // opened while one is already out; kept live by the main-process broadcast. (Canvas hiding is done
+    // inside SceneManager, which owns the staging area; the inspector hiding is handled here.)
+    const [openPanels, setOpenPanels] = useState<{ inspector: boolean; canvas: boolean }>(
+        () => ((window as any).__FLOURISH_PANELS_OPEN__ || { inspector: false, canvas: false })
+    );
+    useEffect(() => {
+        onPanelWindowState((panels) => {
+            (window as any).__FLOURISH_PANELS_OPEN__ = panels;
+            setOpenPanels({ inspector: !!panels?.inspector, canvas: !!panels?.canvas });
+        });
+    }, []);
 
     // REMOVED: The useEffect hook for saving the project has been removed.
     // All changes are now held in memory until the user manually exports the project.
@@ -201,105 +272,22 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
         setSelectedUIElementIds([]);
     }
 
-    const renderInspector = () => {
-        // InGameUIEditor has its own built-in properties panel
-        if (activeTab === 'ui' && uiEditorMode === 'ingame') return null;
-        // When on the UI tab in 'screens' mode with no screen selected, show placeholder
-        if (activeTab === 'ui' && !activeMenuScreenId && uiEditorMode === 'screens') {
-            return <Panel title={t('visualNovelEditor.propertiesTitle')} style={{ width: 'var(--inspector-width)' }} className="flex-shrink-0">
-                <p className="text-xs text-slate-400">{t('visualNovelEditor.selectUiScreenHint')}</p>
-            </Panel>;
-        }
-        if (activeCharacterId) {
-            // Character properties are now integrated into the unified CharacterEditor
-            return null;
-        }
-        if (activeMenuScreenId) {
-            const activeScreen = project.uiScreens[activeMenuScreenId];
-            if (selectedUIElementIds.length > 0 && activeScreen) {
-                const lastId = selectedUIElementIds[selectedUIElementIds.length - 1];
-                const selectedElement = activeScreen.elements[lastId] as VNUIElement | undefined;
-
-                // Dispatch on element type. Hot spots → HotSpotProperties.
-                // Image maps + draggable elements → InteractiveElementProperties.
-                // Everything else → the standard UIElementInspector.
-                if (selectedElement) {
-                    const targetable = (Object.values(activeScreen.elements || {}) as VNUIElement[])
-                        .filter(isInteractiveElement)
-                        .map(el => ({ id: el.id, name: el.name }));
-                    // Drag tags already in use — power the Drag-tag / Accept-tag autocomplete. Includes
-                    // both draggable screen objects AND carry-to-use inventory items (so a hot spot can
-                    // be set to accept an item's tag without retyping it).
-                    const dragTagOptions = Array.from(new Set([
-                        ...(Object.values(activeScreen.elements || {}) as VNUIElement[]).map(el => (el as any).dragTag),
-                        ...(Object.values(project.items || {}) as any[]).map(it => it.dragTag),
-                    ].filter((t): t is string => !!t)));
-                    const deleteSelectedElement = () => {
-                        dispatch({ type: 'DELETE_UI_ELEMENT', payload: { screenId: activeMenuScreenId, elementId: lastId } });
-                        setSelectedUIElementIds([]);
-                    };
-                    if (isHotSpotElement(selectedElement)) {
-                        return (
-                            <HotSpotProperties
-                                spot={selectedElement}
-                                project={project}
-                                targetableElements={targetable}
-                                dragTagOptions={dragTagOptions}
-                                onUpdate={(patch) => dispatch({
-                                    type: 'UPDATE_UI_ELEMENT',
-                                    payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch as Partial<VNUIElement> },
-                                })}
-                                onDelete={deleteSelectedElement}
-                            />
-                        );
-                    }
-                    if (isInteractiveElement(selectedElement)) {
-                        return (
-                            <InteractiveElementProperties
-                                element={selectedElement}
-                                project={project}
-                                targetableElements={targetable}
-                                dragTagOptions={dragTagOptions}
-                                onUpdate={(patch) => dispatch({
-                                    type: 'UPDATE_UI_ELEMENT',
-                                    payload: { screenId: activeMenuScreenId, elementId: lastId, updates: patch },
-                                })}
-                                onDelete={deleteSelectedElement}
-                            />
-                        );
-                    }
-                }
-                return <UIElementInspector screenId={activeMenuScreenId} elementId={lastId} setSelectedElementId={(id) => setSelectedUIElementIds(id ? [id] : [])} onOpenSystems={handleOpenInSystems} />;
-            }
-            return <ScreenInspector screenId={activeMenuScreenId} />;
-        }
-        if (selectedVariableId) {
-            return <PropertiesInspector
-                activeSceneId={activeSceneId}
-                selectedCommandIndex={selectedCommandIndex}
-                setSelectedCommandIndex={setSelectedCommandIndex}
-                selectedVariableId={selectedVariableId}
-                setSelectedVariableId={setSelectedVariableId}
-            />;
-        }
-        if (selectedCommandIndex !== null) {
-            return <PropertiesInspector
-                activeSceneId={activeSceneId}
-                selectedCommandIndex={selectedCommandIndex}
-                setSelectedCommandIndex={setSelectedCommandIndex}
-            />;
-        }
-        // Scenes tab with nothing selected → show Scene Settings (contextual, like the command inspector).
-        if (activeTab === 'scenes') {
-            return <PropertiesInspector
-                activeSceneId={activeSceneId}
-                selectedCommandIndex={null}
-                setSelectedCommandIndex={setSelectedCommandIndex}
-                isConfigScene={true}
-            />;
-        }
-        return null; // Other tabs handle their own inspectors internally
-    }
+    const renderInspector = () => (
+        <InspectorPanel
+            activeTab={activeTab}
+            uiEditorMode={uiEditorMode}
+            activeSceneId={activeSceneId}
+            selectedCommandIndex={selectedCommandIndex}
+            setSelectedCommandIndex={setSelectedCommandIndex}
+            activeMenuScreenId={activeMenuScreenId}
+            selectedUIElementIds={selectedUIElementIds}
+            setSelectedUIElementIds={setSelectedUIElementIds}
+            activeCharacterId={activeCharacterId}
+            selectedVariableId={selectedVariableId}
+            setSelectedVariableId={setSelectedVariableId}
+            onOpenInSystems={handleOpenInSystems}
+        />
+    );
 
     // Calculate tab counts
     const sceneCount = project.scenes ? Object.keys(project.scenes).length : 0;
@@ -659,8 +647,29 @@ const VisualNovelEditor: React.FC<{ onExit: () => void; initialTab?: NavigationT
                     ) : null}
                 </div>
 
-                {/* Properties Inspector Sidebar - Always Visible */}
-                {renderInspector()}
+                {/* Properties Inspector Sidebar - Always Visible.
+                    A small ⧉ button pops the inspector into its own window (desktop only); the popped
+                    window follows this editor's selection via the editor-context sync channel. */}
+                {(() => {
+                    // Hidden while the inspector is popped out into its own window (no duplicate panel).
+                    if (openPanels.inspector) return null;
+                    const inspectorNode = renderInspector();
+                    if (!inspectorNode) return null;
+                    return (
+                        <div className="relative flex-shrink-0">
+                            {isMultiWindowSupported() && !isManagerWindow() && (
+                                <button
+                                    onClick={() => openManagerWindow('inspector')}
+                                    title={t('visualNovelEditor.popOutProperties', { defaultValue: 'Open Properties in its own window' })}
+                                    className="absolute top-1.5 right-1.5 z-20 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-black/20 hover:bg-black/40 border border-[var(--border-subtle)] transition-all"
+                                >
+                                    ⧉
+                                </button>
+                            )}
+                            {inspectorNode}
+                        </div>
+                    );
+                })()}
             </main>
             {isPlaying && (
                 <ErrorBoundary panelName="Live Preview">

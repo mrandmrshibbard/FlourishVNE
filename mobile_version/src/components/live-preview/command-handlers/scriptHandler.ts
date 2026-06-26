@@ -142,7 +142,7 @@ export const handleRunScript = async (
     const runScriptInternal = async (scr: VNScript, args: Record<string, VarValue>, depth: number): Promise<void> => {
         if (depth > MAX_SCRIPT_DEPTH) {
             console.error(`[RunScript] Recursion limit (${MAX_SCRIPT_DEPTH}) reached at "${scr.name}"`);
-            context.notify?.(`Script recursion limit reached ("${scr.name}")`, 'error');
+            if (!context.isStandalone) context.notify?.(`Script recursion limit reached ("${scr.name}")`, 'error');
             return;
         }
 
@@ -221,13 +221,24 @@ export const handleRunScript = async (
                 }
                 pendingCommonEvent = { commonEventId: ce.id, variableOverrides: overrides };
             },
+
+            // Presentation parity: run a real engine command imperatively, reusing the live runtime's
+            // command handlers. No-op if the runtime didn't provide the bridge (e.g. ScriptEditor test run).
+            onRunCommand: context.runCommand
+                ? (type, params) => context.runCommand!(type, params)
+                : undefined,
+            // UI parity: fire a real UI action (go to screen, save/load, show/hide element…).
+            onRunUIAction: context.runUIAction
+                ? (actionType, params) => context.runUIAction!(actionType, params)
+                : undefined,
+            isStandalone: context.isStandalone,
         };
 
         const result = await executeScript(scr, runtimeContext);
         if (!result.success) {
             console.error(`[RunScript] Script "${scr.name}" failed:`, result.error);
             if (result.stack) console.error(result.stack);
-            context.notify?.(`Script "${scr.name}" error: ${result.error}`, 'error');
+            if (!context.isStandalone) context.notify?.(`Script "${scr.name}" error: ${result.error}`, 'error');
         } else {
             console.log(`[RunScript] Script "${scr.name}" completed in ${result.duration.toFixed(1)}ms`);
         }
@@ -250,7 +261,7 @@ export const handleRunScript = async (
         const onStack = playerState.commandStack.some(f => f.commonEventId === pendingCommonEvent!.commonEventId);
         if (playerState.commandStack.length >= MAX_CALL_DEPTH || onStack) {
             console.error(`[Script] callCommonEvent blocked (depth/cycle): "${ce?.name || pendingCommonEvent.commonEventId}"`);
-            context.notify?.(`Common Event call blocked (depth/cycle): "${ce?.name || ''}"`, 'error');
+            if (!context.isStandalone) context.notify?.(`Common Event call blocked (depth/cycle): "${ce?.name || ''}"`, 'error');
         } else if (ce && ce.commands && ce.commands.length > 0) {
             // Save prior values of overridden params for restoration on return (local scope).
             const savedVariables: Record<VNID, VarValue> = {};

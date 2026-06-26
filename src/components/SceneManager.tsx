@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInlineRename } from '../hooks/useInlineRename';
 import { VNID } from '../types';
@@ -12,6 +12,7 @@ import CommandPalette from './CommandPalette';
 import { PlusIcon, TrashIcon, BookOpenIcon, PencilIcon, SparkleIcon, DuplicateIcon } from './icons';
 import { ContextMenu } from './ui/ContextMenu';
 import { CommandRadialProvider } from './inspector/CommandRadialContext';
+import { isManagerWindow, isMultiWindowSupported, openManagerWindow, onPanelWindowState } from '../utils/windowManager';
 
 interface SceneManagerProps {
     project: VNProject;
@@ -43,6 +44,13 @@ const SceneManager: React.FC<SceneManagerProps> = ({
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sceneId: VNID } | null>(null);
     const [draggedSceneId, setDraggedSceneId] = useState<VNID | null>(null);
     const [dropTargetId, setDropTargetId] = useState<VNID | null>(null);
+
+    // When the scene canvas is popped into its own window, hide the inline staging area so the command
+    // list gets the full center column (the floating canvas docks beside the editor instead).
+    const [canvasPoppedOut, setCanvasPoppedOut] = useState<boolean>(() => !!((window as any).__FLOURISH_PANELS_OPEN__?.canvas));
+    useEffect(() => {
+        onPanelWindowState((panels) => setCanvasPoppedOut(!!panels?.canvas));
+    }, []);
 
     const scenesArray = useMemo(() => Object.values(project.scenes) as VNScene[], [project.scenes]);
 
@@ -206,18 +214,29 @@ const SceneManager: React.FC<SceneManagerProps> = ({
 
             {/* Center - Staging Area (top) + Scene Editor (bottom) */}
             <div className="flex-1 flex flex-col min-w-[600px] panel border-r-2 overflow-hidden">
-                {/* Staging Area - Top - 60% */}
-                <div className="flex-[3] flex flex-col border-b-2 border-[var(--border-subtle)] min-h-0 overflow-hidden">
-                    <div className="h-full p-2 overflow-hidden">
-                        <StagingArea
-                            project={project}
-                            activeSceneId={activeSceneId}
-                            selectedCommandIndex={selectedCommandIndex}
-                            className="h-full w-full border-2 border-[var(--border-subtle)] rounded-lg"
-                            style={{ height: '100%' }}
-                        />
+                {/* Staging Area - Top - 60% (hidden while the canvas is popped out into its own window) */}
+                {!canvasPoppedOut && (
+                    <div className="flex-[3] flex flex-col border-b-2 border-[var(--border-subtle)] min-h-0 overflow-hidden">
+                        <div className="relative h-full p-2 overflow-hidden">
+                            {isMultiWindowSupported() && !isManagerWindow() && (
+                                <button
+                                    onClick={() => openManagerWindow('canvas')}
+                                    title={t('common:popOutCanvas', { defaultValue: 'Open the canvas in its own window' })}
+                                    className="absolute top-3.5 right-3.5 z-20 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-black/30 hover:bg-black/50 border border-[var(--border-subtle)] transition-all"
+                                >
+                                    ⧉
+                                </button>
+                            )}
+                            <StagingArea
+                                project={project}
+                                activeSceneId={activeSceneId}
+                                selectedCommandIndex={selectedCommandIndex}
+                                className="h-full w-full border-2 border-[var(--border-subtle)] rounded-lg"
+                                style={{ height: '100%' }}
+                            />
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Scene Editor - Bottom - 40% */}
                 <div className="flex-[2] flex flex-col overflow-hidden min-h-0">

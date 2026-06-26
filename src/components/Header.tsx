@@ -9,7 +9,7 @@ import { estimateProjectAssetBytes, formatBytes, LARGE_PROJECT_WARN_BYTES, type 
 import { isElectronAssetStore, getProjectAssetSizes } from '../utils/assetStore';
 import { saveRecentProject, getRecentProjectInfo } from './ProjectHub';
 import { GameBuilder } from './GameBuilder';
-import { isManagerWindow, closeAllManagerWindows } from '../utils/windowManager';
+import { isManagerWindow, closeAllManagerWindows, onPanelWindowState } from '../utils/windowManager';
 import InfoModal from './ui/InfoModal';
 import LoadingOverlay from './ui/LoadingOverlay';
 import ThemeSelector from './ThemeSelector';
@@ -17,6 +17,8 @@ import LocalizationPanel from './LocalizationPanel';
 import HelpPanel from './HelpPanel';
 import ScriptEditor from './ScriptEditor';
 import PluginManagerUI from './PluginManagerUI';
+import { ExtensionPanelsHost, useExtensionPanels, useExtensionMenuItems, runExtensionMenuItem, useExtensionDatabaseCategories } from './ExtensionPanelsHost';
+import ExtensionDatabaseManager from './ExtensionDatabaseManager';
 import CompareMergeModal from './collab/CompareMergeModal';
 
 
@@ -53,6 +55,14 @@ const Header: React.FC<{
     const [showCompareMerge, setShowCompareMerge] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
+    // Editor panels contributed by extensions (Phase C1) + which ones are currently open.
+    const extensionPanels = useExtensionPanels();
+    const extensionMenuItems = useExtensionMenuItems();
+    const extensionDbCategories = useExtensionDatabaseCategories();
+    const [showExtensionData, setShowExtensionData] = useState(false);
+    const [openPanelIds, setOpenPanelIds] = useState<string[]>([]);
+    const openExtensionPanel = (id: string) => setOpenPanelIds(ids => (ids.includes(id) ? ids : [...ids, id]));
+    const closeExtensionPanel = (id: string) => setOpenPanelIds(ids => ids.filter(x => x !== id));
     const [errorMessage, setErrorMessage] = useState('');
     // Large-export warning: shown before exporting a media-heavy project. The pending promise resolver
     // is called with the user's choice (proceed / cancel).
@@ -65,6 +75,16 @@ const Header: React.FC<{
     const toast = useToast();
     const { t } = useTranslation(['header', 'common']);
     const isChildWindow = isManagerWindow();
+
+    // When any panel (inspector/canvas/in-game part) is popped out, the main editor is usually shrunk
+    // small — so stack the nav tabs ABOVE the action buttons (their own full-width row) instead of
+    // letting them wrap and push the window down.
+    const [anyPanelPopped, setAnyPanelPopped] = useState(false);
+    useEffect(() => {
+        onPanelWindowState((panels) => setAnyPanelPopped(
+            !!(panels?.inspector || panels?.canvas || panels?.ingameCanvas || panels?.ingameProperties)
+        ));
+    }, []);
 
     // Returns true to proceed with export. If the project's embedded media is large, shows a warning
     // first and waits for the user's choice; small projects pass straight through.
@@ -255,8 +275,8 @@ const Header: React.FC<{
     
     return (
         <>
-        <header 
-            className="px-3 py-2 flex items-center z-50 relative"
+        <header
+            className={`px-3 py-2 flex items-center z-50 relative ${anyPanelPopped ? 'flex-wrap gap-y-1' : ''}`}
             style={{ 
                 background: 'linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%)',
                 borderBottom: '1px solid var(--border-subtle)',
@@ -312,11 +332,13 @@ const Header: React.FC<{
                         )}
                     </div>
                     {/* Left-align the tab bar (was centered) so it sits next to the title and the
-                        rightmost tabs stay clear of the right-hand controls on narrow windows. */}
-                    <div className="flex-1 min-w-0 flex justify-start pl-2">
+                        rightmost tabs stay clear of the right-hand controls on narrow windows. When a
+                        panel is popped (small editor), the tab bar takes its OWN full-width row above the
+                        action buttons (order-first + w-full) so all tabs fit without pushing content down. */}
+                    <div className={anyPanelPopped ? 'order-first w-full flex justify-start' : 'flex-1 min-w-0 flex justify-start pl-2'}>
                         {navigationTabs}
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className={`flex items-center gap-1.5 flex-shrink-0 ${anyPanelPopped ? 'ml-auto' : ''}`}>
                         <div className="flex items-center gap-1 bg-[var(--bg-primary)] rounded-lg p-0.5 border border-[var(--border-subtle)]">
                             <button
                                 onClick={undo}
@@ -414,6 +436,50 @@ const Header: React.FC<{
                                             <HelpIcon className="w-4 h-4" />
                                             {t('helpDocs')}
                                         </button>
+                                        {extensionPanels.length > 0 && (
+                                            <>
+                                                <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                                <div className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('extensionPanels', 'Extension Panels')}</div>
+                                                {extensionPanels.map(({ panel }) => (
+                                                    <button
+                                                        key={panel.id}
+                                                        onClick={() => { openExtensionPanel(panel.id); setShowToolsMenu(false); }}
+                                                        className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"
+                                                    >
+                                                        <span className="w-4 h-4 flex items-center justify-center text-[13px]">{panel.icon || '🧩'}</span>
+                                                        {panel.title}
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
+                                        {extensionMenuItems.length > 0 && (
+                                            <>
+                                                <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                                <div className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{t('extensionTools', 'Extension Tools')}</div>
+                                                {extensionMenuItems.map((entry) => (
+                                                    <button
+                                                        key={entry.item.id}
+                                                        onClick={() => { runExtensionMenuItem(entry); setShowToolsMenu(false); }}
+                                                        className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"
+                                                    >
+                                                        <span className="w-4 h-4 flex items-center justify-center text-[13px]">{entry.item.icon || '🔧'}</span>
+                                                        {entry.item.label}
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
+                                        {extensionDbCategories.length > 0 && (
+                                            <>
+                                                <div className="h-px mx-2" style={{ background: 'var(--border-subtle)' }} />
+                                                <button
+                                                    onClick={() => { setShowExtensionData(true); setShowToolsMenu(false); }}
+                                                    className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-violet-400"
+                                                >
+                                                    <span className="w-4 h-4 flex items-center justify-center text-[13px]">🗃️</span>
+                                                    {t('extensionData', 'Extension Data')}
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </>
                             )}
@@ -574,6 +640,9 @@ const Header: React.FC<{
         {!isChildWindow && showPluginManager && (
             <PluginManagerUI onClose={() => setShowPluginManager(false)} />
         )}
+
+        {!isChildWindow && <ExtensionPanelsHost openIds={openPanelIds} onClose={closeExtensionPanel} />}
+        {!isChildWindow && showExtensionData && <ExtensionDatabaseManager onClose={() => setShowExtensionData(false)} />}
     </>
     );
 };

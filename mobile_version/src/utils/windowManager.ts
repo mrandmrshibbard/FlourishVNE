@@ -5,7 +5,7 @@
  * for improved workflow and multi-monitor support
  */
 
-export type ManagerWindowType = 
+export type ManagerWindowType =
   | 'scenes'
   | 'characters'
   | 'ui'
@@ -13,13 +13,57 @@ export type ManagerWindowType =
   | 'variables'
   | 'commonEvents'
   | 'settings'
-  | 'templates';
+  | 'templates'
+  // Focused PANEL windows (not whole tabs) — these render a single panel that follows the main
+  // editor's selection via the editor-context sync channel, rather than a full editor.
+  | 'inspector'
+  | 'canvas'
+  // The In-Game UI editor's canvas and properties, each poppable into its own window.
+  | 'ingame-canvas'
+  | 'ingame-properties';
+
+/** Which focused PANEL windows are currently open (editors hide their matching inline panel). */
+export interface PanelWindowState {
+  inspector: boolean;
+  canvas: boolean;
+  ingameCanvas: boolean;
+  ingameProperties: boolean;
+}
+
+/**
+ * The In-Game UI editor's shared view state, synced across its popped-out parts (tree in main, canvas
+ * + properties in their own windows) so they all agree on which surface is being edited / previewed.
+ */
+export interface InGameUIState {
+  selectedElement: string | null;
+  selectedThemeId: string | null;
+  confirmPreviewVariant: string;
+  phonePreviewView: string;
+}
+
+/**
+ * The transient editor "context" (selection) that travels between windows so a popped-out panel
+ * (e.g. the Properties Inspector) can show what's selected in the main editor. Ids/indices only —
+ * tiny, and deliberately NOT part of the saved project.
+ */
+export interface EditorContext {
+  activeTab: string;
+  uiEditorMode: 'screens' | 'ingame';
+  activeSceneId: string;
+  selectedCommandIndex: number | null;
+  activeMenuScreenId: string | null;
+  selectedUIElementIds: string[];
+  activeCharacterId: string | null;
+  selectedVariableId: string | null;
+}
 
 interface WindowConfig {
   type: ManagerWindowType;
   width: number; // in pixels
   height: number; // in pixels
   title: string;
+  minWidth?: number; // optional per-type minimum (defaults to 800 in main process)
+  minHeight?: number; // optional per-type minimum (defaults to 600 in main process)
 }
 
 const WINDOW_CONFIGS: Record<ManagerWindowType, WindowConfig> = {
@@ -70,6 +114,39 @@ const WINDOW_CONFIGS: Record<ManagerWindowType, WindowConfig> = {
     width: 1000,
     height: 700,
     title: 'Template Gallery'
+  },
+  inspector: {
+    type: 'inspector',
+    width: 420,
+    height: 820,
+    title: 'Properties',
+    // A properties panel should be narrow-dockable — don't inherit the 800px manager-window minimum.
+    minWidth: 260,
+    minHeight: 320
+  },
+  canvas: {
+    type: 'canvas',
+    width: 760,
+    height: 560,
+    title: 'Scene Canvas',
+    minWidth: 320,
+    minHeight: 240
+  },
+  'ingame-canvas': {
+    type: 'ingame-canvas',
+    width: 760,
+    height: 560,
+    title: 'In-Game UI Canvas',
+    minWidth: 320,
+    minHeight: 240
+  },
+  'ingame-properties': {
+    type: 'ingame-properties',
+    width: 360,
+    height: 820,
+    title: 'In-Game UI Properties',
+    minWidth: 280,
+    minHeight: 320
   }
 };
 
@@ -100,7 +177,9 @@ export const openManagerWindow = (type: ManagerWindowType): void => {
       type: config.type,
       width: config.width,
       height: config.height,
-      title: config.title
+      title: config.title,
+      minWidth: config.minWidth,
+      minHeight: config.minHeight
     });
   } else {
     console.error('Electron API not available for window management');
@@ -119,6 +198,57 @@ export const isMultiWindowSupported = (): boolean => {
  */
 export const isManagerWindow = (): boolean => {
   return !!(window as any).__IS_MANAGER_WINDOW__;
+};
+
+/**
+ * Which kind of popped-out window is this? Read synchronously from the ?manager=<type> query that
+ * Electron appends when creating the window (see electron/main.cjs). Returns null in the main window.
+ */
+export const getManagerWindowType = (): ManagerWindowType | null => {
+  try {
+    const fromSearch = new URLSearchParams(window.location.search).get('manager');
+    if (fromSearch) return fromSearch as ManagerWindowType;
+    const m = /[?&#]manager=([^&#]+)/.exec(window.location.href);
+    return m ? (decodeURIComponent(m[1]) as ManagerWindowType) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Broadcast the editor selection to every other window (drives popped-out panels). No-op off Electron.
+ */
+export const syncEditorContext = (context: EditorContext): void => {
+  (window as any).electronAPI?.syncEditorContext?.(context);
+};
+
+/**
+ * Subscribe to editor-context updates from other windows. Returns true if the listener was wired.
+ */
+export const onEditorContextUpdate = (callback: (context: EditorContext) => void): boolean => {
+  if ((window as any).electronAPI?.onEditorContextUpdate) {
+    (window as any).electronAPI.onEditorContextUpdate(callback);
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Subscribe to which focused PANEL windows (inspector, canvas) are open. Editors use this to hide the
+ * matching inline panel while a floating one exists. No-op off Electron.
+ */
+export const onPanelWindowState = (callback: (panels: PanelWindowState) => void): void => {
+  (window as any).electronAPI?.onPanelWindowState?.(callback);
+};
+
+/** Broadcast the In-Game UI editor's shared view state to its other popped-out parts. No-op off Electron. */
+export const syncInGameState = (state: InGameUIState): void => {
+  (window as any).electronAPI?.syncInGameState?.(state);
+};
+
+/** Subscribe to In-Game UI shared-state updates from other windows. */
+export const onInGameStateUpdate = (callback: (state: InGameUIState) => void): void => {
+  (window as any).electronAPI?.onInGameStateUpdate?.(callback);
 };
 
 /**

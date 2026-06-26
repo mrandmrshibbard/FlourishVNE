@@ -9,6 +9,7 @@ import { useProject } from '../contexts/ProjectContext';
 import MenuEditor from './menu-editor/MenuEditor';
 import InGameUIEditor from './InGameUIEditor';
 import { ElementRadialProvider, useElementRadial } from './menu-editor/ElementRadialContext';
+import { isManagerWindow, isMultiWindowSupported, openManagerWindow, onPanelWindowState } from '../utils/windowManager';
 import { PlusIcon, TrashIcon, BookmarkSquareIcon, PencilIcon, DuplicateIcon, LockClosedIcon, ChatBubbleIcon, ChevronRightIcon, ChevronDownIcon } from './icons';
 import ConfirmationModal from './ui/ConfirmationModal';
 import UIScreenThemeSelector from './UIScreenThemeSelector';
@@ -64,6 +65,17 @@ const UIManager: React.FC<UIManagerProps> = ({
     const [renamingId, setRenamingId] = useState<VNID | null>(null);
     const [pendingRestore, setPendingRestore] = useState(false);
     const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+
+    // When the (adaptive) canvas is popped into its own window, hide the inline UI canvas so the screen
+    // list gets the full width (the floating canvas docks beside the editor instead).
+    const [canvasPoppedOut, setCanvasPoppedOut] = useState<boolean>(() => !!((window as any).__FLOURISH_PANELS_OPEN__?.canvas));
+    const [inspectorPoppedOut, setInspectorPoppedOut] = useState<boolean>(() => !!((window as any).__FLOURISH_PANELS_OPEN__?.inspector));
+    useEffect(() => {
+        onPanelWindowState((panels) => {
+            setCanvasPoppedOut(!!panels?.canvas);
+            setInspectorPoppedOut(!!panels?.inspector);
+        });
+    }, []);
 
     // Expansion state for the screen tree — persisted so it survives reloads
     const [expandedScreens, setExpandedScreens] = useState<Set<VNID>>(() => {
@@ -196,11 +208,17 @@ const UIManager: React.FC<UIManagerProps> = ({
             {/* Panel content */}
             <div className="flex-1 min-h-0">
                 {editorMode === 'ingame' ? (
-                    <InGameUIEditor project={project} />
+                    // In-Game UI editor; its canvas hides when the shared Canvas window is open and its
+                    // properties hide when the shared Properties window is open (the tree stays so you can
+                    // still pick which surface to edit).
+                    <InGameUIEditor project={project} showCanvas={!canvasPoppedOut} showProperties={!inspectorPoppedOut} />
                 ) : (
                     <div className="flex h-full">
-                        {/* UI Screen List Sidebar */}
-                        <div className="bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
+                        {/* UI Screen List Sidebar (grows to fill when the canvas is popped out) */}
+                        <div
+                            className={`bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col ${canvasPoppedOut ? 'flex-1' : ''}`}
+                            style={canvasPoppedOut ? undefined : { width: 'var(--sidebar-width)' }}
+                        >
                             <div className="p-4 border-b border-[var(--border-subtle)]">
                                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                     <BookmarkSquareIcon className="w-5 h-5" />
@@ -255,24 +273,36 @@ const UIManager: React.FC<UIManagerProps> = ({
 
                         {/* UI Editor — MenuEditor handles every screen. Hot spots, draggable
                             elements, and image maps render as overlays on the canvas; the inspector
-                            dispatcher routes selection to the right panel via the hot zone shim. */}
-                        <div className="flex-1 flex flex-col min-w-0">
-                            {activeMenuScreenId ? (
-                                <MenuEditor
-                                    activeScreenId={activeMenuScreenId}
-                                    selectedElementIds={selectedUIElementIds}
-                                    setSelectedElementIds={setSelectedUIElementIds}
-                                    isPlaying={isPlaying}
-                                />
-                            ) : (
-                                <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
-                                    <div className="text-center">
-                                        <BookmarkSquareIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                                        <p className="text-lg">{t('manager.selectScreenToEdit')}</p>
+                            dispatcher routes selection to the right panel via the hot zone shim.
+                            Hidden while the canvas is popped out into its own window. */}
+                        {!canvasPoppedOut && (
+                            <div className="relative flex-1 flex flex-col min-w-0">
+                                {isMultiWindowSupported() && !isManagerWindow() && (
+                                    <button
+                                        onClick={() => openManagerWindow('canvas')}
+                                        title={t('manager.popOutCanvas', { defaultValue: 'Open the canvas in its own window' })}
+                                        className="absolute top-2 right-2 z-20 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-black/30 hover:bg-black/50 border border-[var(--border-subtle)] transition-all"
+                                    >
+                                        ⧉
+                                    </button>
+                                )}
+                                {activeMenuScreenId ? (
+                                    <MenuEditor
+                                        activeScreenId={activeMenuScreenId}
+                                        selectedElementIds={selectedUIElementIds}
+                                        setSelectedElementIds={setSelectedUIElementIds}
+                                        isPlaying={isPlaying}
+                                    />
+                                ) : (
+                                    <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
+                                        <div className="text-center">
+                                            <BookmarkSquareIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                                            <p className="text-lg">{t('manager.selectScreenToEdit')}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        )}
 
                         <ConfirmationModal
                             isOpen={restoreModalOpen}

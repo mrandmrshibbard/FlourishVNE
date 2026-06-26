@@ -5,7 +5,7 @@ import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 // FIX: VNID is not exported from scene/types. Imported from ../types instead.
 import { VNID } from '../types';
-import { CommandType, VNCommand, ShowCharacterCommand, FlashScreenCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, VNScene, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, GroupCommand } from '../features/scene/types';
+import { CommandType, VNCommand, ShowCharacterCommand, SetCharacterLayerCommand, FlashScreenCommand, ShowTextCommand, ShowImageCommand, ShowButtonCommand, VNScene, BranchStartCommand, BranchElseIfCommand, BranchElseCommand, BranchEndCommand, GroupCommand } from '../features/scene/types';
 import { VNProject } from '../types/project';
 import { VNImage } from '../features/assets/types';
 import Panel from './ui/Panel';
@@ -77,6 +77,12 @@ const CommandItem: React.FC<{
                 return `Show: ${charName} (${exprName}) at ${showCmd.position}`;
             case CommandType.HideCharacter:
                 return `Hide: ${project.characters[command.characterId]?.name || 'N/A'}`;
+            case CommandType.SetCharacterLayer: {
+                const slc = command as SetCharacterLayerCommand;
+                const cn = project.characters[slc.characterId]?.name || 'N/A';
+                const n = (slc.layers || []).length;
+                return `Set Layers: ${cn} (${n} ${n === 1 ? 'layer' : 'layers'})`;
+            }
             case CommandType.Choice:
                 return `Choice: ${command.options.length} options`;
             case CommandType.PlayMusic:
@@ -117,6 +123,12 @@ const CommandItem: React.FC<{
             case CommandType.ShowScreen:
                  const screenName = project.uiScreens[command.screenId]?.name || 'Unknown Screen';
                  return `Show UI Screen: ${screenName}`;
+            case CommandType.ShowItem: {
+                const itemName = project.items?.[command.itemId]?.name || 'Unknown Item';
+                return `Show Item: ${itemName} at (${command.x}%, ${command.y}%)`;
+            }
+            case CommandType.ShowHotSpot:
+                return `Show Hot Spot: ${command.name?.trim() || 'Unnamed'}`;
             case CommandType.Label:
                 return `Label: ${command.labelId}`;
             case CommandType.JumpToLabel:
@@ -1080,6 +1092,121 @@ const SceneEditor: React.FC<{
                 e.preventDefault();
                 const allIds = new Set(activeScene.commands.map(cmd => cmd.id));
                 setSelectedCommands(allIds);
+            }
+
+            // Move the selected command(s) up/down WITHOUT dragging (PageUp/PageDown, or Alt+Arrow).
+            // Reorders by rebuilding the array (no gap, no drop math). Supports BATCH selection:
+            // top-level rows move as a group (a branch travels as one block); commands inside a branch
+            // move only within that branch. A selection split across a branch boundary is NOT moved as a
+            // unit — the inside-the-branch commands are de-selected so only the outside ones move.
+            if (activeScene &&
+                (e.key === 'PageUp' || e.key === 'PageDown' || (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')))) {
+                const dir = (e.key === 'PageUp' || e.key === 'ArrowUp') ? -1 : 1;
+                const cmds = activeScene.commands;
+                // Current selection (multi via selectedCommands; fall back to the single anchor index).
+                const selIds = selectedCommands.size > 0
+                    ? [...selectedCommands]
+                    : (selectedCommandIndex !== null && cmds[selectedCommandIndex] ? [cmds[selectedCommandIndex].id] : []);
+                if (selIds.length === 0) return;
+                // Groups are retired and can use a non-contiguous layout — skip to avoid corrupting them.
+                if (cmds.some(c => c.type === CommandType.Group)) return;
+
+                // Top-level slots: a branch is ONE block (BranchStart..BranchEnd); everything else is a single row.
+                const slots: Array<[number, number]> = [];
+                for (let i = 0; i < cmds.length; i++) {
+                    const c = cmds[i];
+                    if (c.type === CommandType.BranchStart) {
+                        const end = cmds.findIndex((x, j) => j > i && x.type === CommandType.BranchEnd && (x as BranchEndCommand).branchId === (c as BranchStartCommand).branchId);
+                        const e2 = end >= 0 ? end : i;
+                        slots.push([i, e2]); i = e2;
+                    } else {
+                        slots.push([i, i]);
+                    }
+                }
+                // For an index, which branch (its BranchStart index) is it strictly inside? null = top-level.
+                const branchOf = (i: number): number | null => {
+                    for (const [s, en] of slots) { if (en > s && i > s && i < en) return s; }
+                    return null;
+                };
+
+                // Resolve selected ids → indices, dropping branch markers (they can't move independently).
+                const selIndices = selIds
+                    .map(id => cmds.findIndex(c => c.id === id))
+                    .filter(i => i >= 0 && cmds[i].type !== CommandType.BranchEnd && cmds[i].type !== CommandType.BranchElseIf && cmds[i].type !== CommandType.BranchElse);
+                if (selIndices.length === 0) return;
+
+                const topLevelSel = selIndices.filter(i => branchOf(i) === null);
+                const interiorSel = selIndices.filter(i => branchOf(i) !== null);
+
+                e.preventDefault();
+                let arr: VNCommand[] = cmds;
+                let keepIds: string[];
+                let deselectedInside = false;
+
+                if (topLevelSel.length > 0) {
+                    // A split selection favors the OUTSIDE: drop the inside-a-branch commands.
+                    if (interiorSel.length > 0) deselectedInside = true;
+                    keepIds = topLevelSel.map(i => cmds[i].id);
+                    // Move selected top-level slots as a group (preserving relative order).
+                    const headSelected = new Set(topLevelSel);
+                    const blocks = slots.map(([a, b]) => cmds.slice(a, b + 1));
+                    const selB = slots.map(([a]) => headSelected.has(a));
+                    if (dir === -1) {
+                        for (let i = 1; i < blocks.length; i++) {
+                            if (selB[i] && !selB[i - 1]) {
+                                [blocks[i - 1], blocks[i]] = [blocks[i], blocks[i - 1]];
+                                [selB[i - 1], selB[i]] = [selB[i], selB[i - 1]];
+                            }
+                        }
+                    } else {
+                        for (let i = blocks.length - 2; i >= 0; i--) {
+                            if (selB[i] && !selB[i + 1]) {
+                                [blocks[i + 1], blocks[i]] = [blocks[i], blocks[i + 1]];
+                                [selB[i + 1], selB[i]] = [selB[i], selB[i + 1]];
+                            }
+                        }
+                    }
+                    arr = blocks.flat();
+                } else {
+                    // All selected commands are inside a branch. Keep one branch only (the anchor's, or the first).
+                    const branches = [...new Set(interiorSel.map(i => branchOf(i)!))];
+                    const anchorBranch = selectedCommandIndex !== null ? branchOf(selectedCommandIndex) : null;
+                    const bs = (anchorBranch !== null && branches.includes(anchorBranch)) ? anchorBranch : branches[0];
+                    const keep = interiorSel.filter(i => branchOf(i) === bs);
+                    if (keep.length < interiorSel.length) deselectedInside = true;
+                    keepIds = keep.map(i => cmds[i].id);
+                    const slot = slots.find(([a]) => a === bs)!;
+                    const [s, en] = slot;
+                    const idsToMove = new Set(keepIds);
+                    arr = [...cmds];
+                    const isSel = (i: number) => idsToMove.has(arr[i].id);
+                    if (dir === -1) {
+                        for (let i = s + 1; i <= en - 1; i++) {
+                            if (isSel(i) && i - 1 >= s + 1 && !isSel(i - 1)) { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; }
+                        }
+                    } else {
+                        for (let i = en - 1; i >= s + 1; i--) {
+                            if (isSel(i) && i + 1 <= en - 1 && !isSel(i + 1)) { [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]]; }
+                        }
+                    }
+                }
+
+                const changed = arr.length !== cmds.length || arr.some((c, i) => c.id !== cmds[i].id);
+                if (changed) {
+                    dispatch({ type: 'UPDATE_SCENE_COMMANDS', payload: { sceneId: activeSceneId, commands: arr } });
+                }
+                // Selection follows the moved commands (and drops anything we de-selected).
+                const keepSet = new Set(keepIds);
+                setSelectedCommands(keepSet);
+                const anchorId = (selectedCommandIndex !== null && cmds[selectedCommandIndex] && keepSet.has(cmds[selectedCommandIndex].id))
+                    ? cmds[selectedCommandIndex].id
+                    : keepIds[0];
+                const newAnchor = arr.findIndex(c => c.id === anchorId);
+                setSelectedCommandIndex(newAnchor >= 0 ? newAnchor : null);
+                setLastSelectedIndex(newAnchor >= 0 ? newAnchor : null);
+                if (deselectedInside) {
+                    toast.info(t('editor.branchSelectionTrimmed', { defaultValue: "Commands inside a branch can't move with the others — they were de-selected." }));
+                }
             }
 
             // Deselect All (Escape)

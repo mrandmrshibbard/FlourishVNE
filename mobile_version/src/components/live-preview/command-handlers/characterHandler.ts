@@ -1,9 +1,31 @@
-import { ShowCharacterCommand, HideCharacterCommand } from '../../../features/scene/types';
+import { ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand } from '../../../features/scene/types';
 import { VNCharacterLayer } from '../../../features/character/types';
 import { VNID } from '../../../types';
 import { CommandContext, CommandResult } from './types';
 import { TweenManager } from '../systems/tweenManager';
 import { resolveFieldUrl } from '../../../utils/assetStore';
+
+/** Build the stacked image/video URLs for a character from a resolved per-layer asset selection
+ *  (base first, then each layer in definition order). Shared by ShowCharacter + SetCharacterLayer. */
+function buildCharacterMedia(
+  charData: any,
+  layerSelections: Record<VNID, VNID | null>,
+  wrap: (u: string) => string,
+): { imageUrls: string[]; videoUrls: string[]; hasVideo: boolean; videoLoop: boolean } {
+  const imageUrls: string[] = [];
+  const videoUrls: string[] = [];
+  let hasVideo = false;
+  let videoLoop = false;
+  if (charData.baseVideoUrl) { videoUrls.push(wrap(charData.baseVideoUrl)); hasVideo = true; videoLoop = !!charData.baseVideoLoop; }
+  else if (charData.baseImageUrl) { imageUrls.push(wrap(charData.baseImageUrl)); }
+  (Object.values(charData.layers) as VNCharacterLayer[]).forEach(layer => {
+    const assetId = layerSelections[layer.id];
+    const asset = assetId ? layer.assets[assetId] : null;
+    if (asset?.videoUrl) { videoUrls.push(wrap(asset.videoUrl)); hasVideo = true; videoLoop = videoLoop || !!asset.loop; }
+    else if (asset?.imageUrl) { imageUrls.push(wrap(asset.imageUrl)); }
+  });
+  return { imageUrls, videoUrls, hasVideo, videoLoop };
+}
 
 /**
  * Handles showing a character with expression, layers, and transitions
@@ -24,21 +46,8 @@ export function handleShowCharacter(
   // Clear any resting tween values so the new position takes effect cleanly
   TweenManager.cancelForTarget(command.characterId, 'character');
 
-  const imageUrls: string[] = [];
-  const videoUrls: string[] = [];
-  let hasVideo = false;
-  let videoLoop = false;
   // Managed asset refs ("assets/…") → flourish-asset:// URL; data:/http pass through.
   const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
-
-  // Check base image/video
-  if (charData.baseVideoUrl) {
-    videoUrls.push(wrap(charData.baseVideoUrl));
-    hasVideo = true;
-    videoLoop = !!charData.baseVideoLoop;
-  } else if (charData.baseImageUrl) {
-    imageUrls.push(wrap(charData.baseImageUrl));
-  }
 
   // Build layer variable bindings by finding which variables contain asset IDs from which layers
   // This allows automatic binding based on the actual data, not variable names
@@ -87,54 +96,32 @@ export function handleShowCharacter(
     }
   });
 
-  // Check layer assets - respect variable bindings
+  // Resolve the asset shown in each layer: a per-layer OVERRIDE wins, else the variable binding,
+  // else the expression (preset) configuration. Stored on the stage char so SetCharacterLayer can
+  // patch a single layer later and rebuild without re-running ShowCharacter.
+  const layerSelections: Record<VNID, VNID | null> = {};
   Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
-    let asset = null;
-
-    // Check if this layer has a variable binding
+    if (command.layerOverrides && Object.prototype.hasOwnProperty.call(command.layerOverrides, layer.id)) {
+      layerSelections[layer.id] = command.layerOverrides[layer.id] || null;
+      return;
+    }
     const variableId = finalBindings[layer.id];
     if (variableId && playerState.variables[variableId] !== undefined) {
       const varValue = playerState.variables[variableId];
       const variable = project.variables[variableId];
-      
-      // Support both index-based (number) and ID-based (string) variables
       if (variable?.type === 'number') {
-        // Use variable value as index into layer assets (for cyclers)
         const index = Number(varValue) || 0;
-        const assetArray = Object.values(layer.assets);
-        asset = assetArray[index];
-        console.log(
-          `ShowCharacter: Using variable ${variableId} (index: ${index}) for layer "${layer.name}"`
-        );
+        layerSelections[layer.id] = ((Object.values(layer.assets)[index] as any)?.id) ?? null;
       } else {
-        // Use variable value as asset ID directly (for string variables)
         const assetId = String(varValue);
-        asset = assetId ? layer.assets[assetId] : null;
-        console.log(
-          `ShowCharacter: Using variable ${variableId} (assetId: ${assetId}) for layer "${layer.name}"`
-        );
+        layerSelections[layer.id] = (assetId && layer.assets[assetId]) ? assetId : null;
       }
     } else {
-      // Use expression configuration
-      const assetId = exprData.layerConfiguration[layer.id];
-      if (assetId) {
-        asset = layer.assets[assetId];
-        console.log(
-          `ShowCharacter: Using expression config for layer "${layer.name}"`
-        );
-      }
-    }
-
-    if (asset) {
-      if (asset.videoUrl) {
-        videoUrls.push(wrap(asset.videoUrl));
-        hasVideo = true;
-        videoLoop = videoLoop || !!asset.loop;
-      } else if (asset.imageUrl) {
-        imageUrls.push(wrap(asset.imageUrl));
-      }
+      layerSelections[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
     }
   });
+
+  const { imageUrls, videoUrls, hasVideo, videoLoop } = buildCharacterMedia(charData, layerSelections, wrap);
 
   // For slide transitions, use endPosition if specified, otherwise use position
   let finalPosition = command.endPosition || command.position;
@@ -201,6 +188,7 @@ export function handleShowCharacter(
     videoLoop,
     expressionId: command.expressionId,
     layerVariableBindings: finalBindings,
+    layerSelections,
     sourceCommandId: command.id,
     scale: command.scale,
     inverted: command.inverted,
@@ -340,4 +328,50 @@ export function handleHideCharacter(
       },
     };
   }
+}
+
+/**
+ * Change one or more layers on a character already on stage (blush on, draw weapon, swap hat…)
+ * without re-showing the whole sprite. Patches the stored layerSelections and rebuilds the composite.
+ */
+export function handleSetCharacterLayer(
+  command: SetCharacterLayerCommand,
+  context: CommandContext
+): CommandResult {
+  const { project, playerState } = context;
+  const charData = project.characters[command.characterId];
+  const onStage = playerState.stageState.characters[command.characterId];
+  if (!charData || !onStage) {
+    // Character not on stage — nothing to change.
+    return { advance: true };
+  }
+  const wrap = (u: string): string => resolveFieldUrl(project.id, u) || u;
+  const useTransition = !!command.transition && command.transition !== 'instant';
+
+  return {
+    advance: true,
+    // Functional patch so it composes with other stacked character commands against the latest stage.
+    stagePatch: (prev) => {
+      const cur = prev.characters[command.characterId];
+      if (!cur) return {};
+      const selections: Record<VNID, VNID | null> = { ...(cur.layerSelections || {}) };
+      (command.layers || []).forEach(({ layerId, assetId }) => { selections[layerId] = assetId || null; });
+      const { imageUrls, videoUrls, hasVideo, videoLoop } = buildCharacterMedia(charData, selections, wrap);
+      return {
+        characters: {
+          ...prev.characters,
+          [command.characterId]: {
+            ...cur,
+            imageUrls,
+            videoUrls,
+            isVideo: hasVideo,
+            videoLoop,
+            layerSelections: selections,
+            // Optional crossfade of the character to the new look; otherwise an instant swap.
+            transition: useTransition ? { type: command.transition!, duration: command.duration ?? 0.3, action: 'show' as const } : null,
+          },
+        },
+      };
+    },
+  };
 }

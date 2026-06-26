@@ -1,5 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 'window-type' is sent ONCE on did-finish-load and carries the project for popped-out windows. The
+// renderer subscribes from a React effect, which can run AFTER the message has already arrived — in
+// which case a lazily-attached listener would miss it and the window would hang on "Loading…". So
+// attach the IPC listener at preload time (before any page script runs), buffer the last message, and
+// replay it the moment the renderer subscribes. Deterministic, no race.
+let __bufferedWindowType = null;
+let __windowTypeCb = null;
+ipcRenderer.on('window-type', (event, data) => {
+  __bufferedWindowType = data;
+  if (__windowTypeCb) { try { __windowTypeCb(data); } catch {} }
+});
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -25,16 +37,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeAllManagerWindows: () => 
     ipcRenderer.send('close-all-manager-windows'),
   
-  // Receive window type for manager windows
-  onWindowType: (callback) => 
-    ipcRenderer.on('window-type', (event, type) => callback(type)),
+  // Receive window type for manager windows. Registers the callback and immediately replays the
+  // buffered message if it already arrived (see the listener at the top of this file).
+  onWindowType: (callback) => {
+    __windowTypeCb = callback;
+    if (__bufferedWindowType) { try { callback(__bufferedWindowType); } catch {} }
+  },
   
   // Project state synchronization
   syncProjectState: (projectData) =>
     ipcRenderer.send('sync-project-state', projectData),
-  
+
   onProjectStateUpdate: (callback) =>
     ipcRenderer.on('project-state-update', (event, projectData) => callback(projectData)),
+
+  // Editor context (selection) synchronization — drives popped-out inspector/canvas windows.
+  syncEditorContext: (context) =>
+    ipcRenderer.send('sync-editor-context', context),
+
+  onEditorContextUpdate: (callback) =>
+    ipcRenderer.on('editor-context-update', (event, context) => callback(context)),
+
+  // Which focused PANEL windows (inspector, canvas) are open — editors hide the matching inline panel.
+  onPanelWindowState: (callback) =>
+    ipcRenderer.on('panel-window-state', (event, panels) => callback(panels)),
+
+  // In-Game UI editor shared view-state sync (drives its popped-out canvas + properties windows).
+  syncInGameState: (state) =>
+    ipcRenderer.send('sync-ingame-state', state),
+
+  onInGameStateUpdate: (callback) =>
+    ipcRenderer.on('ingame-state-update', (event, state) => callback(state)),
   
   // Window close handling
   onRequestSaveBeforeQuit: (callback) =>

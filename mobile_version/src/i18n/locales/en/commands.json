@@ -17,6 +17,7 @@
     "Phone": "Phone"
   },
   "names": {
+    "SetCharacterLayer": "Set Character Layer",
     "ShowPhone": "Show Phone",
     "HidePhone": "Hide Phone",
     "ShowPhoneText": "Show Text",

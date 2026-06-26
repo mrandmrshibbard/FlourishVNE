@@ -386,8 +386,9 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1024,
-    minHeight: 768,
+    // Low minimum so the editor can be freely shrunk and docked beside popped-out panels.
+    minWidth: 460,
+    minHeight: 380,
     icon: path.join(__dirname, '../public/Flourish.png'),
     webPreferences: {
       nodeIntegration: false,
@@ -1464,9 +1465,36 @@ ipcMain.handle('build-android-game', async (event, { androidFiles, options }) =>
 
 // Multi-Window Management
 const managerWindows = new Map();
+// Most recent editor selection context (from whichever editor window was last active). Used to seed
+// a newly-opened panel window so it shows the last-active editor's selection.
+let lastEditorContext = null;
+
+// Which focused PANEL windows are open? Full editors hide their matching INLINE panel while one is,
+// so the floating panel can be docked beside the editor without a duplicate.
+function isManagerOpen(type) {
+  return managerWindows.has(type) && !managerWindows.get(type).isDestroyed();
+}
+function panelWindowState() {
+  return {
+    inspector: isManagerOpen('inspector'),
+    canvas: isManagerOpen('canvas'),
+    ingameCanvas: isManagerOpen('ingame-canvas'),
+    ingameProperties: isManagerOpen('ingame-properties'),
+  };
+}
+function broadcastPanelState() {
+  const panels = panelWindowState();
+  if (mainWindow && !mainWindow.isDestroyed()) { try { mainWindow.webContents.send('panel-window-state', panels); } catch {} }
+  managerWindows.forEach(win => { if (!win.isDestroyed()) { try { win.webContents.send('panel-window-state', panels); } catch {} } });
+}
+// PANEL window types — opening/closing one tells editors to hide/show their matching inline panel.
+const PANEL_WINDOW_TYPES = new Set(['inspector', 'canvas', 'ingame-canvas', 'ingame-properties']);
+// Most recent In-Game UI shared view-state (selected surface + preview sub-states), for seeding new
+// In-Game panel windows so they open agreeing with the main editor.
+let lastInGameState = null;
 
 ipcMain.on('open-manager-window', (event, config) => {
-  const { type, width, height, title } = config;
+  const { type, width, height, title, minWidth, minHeight } = config;
   
   // If window already exists, focus it
   if (managerWindows.has(type) && !managerWindows.get(type).isDestroyed()) {
@@ -1478,8 +1506,8 @@ ipcMain.on('open-manager-window', (event, config) => {
   const managerWindow = new BrowserWindow({
     width,
     height,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: minWidth || 800,
+    minHeight: minHeight || 600,
     icon: path.join(__dirname, '../public/Flourish.png'),
     webPreferences: {
       nodeIntegration: false,
@@ -1504,9 +1532,18 @@ ipcMain.on('open-manager-window', (event, config) => {
   managerWindow.webContents.once('did-finish-load', () => {
     // Get project data from main window
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.executeJavaScript('window.__FLOURISH_PROJECT__')
-        .then(projectData => {
-          managerWindow.webContents.send('window-type', { type, project: projectData });
+      mainWindow.webContents.executeJavaScript('({ project: window.__FLOURISH_PROJECT__, context: window.__FLOURISH_EDITOR_CONTEXT__ })')
+        .then(data => {
+          const projectData = data && data.project;
+          // Prefer the cached last-active context (could be from a popped tab); fall back to the main
+          // window's own global. Carry it INSIDE the window-type message (not a separate event): the
+          // popped window's editor-context listener isn't mounted yet at this point, so a standalone
+          // event would be missed. window-type IS handled at the app root, so it always lands — and it
+          // seeds the popped window's __FLOURISH_EDITOR_CONTEXT__ before the inspector mounts.
+          const contextData = lastEditorContext || (data && data.context);
+          // Seed which panel windows are already open so a newly-opened editor hides its matching inline
+          // panel from the start (avoids a flash of the duplicate panel).
+          managerWindow.webContents.send('window-type', { type, project: projectData, context: contextData, panelsOpen: panelWindowState(), inGameState: lastInGameState });
           managerWindow.show();
         })
         .catch(() => {
@@ -1523,25 +1560,31 @@ ipcMain.on('open-manager-window', (event, config) => {
   // Remove from map when closed
   managerWindow.on('closed', () => {
     managerWindows.delete(type);
+    // If a panel window closed, tell editors to bring their matching inline panel back.
+    if (PANEL_WINDOW_TYPES.has(type)) broadcastPanelState();
   });
-  
+
   managerWindows.set(type, managerWindow);
+  // Tell editors a panel window now exists (so they hide their matching inline panel).
+  if (PANEL_WINDOW_TYPES.has(type)) broadcastPanelState();
 });
 
 ipcMain.on('focus-main-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.focus();
+    // Only restore when actually minimized — calling restore() on a MAXIMIZED window un-maximizes it
+    // (which is what made closing a popped-out window pull the main app out of maximize).
+    if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
-    mainWindow.restore(); // In case it's minimized
+    mainWindow.focus();
   }
 });
 
 ipcMain.on('focus-manager-window', (event, type) => {
   if (managerWindows.has(type) && !managerWindows.get(type).isDestroyed()) {
     const win = managerWindows.get(type);
-    win.focus();
+    if (win.isMinimized()) win.restore(); // don't un-maximize a maximized window
     win.show();
-    win.restore(); // In case it's minimized
+    win.focus();
   }
 });
 
@@ -1560,11 +1603,41 @@ ipcMain.on('sync-project-state', (event, projectData) => {
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents !== event.sender) {
     mainWindow.webContents.send('project-state-update', projectData);
   }
-  
+
   // Update all manager windows
   managerWindows.forEach(win => {
     if (!win.isDestroyed() && win.webContents !== event.sender) {
       win.webContents.send('project-state-update', projectData);
+    }
+  });
+});
+
+// Sync the editor "context" (active scene/tab + current selection — just ids/indices, tiny) across
+// windows. This is what lets a popped-out Properties Inspector follow what's selected in the active
+// editor. Separate from project state because selection is transient UI state, not saved data.
+// Cache the most recent context so a freshly-opened panel window seeds from the LAST-ACTIVE editor
+// (which may be a popped-out tab), not always the main window.
+// Relay In-Game UI shared view-state across its popped-out parts (canvas/properties) + the main editor.
+ipcMain.on('sync-ingame-state', (event, state) => {
+  lastInGameState = state;
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents !== event.sender) {
+    mainWindow.webContents.send('ingame-state-update', state);
+  }
+  managerWindows.forEach(win => {
+    if (!win.isDestroyed() && win.webContents !== event.sender) {
+      win.webContents.send('ingame-state-update', state);
+    }
+  });
+});
+
+ipcMain.on('sync-editor-context', (event, context) => {
+  lastEditorContext = context;
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents !== event.sender) {
+    mainWindow.webContents.send('editor-context-update', context);
+  }
+  managerWindows.forEach(win => {
+    if (!win.isDestroyed() && win.webContents !== event.sender) {
+      win.webContents.send('editor-context-update', context);
     }
   });
 });

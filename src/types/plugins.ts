@@ -28,6 +28,13 @@ export interface PluginManifest {
     engineVersion?: string;
     /** Plugin category for organisation */
     category: PluginCategory;
+    /**
+     * What this add-on extends. Default `'runtime'` (the existing plugin behaviour — runs inside the
+     * game, sandboxed, and is bundled into exported games). `'editor'` = an EXTENSION that extends the
+     * editor only (panels, etc.); it runs on the author's machine with FULL trust (DOM/network allowed)
+     * and is NOT shipped to players. `'both'` = does both. Additive/optional → old plugins keep working.
+     */
+    target?: 'runtime' | 'editor' | 'both';
     /** Capabilities this plugin provides */
     capabilities: PluginCapability[];
     /** Other plugin IDs this plugin depends on */
@@ -91,6 +98,23 @@ export interface VNPlugin {
     config: Record<string, any>;
     /** The plugin's source code (JavaScript) */
     source: string;
+    /**
+     * Whether to bundle this plugin into EXPORTED games. Default (undefined) = included for runtime
+     * plugins. Editor extensions (`manifest.target === 'editor'`) are ALWAYS excluded from builds
+     * regardless of this flag. Set false to keep a runtime plugin in the editor but out of the game.
+     */
+    includeInBuild?: boolean;
+    /**
+     * Bundled resources (from a `.flourishext` package): file name → data URL. The extension reads them
+     * at runtime via `api.getResource(name)` (e.g. for an `<img src>`). Travel with the project + build.
+     */
+    resources?: Record<string, string>;
+    /**
+     * Hide this add-on's UI while TEST-PLAYING in the editor (mainly for editor extensions whose
+     * floating UI would otherwise overlap the preview). When true, the extension is suspended (its
+     * `onDisable` runs) for the duration of test-play and restored (`onEnable`) afterwards.
+     */
+    hideInTestPlay?: boolean;
 }
 
 export type PluginState = 'installed' | 'enabled' | 'disabled' | 'error';
@@ -156,6 +180,10 @@ export interface PluginAPI {
     /** Read this plugin's user-configured settings (manifest.settings defaults merged with overrides). */
     getConfig: () => Record<string, any>;
 
+    // --- Resources (from a .flourishext bundle) ---
+    /** Get a bundled resource's data URL by file name (e.g. for an `<img src>`). undefined if absent. */
+    getResource?: (name: string) => string | undefined;
+
     // --- Storage ---
     /** Get a value from plugin-scoped persistent storage */
     getStorage: (key: string) => any;
@@ -167,7 +195,144 @@ export interface PluginAPI {
     registerCommand: (commandDef: CustomCommandDefinition) => void;
     /** Register a custom effect */
     registerEffect: (effectDef: CustomEffectDefinition) => void;
+    /** Register an editor PANEL (target 'editor'/'both' add-ons). The panel opens from Tools →
+     *  Extension Panels in a floating window. Free-form: you render whatever you want. Optional. */
+    registerPanel?: (panel: EditorPanelContribution) => void;
+    /** Register an editor MENU ITEM / TOOL. Appears under Tools → Extension Tools; clicking runs your
+     *  `run(ctx)`. Use for generators, importers, one-shot utilities (not a persistent panel). Optional. */
+    registerMenuItem?: (item: EditorMenuItemContribution) => void;
+    /** Register a custom DATABASE CATEGORY — a new data table (e.g. "Cards", "Quests"). The editor
+     *  generates an add/edit form from your `fields`; records are saved with the project. Optional. */
+    registerDatabaseCategory?: (category: EditorDatabaseCategory) => void;
+    /** Read all records the user created in one of this extension's database categories (by id). */
+    getRecords?: (categoryId: string) => ExtensionRecord[];
+    /** Register a custom SCREEN UI ELEMENT TYPE — a new widget for the screen / In-Game UI editor that
+     *  renders in both the editor canvas and the shipped game. Use a `runtime` or `both` target so the
+     *  renderer is bundled into exported games. Optional. */
+    registerUIElementType?: (def: EditorUIElementType) => void;
 }
+
+/** Context passed to a custom UI element's renderer. */
+export interface UIElementRenderContext {
+    /** Read a game variable by name or id (live value while playing; default value in the editor). */
+    getVariable: (nameOrId: string) => string | number | boolean | undefined;
+    /** True when rendering on the editor canvas (a static preview) vs the live game. */
+    isEditor: boolean;
+}
+
+/**
+ * A custom screen UI element type contributed by an extension. `render` returns an HTML STRING (it runs
+ * in the sandbox — build a string, no DOM access) that fills the element's box. The editor generates the
+ * property inspector from `inspector`. Author this in a `runtime`/`both` plugin so it ships with games.
+ */
+export interface EditorUIElementType {
+    /** Unique id within the extension (auto-namespaced to the plugin id). */
+    type: string;
+    /** Display name in the element palette. */
+    displayName: string;
+    /** Optional emoji/icon for the palette. */
+    icon?: string;
+    /** Default property values for a new element. */
+    defaultProps?: Record<string, any>;
+    /** Default element size in screen-% (defaults to 20×15). */
+    defaultSize?: { width: number; height: number };
+    /** Property fields shown in the element inspector (reuses the database field spec). */
+    inspector?: ExtensionFieldSpec[];
+    /** Return an HTML string for the element, given its props + context. Fills the element's box (use
+     *  width/height: 100%). Runs sandboxed — no DOM/network; just build a string. */
+    render: (props: Record<string, any>, ctx: UIElementRenderContext) => string;
+}
+
+/**
+ * Context handed to an editor panel's `render()` — read the project, dispatch editor actions, show
+ * toasts, and read/write the extension's own persistent (project-scoped) storage.
+ */
+export interface EditorPanelContext {
+    /** Current project snapshot (read-only; may be null before a project loads). */
+    getProject: () => any;
+    /** Dispatch a project action (the same actions the editor uses). Use deliberately. */
+    dispatch: (action: any) => void;
+    /** Show a toast notification. */
+    notify: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+    /** Read this extension's persistent, project-scoped storage. */
+    getStorage: (key: string) => any;
+    /** Write this extension's persistent, project-scoped storage. */
+    setStorage: (key: string, value: any) => void;
+}
+
+/**
+ * An editor panel contributed by an extension (`target: 'editor' | 'both'`). Free-form: `render()`
+ * receives a real container element + the editor context and may render ANYTHING (DOM, iframes, etc.).
+ * Editor extensions run on the author's machine with full trust and are NOT shipped in exported games.
+ */
+export interface EditorPanelContribution {
+    /** Unique id within the extension (auto-namespaced to the plugin id). */
+    id: string;
+    /** Title shown in the panel's title bar and the Tools → Extension Panels menu. */
+    title: string;
+    /** Optional emoji/icon shown in the menu. */
+    icon?: string;
+    /** Render the panel into `container`. Return an optional cleanup fn (called when the panel closes). */
+    render: (container: HTMLElement, ctx: EditorPanelContext) => void | (() => void);
+}
+
+/**
+ * A menu/tool action contributed by an extension. Appears under Tools → Extension Tools; clicking runs
+ * `run(ctx)`. Use for generators, importers, validators, one-shot utilities — anything that isn't a
+ * persistent panel. Gets the same editor context as a panel (project read, dispatch, notify, storage).
+ */
+export interface EditorMenuItemContribution {
+    /** Unique id within the extension (auto-namespaced to the plugin id). */
+    id: string;
+    /** Label shown in the Tools → Extension Tools menu. */
+    label: string;
+    /** Optional emoji/icon. */
+    icon?: string;
+    /** Runs when the menu item is clicked. */
+    run: (ctx: EditorPanelContext) => void;
+}
+
+/** Field types the generated database form supports. */
+export type ExtensionFieldType = 'text' | 'textarea' | 'number' | 'boolean' | 'select' | 'color' | 'asset';
+
+/** One field in a custom database category — drives one control in the generated record form. */
+export interface ExtensionFieldSpec {
+    /** Key used in the record object. */
+    key: string;
+    /** Display label. */
+    label: string;
+    /** Control type. `asset` = pick a project image/background by id. */
+    type: ExtensionFieldType;
+    /** Options for `select`. */
+    options?: Array<{ label: string; value: string }>;
+    /** Default value for new records. */
+    default?: string | number | boolean;
+    /** Placeholder for text/number fields. */
+    placeholder?: string;
+}
+
+/**
+ * A custom database category contributed by an extension — a new data table the user can fill in.
+ * The editor renders a list + an auto-generated add/edit form from `fields`. Records save with the
+ * project (in extension storage) and are readable at runtime via `api.getRecords(categoryId)`.
+ */
+export interface EditorDatabaseCategory {
+    /** Unique id within the extension (auto-namespaced to the plugin id). */
+    id: string;
+    /** Display name (the tab/category title), e.g. "Cards". */
+    name: string;
+    /** Optional emoji/icon. */
+    icon?: string;
+    /** Singular label for one record, used on the "Add" button (e.g. "Card"). Defaults to "Record". */
+    recordLabel?: string;
+    /** Which field is shown as a record's title in the list. Defaults to the first text field. */
+    titleField?: string;
+    /** The fields each record has. */
+    fields: ExtensionFieldSpec[];
+}
+
+/** A single user-created record in a database category. Always has an `id`; other keys come from fields. */
+export type ExtensionRecord = { id: string; [key: string]: any };
 
 /**
  * A custom command definition provided by a plugin.

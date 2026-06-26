@@ -16,7 +16,7 @@ import { useProject } from '../../contexts/ProjectContext';
 import { VNProject } from '../../types/project';
 import type { VNID } from '../../types';
 import {
-    VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, REACTIVE_VISUAL_TYPES,
+    VNCommand, CommandType, DialogueCommand, ShowButtonCommand, ShowItemCommand, ShowTextCommand, ShowImageCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, REACTIVE_VISUAL_TYPES,
     ShowPhoneTextCommand, ChoiceOption,
 } from '../../features/scene/types';
 import { VNUIAction, UIActionType } from '../../types/shared';
@@ -43,7 +43,7 @@ export type UpdateCommand = (updates: Partial<VNCommand>) => void;
 /** Visual scene commands whose stacking order the author can change (the stage band system).
  *  Movies and hot spots keep their fixed bands for now. */
 const VISUAL_LAYER_TYPES = new Set<CommandType>([
-    CommandType.ShowImage, CommandType.ShowCharacter, CommandType.ShowText, CommandType.ShowButton, CommandType.ShowItem,
+    CommandType.ShowImage, CommandType.ShowCharacter, CommandType.ShowText, CommandType.ShowButton, CommandType.ShowItem, CommandType.ShowHotSpot,
 ]);
 
 /** Effective `layer` of the other visual commands in the same scene (for Front/Back). */
@@ -119,6 +119,9 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
     if (command.type === CommandType.ShowCharacter) {
         return <>{<ShowCharacterGroup groupId={groupId} cmd={command as ShowCharacterCommand} updateCommand={updateCommand} project={project} t={t} />}{layerCtl}</>;
     }
+    if (command.type === CommandType.SetCharacterLayer) {
+        return <SetCharacterLayerGroup groupId={groupId} cmd={command as SetCharacterLayerCommand} updateCommand={updateCommand} project={project} t={t} />;
+    }
     if (command.type === CommandType.HideCharacter) {
         const c = command as HideCharacterCommand;
         if (groupId === 'content') {
@@ -143,7 +146,7 @@ export const CommandGroupFields: React.FC<GroupProps> = ({ groupId, command, upd
         return <PlayMovieGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
     }
     if (command.type === CommandType.ShowHotSpot) {
-        return <ShowHotSpotGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />;
+        return <>{<ShowHotSpotGroup groupId={groupId} cmd={command as any} updateCommand={updateCommand} project={project} t={t} />}{layerCtl}</>;
     }
     if (command.type === CommandType.ShowPhoneText) {
         return <ShowPhoneTextGroup groupId={groupId} cmd={command as ShowPhoneTextCommand} updateCommand={updateCommand} project={project} t={t} />;
@@ -745,6 +748,31 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
                         onChange={value => updateCommand({ expressionId: value } as any)}
                         placeholder={(!character || Object.keys(character.expressions).length === 0) ? t('shared.noExpressions') : t('shared.selectExpression')} />
                 </FormField>
+                {character && Object.keys(character.layers).length > 0 && (() => {
+                    const ovValue = (layerId: string) => {
+                        const ov = cmd.layerOverrides;
+                        if (!ov || !Object.prototype.hasOwnProperty.call(ov, layerId)) return '__preset__';
+                        return ov[layerId] === null ? '' : (ov[layerId] as string);
+                    };
+                    const setOv = (layerId: string, val: string) => {
+                        const ov: Record<string, any> = { ...(cmd.layerOverrides || {}) };
+                        if (val === '__preset__') delete ov[layerId]; else ov[layerId] = val === '' ? null : val;
+                        updateCommand({ layerOverrides: Object.keys(ov).length ? ov : undefined } as any);
+                    };
+                    return (
+                        <CollapsibleSection title="Per-layer overrides" hint="Override individual layers on top of the expression — compose looks (e.g. happy face + school outfit + blush on) without a dedicated expression.">
+                            {Object.values(character.layers).map((layer: any) => (
+                                <FormField key={layer.id} label={layer.name}>
+                                    <Select value={ovValue(layer.id)} onChange={e => setOv(layer.id, e.target.value)}>
+                                        <option value="__preset__">Use preset</option>
+                                        <option value="">None (hide layer)</option>
+                                        {Object.values(layer.assets).map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                    </Select>
+                                </FormField>
+                            ))}
+                        </CollapsibleSection>
+                    );
+                })()}
             </>;
         }
         case 'transform': {
@@ -779,6 +807,53 @@ const ShowCharacterGroup: React.FC<{ groupId: InspectorGroupId; cmd: ShowCharact
         default:
             return null;
     }
+};
+
+const SetCharacterLayerGroup: React.FC<{ groupId: InspectorGroupId; cmd: SetCharacterLayerCommand; updateCommand: UpdateCommand; project: VNProject; t: any }> = ({ groupId, cmd, updateCommand, project, t }) => {
+    const character = project.characters[cmd.characterId];
+    if (groupId === 'content') {
+        const characterOptions = Object.values(project.characters).map((c: any) => ({ value: c.id, label: c.name }));
+        const layers = character ? Object.values(character.layers) as any[] : [];
+        const rows = cmd.layers || [];
+        const setRows = (next: typeof rows) => updateCommand({ layers: next } as any);
+        return <>
+            <FormField label={t('shared.character')}>
+                <SearchableSelect options={characterOptions} value={cmd.characterId}
+                    onChange={value => updateCommand({ characterId: value, layers: [] } as any)}
+                    placeholder={Object.keys(project.characters).length === 0 ? t('shared.noCharacters') : t('shared.selectCharacter')} />
+            </FormField>
+            {character && (
+                <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs text-[var(--text-secondary)]">Layers to change</span>
+                        <button onClick={() => setRows([...rows, { layerId: (layers[0]?.id) || '', assetId: null }])} className="text-xs px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-white flex items-center gap-1"><PlusIcon className="w-3 h-3" /> Add</button>
+                    </div>
+                    {rows.map((row, i) => {
+                        const layer = row.layerId ? character.layers[row.layerId] : undefined;
+                        const assets = layer ? Object.values(layer.assets) as any[] : [];
+                        return (
+                            <div key={i} className="flex items-center gap-1.5">
+                                <Select value={row.layerId} onChange={e => setRows(rows.map((r, j) => j === i ? { layerId: e.target.value, assetId: null } : r))}>
+                                    <option value="">Layer…</option>
+                                    {layers.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                </Select>
+                                <Select value={row.assetId ?? ''} onChange={e => setRows(rows.map((r, j) => j === i ? { ...r, assetId: e.target.value || null } : r))}>
+                                    <option value="">None (hide)</option>
+                                    {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </Select>
+                                <button onClick={() => setRows(rows.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300 text-xs flex-shrink-0" title="Remove">✕</button>
+                            </div>
+                        );
+                    })}
+                    {rows.length === 0 && <p className="text-[11px] text-[var(--text-muted)]">No layers yet — Add one to change it on the on-stage character (e.g. Blush → On).</p>}
+                </div>
+            )}
+        </>;
+    }
+    if (groupId === 'animation') {
+        return <TransitionFields transition={cmd.transition || 'instant'} duration={cmd.duration ?? 0.3} onUpdate={updateCommand as any} />;
+    }
+    return null;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

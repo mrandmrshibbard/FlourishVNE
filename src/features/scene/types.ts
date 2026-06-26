@@ -46,6 +46,7 @@ export enum CommandType {
     SetBackground = 'SetBackground',
     ShowCharacter = 'ShowCharacter',
     HideCharacter = 'HideCharacter',
+    SetCharacterLayer = 'SetCharacterLayer',
     Choice = 'Choice',
     BranchStart = 'BranchStart',
     BranchElseIf = 'BranchElseIf',
@@ -245,6 +246,10 @@ export interface ShowCharacterCommand extends BaseCommand {
     visualEffects?: VNCharacterVisualEffect[];
     /** @deprecated Use visualEffects instead — kept for backward compatibility */
     visualEffect?: VNCharacterVisualEffect;
+    /** Per-layer overrides applied ON TOP of the expression (the optional "preset"): layerId → assetId,
+     *  or null to clear that layer. Lets a look compose (e.g. happy face + school outfit + blush on)
+     *  without a dedicated expression. Additive-optional; empty = today's behavior. */
+    layerOverrides?: Record<VNID, VNID | null>;
 }
 
 export interface HideCharacterCommand extends BaseCommand {
@@ -254,6 +259,16 @@ export interface HideCharacterCommand extends BaseCommand {
     duration: number; // in seconds
     startPosition?: VNPosition; // for slide transitions
     endPosition?: VNPosition; // for slide transitions
+}
+
+/** Change one or more LAYERS on a character already on stage, without re-showing the whole sprite
+ *  (e.g. blush on, draw weapon, swap hat). Composes with the character's current look. */
+export interface SetCharacterLayerCommand extends BaseCommand {
+    type: CommandType.SetCharacterLayer;
+    characterId: VNID;
+    layers: Array<{ layerId: VNID; assetId: VNID | null }>; // null clears that layer
+    transition?: VNTransition;  // optional crossfade of the character to the new look ('instant'/undefined = swap)
+    duration?: number;          // transition duration in seconds (default 0.3)
 }
 
 // Choice actions now support all UI button actions for maximum flexibility
@@ -1009,7 +1024,7 @@ export interface TweenElementCommand extends BaseCommand {
 }
 
 export type VNCommand =
-  | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand
+  | DialogueCommand | SetBackgroundCommand | ShowCharacterCommand | HideCharacterCommand | SetCharacterLayerCommand
     | ChoiceCommand | BranchStartCommand | BranchElseIfCommand | BranchElseCommand | BranchEndCommand | SetVariableCommand | TextInputCommand | JumpCommand | LabelCommand | JumpToLabelCommand
   | PlayMusicCommand | StopMusicCommand | PlaySoundEffectCommand | StopSoundEffectCommand | PlayMovieCommand | StopMovieCommand | WaitCommand
   | ShakeScreenCommand | TintScreenCommand | PanZoomScreenCommand | ResetScreenEffectsCommand

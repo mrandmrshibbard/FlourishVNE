@@ -1,10 +1,28 @@
 import { VNID } from '../types';
 import { VNProject } from '../types/project';
 // FIX: UIActionType is exported from shared types.
-import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, DropdownOption } from '../features/ui/types';
+import { UIElementType, VNUIElement, UITextElement, UIButtonElement, UIImageElement, UISaveSlotGridElement, UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement, DropdownOption } from '../features/ui/types';
 import { UIActionType } from '../types/shared';
 
 const generateId = (): VNID => `elem-${Math.random().toString(36).substring(2, 9)}`;
+
+/** Build a custom (extension-contributed) screen element from a registered UI element type. */
+export const createCustomUIElement = (
+    pluginType: string,
+    displayName: string,
+    defaultProps?: Record<string, any>,
+    defaultSize?: { width: number; height: number },
+): UICustomElement => ({
+    id: generateId(),
+    name: displayName || 'Custom Element',
+    x: 40, y: 40,
+    width: defaultSize?.width ?? 20,
+    height: defaultSize?.height ?? 15,
+    anchorX: 0, anchorY: 0,
+    type: UIElementType.Custom,
+    pluginType,
+    props: { ...(defaultProps || {}) },
+});
 
 export const createUIElement = (type: UIElementType, project: VNProject): VNUIElement | null => {
     const base = {
@@ -75,13 +93,37 @@ export const createUIElement = (type: UIElementType, project: VNProject): VNUIEl
             const firstCharId = Object.keys(project.characters)[0] || '';
             const firstChar = firstCharId ? project.characters[firstCharId] : null;
             const firstExprId = firstChar ? Object.keys(firstChar.expressions)[0] : undefined;
-            
+
             const el: UICharacterPreviewElement = {
                 ...base, name: 'Character Preview', type,
                 width: 30, height: 60,
                 characterId: firstCharId,
                 expressionId: firstExprId,
                 layerVariableMap: {}
+            };
+            return el;
+        }
+        case UIElementType.Customizer: {
+            const firstCharId = Object.keys(project.characters)[0] || '';
+            const firstChar = firstCharId ? project.characters[firstCharId] : null;
+            const firstExprId = firstChar ? Object.keys(firstChar.expressions)[0] : undefined;
+
+            const el: UICustomizerElement = {
+                ...base, name: 'Customizer', type,
+                x: 20, y: 15, width: 60, height: 70,
+                characterId: firstCharId,
+                expressionId: firstExprId,
+                categories: [],
+                layout: 'preview-left',
+                previewPercent: 45,
+                showLabels: true,
+                font: project.ui.choiceTextFont,
+                backgroundColor: '#1e1e38',
+                borderColor: '#4D3273',
+                borderRadius: 8,
+                swatchSize: 48,
+                swatchGap: 6,
+                selectedColor: '#8a2be2',
             };
             return el;
         }

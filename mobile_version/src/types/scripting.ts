@@ -55,10 +55,10 @@ export interface ScriptParam {
 
 /**
  * Script trigger types — when/how a script executes.
- * - 'command': Executed via a RunScript command in the scene timeline
- * - 'onSceneEnter': Auto-runs when a specific scene starts
- * - 'onSceneExit': Auto-runs when a specific scene ends
- * - 'global': Available as a utility (called by other scripts)
+ * - 'command': Runs ONLY when invoked (a RunScript command, or game.runScript from another script). The default.
+ * - 'onSceneEnter': GLOBAL lifecycle hook — auto-runs on EVERY scene start (not bound to one scene).
+ * - 'onSceneExit': GLOBAL lifecycle hook — auto-runs on EVERY scene end (not bound to one scene).
+ * - 'global': Helper — behaves like 'command' (runs only when another script/command calls it); a labelling hint.
  */
 export type ScriptTrigger = 'command' | 'onSceneEnter' | 'onSceneExit' | 'global';
 
@@ -103,6 +103,108 @@ export interface ScriptAPI {
     runScript: (nameOrId: string, args?: Record<string, string | number | boolean>) => void | Promise<void>;
     /** Call a Common Event by name or ID, with optional arguments. */
     callCommonEvent: (nameOrId: string, args?: Record<string, string | number | boolean>) => void;
+
+    // --- Presentation (drive real visual commands from a script; see SCRIPT_ENGINE_PARITY_PLAN) ---
+    // These run the SAME engine handlers as the visual commands, so timing/transitions match. `await`
+    // them to keep ordering. (Slice 1 = characters / background / image; more land in later slices.)
+    /** Show a character (by name or id). opts: expression (name/id), position ('left'|'center'|'right'
+     *  or {x,y} as 0-100 %), transition (e.g. 'fade'), duration (seconds). */
+    showCharacter?: (idOrName: string, opts?: { expression?: string; position?: string | { x: number; y: number }; transition?: string; duration?: number }) => Promise<void>;
+    /** Hide a character (by name or id). */
+    hideCharacter?: (idOrName: string, opts?: { transition?: string; duration?: number }) => Promise<void>;
+    /** Set the scene background (by name or id). */
+    setBackground?: (idOrName: string, opts?: { transition?: string; duration?: number }) => Promise<void>;
+    /** Show an image overlay (by name or id). opts: x,y (0-100 %), width, height. */
+    showImage?: (idOrName: string, opts?: { x?: number; y?: number; width?: number; height?: number; transition?: string; duration?: number }) => Promise<void>;
+
+    // --- Screen effects + particles/tween ---
+    /** Shake the screen. opts: intensity, duration (s; 0 = until reset). */
+    shakeScreen?: (opts?: { intensity?: number; duration?: number }) => Promise<void>;
+    /** Flash the screen a colour. opts: color (hex), duration (s). */
+    flashScreen?: (opts?: { color?: string; duration?: number }) => Promise<void>;
+    /** Tint the screen a colour (hex, supports alpha e.g. '#00000080'). opts: duration (s). */
+    tintScreen?: (color: string, opts?: { duration?: number }) => Promise<void>;
+    /** Pan / zoom the screen. opts: zoom, panX, panY, duration (s). */
+    panZoom?: (opts?: { zoom?: number; panX?: number; panY?: number; duration?: number }) => Promise<void>;
+    /** Reset tint / pan / zoom / overlay effects. opts: duration (s). */
+    resetScreenEffects?: (opts?: { duration?: number }) => Promise<void>;
+    /** Spawn particles (opts map to the Spawn Particles command's fields). */
+    spawnParticles?: (opts?: Record<string, any>) => Promise<void>;
+    /** Stop particles (opts map to the Stop Particles command's fields). */
+    stopParticles?: (opts?: Record<string, any>) => Promise<void>;
+    /** Tween an element's properties (opts map to the Tween Element command's fields). */
+    tween?: (opts?: Record<string, any>) => Promise<void>;
+
+    // --- Blocking input (await the player) ---
+    /** Show a dialogue line and WAIT until the player advances. Speaker '' = Narrator. */
+    dialogue?: (speaker: string, text: string) => Promise<void>;
+    /** Show choices and WAIT; resolves to the chosen option's INDEX. Options: strings or { text }. */
+    choice?: (options: Array<string | { text: string }>) => Promise<number>;
+    /** Show a text-input prompt and WAIT; resolves to the typed string. opts: placeholder, variable (also stores it). */
+    textInput?: (prompt: string, opts?: { placeholder?: string; variable?: string }) => Promise<string>;
+
+    // --- Generic power-user escape hatches (full parity) ---
+    /** Run ANY scene command by type with raw params (same handler the editor uses). e.g.
+     *  game.runCommand('ShowCharacter', { characterId, transition: 'fade' }). Returns when applied. */
+    runCommand?: (type: string, params?: Record<string, any>) => Promise<any>;
+    /** Fire ANY UI action by type (the same path a UI button uses). e.g.
+     *  game.ui('GoToScreen', { targetScreenId }). See the UIActionType list in the docs. */
+    ui?: (actionType: string, params?: Record<string, any>) => void;
+
+    // --- Named UI helpers (sugar over game.ui) ---
+    /** Open a UI screen (menu/title/custom) by name or id. */
+    goToScreen?: (screenIdOrName: string) => void;
+    /** Toggle a UI screen open/closed by name or id. */
+    toggleScreen?: (screenIdOrName: string) => void;
+    /** Return to gameplay from any screen layered over the game. */
+    returnToGame?: () => void;
+    /** Reveal a screen element (overrides startHidden) by element id. */
+    showElement?: (elementId: string) => void;
+    /** Hide a screen element by element id. */
+    hideElement?: (elementId: string) => void;
+    /** Swap a screen element's image (element id + image name/id). */
+    changeImage?: (elementId: string, imageIdOrName: string) => void;
+    /** Play a named CSS animation on a screen element. */
+    playAnimation?: (elementId: string, animation: string, duration?: number) => void;
+    /** Save the game to a slot (default 0 = auto-save). */
+    saveGame?: (slot?: number) => void;
+    /** Load the game from a slot (default 0). */
+    loadGame?: (slot?: number) => void;
+    /** Quit to the title screen (shows the confirm dialog if a game is in progress). */
+    quitToTitle?: () => void;
+    /** Exit the game (desktop) / no-op on web. */
+    exitGame?: () => void;
+    /** Open a URL (default newTab true). */
+    openURL?: (url: string, newTab?: boolean) => void;
+
+    // --- Named command helpers (sugar over game.runCommand) ---
+    /** Change a character's dress-up layers (opts map to the Set Character Layer command's fields). */
+    setCharacterLayer?: (idOrName: string, opts?: Record<string, any>) => Promise<void>;
+    /** Show on-screen text (opts: x, y, fontSize, color, … map to the Show Text command). */
+    showText?: (text: string, opts?: Record<string, any>) => Promise<void>;
+    /** Hide on-screen text (opts map to the Hide Text command). */
+    hideText?: (opts?: Record<string, any>) => Promise<void>;
+    /** Hide an image overlay by name or id. */
+    hideImage?: (idOrName: string) => Promise<void>;
+    /** Stop a playing sound effect by name or id (optional fade in seconds). */
+    stopSFX?: (idOrName: string, fadeDuration?: number) => Promise<void>;
+    /** Lightning flash (opts map to the Lightning command's fields). */
+    lightning?: (opts?: Record<string, any>) => Promise<void>;
+    /** Fireworks burst (opts map to the Fireworks command's fields). */
+    fireworks?: (opts?: Record<string, any>) => Promise<void>;
+    /** Turn the flashlight on (opts map to the Flashlight command's fields). */
+    flashlight?: (opts?: Record<string, any>) => Promise<void>;
+    /** Turn the flashlight off. */
+    flashlightOff?: () => Promise<void>;
+    /** Apply a screen overlay effect (fog/haze/CRT…) by type (opts: intensity, variant, duration…). */
+    screenOverlay?: (effectType: string, opts?: Record<string, any>) => Promise<void>;
+    /** Roll credits (opts map to the Credit Roll command's fields). */
+    creditRoll?: (opts?: Record<string, any>) => Promise<void>;
+    /** Play a movie/video by name or id. Fullscreen + waits for the movie to finish by default (await it);
+     *  pass `{ displayMode: 'overlay' }` for a non-blocking overlay, or `{ waitsForCompletion: false }`. */
+    playMovie?: (idOrName: string, opts?: Record<string, any>) => Promise<void>;
+    /** Stop the fullscreen movie and clear any movie overlays. */
+    stopMovie?: () => Promise<void>;
 
     /** Play a sound effect by name or ID */
     playSFX: (nameOrId: string, volume?: number) => void;

@@ -15,6 +15,7 @@ import { VNProjectUI, VNFontSettings, VNConfirmDialogSettings, VNConfirmVariantS
 import { PHONE_GLYPHS, PHONE_ICON_KEYS } from '../features/ui/phoneIcons';
 import { VNID } from '../types';
 import { useProject } from '../contexts/ProjectContext';
+import { isManagerWindow, isMultiWindowSupported, openManagerWindow, syncInGameState, onInGameStateUpdate, type InGameUIState } from '../utils/windowManager';
 import FontEditor, { defaultFontSettings } from './ui/FontEditor';
 import { useTranslation } from 'react-i18next';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../utils/styleUtils';
@@ -2095,20 +2096,55 @@ const SnapGuideOverlay: React.FC<{ gridSize: number }> = ({ gridSize }) => {
 
 interface InGameUIEditorProps {
     project: VNProject;
+    // The editor is composed of three independently-renderable parts: the element tree/list (left),
+    // the canvas (center), and the properties (right). These flags let a host render a subset — e.g.
+    // a popped-out window showing only the canvas — while another shows the tree + properties.
+    showTree?: boolean;
+    showCanvas?: boolean;
+    showProperties?: boolean;
 }
 
-const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
+const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project, showTree = true, showCanvas = true, showProperties = true }) => {
     const { t } = useTranslation('ui');
     const { dispatch } = useProject();
-    const [selectedElement, setSelectedElement] = useState<InGameUIElement | null>('dialogueBox');
-    const [selectedThemeId, setSelectedThemeId] = useState<VNID | null>(null);
+    // Seed shared view-state from a cross-window snapshot (set when this is a popped-out In-Game part).
+    const seedInGame = (typeof window !== 'undefined' ? (window as any).__FLOURISH_INGAME_STATE__ : null) as InGameUIState | null;
+    const [selectedElement, setSelectedElement] = useState<InGameUIElement | null>((seedInGame?.selectedElement as InGameUIElement) ?? 'dialogueBox');
+    const [selectedThemeId, setSelectedThemeId] = useState<VNID | null>(seedInGame?.selectedThemeId ?? null);
     // Which confirmation the preview shows (Quit vs New Game). Default to New Game so it's visible.
-    const [confirmPreviewVariant, setConfirmPreviewVariant] = useState<ConfirmVariant>('newGame');
+    const [confirmPreviewVariant, setConfirmPreviewVariant] = useState<ConfirmVariant>((seedInGame?.confirmPreviewVariant as ConfirmVariant) ?? 'newGame');
     // Which phone "view" the canvas previews so each dynamic surface can be seen + themed live.
-    const [phonePreviewView, setPhonePreviewView] = useState<'phone' | 'notification' | 'badge' | 'call'>('phone');
+    const [phonePreviewView, setPhonePreviewView] = useState<'phone' | 'notification' | 'badge' | 'call'>((seedInGame?.phonePreviewView as any) ?? 'phone');
     const [showSnapGuides, setShowSnapGuides] = useState(false);
     const stageRef = useRef<HTMLDivElement>(null);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+
+    // ── Cross-window sync of the shared view-state, so the popped-out canvas/properties windows and
+    // the tree in the main editor all agree on the selected surface + how it's previewed. Each window
+    // BROADCASTS while focused and ADOPTS others' updates while not focused (no feedback loop). ──
+    const isFocusedRef = useRef<boolean>(typeof document !== 'undefined' ? document.hasFocus() : false);
+    useEffect(() => {
+        const onFocus = () => { isFocusedRef.current = true; };
+        const onBlur = () => { isFocusedRef.current = false; };
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
+        return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur); };
+    }, []);
+    useEffect(() => {
+        const state: InGameUIState = { selectedElement, selectedThemeId, confirmPreviewVariant, phonePreviewView };
+        (window as any).__FLOURISH_INGAME_STATE__ = state;
+        if (isFocusedRef.current) syncInGameState(state);
+    }, [selectedElement, selectedThemeId, confirmPreviewVariant, phonePreviewView]);
+    useEffect(() => {
+        onInGameStateUpdate((s) => {
+            if (isFocusedRef.current || !s) return;
+            (window as any).__FLOURISH_INGAME_STATE__ = s;
+            setSelectedElement((s.selectedElement as InGameUIElement) ?? null);
+            setSelectedThemeId(s.selectedThemeId ?? null);
+            setConfirmPreviewVariant(s.confirmPreviewVariant as ConfirmVariant);
+            setPhonePreviewView((s.phonePreviewView as any) ?? 'phone');
+        });
+    }, []);
 
     const ui = project.ui;
     const gameW = project.gameResolution?.width || 1920;
@@ -2271,7 +2307,8 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
 
     return (
         <div className="flex h-full">
-            {/* Element list sidebar */}
+            {/* Element list sidebar (Part 1: tree) */}
+            {showTree && (
             <div className="bg-[var(--bg-primary)] border-r border-[var(--border-subtle)] flex flex-col" style={{ width: 'var(--sidebar-width)' }}>
                 <div className="p-4 border-b border-[var(--border-subtle)]">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -2301,9 +2338,20 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                     ))}
                 </div>
             </div>
+            )}
 
-            {/* Canvas area (center) */}
-            <div className="flex-1 min-w-0 flex items-center justify-center p-4 bg-[var(--bg-secondary)]">
+            {/* Canvas area (center) (Part 2: canvas) */}
+            {showCanvas && (
+            <div className="relative flex-1 min-w-0 flex items-center justify-center p-4 bg-[var(--bg-secondary)]">
+                {isMultiWindowSupported() && !isManagerWindow() && (
+                    <button
+                        onClick={() => openManagerWindow('canvas')}
+                        title={t('inGameUi.popOutCanvas', 'Open the canvas in its own window')}
+                        className="absolute top-2 right-2 z-30 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-black/40 hover:bg-black/60 border border-[var(--border-subtle)] transition-all"
+                    >
+                        ⧉
+                    </button>
+                )}
                 <div
                     ref={stageRef}
                     className="relative overflow-hidden rounded-md shadow-lg"
@@ -2378,10 +2426,10 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         the author preview + theme the other dynamic surfaces (banner / badge / call). */}
                     {selectedElement === 'phone' && (
                         <>
-                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-1 bg-[var(--bg-secondary)]/90 backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-lg">
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-1 bg-[var(--bg-tertiary)] border border-[var(--border-default)] backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-xl">
                                 {([['phone', 'Phone'], ['notification', 'Banner'], ['badge', 'Badge'], ['call', 'Call']] as const).map(([v, lbl]) => (
                                     <button key={v} onClick={() => setPhonePreviewView(v)}
-                                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${phonePreviewView === v ? 'bg-[var(--accent-lavender)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${phonePreviewView === v ? 'bg-[var(--accent-lavender)] text-white shadow' : 'text-[var(--text-primary)] hover:bg-white/10'}`}>
                                         {lbl}
                                     </button>
                                 ))}
@@ -2438,10 +2486,10 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                         author preview EITHER the Quit or the New Game confirmation (shared styling). */}
                     {selectedElement === 'confirmDialogs' && (
                         <>
-                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-[var(--bg-secondary)]/90 backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-lg">
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-[var(--bg-tertiary)] border border-[var(--border-default)] backdrop-blur-sm rounded-lg p-1 pointer-events-auto shadow-xl">
                                 {CONFIRM_VARIANTS.map(v => (
                                     <button key={v} onClick={() => setConfirmPreviewVariant(v)}
-                                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${confirmPreviewVariant === v ? 'bg-[var(--accent-lavender)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
+                                        className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${confirmPreviewVariant === v ? 'bg-[var(--accent-lavender)] text-white shadow' : 'text-[var(--text-primary)] hover:bg-white/10'}`}>
                                         {confirmVariantLabel(v, t)}
                                     </button>
                                 ))}
@@ -2502,9 +2550,20 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                     )}
                 </div>
             </div>
+            )}
 
-            {/* Properties panel (right side) */}
-            <div className="w-72 flex-shrink-0 border-l border-[var(--border-subtle)] bg-[var(--bg-primary)] overflow-y-auto">
+            {/* Properties panel (right side) (Part 3: properties) */}
+            {showProperties && (
+            <div className={`relative ${(!showTree && !showCanvas) ? 'flex-1 min-w-0' : 'w-72 flex-shrink-0 border-l border-[var(--border-subtle)]'} bg-[var(--bg-primary)] overflow-y-auto`}>
+                {isMultiWindowSupported() && !isManagerWindow() && (
+                    <button
+                        onClick={() => openManagerWindow('inspector')}
+                        title={t('inGameUi.popOutProperties', 'Open the properties in its own window')}
+                        className="absolute top-2 right-2 z-30 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-black/40 hover:bg-black/60 border border-[var(--border-subtle)] transition-all"
+                    >
+                        ⧉
+                    </button>
+                )}
                 {selectedElement === 'textboxThemes' ? (
                     <TextboxThemeManager project={project} selectedThemeId={selectedThemeId} onSelect={setSelectedThemeId} />
                 ) : selectedElement ? (
@@ -2515,6 +2574,7 @@ const InGameUIEditor: React.FC<InGameUIEditorProps> = ({ project }) => {
                     </div>
                 )}
             </div>
+            )}
         </div>
     );
 };

@@ -268,6 +268,10 @@ const CommonEventsManager: React.FC<CommonEventsManagerProps> = ({ project }) =>
                 newCommand.transition = 'fade';
                 newCommand.duration = 0.3;
                 break;
+            case CommandType.SetCharacterLayer:
+                newCommand.characterId = '';
+                newCommand.layers = [];
+                break;
             case CommandType.PlayMusic:
                 newCommand.audioId = '';
                 newCommand.loop = true;

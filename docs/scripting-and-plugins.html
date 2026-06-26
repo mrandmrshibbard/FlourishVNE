@@ -93,6 +93,8 @@
   </div>
   <nav>
     <a href="#getting-started">Getting Started</a>
+    <a href="#terminology-quick-glossary">Terminology (quick glossary)</a>
+    <a href="#when-should-i-use-a-script-instead-of-the-editor">When should I use a script instead of the editor?</a>
     <a href="#script-triggers">Script Triggers</a>
     <a href="#the-game-api">The game API</a>
     <a href="#examples">Examples</a>
@@ -117,6 +119,18 @@
     <a href="#plugin-lifecycle">Plugin Lifecycle</a>
     <a href="#plugin-details-view">Plugin Details View</a>
     <a href="#tips">Tips</a>
+    <a href="#the-target-field--the-most-important-choice">The target field — the most important choice</a>
+    <a href="#anatomy-of-an-extension">Anatomy of an extension</a>
+    <a href="#contribution-1--panels--apiregisterpanel">Contribution 1 — Panels  (api.registerPanel)</a>
+    <a href="#contribution-2--menu-tools--apiregistermenuitem">Contribution 2 — Menu tools  (api.registerMenuItem)</a>
+    <a href="#contribution-3--database-categories--apiregisterdatabasecategory">Contribution 3 — Database categories  (api.registerDatabaseCategory)</a>
+    <a href="#contribution-4--custom-ui-element-types--apiregisteruielementtype">Contribution 4 — Custom UI element types  (api.registerUIElementType)</a>
+    <a href="#resources--the-flourishext-bundle">Resources &amp; the .flourishext bundle</a>
+    <a href="#the-editor-context-ctx--panels--tools">The editor context (ctx) — panels &amp; tools</a>
+    <a href="#field-types-database-categories--element-inspectors">Field types (database categories &amp; element inspectors)</a>
+    <a href="#installing-trust--build-options">Installing, trust &amp; build options</a>
+    <a href="#ready-to-try-samples-docsexamples">Ready-to-try samples (docs/examples/)</a>
+    <a href="#security-model-full-trust-local-no-cross-user-harm">Security model (full-trust local, no cross-user harm)</a>
     <div class="doc-links">
       <div class="nav-section">Other Docs</div>
       <a href="getting-started.html">Getting Started</a>
@@ -139,6 +153,35 @@
   <li>Click <strong>📖 API</strong> in the editor toolbar for a clickable reference of every <code>game</code> method</li>
 </ol>
   <blockquote><strong>About Test Run:</strong> it executes your script against a <em>mock</em> game — variables start at their defaults and side-effects (dialogue, audio, navigation, <code>runScript</code>/<code>callCommonEvent</code>) are <strong>printed to the console instead of actually happening</strong>. It's for checking logic and catching errors. To see a script truly affect the game, run it from a <strong>Run Script</strong> command in <strong>Test Play</strong>.</blockquote>
+  <hr>
+  <h2 id="terminology-quick-glossary">Terminology (quick glossary)</h2>
+  <table>
+<thead><tr><th>Term</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td><strong>Script</strong></td><td>A block of JavaScript you write in the Script Editor. It talks to the game through the safe <code>game</code> API.</td></tr>
+<tr><td><strong>Command</strong></td><td>One step in a scene's timeline (Show Character, Dialogue, …) — the no-code building block.</td></tr>
+<tr><td><strong>RunScript command</strong></td><td>The scene command that runs one of your scripts during play.</td></tr>
+<tr><td><strong>Common Event</strong></td><td>A reusable list of commands you can call from anywhere (a "function" for the no-code editor).</td></tr>
+<tr><td><strong>Plugin</strong></td><td>Code that extends the game <strong>engine</strong> — new commands / effects / hooks available at runtime.</td></tr>
+<tr><td><strong>Extension</strong></td><td>Code that extends the <strong>editor</strong> itself — panels, tools, database tables, custom UI elements. See <em>Extensions System</em> below.</td></tr>
+<tr><td><strong>Trigger</strong></td><td>When a script runs: <em>only when called</em> (default), or <em>auto on every scene start/end</em>.</td></tr>
+<tr><td>**<code>game</code>**</td><td>The object your script uses to talk to the visual novel (<code>game.setVariable(...)</code>, etc.).</td></tr>
+<tr><td>**<code>await</code>**</td><td>Put it before a <code>game.x()</code> that takes time (dialogue, wait, transitions) so the next line waits for it to finish.</td></tr>
+<tr><td><strong>Sandbox</strong></td><td>The safety box scripts run in — no internet, files, or timers. Pure game logic only.</td></tr>
+<tr><td><strong>Runtime vs editor</strong></td><td>"Runtime" = while the game is being <em>played</em>; "editor" = while you're <em>building</em> it. Scripts run at runtime.</td></tr>
+</tbody>
+</table>
+  <hr>
+  <h2 id="when-should-i-use-a-script-instead-of-the-editor">When should I use a script instead of the editor?</h2>
+  <p>The visual editor handles the vast majority of a visual novel with <strong>no code</strong>, and for most scenes it's the better tool. Reach for a <strong>script</strong> when you hit something the editor can't express neatly:</p>
+  <ul>
+  <li><strong>Real logic &amp; math</strong> — loops, several conditions at once, calculations, a stat system, random tables, a small minigame. Visual branches get unwieldy past a few conditions; code stays short.</li>
+  <li><strong>Doing the same thing many times</strong> — loop to show 10 lines or check a list, instead of placing each by hand.</li>
+  <li><strong>Computed text</strong> — build a sentence out of variables, then show it.</li>
+  <li><strong>Reuse</strong> — write a helper script once and call it anywhere with <code>game.runScript(...)</code>.</li>
+</ul>
+  <p>You don't have to choose all-or-nothing: most creators build the bulk in the editor and <strong>drop into a script only for the tricky part</strong> (via a RunScript command). Everything the editor's commands do, a script can do too — see <code>game.runCommand</code> / <code>game.ui</code> below — so you're never stuck.</p>
+  <p>What scripts <strong>can't</strong> do (by design): reach the internet, touch files, or set timers — the sandbox blocks these. Those capabilities belong to <strong>Plugins/Extensions</strong>, not in-game scripts.</p>
   <hr>
   <h2 id="script-triggers">Script Triggers</h2>
   <p>Each script has a <strong>trigger</strong> that determines when it can run:</p>
@@ -196,6 +239,89 @@ game.playMusic("battle_theme", true, 0.5);
 
 // Stop all music (optional fade duration in seconds)
 game.stopMusic(2);</code></pre>
+  <h3>Showing characters, backgrounds &amp; images</h3>
+  <p>These run the <strong>real</strong> engine commands, so transitions and timing match the editor exactly. <code>await</code> them so they happen in order. (Characters/backgrounds/images/effects are referenced by <strong>name or id</strong>.)</p>
+  <pre><code>// Show a character. opts: expression (name/id), position ("left"|"center"|"right" or {x,y} 0–100%),
+// transition (e.g. "fade"), duration (seconds).
+await game.showCharacter("Luna", { expression: "happy", position: "center", transition: "fade" });
+
+// Hide a character.
+await game.hideCharacter("Luna", { transition: "fade" });
+
+// Change the scene background.
+await game.setBackground("Forest", { transition: "fade", duration: 1 });
+
+// Show / hide an image overlay (x,y in 0–100% of the screen).
+await game.showImage("Sign", { x: 50, y: 40, width: 30 });
+await game.hideImage("Sign");</code></pre>
+  <h3>On-screen text, dress-up &amp; credits</h3>
+  <pre><code>await game.showText("Chapter One", { x: 50, y: 20, fontSize: 48, color: "#ffffff" });
+await game.hideText();
+
+await game.setCharacterLayer("Hero", { layers: [ /* dress-up layer ids */ ] });
+await game.creditRoll();</code></pre>
+  <h3>Screen effects &amp; weather</h3>
+  <pre><code>await game.shakeScreen({ intensity: 5, duration: 0.5 });
+await game.flashScreen({ color: "#ffffff", duration: 0.4 });
+await game.tintScreen("#00000080", { duration: 1 });        // hex + alpha
+await game.panZoom({ zoom: 1.2, panX: 10, panY: 0, duration: 1 });
+await game.resetScreenEffects({ duration: 1 });             // clear tint/pan/zoom/overlays
+
+await game.lightning({ flashes: 2 });
+await game.fireworks({ bursts: 3 });
+await game.flashlight({ radius: 22 });   await game.flashlightOff();
+await game.screenOverlay("fog", { intensity: 0.5 });        // fog / haze / smoke / CRT…
+await game.spawnParticles({ /* … */ });  await game.stopParticles();
+await game.tween({ /* … */ });   // animate a screen element's properties (opts map to the Tween command)
+await game.stopSFX("rain");</code></pre>
+  <h3>Ask the player &amp; wait (<code>await</code>)</h3>
+  <p>These <strong>pause the script until the player responds</strong> — the heart of branching logic in code.</p>
+  <pre><code>// Show one line and wait for the player to advance. "" = Narrator.
+await game.dialogue("Luna", "Are you ready?");
+
+// Show choices; get the chosen index back (0-based).
+const pick = await game.choice(["Fight", "Run", "Talk"]);
+if (pick === 0) { await game.dialogue("", "You raise your sword."); }
+
+// Ask for typed text (optionally store it in a variable too).
+const name = await game.textInput("What's your name?", { variable: "playerName" });
+await game.dialogue("", "Hello, " + name + "!");
+
+// Pause without input:
+await game.wait(1.5);   // seconds
+
+// Play a movie/video and WAIT for it to finish (fullscreen; the player can click to skip):
+await game.playMovie("Intro Cutscene");
+await game.playMovie("Logo", { waitsForCompletion: false });   // fire-and-forget
+await game.playMovie("Rain", { displayMode: "overlay", loop: true });  // non-blocking overlay
+game.stopMovie();   // stop the fullscreen movie + clear overlays</code></pre>
+  <blockquote>**<code>game.dialogue</code> vs <code>game.showDialogue</code>:** <code>dialogue</code> (with <code>await</code>) shows ONE line and waits for a click; <code>showDialogue</code> just drops text in the box and continues immediately (fire-and-forget).</blockquote>
+  <h3>Controlling the UI (screens, elements, save / load)</h3>
+  <p>Anything a UI button can do, a script can do.</p>
+  <pre><code>game.goToScreen("Pause Menu");      // open a screen by name or id
+game.toggleScreen("Map");
+game.returnToGame();                // close screens, back to gameplay
+
+game.showElement("portrait");       // reveal / hide a screen element by id
+game.hideElement("portrait");
+game.changeImage("portrait", "Portrait_Sad");
+game.playAnimation("title", "shake", 0.5);
+
+game.saveGame(0);                   // 0 = the auto-save slot
+game.loadGame(1);
+game.quitToTitle();
+game.exitGame();                    // desktop; no-op on web
+game.openURL("https://example.com");</code></pre>
+  <h3>Run ANY command or UI action (advanced)</h3>
+  <p>Every scene command and UI action is reachable, even ones without a named helper above:</p>
+  <pre><code>// Run any scene command by type (the fields match the editor's command):
+await game.runCommand("ShowCharacter", { characterId: "Luna", transition: "fade" });
+await game.runCommand("PlayMusic", { audioId: "Theme", loop: true });
+
+// Fire any UI action by type:
+game.ui("GoToScreen", { targetScreenId: "Pause Menu" });
+game.ui("SaveGame", { slotNumber: 0 });</code></pre>
+  <blockquote>The <code>type</code> / <code>actionType</code> strings match the names in the editor (Show Character → <code>"ShowCharacter"</code>, Go To Screen → <code>"GoToScreen"</code>). Every built-in command is reachable this way.</blockquote>
   <h3>Project Info (Read-Only)</h3>
   <pre><code>// The current scene's name and ID
 let name = game.currentScene;     // e.g. "Chapter 1"
@@ -294,6 +420,27 @@ if (hasKey &amp;&amp; hasMap) {
 } else {
     game.showDialogue("Narrator", "The path forward is blocked.");
 }</code></pre>
+  <h3>A fully-scripted scene (stage + ask the player)</h3>
+  <p>Shows the newer <code>await</code> API driving the whole scene — background, character, branching choice, and a follow-up — all from one script run by a single RunScript command.</p>
+  <pre><code>await game.setBackground("Throne Room", { transition: "fade" });
+await game.showCharacter("Queen", { expression: "stern", position: "center" });
+
+await game.dialogue("Queen", "You stand accused. How do you plead?");
+
+const plea = await game.choice(["Guilty", "Innocent", "Say nothing"]);
+
+if (plea === 0) {
+    game.setVariable("reputation", game.getVariable("reputation") - 10);
+    await game.dialogue("Queen", "At least you are honest.");
+} else if (plea === 1) {
+    await game.shakeScreen({ intensity: 4, duration: 0.4 });
+    await game.dialogue("Queen", "We shall see about that.");
+} else {
+    await game.dialogue("Queen", "Silence will not save you.");
+}
+
+await game.hideCharacter("Queen", { transition: "fade" });
+game.jumpToScene("The Verdict");</code></pre>
   <hr>
   <h2 id="using-runscript-in-scenes">Using RunScript in Scenes</h2>
   <ol>
@@ -680,7 +827,160 @@ const plugin = { manifest, onEnable };</code></pre>
   <li>Use scoped storage (<code>api.setStorage</code>) instead of global state — it travels with the project</li>
   <li>Share plugins via <strong>Export</strong> (Details view) → a <code>.plugin.js</code> file; install it elsewhere with <strong>Import from file…</strong></li>
   <li>Declare <code>dependencies</code> / <code>engineVersion</code> in the manifest — install is blocked if a dependency is missing or the engine is too old</li>
-  <li>Plugins run in the same hardened sandbox as scripts (no <code>document</code>/<code>window</code>/<code>fetch</code>/timers/<code>.constructor</code>). This is a practical sandbox, not a security boundary — only install plugins you trust.</li>
+  <li>Plugins run in the same hardened sandbox as scripts (no <code>document</code>/<code>window</code>/<code>fetch</code>/timers/<code>.constructor</code>). This is a practical sandbox, not a security boundary — only install plugins you trust. (Editor <strong>Extensions</strong> — see below — run with full trust instead.)</li>
+</ul>
+  <hr>
+  <h1>FlourishVNE Extensions System</h1>
+  <p>Where a <strong>Plugin</strong> extends the <em>game engine</em> (custom commands/effects that run during play), an <strong>Extension</strong> extends the <strong>editor itself</strong> — adding panels, tools, database tables, and custom screen widgets. Both are authored the same way (a <code>manifest</code> + a <code>plugin</code> object) and installed through the same Plugin Manager; what differs is the manifest's **<code>target</code>** and which <code>api.register*</code> methods you call.</p>
+  <h2 id="the-target-field--the-most-important-choice">The <code>target</code> field — the most important choice</h2>
+  <pre><code>const manifest = {
+  id: 'com.you.my-addon', name: 'My Add-on', version: '1.0.0',
+  description: '...', author: 'You', category: 'utility',
+  target: 'editor',   // 'runtime' (default) | 'editor' | 'both'
+};</code></pre>
+  <table>
+<thead><tr><th><code>target</code></th><th>Runs…</th><th>Sandbox</th><th>Shipped in exported games?</th><th>Use for</th></tr></thead>
+<tbody>
+<tr><td><code>'runtime'</code> <em>(default)</em></td><td>inside the game</td><td><strong>sandboxed</strong> (no DOM/network/timers)</td><td><strong>yes</strong></td><td>custom commands/effects (Plugins)</td></tr>
+<tr><td><code>'editor'</code></td><td>in the editor only</td><td><strong>full trust</strong> (DOM, network, timers OK)</td><td><strong>no — stripped from builds</strong></td><td>panels, tools, database tables</td></tr>
+<tr><td><code>'both'</code></td><td>editor <em>and</em> game</td><td>full trust</td><td><strong>yes</strong></td><td><strong>custom UI element types</strong> (their renderer must ship)</td></tr>
+</tbody>
+</table>
+  <p>Two rules follow from this table:</p>
+  <ul>
+  <li><strong>Editor extensions run on your own machine with full trust</strong> — they can use <code>document</code>, <code>fetch</code>, timers, anything. They are <strong>never bundled into exported games</strong>, so they can't affect players.</li>
+  <li>**A custom UI element type must use <code>target: 'both'</code>** (or <code>'runtime'</code>) — otherwise its renderer is stripped from the build and the element won't appear in the finished game.</li>
+</ul>
+  <h2 id="anatomy-of-an-extension">Anatomy of an extension</h2>
+  <pre><code>const manifest = {
+  id: 'com.you.my-addon',
+  name: 'My Add-on',
+  version: '1.0.0',           // semver
+  description: 'What it does.',
+  author: 'You',
+  category: 'utility',        // commands | effects | ui | assets | gameplay | integration | utility
+  target: 'editor',
+  capabilities: ['ui-panels'],
+};
+
+const plugin = {
+  manifest,
+  onEnable(api) {
+    // Register your contributions here (see below). onEnable runs when the
+    // extension loads/enables AND on every project load — keep it idempotent.
+  },
+  onDisable(api) { /* tear down anything you created (DOM you added, timers) */ },
+};</code></pre>
+  <blockquote><code>onEnable</code> is also where you keep a reference for cleanup. If your extension creates its own floating DOM (a button, a window), remove it in <code>onDisable</code> so the "Hide during test play" / disable / uninstall flows can take it down cleanly.</blockquote>
+  <h2 id="contribution-1--panels--apiregisterpanel">Contribution 1 — Panels  (<code>api.registerPanel</code>)</h2>
+  <p>A free-form floating window opened from <strong>Tools ▸ Extension Panels</strong>.</p>
+  <pre><code>api.registerPanel({
+  id: 'notes',
+  title: 'Notepad',
+  icon: '📝',
+  // `container` is a real DOM element; `ctx` is the editor context (below). Render anything.
+  // Return an optional cleanup function (called when the panel window closes).
+  render: (container, ctx) =&gt; {
+    const ta = document.createElement('textarea');
+    ta.value = ctx.getStorage('notes') || '';
+    ta.addEventListener('input', () =&gt; ctx.setStorage('notes', ta.value));
+    container.appendChild(ta);
+    return () =&gt; { /* cleanup */ };
+  },
+});</code></pre>
+  <h2 id="contribution-2--menu-tools--apiregistermenuitem">Contribution 2 — Menu tools  (<code>api.registerMenuItem</code>)</h2>
+  <p>A one-shot action under <strong>Tools ▸ Extension Tools</strong> (generators, importers, validators).</p>
+  <pre><code>api.registerMenuItem({
+  id: 'wordcount', label: 'Word count', icon: '🔢',
+  run: (ctx) =&gt; {
+    const scenes = Object.values(ctx.getProject().scenes || {});
+    ctx.notify('You have ' + scenes.length + ' scenes.', 'info');
+  },
+});</code></pre>
+  <h2 id="contribution-3--database-categories--apiregisterdatabasecategory">Contribution 3 — Database categories  (<code>api.registerDatabaseCategory</code>)</h2>
+  <p>A new data table the user fills in. The editor <strong>generates the list + add/edit form</strong> from your <code>fields</code>; records save with the project and are readable at runtime via <code>api.getRecords(categoryId)</code>. Opens from <strong>Tools ▸ Extension Data</strong>.</p>
+  <pre><code>api.registerDatabaseCategory({
+  id: 'cards', name: 'Cards', icon: '🃏', recordLabel: 'Card', titleField: 'name',
+  fields: [
+    { key: 'name', label: 'Name', type: 'text' },
+    { key: 'cost', label: 'Cost', type: 'number', default: 1 },
+    { key: 'rarity', label: 'Rarity', type: 'select', options: [
+      { label: 'Common', value: 'common' }, { label: 'Rare', value: 'rare' },
+    ] },
+    { key: 'art', label: 'Art', type: 'asset' },         // picks a project image/background
+    { key: 'text', label: 'Card text', type: 'textarea' },
+  ],
+});
+
+// Later, at runtime (or in a tool):
+const cards = api.getRecords('cards');   // → [{ id, name, cost, rarity, art, text }, …]</code></pre>
+  <h2 id="contribution-4--custom-ui-element-types--apiregisteruielementtype">Contribution 4 — Custom UI element types  (<code>api.registerUIElementType</code>)</h2>
+  <p>A new screen widget that appears in the menu / In-Game UI editor palette and renders on the canvas <strong>and</strong> in the shipped game. **Use <code>target: 'both'</code>** so the renderer ships.</p>
+  <pre><code>api.registerUIElementType({
+  type: 'statBar', displayName: 'Stat Bar', icon: '📊',
+  defaultProps: { label: 'HP', variable: '', max: 100, color: '#22c55e' },
+  defaultSize: { width: 32, height: 7 },   // screen-%
+  inspector: [                              // generates the element's property form
+    { key: 'label', label: 'Label', type: 'text' },
+    { key: 'variable', label: 'Variable (name)', type: 'text' },
+    { key: 'max', label: 'Max', type: 'number', default: 100 },
+    { key: 'color', label: 'Fill', type: 'color', default: '#22c55e' },
+  ],
+  // Return an HTML STRING (you're sandboxed if target:'runtime'/'both' — build a string, no DOM).
+  // It fills the element's positioned box. ctx.getVariable reads the live value (or default in editor).
+  render: (props, ctx) =&gt; {
+    const cur = Number(ctx.getVariable(props.variable)) || 0;
+    const pct = Math.min(100, (cur / (props.max || 100)) * 100);
+    return '&lt;div style="width:100%;height:100%;background:#1f2937;border-radius:6px;overflow:hidden"&gt;' +
+           '&lt;div style="height:100%;width:' + pct + '%;background:' + props.color + '"&gt;&lt;/div&gt;&lt;/div&gt;';
+  },
+});</code></pre>
+  <blockquote><strong>Always escape user text</strong> you put into an HTML string (e.g. a label) to avoid breaking the markup.</blockquote>
+  <h2 id="resources--the-flourishext-bundle">Resources &amp; the <code>.flourishext</code> bundle</h2>
+  <p>For code-only extensions, a single <code>.js</code> file is enough (Export → **Export <code>.plugin.js</code><strong>, install with </strong>Import from file…<strong>). To ship </strong>images or other binary assets<strong>, package a </strong><code>.flourishext</code> bundle** — a ZIP containing:</p>
+  <pre><code>manifest.json     ← the manifest (metadata, for preview)
+entry.js          ← your extension source (the manifest + plugin code)
+resources/        ← any files (icon.png, sfx.mp3, …)</code></pre>
+  <ul>
+  <li><strong>Build one:</strong> in an installed extension's <strong>Details</strong>, attach files under <strong>Resources</strong>, then **Export <code>.flourishext</code>**.</li>
+  <li><strong>Install one:</strong> <strong>Import from file…</strong> accepts <code>.flourishext</code> / <code>.zip</code> (then confirm the trust prompt).</li>
+  <li><strong>Use a resource at runtime:</strong> <code>api.getResource('icon.png')</code> returns its data URL. Because a custom element's <code>render</code> is defined inside <code>onEnable(api)</code>, it can use it via closure:</li>
+</ul>
+  <pre><code>render: (props) =&gt; '&lt;img src="' + api.getResource('icon.png') + '" style="width:100%;height:100%"&gt;'</code></pre>
+  <h2 id="the-editor-context-ctx--panels--tools">The editor context (<code>ctx</code>) — panels &amp; tools</h2>
+  <p>Passed to <code>panel.render(container, ctx)</code> and <code>menuItem.run(ctx)</code>:</p>
+  <table>
+<thead><tr><th>Member</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>ctx.getProject()</code></td><td>The current project (read-only snapshot).</td></tr>
+<tr><td><code>ctx.dispatch(action)</code></td><td>Dispatch an editor action (advanced — same actions the editor uses).</td></tr>
+<tr><td><code>ctx.notify(msg, type?)</code></td><td>Toast: `'info' \</td><td>'success' \</td><td>'warning' \</td><td>'error'`.</td></tr>
+<tr><td><code>ctx.getStorage(key)</code> / <code>ctx.setStorage(key, value)</code></td><td>This extension's persistent, project-scoped storage.</td></tr>
+</tbody>
+</table>
+  <p>Custom UI element renderers instead get <code>ctx = { getVariable(nameOrId), isEditor }</code>.</p>
+  <h2 id="field-types-database-categories--element-inspectors">Field types (database categories &amp; element inspectors)</h2>
+  <p><code>text</code> · <code>textarea</code> · <code>number</code> · <code>boolean</code> · <code>select</code> (needs <code>options: [{label, value}]</code>) · <code>color</code> · <code>asset</code> (project image/background picker). Each field: <code>{ key, label, type, default?, placeholder?, options? }</code>.</p>
+  <h2 id="installing-trust--build-options">Installing, trust &amp; build options</h2>
+  <ul>
+  <li><strong>Trust prompt:</strong> every install shows the name, author, version, type (editor/game/both) and capabilities, with a "this runs code on your machine" warning. Nothing runs until you confirm.</li>
+  <li><strong>Per-plugin Details controls:</strong> <em>Include in exported games</em> (runtime plugins), <em>Hide during test play</em> (editor extensions whose floating UI would overlap the preview), <em>Resources</em>, *Export <code>.plugin.js</code>* / *Export <code>.flourishext</code>*, enable/disable/uninstall.</li>
+</ul>
+  <h2 id="ready-to-try-samples-docsexamples">Ready-to-try samples (<code>docs/examples/</code>)</h2>
+  <table>
+<thead><tr><th>File</th><th>Shows</th></tr></thead>
+<tbody>
+<tr><td><code>project-stats-panel.plugin.js</code></td><td>A panel (live project stats).</td></tr>
+<tr><td><code>story-bible.plugin.js</code></td><td>A self-managed floating button + a draggable window with nested sections.</td></tr>
+<tr><td><code>custom-elements.plugin.js</code></td><td>Custom UI element types (a variable-bound Stat Bar + a Nameplate).</td></tr>
+</tbody>
+</table>
+  <p>Import any of them via <strong>Plugin Manager ▸ Import from file…</strong>.</p>
+  <h2 id="security-model-full-trust-local-no-cross-user-harm">Security model (full-trust local, no cross-user harm)</h2>
+  <ul>
+  <li>Local install is <strong>full trust but explicit opt-in</strong> — third-party add-ons are disabled until you install + confirm them, and the prompt shows provenance. A malicious <em>local</em> extension can harm <em>your</em> machine; that is the accepted trade-off of full trust.</li>
+  <li>The app never lets extension code reach the <strong>auto-updater or any sync/share channel</strong>, and <strong>install scripts from an imported project never auto-run</strong> — so an add-on can't silently propagate to other users.</li>
+  <li>Runtime plugins (shipped to players) stay <strong>sandboxed</strong>; only editor/both extensions (which run on the author's machine) get full trust.</li>
 </ul>
 </main>
 

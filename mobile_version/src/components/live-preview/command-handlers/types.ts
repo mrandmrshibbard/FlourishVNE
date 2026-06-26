@@ -51,6 +51,16 @@ export interface CommandContext {
     evaluateConditions: (conditions: VNCondition[] | undefined, variables: Record<VNID, string | number | boolean>) => boolean;
     /** Show a toast notification to the player (scripts' game.notify, surfaced script errors). Optional. */
     notify?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+    /** Run a real engine command imperatively from a foreground script (presentation parity) — reuses
+     *  this same context's handlers + applies the result live. Resolves once applied (blocking commands
+     *  like choice resolve on player input, returning e.g. the chosen index). Optional. */
+    runCommand?: (type: string, params: Record<string, any>) => Promise<any>;
+    /** Fire a real UI action from a foreground script (the same path a UI button uses) — go to screen,
+     *  save/load, show/hide element, etc. Optional. */
+    runUIAction?: (actionType: string, params: Record<string, any>) => void;
+    /** True when running inside an EXPORTED game (not the editor's test-play). Used to suppress
+     *  developer-facing diagnostics (script "not found" warnings, error toasts) from reaching players. */
+    isStandalone?: boolean;
 }
 
 /**

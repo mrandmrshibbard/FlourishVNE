@@ -163,6 +163,8 @@ interface StageCharacterState {
     inverted?: boolean;
     rotation?: number;
     flipY?: boolean;
+    /** Resolved per-layer asset selection so SetCharacterLayer can patch one layer in the editor preview. */
+    layerSelections?: Record<VNID, VNID | null>;
 }
 
 interface StageState {
@@ -217,7 +219,9 @@ const StagingArea: React.FC<{
     selectedCommandIndex: number | null;
     className?: string;
     style?: React.CSSProperties;
-}> = ({ project, activeSceneId, selectedCommandIndex, className, style }) => {
+    /** Chromeless: render just the stage (no surrounding Panel header) — used by the popped-out canvas window. */
+    bare?: boolean;
+}> = ({ project, activeSceneId, selectedCommandIndex, className, style, bare }) => {
     const { dispatch } = useProject();
     const { t } = useTranslation('staging');
     const commandRadial = useCommandRadial();
@@ -388,14 +392,18 @@ const StagingArea: React.FC<{
                     const charData = project.characters[command.characterId];
                     const exprData = charData?.expressions[command.expressionId];
                     if (charData && exprData) {
+                        // Resolve each layer: per-layer override wins, else the expression (preset) config.
+                        const sel: Record<string, string | null> = {};
+                        Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
+                            if (command.layerOverrides && Object.prototype.hasOwnProperty.call(command.layerOverrides, layer.id)) sel[layer.id] = command.layerOverrides[layer.id] || null;
+                            else sel[layer.id] = exprData.layerConfiguration[layer.id] ?? null;
+                        });
                         const imageUrls: string[] = [];
                         if (charData.baseImageUrl) imageUrls.push(charData.baseImageUrl);
                         Object.values(charData.layers).forEach((layer: VNCharacterLayer) => {
-                            const assetId = exprData.layerConfiguration[layer.id];
-                            if (assetId) {
-                                const asset = layer.assets[assetId];
-                                if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
-                            }
+                            const assetId = sel[layer.id];
+                            const asset = assetId ? layer.assets[assetId] : null;
+                            if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
                         });
                         // "Keep current position": if the character is already on stage and the command
                         // opts in, preview it at its existing position (mirrors the runtime handler) so the
@@ -403,12 +411,29 @@ const StagingArea: React.FC<{
                         const keptPosition = command.keepPosition && characters[command.characterId]
                             ? characters[command.characterId].position
                             : command.position;
-                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY };
+                        characters[command.characterId] = { charId: command.characterId, layer: command.layer, position: keptPosition, imageUrls, transition: command.transition, sourceCommandId: command.id, scale: command.scale, inverted: command.inverted, rotation: command.rotation, flipY: command.flipY, layerSelections: sel };
                     }
                     break;
                 case CommandType.HideCharacter:
                     delete characters[command.characterId];
                     break;
+                case CommandType.SetCharacterLayer: {
+                    const cur = characters[command.characterId];
+                    const cData = project.characters[command.characterId];
+                    if (cur && cData) {
+                        const sel: Record<string, string | null> = { ...((cur as any).layerSelections || {}) };
+                        (command.layers || []).forEach(({ layerId, assetId }) => { sel[layerId] = assetId || null; });
+                        const imageUrls: string[] = [];
+                        if (cData.baseImageUrl) imageUrls.push(cData.baseImageUrl);
+                        Object.values(cData.layers).forEach((layer: VNCharacterLayer) => {
+                            const aId = sel[layer.id];
+                            const asset = aId ? layer.assets[aId] : null;
+                            if (asset?.imageUrl) imageUrls.push(asset.imageUrl);
+                        });
+                        characters[command.characterId] = { ...cur, imageUrls, layerSelections: sel };
+                    }
+                    break;
+                }
                 case CommandType.SetVariable:
                     const variable = project.variables[command.variableId];
                     if (variable) {
@@ -831,6 +856,35 @@ const StagingArea: React.FC<{
         // NOTE: `overlayResizeSize` is intentionally NOT a dep — the latest size is read via
         // overlayResizeSizeRef in onUp, so the listeners attach once per drag (not per mousemove).
     }, [overlayResize, project.scenes, dispatch, stageSize]);
+
+    // Arrow-key nudge: fine-tune the SELECTED command's position pixel-by-pixel (% steps; Shift = coarser).
+    // Covers x/y commands (image/text/button/item/hot spot) and ShowCharacter once it has a custom {x,y}
+    // position (drag a preset character once to convert it). Mirrors the drag's commit shape.
+    useEffect(() => {
+        const NUDGE_TYPES = new Set<CommandType>([CommandType.ShowImage, CommandType.ShowText, CommandType.ShowButton, CommandType.ShowItem, CommandType.ShowHotSpot, CommandType.ShowCharacter]);
+        const onKey = (e: KeyboardEvent) => {
+            if (selectedCommandIndex === null) return;
+            if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+            const target = e.target as HTMLElement;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            const scene = project.scenes[activeSceneId];
+            const cmd: any = scene?.commands[selectedCommandIndex];
+            if (!cmd || !NUDGE_TYPES.has(cmd.type)) return;
+            const isChar = cmd.type === CommandType.ShowCharacter;
+            if (isChar && (typeof cmd.position !== 'object' || !cmd.position)) return; // preset char — drag once first
+            e.preventDefault();
+            const step = e.shiftKey ? 2 : 0.5;
+            const ddx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+            const ddy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+            const clamp = (n: number) => Math.round(Math.max(0, Math.min(100, n)) * 100) / 100;
+            const command = isChar
+                ? { ...cmd, position: { x: clamp((cmd.position.x ?? 50) + ddx), y: clamp((cmd.position.y ?? 80) + ddy) } }
+                : { ...cmd, x: clamp((cmd.x ?? 50) + ddx), y: clamp((cmd.y ?? 50) + ddy) };
+            dispatch({ type: 'UPDATE_COMMAND', payload: { sceneId: activeSceneId, commandIndex: selectedCommandIndex, command } });
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [project, activeSceneId, selectedCommandIndex, dispatch]);
 
     const getPositionStyle = (position: VNPosition): React.CSSProperties => {
         if (typeof position === 'object') {
@@ -1328,15 +1382,7 @@ const StagingArea: React.FC<{
         return fontSize * scale;
     };
 
-    return (
-        <Panel
-            title={t('panelTitle')}
-            className={className} 
-            style={{ 
-                height: style?.height || 'var(--canvas-height)',
-                ...style 
-            }}
-        >
+    const stageInner = (
             <div ref={containerRef} className="w-full h-full flex items-center justify-center p-2">
                 <div
                     ref={stageRef}
@@ -1826,6 +1872,27 @@ const StagingArea: React.FC<{
                  </div>
                 </div>
             </div>
+    );
+
+    if (bare) {
+        // Chromeless (popped-out canvas window): just the stage, no Panel header.
+        return (
+            <div className={`flex flex-col overflow-hidden ${className || ''}`} style={{ height: style?.height || '100%', ...style }}>
+                {stageInner}
+            </div>
+        );
+    }
+
+    return (
+        <Panel
+            title={t('panelTitle')}
+            className={className}
+            style={{
+                height: style?.height || 'var(--canvas-height)',
+                ...style
+            }}
+        >
+            {stageInner}
         </Panel>
     );
 };

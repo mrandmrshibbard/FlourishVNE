@@ -3,6 +3,7 @@ import { flushSync, createPortal } from 'react-dom';
 import { useProject } from '../contexts/ProjectContext';
 import { useToast } from '../contexts/ToastContext';
 import { interpolateVariables } from '../utils/variableInterpolation';
+import { createCommand } from '../utils/commandFactory';
 import { combineConditions } from '../utils/conditionLogic';
 import { deriveHotSpotsFromScreen, deriveInteractiveElementsFromScreen } from '../utils/interactiveElements';
 import { XMarkIcon, FilmIcon, VariablesIcon } from './icons';
@@ -15,14 +16,14 @@ import {
 } from '../types/shared';
 import {
     VNUIScreen, VNUIElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement,
-    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
+    UISettingsSliderElement, UISettingsToggleElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement, GameSetting, GameToggleSetting, UIElementType, UIAppearanceState,
     VNHotSpot, VNHotZoneElement, VNConfirmDialogSettings, QuickMenuButtonConfig, QuickMenuButtonKey, VNProjectUI, PhonePortraitSource
 } from '../features/ui/types';
 import { PHONE_GLYPHS } from '../features/ui/phoneIcons';
 import { resolveFieldUrl } from '../utils/assetStore';
 import { VNItem, VNItemCollection } from '../features/items/types';
 import {
-    VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, DialogueCommand,
+    VNCommand, CommandType, ChoiceOption, SetBackgroundCommand, ShowCharacterCommand, HideCharacterCommand, SetCharacterLayerCommand, DialogueCommand,
     ChoiceCommand, JumpCommand, SetVariableCommand, TextInputCommand, PlayMusicCommand, StopMusicCommand, PlaySoundEffectCommand, StopSoundEffectCommand,
     PlayMovieCommand, StopMovieCommand, WaitCommand, ShakeScreenCommand, TintScreenCommand, PanZoomScreenCommand, ResetScreenEffectsCommand,
     FlashScreenCommand, LightningCommand, FlashlightCommand, FireworksCommand, PlaceLightsCommand, VNLight, LabelCommand, JumpToLabelCommand, ShowTextCommand, ShowImageCommand, HideTextCommand, HideImageCommand,
@@ -232,6 +233,7 @@ import {
     handleChoice,
     handleShowCharacter,
     handleHideCharacter,
+    handleSetCharacterLayer,
     handleSetBackground,
     handlePlayMusic,
     handleStopMusic,
@@ -979,7 +981,9 @@ const HotSpotOverlayElement: React.FC<{
         left: `${overlay.x}%`, top: `${overlay.y}%`,
         width: `${overlay.width}%`, height: `${overlay.height}%`,
         borderRadius: overlay.shape === 'circle' ? '50%' : 6,
-        zIndex: 8, // above characters (z-5), below dialogue (z-20)
+        // Honor a per-spot layer so items/images can sit above a hot spot (1 + layer*100, the shared
+        // overlay band). Without a layer set, keep the legacy fixed z (above characters z-5, below dialogue z-20).
+        zIndex: overlay.layer != null ? (1 + overlay.layer * 100) : 8,
         // drag-drop spots are pure drop zones (coordinate hit-test) — don't capture clicks,
         // so empty/drag clicks still reach the stage. click/hover spots capture.
         pointerEvents: overlay.trigger === 'drag-drop' ? 'none' : 'auto',
@@ -4124,6 +4128,190 @@ const UIScreenRenderer: React.FC<{
                     </div>
                 );
             }
+            case UIElementType.Customizer: {
+                const el = element as UICustomizerElement;
+                const character = project.characters[el.characterId];
+                if (!character) return null;
+                const fallbackExpr = (el.expressionId && character.expressions[el.expressionId]) || Object.values(character.expressions)[0] || null;
+
+                // Composite preview: base + each layer's chosen asset (category variable → else fallback expression).
+                const imageUrls: string[] = [];
+                const videoUrls: string[] = [];
+                let hasVideo = false, videoLoop = false;
+                if (character.baseVideoUrl) { videoUrls.push(resolveFieldUrl(project.id, character.baseVideoUrl) || character.baseVideoUrl); hasVideo = true; videoLoop = !!character.baseVideoLoop; }
+                else if (character.baseImageUrl) { imageUrls.push(resolveFieldUrl(project.id, character.baseImageUrl) || character.baseImageUrl); }
+                Object.entries(character.layers).forEach(([layerId, layer]) => {
+                    const cat = (el.categories || []).find(c => c.layerId === layerId);
+                    let assetId: string | null = null;
+                    if (cat) assetId = String(variables[cat.variableId] ?? '') || null;
+                    if (!assetId && fallbackExpr) assetId = fallbackExpr.layerConfiguration[layerId] || null;
+                    const asset = assetId ? layer.assets[assetId] : null;
+                    if (asset?.videoUrl) { videoUrls.push(resolveFieldUrl(project.id, asset.videoUrl) || asset.videoUrl); hasVideo = true; videoLoop = videoLoop || !!asset.loop; }
+                    else if (asset?.imageUrl) { imageUrls.push(resolveFieldUrl(project.id, asset.imageUrl) || asset.imageUrl); }
+                });
+
+                const swatchSize = el.swatchSize ?? 48;
+                const swatchGap = el.swatchGap ?? 6;
+                const selColor = el.selectedColor || '#8a2be2';
+                const arrowColor = el.arrowColor || '#ffffff';
+                const arrowSize = el.arrowSize ?? 28;
+                const arrowUrl = el.arrowImage ? getElementAssetUrl(el.arrowImage) : null;
+                const buttonColor = el.buttonColor || 'rgba(255,255,255,0.12)';
+                const buttonTextColor = el.buttonTextColor || '#ffffff';
+                const labelStyle = { ...fontSettingsToStyle(el.font), lineHeight: 1.2 } as React.CSSProperties;
+                const assetUrlOf = (a: any) => a.imageUrl ? (resolveFieldUrl(project.id, a.imageUrl) || a.imageUrl) : (a.videoUrl ? (resolveFieldUrl(project.id, a.videoUrl) || a.videoUrl) : null);
+
+                const previewNode = (
+                    <div className="relative w-full h-full">
+                        {hasVideo && videoUrls.length > 0
+                            ? videoUrls.map((u, i) => <video key={i} src={u} autoPlay muted loop={videoLoop} playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />)
+                            : imageUrls.map((u, i) => <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />)}
+                    </div>
+                );
+
+                // Per-option rules: hide or lock an option when its conditions fail; optional swatch override.
+                const processOptions = (cat: any) => {
+                    const layer = character.layers[cat.layerId];
+                    if (!layer) return [] as Array<{ a: any; locked: boolean; swatchUrl: string | null }>;
+                    return (Object.values(layer.assets) as any[]).map(a => {
+                        const meta = el.optionMeta?.[a.id];
+                        const ok = !meta?.conditions?.length || evaluateConditions(meta.conditions, variables);
+                        const locked = !ok && meta?.whenUnmet === 'lock';
+                        const hidden = !ok && (meta?.whenUnmet ?? 'hide') === 'hide';
+                        const swatchUrl = meta?.swatchImage ? getElementAssetUrl(meta.swatchImage) : assetUrlOf(a);
+                        return { a, locked, hidden, swatchUrl };
+                    }).filter(x => !x.hidden);
+                };
+
+                // One category's picker, in the configured style (default swatches).
+                const renderPicker = (cat: any, current: string): React.ReactNode => {
+                    const opts = processOptions(cat);
+                    const selectable = opts.filter(x => !x.locked);
+                    const pstyle = cat.pickerStyle || 'swatches';
+                    const pick = (id: string) => onVariableChange?.(cat.variableId, id);
+
+                    if (pstyle === 'arrows') {
+                        const idx = selectable.findIndex(x => x.a.id === current);
+                        const cycle = (dir: number) => { const n = selectable.length; if (!n) return; const ni = (((idx < 0 ? 0 : idx) + dir) % n + n) % n; pick(selectable[ni].a.id); };
+                        const cur = idx >= 0 ? selectable[idx] : selectable[0];
+                        const arrowBtn = (dir: number, flip: boolean) => (
+                            <button onClick={() => cycle(dir)} style={{ flexShrink: 0, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4 }}>
+                                {arrowUrl
+                                    ? <img src={arrowUrl} alt="" style={{ width: arrowSize, height: arrowSize, objectFit: 'contain', transform: flip ? 'scaleX(-1)' : undefined }} />
+                                    : <span style={{ fontSize: arrowSize, lineHeight: 1, color: arrowColor }}>{flip ? '◀' : '▶'}</span>}
+                            </button>
+                        );
+                        return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {arrowBtn(-1, true)}
+                                <div style={{ flex: 1, minWidth: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                    {cur?.swatchUrl && <div style={{ width: swatchSize, height: swatchSize }}>{cur.a.videoUrl ? <video src={cur.swatchUrl} muted loop playsInline className="w-full h-full object-contain" /> : <img src={cur.swatchUrl} alt="" className="w-full h-full object-contain" />}</div>}
+                                    <div style={{ ...labelStyle }} className="truncate w-full">{cur?.a.name || ''}</div>
+                                </div>
+                                {arrowBtn(1, false)}
+                            </div>
+                        );
+                    }
+                    if (pstyle === 'dropdown') {
+                        return (
+                            <select value={current} onChange={e => pick(e.target.value)} style={{ width: '100%', padding: '4px 6px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', color: buttonTextColor, border: `1px solid ${el.borderColor || 'rgba(255,255,255,0.2)'}` }}>
+                                {opts.map(x => <option key={x.a.id} value={x.a.id} disabled={x.locked}>{x.a.name}{x.locked ? ' 🔒' : ''}</option>)}
+                            </select>
+                        );
+                    }
+                    if (pstyle === 'buttons') {
+                        return (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {opts.map(x => {
+                                    const sel = current === x.a.id;
+                                    return <button key={x.a.id} disabled={x.locked} onClick={() => !x.locked && pick(x.a.id)} style={{ ...labelStyle, cursor: x.locked ? 'not-allowed' : 'pointer', opacity: x.locked ? 0.5 : 1, padding: '4px 10px', borderRadius: 6, background: sel ? selColor : buttonColor, color: buttonTextColor, border: 'none' }}>{x.a.name}{x.locked ? ' 🔒' : ''}</button>;
+                                })}
+                            </div>
+                        );
+                    }
+                    // default: swatch grid
+                    return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: swatchGap }}>
+                            {opts.map(x => {
+                                const sel = current === x.a.id;
+                                return (
+                                    <div key={x.a.id} onClick={() => !x.locked && pick(x.a.id)} title={x.a.name}
+                                        style={{ position: 'relative', width: swatchSize, height: swatchSize, flexShrink: 0, cursor: x.locked ? 'not-allowed' : 'pointer', opacity: x.locked ? 0.55 : 1, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', boxShadow: sel ? `0 0 0 3px ${selColor}` : 'inset 0 0 0 1px rgba(255,255,255,0.15)' }}>
+                                        {x.a.videoUrl ? <video src={x.swatchUrl || undefined} muted loop playsInline className="w-full h-full object-contain" /> : x.swatchUrl ? <img src={x.swatchUrl} alt={x.a.name} className="w-full h-full object-contain" /> : <div className="w-full h-full" />}
+                                        {x.locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.min(swatchSize * 0.5, 22) }}>🔒</div>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                };
+
+                // Quick actions (additive, optional). Randomize picks a passing option per category; Reset
+                // returns each category to its variable default (or the layer's first asset).
+                const randomizeLook = () => {
+                    (el.categories || []).forEach(cat => {
+                        const layer = character.layers[cat.layerId]; if (!layer) return;
+                        const opts = (Object.values(layer.assets) as any[]).filter(a => { const m = el.optionMeta?.[a.id]; return !m?.conditions?.length || evaluateConditions(m.conditions, variables); });
+                        if (opts.length) onVariableChange?.(cat.variableId, opts[Math.floor(Math.random() * opts.length)].id);
+                    });
+                };
+                const resetLook = () => {
+                    (el.categories || []).forEach(cat => {
+                        const v = project.variables[cat.variableId];
+                        const layer = character.layers[cat.layerId];
+                        const fallback = layer ? Object.keys(layer.assets)[0] : '';
+                        const def = (v && v.defaultValue !== undefined && v.defaultValue !== '') ? String(v.defaultValue) : (fallback || '');
+                        onVariableChange?.(cat.variableId, def);
+                    });
+                };
+
+                const pickersNode = (
+                    <div className="w-full h-full overflow-y-auto" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 8 }}>
+                        {(el.categories || []).map(cat => {
+                            const layer = character.layers[cat.layerId];
+                            if (!layer) return null;
+                            const current = String(variables[cat.variableId] ?? '');
+                            return (
+                                <div key={cat.layerId}>
+                                    {el.showLabels !== false && <div style={{ ...labelStyle, marginBottom: 4 }}>{cat.label || layer.name}</div>}
+                                    {renderPicker(cat, current)}
+                                </div>
+                            );
+                        })}
+                        {(el.categories || []).length === 0 && (
+                            <div style={{ ...labelStyle, opacity: 0.6 }}>No categories yet — set them up in the Customizer's properties.</div>
+                        )}
+                        {(el.showRandomize || el.showReset) && (el.categories || []).length > 0 && (
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                                {el.showRandomize && <button onClick={randomizeLook} style={{ ...labelStyle, cursor: 'pointer', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.randomizeLabel || 'Randomize'}</button>}
+                                {el.showReset && <button onClick={resetLook} style={{ ...labelStyle, cursor: 'pointer', padding: '4px 12px', borderRadius: 6, background: buttonColor, color: buttonTextColor, border: 'none' }}>{el.resetLabel || 'Reset'}</button>}
+                            </div>
+                        )}
+                    </div>
+                );
+
+                const layout = el.layout || 'preview-left';
+                const pv = `${el.previewPercent ?? 45}%`;
+                const frameUrl = el.backgroundImage ? getElementAssetUrl(el.backgroundImage) : null;
+                const containerStyle: React.CSSProperties = {
+                    ...style,
+                    background: el.backgroundColor || undefined,
+                    ...(frameUrl ? { backgroundImage: `url(${frameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                    ...(el.borderColor ? { border: `1px solid ${el.borderColor}` } : {}),
+                    borderRadius: el.borderRadius ?? 8,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: layout === 'preview-top' ? 'column' : 'row',
+                };
+                const previewWrap = <div style={layout === 'preview-top' ? { height: pv, width: '100%', flexShrink: 0 } : { width: pv, height: '100%', flexShrink: 0 }}>{previewNode}</div>;
+                const pickersWrap = <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>{pickersNode}</div>;
+
+                return (
+                    <div key={el.id} style={containerStyle}>
+                        {layout === 'preview-right' ? <>{pickersWrap}{previewWrap}</> : <>{previewWrap}{pickersWrap}</>}
+                    </div>
+                );
+            }
             case UIElementType.AssetCycler: {
                 const el = element as UIAssetCyclerElement;
                 return <AssetCyclerElement 
@@ -4416,6 +4604,23 @@ const UIScreenRenderer: React.FC<{
                         </div>
                     </>
                 );
+            }
+            case UIElementType.Custom: {
+                const el = element as UICustomElement;
+                const def = pluginManager.getUIElementType(el.pluginType);
+                if (!def) return null; // owning extension missing → render nothing (save/load-safe)
+                const getVar = (nameOrId: string) => {
+                    let id = nameOrId;
+                    if (!(project.variables as any)[id]) {
+                        const found = Object.values(project.variables).find((v: any) => v.name?.toLowerCase() === String(nameOrId).toLowerCase()) as any;
+                        if (found) id = found.id;
+                    }
+                    return variables[id];
+                };
+                let html = '';
+                try { html = def.render(el.props || {}, { getVariable: getVar, isEditor: false }); }
+                catch (e) { console.error('[Custom element] render failed:', e); }
+                return <div key={el.id} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
             }
             default: return null;
         }
@@ -5263,6 +5468,10 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
     // Use refs for visual effects to avoid triggering command loop re-execution
     const activeFlashRef = useRef<{ color: string; duration: number; key: number } | null>(null);
     const activeShakeRef = useRef<{ intensity: number; duration: number } | null>(null);
+    // Set ONLY while a foreground script is awaiting player input (game.dialogue/choice/textInput). The
+    // input handlers check it and resolve the script's promise instead of their normal behavior. It is
+    // null at all other times, so non-script playback (artists'/writers' games) is completely unaffected.
+    const scriptInputResolverRef = useRef<{ kind: 'dialogue' | 'choice' | 'textInput' | 'movie'; resolve: (value: any) => void } | null>(null);
     const [flashTrigger, setFlashTrigger] = useState(0);
     const [shakeTrigger, setShakeTrigger] = useState(0);
     // Lightning (one-shot flash sequence) — mirrors the flash ref/trigger pattern.
@@ -7290,8 +7499,242 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             activeEffectTimeoutsRef,
             evaluateConditions,
             notify,
+            isStandalone,
         };
-        
+
+        // ── Script → engine parity bridge (additive; the normal command loop is untouched). ──
+        // A foreground script (game.showCharacter / setBackground / showImage …) runs a REAL command
+        // through the SAME handler, then we apply the result LIVE via a decoupled applier (stagePatch is
+        // run against the LATEST stage so sequential script commands compose). Handlers are given a
+        // context whose `advance` is neutralised — a script drives its own flow; sub-commands must never
+        // advance the main loop. Resolves once applied; no currentIndex/scene/stack mutation here.
+        commandContext.runCommand = async (type: string, params: Record<string, any>): Promise<any> => {
+            try {
+                const base = createCommand(type, project, {});
+                if (!base) { console.warn('[Script] runCommand: cannot build command', type); return; }
+                const cmd: any = { ...base, ...params, id: `script-cmd-${Math.random().toString(36).slice(2, 9)}` };
+                const hctx: CommandContext = { ...commandContext, advance: () => {} };
+                let result: CommandResult | undefined;
+                switch (type) {
+                    case 'ShowCharacter': result = handleShowCharacter(cmd, hctx); break;
+                    case 'HideCharacter': result = handleHideCharacter(cmd, hctx); break;
+                    case 'SetBackground': result = await handleSetBackground(cmd, hctx); break;
+                    case 'ShowImage': result = handleShowImage(cmd, hctx); break;
+                    case 'SpawnParticles': result = handleSpawnParticles(cmd, hctx); break;
+                    case 'StopParticles': result = handleStopParticles(cmd, hctx); break;
+                    case 'TweenElement': result = handleTweenElement(cmd, hctx); break;
+                    // Additional pure handlers (Phase A): each returns a CommandResult applied via the
+                    // decoupled applier below (stage/ui/music/variables + stagePatch). Safe to bridge
+                    // because none depend on the main loop's advance/index.
+                    case 'SetCharacterLayer': result = handleSetCharacterLayer(cmd, hctx); break;
+                    case 'ShowText': result = handleShowText(cmd, hctx); break;
+                    case 'HideText': result = handleHideText(cmd, hctx); break;
+                    case 'HideImage': result = handleHideImage(cmd, hctx); break;
+                    case 'ShowButton': result = handleShowButton(cmd, hctx); break;
+                    case 'HideButton': result = handleHideButton(cmd, hctx); break;
+                    case 'ShowItem': result = handleShowItem(cmd, hctx); break;
+                    case 'PlayMusic': result = handlePlayMusic(cmd, hctx); break;
+                    case 'StopMusic': result = handleStopMusic(cmd, hctx); break;
+                    case 'PlaySoundEffect': result = handlePlaySoundEffect(cmd, hctx); break;
+                    case 'StopSoundEffect': result = handleStopSoundEffect(cmd, hctx); break;
+                    case 'ShowPhone': result = handleShowPhone(cmd, hctx); break;
+                    case 'HidePhone': result = handleHidePhone(cmd, hctx); break;
+                    case 'ShowPhoneText': result = handleShowPhoneText(cmd, hctx); break;
+                    case 'HidePhoneText': result = handleHidePhoneText(cmd, hctx); break;
+                    case 'GiveItem':
+                    case 'UseItem':
+                    case 'DestroyItem': result = handleItemCommand(cmd, hctx); break;
+                    case 'RestockCollection': result = handleRestockCollectionCommand(cmd, hctx); break;
+                    case 'BuyItem': result = handleBuyItemCommand(cmd, hctx); break;
+                    case 'SellItem': result = handleSellItemCommand(cmd, hctx); break;
+                    case 'PlaceLights': result = { advance: true, stagePatch: () => ({ lights: cmd.lights || [], lightsAbove: !!cmd.aboveCharacters }) }; break;
+                    case 'ClearLights': result = { advance: true, stagePatch: () => ({ lights: [] }) }; break;
+                    case 'CreditRoll': { setActiveCreditRoll(cmd); result = handleCreditRoll(cmd, hctx); break; }
+                    // Screen effects are INLINE in the main loop (component refs/state), so we replicate
+                    // the exact same effect here (identical refs/render path) rather than touch the loop.
+                    case 'ShakeScreen': {
+                        activeShakeRef.current = { intensity: cmd.intensity, duration: cmd.duration };
+                        setShakeTrigger(prev => prev + 1);
+                        if (cmd.duration > 0) {
+                            const tid = window.setTimeout(() => {
+                                activeShakeRef.current = null;
+                                setShakeTrigger(prev => prev + 1);
+                                activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== tid);
+                            }, cmd.duration * 1000);
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                        return;
+                    }
+                    case 'FlashScreen': {
+                        activeFlashRef.current = { color: cmd.color, duration: cmd.duration, key: Date.now() };
+                        setFlashTrigger(prev => prev + 1);
+                        return;
+                    }
+                    case 'TintScreen': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: cmd.color, transitionDuration: cmd.duration } } } : p);
+                        return;
+                    }
+                    case 'PanZoomScreen': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, zoom: cmd.zoom, panX: cmd.panX, panY: cmd.panY, transitionDuration: cmd.duration } } } : p);
+                        return;
+                    }
+                    case 'ResetScreenEffects': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: cmd.duration, overlayEffects: [] } } } : p);
+                        return;
+                    }
+                    // More inline-effect commands (refs/component state) — replicate the main loop's exact
+                    // behaviour so the same render path runs, without touching the loop.
+                    case 'Flashlight': {
+                        if (cmd.enabled) {
+                            setFlashlight({
+                                radius: cmd.radius ?? 22, softness: cmd.softness ?? 0.6, darkness: cmd.darkness ?? 0.85,
+                                color: cmd.color || '#000000', toggleKey: cmd.toggleKey, affectsDialogue: cmd.affectsDialogue !== false,
+                                darkWhenOff: cmd.darkWhenOff === true, on: true,
+                            });
+                            if (cmd.sfxId) playSound(cmd.sfxId);
+                        } else { setFlashlight(null); }
+                        return;
+                    }
+                    case 'Lightning': {
+                        activeLightningRef.current = {
+                            color: cmd.color || '#EAF2FF', intensity: cmd.intensity ?? 0.9, duration: cmd.duration ?? 0.7,
+                            flashes: cmd.flashes ?? 2, affectsDialogue: cmd.affectsDialogue !== false, key: Date.now(),
+                        };
+                        setLightningTrigger(prev => prev + 1);
+                        if (cmd.thunderSfxId) {
+                            const tid = window.setTimeout(() => playSound(cmd.thunderSfxId, cmd.thunderVolume), Math.max(0, (cmd.thunderDelay ?? 0.6) * 1000));
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                        return;
+                    }
+                    case 'Fireworks': {
+                        activeFireworksRef.current = {
+                            colors: (cmd.colors && cmd.colors.length) ? cmd.colors : [], intensity: cmd.intensity ?? 1,
+                            bursts: Math.max(1, cmd.bursts ?? 3), duration: cmd.duration ?? 2.5, burstHeight: cmd.burstHeight ?? 0.7,
+                            affectsDialogue: cmd.affectsDialogue !== false, sfxId: cmd.sfxId ?? null, sfxVolume: cmd.sfxVolume,
+                            sfxPerBurst: !!cmd.sfxPerBurst, key: Date.now(),
+                        };
+                        setFireworksTrigger(prev => prev + 1);
+                        if (cmd.sfxId && !cmd.sfxPerBurst) {
+                            const tid = window.setTimeout(() => playSound(cmd.sfxId, cmd.sfxVolume), Math.max(0, (cmd.sfxDelay ?? 0.3) * 1000));
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                        return;
+                    }
+                    case 'SetScreenOverlayEffect': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: cmd.effectType, intensity: cmd.intensity, variant: cmd.variant, color: cmd.color, params: cmd.params }) } } } : p);
+                        const overlayDur = cmd.duration ?? 0;
+                        if (overlayDur > 0) {
+                            const effType = cmd.effectType;
+                            const tid = window.setTimeout(() => {
+                                updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, screen: { ...p.stageState.screen, overlayEffects: upsertOverlayEffect(p.stageState.screen.overlayEffects, { type: effType, intensity: 0 }) } } } : p);
+                                activeEffectTimeoutsRef.current = activeEffectTimeoutsRef.current.filter(id => id !== tid);
+                            }, overlayDur * 1000);
+                            activeEffectTimeoutsRef.current.push(tid);
+                        }
+                        return;
+                    }
+                    case 'ShowHotSpot': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: [
+                            ...(p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.id),
+                            { id: cmd.id, commandId: cmd.id, name: cmd.name, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height,
+                              shape: cmd.shape, trigger: cmd.trigger, actions: cmd.actions, conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
+                              highlightColor: cmd.highlightColor, visible: cmd.visible, advanceOnTrigger: cmd.advanceOnTrigger, layer: cmd.layer },
+                        ] } } : p);
+                        return;
+                    }
+                    case 'HideHotSpot': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, hotSpotOverlays: (p.stageState.hotSpotOverlays || []).filter(h => h.commandId !== cmd.targetCommandId) } } : p);
+                        return;
+                    }
+                    // BLOCKING commands: show the UI (real handler), then PAUSE the script until the player
+                    // responds. The input handlers resolve `scriptInputResolverRef` (set just below). When
+                    // no script is awaiting, that ref is null, so normal playback is untouched.
+                    case 'Dialogue': {
+                        const r = handleDialogue(cmd, hctx);
+                        if (r.updates?.uiState) updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, ...r.updates!.uiState } } : p);
+                        return new Promise<void>(resolve => { scriptInputResolverRef.current = { kind: 'dialogue', resolve: () => resolve() }; });
+                    }
+                    case 'Choice': {
+                        const r = handleChoice(cmd, hctx);
+                        if (r.updates?.uiState) updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, ...r.updates!.uiState } } : p);
+                        return new Promise<number>(resolve => { scriptInputResolverRef.current = { kind: 'choice', resolve: (idx) => resolve(typeof idx === 'number' ? idx : 0) }; });
+                    }
+                    case 'TextInput': {
+                        const r = handleTextInput(cmd, hctx);
+                        if (r.updates?.uiState) updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, ...r.updates!.uiState } } : p);
+                        return new Promise<string>(resolve => { scriptInputResolverRef.current = { kind: 'textInput', resolve: (val) => resolve(typeof val === 'string' ? val : String(val ?? '')) }; });
+                    }
+                    // Movie playback (inline in the main loop — replicate here). Overlay = non-blocking;
+                    // fullscreen + waitsForCompletion = AWAIT until the movie ends (resolved by the movie's
+                    // onEnded/onClick guards) — the 'movie' resolver. Non-wait fullscreen = fire-and-forget.
+                    case 'PlayMovie': {
+                        const movieUrl = assetResolver(cmd.videoId, 'video');
+                        if (cmd.displayMode === 'overlay') {
+                            updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [
+                                ...(p.stageState.movieOverlays || []),
+                                { url: movieUrl || '', loop: cmd.loop ?? false, holdLastFrame: cmd.holdLastFrame ?? false, transition: cmd.transition, transitionDuration: cmd.transitionDuration, commandId: cmd.id, parallaxDepth: cmd.parallaxDepth, x: cmd.x, y: cmd.y, width: cmd.width, height: cmd.height, opacity: cmd.opacity, objectFit: cmd.objectFit },
+                            ] } } : p);
+                            return;
+                        }
+                        updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, movieUrl, movieLoop: cmd.loop ?? false, movieHoldLastFrame: cmd.holdLastFrame ?? false, movieTransition: cmd.transition, movieTransitionDuration: cmd.transitionDuration, movieExiting: false } } : p);
+                        if (cmd.waitsForCompletion !== false && !(cmd.loop ?? false)) {
+                            return new Promise<void>(resolve => { scriptInputResolverRef.current = { kind: 'movie', resolve: () => resolve() }; });
+                        }
+                        return;
+                    }
+                    case 'StopMovie': {
+                        updatePlayerState(p => p ? { ...p, stageState: { ...p.stageState, movieOverlays: [] }, uiState: { ...p.uiState, movieUrl: null, movieLoop: false } } : p);
+                        return;
+                    }
+                    default: console.warn('[Script] runCommand: unsupported command type', type); return;
+                }
+                if (!result) return;
+                // Persist variable writes through the runtime store so item/variable-changing commands
+                // stick and downstream conditions see them (mirrors the main applyResult).
+                if (result.updates?.variables && variableStoreRef.current) {
+                    variableStoreRef.current.applyWrites(Object.entries(result.updates.variables).map(([variableId, value]) => ({ variableId, value, scope: 'global' as const, sourceCommandId: cmd.id })));
+                }
+                if (result.updates || result.stagePatch) {
+                    updatePlayerState(p => {
+                        if (!p) return p;
+                        let nextStage = result!.updates?.stageState !== undefined ? { ...p.stageState, ...result!.updates.stageState } : undefined;
+                        if (result!.stagePatch) nextStage = { ...(nextStage ?? p.stageState), ...result!.stagePatch(p.stageState) };
+                        const mergedVars = result!.updates?.variables
+                            ? (variableStoreRef.current ? variableStoreRef.current.snapshot().globals : { ...p.variables, ...result!.updates.variables })
+                            : undefined;
+                        return {
+                            ...p,
+                            ...(nextStage !== undefined ? { stageState: nextStage } : {}),
+                            ...(mergedVars !== undefined ? { variables: mergedVars } : {}),
+                            ...(result!.updates?.uiState !== undefined ? { uiState: { ...p.uiState, ...result!.updates.uiState } } : {}),
+                            ...(result!.updates?.musicState !== undefined ? { musicState: { ...p.musicState, ...result!.updates.musicState } } : {}),
+                        };
+                    });
+                }
+                if (result.delay && result.callback) {
+                    const tid = window.setTimeout(result.callback, result.delay);
+                    activeEffectTimeoutsRef.current.push(tid);
+                } else if (result.callback) {
+                    result.callback();
+                }
+            } catch (e) {
+                console.error('[Script] runCommand error:', e);
+            }
+        };
+
+        // ── Script → UI bridge: fire any UI action (go to screen, save/load, show/hide element…) ──
+        // Routes through handleUIActionRef so the script hits the LATEST handleUIAction (fresh
+        // playerState), not the stale closure captured by this command-loop effect. Additive: when no
+        // script calls it, nothing changes for normal playback.
+        commandContext.runUIAction = (actionType: string, params?: Record<string, any>): void => {
+            try {
+                handleUIActionRef.current?.({ type: actionType as UIActionType, ...(params || {}) } as VNUIAction);
+            } catch (e) {
+                console.error('[Script] runUIAction error:', e);
+            }
+        };
+
         let instantAdvance = true;
         (async () => {
             try {
@@ -7367,6 +7810,8 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         activeShakeRef.current = null;
                         scheduler.reset();
                         variableStoreRef.current = null;
+                        // If a script was awaiting input when the scene changed, release it so it can't hang.
+                        if (scriptInputResolverRef.current) { const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null; r.resolve(undefined); }
                     }
                 }
                 instantAdvance = result.advance;
@@ -7475,6 +7920,11 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 }
                 case CommandType.HideCharacter: {
                     const result = handleHideCharacter(command as HideCharacterCommand, commandContext);
+                    applyResult(result);
+                    break;
+                }
+                case CommandType.SetCharacterLayer: {
+                    const result = handleSetCharacterLayer(command as SetCharacterLayerCommand, commandContext);
                     applyResult(result);
                     break;
                 }
@@ -8035,6 +8485,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                                     conditions: cmd.conditions, acceptedTag: cmd.acceptedTag,
                                     highlightColor: cmd.highlightColor, visible: cmd.visible,
                                     advanceOnTrigger: cmd.advanceOnTrigger,
+                                    layer: cmd.layer,
                                 },
                             ],
                         },
@@ -8158,6 +8609,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         if (scenePaused) return;
         // A modal incoming call is ringing — the call overlay owns input until answered/declined.
         if (playerState?.uiState.phone?.incomingCall?.phase === 'ringing' && playerState.uiState.phone.incomingCall.modal) return;
+        // Script-driven dialogue (game.dialogue): resolve the awaiting script and clear the line. This
+        // branch is INERT during normal playback (the ref is only set while a script is awaiting input),
+        // so artists'/writers' dialogue advancing is unchanged.
+        if (scriptInputResolverRef.current?.kind === 'dialogue') {
+            const r = scriptInputResolverRef.current;
+            scriptInputResolverRef.current = null;
+            stopVoice();
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, dialogue: null, isWaitingForInput: false, isSkipping: false } } : p);
+            r.resolve(undefined);
+            return;
+        }
         // Advancing past a line cuts off its voice clip so it doesn't bleed into the next line.
         stopVoice();
         updatePlayerState(p => {
@@ -8209,6 +8671,17 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
         });
     };
     const handleChoiceSelect = (choice: ChoiceOption) => {
+        // Script-driven choice (game.choice): resolve the awaiting script with the chosen index, clear
+        // the choices, and skip the normal action processing. INERT during normal playback (ref is null
+        // unless a script is awaiting), so authored choices behave exactly as before.
+        if (scriptInputResolverRef.current?.kind === 'choice') {
+            const r = scriptInputResolverRef.current;
+            scriptInputResolverRef.current = null;
+            const idx = (playerState?.uiState.choices || []).findIndex(c => c.id === choice.id);
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, choices: null, isWaitingForInput: false } } : p);
+            r.resolve(idx >= 0 ? idx : 0);
+            return;
+        }
         runtimeDebugLog('[CHOICE] Selected:', choice.text, 'Actions:', choice.actions?.length || 0);
         // Full action list (+ legacy targetSceneId fallback). The inline handling below covers
         // SetVariable / JumpToScene / JumpToLabel / OpenURL; EVERY other action type is delegated to
@@ -8219,6 +8692,12 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
             allActions.push({ type: UIActionType.JumpToScene, targetSceneId: (choice as any).targetSceneId } as VNUIAction);
         }
         const INLINE_CHOICE_ACTIONS = new Set<string>([UIActionType.SetVariable, UIActionType.JumpToScene, UIActionType.JumpToLabel, UIActionType.OpenURL]);
+        // A choice that changes scenes should play the leaving scene's Exit Transition — same as a UI
+        // button's Jump-to-Scene action does. The whole selection (variables/history/jump + post-actions)
+        // is wrapped in runSelection and deferred behind startSceneExitTransition so ordering is unchanged;
+        // when there's no scene jump (or no current scene) it runs immediately, exactly as before.
+        const willJumpScene = allActions.some(a => a.type === UIActionType.JumpToScene);
+        const runSelection = () => {
         updatePlayerState(p => {
             if (!p) return null;
             let newState = { ...p };
@@ -8359,6 +8838,20 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     newState.currentSceneId = actualSceneId;
                     newState.currentCommands = newScene.commands;
                     newState.currentIndex = 0;
+                    // Reset the stage to a clean slate — same as the button Jump-to-Scene path. Without
+                    // this, the OLD scene's background lingers and "pops back" when the exit-transition
+                    // black overlay lifts (before the new scene's background fades in). The new scene's
+                    // own commands re-establish bg/characters.
+                    newState.stageState = {
+                        backgroundUrl: null,
+                        characters: {},
+                        textOverlays: [],
+                        imageOverlays: [],
+                        buttonOverlays: [],
+                        movieOverlays: [],
+                        screen: { shake: { active: false, intensity: 0 }, tint: 'transparent', zoom: 1, panX: 0, panY: 0, transitionDuration: 0.5, overlayEffects: [] },
+                        particleEffects: {},
+                    };
                 } else {
                      console.error(`Scene not found for choice jump: ${actualSceneId}`);
                      newState.currentIndex = newState.currentIndex + 1;
@@ -8382,9 +8875,25 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                 handleUIAction(action, action.type === UIActionType.CallCommonEvent ? { resumeAtCurrent: true } : undefined);
             }
         }
+        };
+        const sceneToExit = playerStateRef.current?.currentSceneId;
+        if (willJumpScene && sceneToExit) {
+            startSceneExitTransition(sceneToExit, runSelection);
+        } else {
+            runSelection();
+        }
     };
 
     const handleTextInputSubmit = (value: string) => {
+        // Script-driven text input (game.textInput): resolve the awaiting script with the typed value,
+        // clear the field, skip the normal variable-store. INERT during normal playback.
+        if (scriptInputResolverRef.current?.kind === 'textInput') {
+            const r = scriptInputResolverRef.current;
+            scriptInputResolverRef.current = null;
+            updatePlayerState(p => p ? { ...p, uiState: { ...p.uiState, textInput: null, isWaitingForInput: false } } : p);
+            r.resolve(value);
+            return;
+        }
         updatePlayerState(p => {
             if (!p || !p.uiState.textInput) return p;
             
@@ -11265,6 +11774,13 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                     className="absolute inset-0 bg-black z-40 flex flex-col items-center justify-center text-white"
                     style={{ opacity: uiState.movieExiting ? 0 : 1, transition: uiState.movieExiting ? `opacity ${movieExitDur}s ease-out` : undefined }}
                     onClick={() => {
+                        // Script-driven movie (game.playMovie): clicking skips it → resolve the script, clear.
+                        if (scriptInputResolverRef.current?.kind === 'movie') {
+                            const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null;
+                            updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                            r.resolve(undefined);
+                            return;
+                        }
                         if (!uiState.isWaitingForInput) return;
                         updatePlayerState(p => p ? {...p, currentIndex: p.currentIndex + 1, uiState: {...p.uiState, isWaitingForInput: false, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
                     }}
@@ -11282,6 +11798,14 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                         loop={uiState.movieLoop ?? false}
                         style={{ width: '100%', height: '100%', objectFit: 'contain', animation: movieEntryAnim(uiState.movieTransition, uiState.movieTransitionDuration) }}
                         onEnded={() => {
+                            // Script-driven movie (game.playMovie, waitsForCompletion): resolve the awaiting
+                            // script + clear, regardless of holdLastFrame. (Checked first so a script never hangs.)
+                            if (scriptInputResolverRef.current?.kind === 'movie') {
+                                const r = scriptInputResolverRef.current; scriptInputResolverRef.current = null;
+                                updatePlayerState(p => p ? {...p, uiState: {...p.uiState, movieUrl: null, movieLoop: false, movieExiting: false}} : null);
+                                r.resolve(undefined);
+                                return;
+                            }
                             // If looping, onEnded won't fire (browser handles loop). Just in case:
                             if (uiState.movieLoop) return;
                             // Hold last frame: leave the (now-ended) video frozen on its final frame.
@@ -11303,7 +11827,7 @@ const LivePreview: React.FC<{ onClose: () => void; hideCloseButton?: boolean; au
                             }
                         }}
                     />
-                    {uiState.isWaitingForInput && (
+                    {(uiState.isWaitingForInput || scriptInputResolverRef.current?.kind === 'movie') && (
                         <div className="absolute bottom-4 right-4 text-xs opacity-50 pointer-events-none">Click to skip</div>
                     )}
                 </div>

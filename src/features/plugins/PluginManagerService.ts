@@ -15,10 +15,19 @@ import {
     PluginAPI,
     CustomCommandDefinition,
     CustomEffectDefinition,
+    EditorPanelContribution,
+    EditorPanelContext,
+    EditorMenuItemContribution,
+    EditorDatabaseCategory,
+    ExtensionRecord,
+    EditorUIElementType,
 } from '../../types/plugins';
 
 /** Current engine version (for engineVersion dependency checks). */
 export const ENGINE_VERSION = '2.0.0';
+
+/** pluginStorage key prefix under which a database category's records array is stored. */
+export const EXT_DB_STORAGE_PREFIX = '__extdb__';
 
 type VarValue = string | number | boolean;
 type NotifyType = 'info' | 'success' | 'warning' | 'error';
@@ -55,6 +64,10 @@ export class PluginManagerService {
     private loadedPlugins = new Map<string, { hooks: PluginHooks; api: PluginAPI }>();
     private registeredCommands = new Map<string, { def: CustomCommandDefinition; pluginId: string }>();
     private registeredEffects = new Map<string, { def: CustomEffectDefinition; pluginId: string }>();
+    private registeredPanels = new Map<string, { def: EditorPanelContribution; pluginId: string }>();
+    private registeredMenuItems = new Map<string, { def: EditorMenuItemContribution; pluginId: string }>();
+    private registeredDbCategories = new Map<string, { def: EditorDatabaseCategory; pluginId: string }>();
+    private registeredUIElementTypes = new Map<string, { def: EditorUIElementType; pluginId: string }>();
     private listeners = new Set<() => void>();
 
     private host: PluginHostBridge | null = null;
@@ -85,7 +98,7 @@ export class PluginManagerService {
      * Install a plugin from source: validate, check deps/engine, dispatch INSTALL,
      * load hooks, and fire onLoad/onEnable. Returns the created VNPlugin (throws on error).
      */
-    loadPlugin(source: string, project: VNProject, dispatch: (action: any) => void): VNPlugin {
+    loadPlugin(source: string, project: VNProject, dispatch: (action: any) => void, resources?: Record<string, string>): VNPlugin {
         const manifest = this.extractManifest(source);
         if (!manifest) throw new Error('Plugin must define a `manifest` object.');
 
@@ -107,12 +120,12 @@ export class PluginManagerService {
             }
         }
 
-        const plugin = createPlugin(manifest, source, {});
+        const plugin = createPlugin(manifest, source, {}, resources);
         dispatch({ type: 'INSTALL_PLUGIN', payload: { plugin } });
 
         // Load hooks against a fresh API and fire onLoad + onEnable.
         const api = this.createPluginAPI(manifest);
-        const hooks = this.parsePluginSource(source, api);
+        const hooks = this.parsePluginSource(source, api, manifest.target);
         this.loadedPlugins.set(manifest.id, { hooks, api });
         try { hooks.onLoad?.(api); } catch (e) { console.error(`[Plugin ${manifest.id}] onLoad failed:`, e); }
         try { hooks.onEnable?.(api); } catch (e) { console.error(`[Plugin ${manifest.id}] onEnable failed:`, e); }
@@ -127,7 +140,7 @@ export class PluginManagerService {
         let loaded = this.loadedPlugins.get(pluginId);
         if (!loaded) {
             const api = this.createPluginAPI(plugin.manifest);
-            const hooks = this.parsePluginSource(plugin.source, api);
+            const hooks = this.parsePluginSource(plugin.source, api, plugin.manifest.target);
             loaded = { hooks, api };
             this.loadedPlugins.set(pluginId, loaded);
             try { loaded.hooks.onLoad?.(loaded.api); } catch (e) { console.error(e); }
@@ -172,7 +185,7 @@ export class PluginManagerService {
             if (this.loadedPlugins.has(plugin.manifest.id)) continue;
             try {
                 const api = this.createPluginAPI(plugin.manifest);
-                const hooks = this.parsePluginSource(plugin.source, api);
+                const hooks = this.parsePluginSource(plugin.source, api, plugin.manifest.target);
                 this.loadedPlugins.set(plugin.manifest.id, { hooks, api });
                 hooks.onLoad?.(api);
                 hooks.onEnable?.(api);
@@ -189,6 +202,18 @@ export class PluginManagerService {
         }
         for (const [key, v] of Array.from(this.registeredEffects.entries())) {
             if (v.pluginId === pluginId) this.registeredEffects.delete(key);
+        }
+        for (const [key, v] of Array.from(this.registeredPanels.entries())) {
+            if (v.pluginId === pluginId) this.registeredPanels.delete(key);
+        }
+        for (const [key, v] of Array.from(this.registeredMenuItems.entries())) {
+            if (v.pluginId === pluginId) this.registeredMenuItems.delete(key);
+        }
+        for (const [key, v] of Array.from(this.registeredDbCategories.entries())) {
+            if (v.pluginId === pluginId) this.registeredDbCategories.delete(key);
+        }
+        for (const [key, v] of Array.from(this.registeredUIElementTypes.entries())) {
+            if (v.pluginId === pluginId) this.registeredUIElementTypes.delete(key);
         }
     }
 
@@ -210,6 +235,43 @@ export class PluginManagerService {
         return this.registeredEffects.get(type)?.def;
     }
 
+    /** All editor panels contributed by enabled extensions (with their owning plugin id). */
+    getRegisteredPanels(): Array<{ panel: EditorPanelContribution; pluginId: string }> {
+        return Array.from(this.registeredPanels.values()).map(v => ({ panel: v.def, pluginId: v.pluginId }));
+    }
+
+    /** All editor menu items / tools contributed by enabled extensions (with their owning plugin id). */
+    getRegisteredMenuItems(): Array<{ item: EditorMenuItemContribution; pluginId: string }> {
+        return Array.from(this.registeredMenuItems.values()).map(v => ({ item: v.def, pluginId: v.pluginId }));
+    }
+
+    /** All custom database categories contributed by enabled extensions (with their owning plugin id). */
+    getRegisteredDbCategories(): Array<{ category: EditorDatabaseCategory; pluginId: string }> {
+        return Array.from(this.registeredDbCategories.values()).map(v => ({ category: v.def, pluginId: v.pluginId }));
+    }
+
+    /** All custom UI element types contributed by enabled extensions (with their owning plugin id). */
+    getRegisteredUIElementTypes(): Array<{ def: EditorUIElementType; pluginId: string }> {
+        return Array.from(this.registeredUIElementTypes.values()).map(v => ({ def: v.def, pluginId: v.pluginId }));
+    }
+
+    /** Look up one custom UI element type by its (namespaced) type id — used by the renderer. */
+    getUIElementType(type: string): EditorUIElementType | undefined {
+        return this.registeredUIElementTypes.get(type)?.def;
+    }
+
+    /** Build the editor context handed to a panel's render() (project read, dispatch, notify, storage). */
+    buildPanelContext(pluginId: string): EditorPanelContext {
+        const self = this;
+        return {
+            getProject: () => self.host?.getProject() || null,
+            dispatch: (action: any) => self.host?.dispatch(action),
+            notify: (message: string, type?: NotifyType) => self.host?.notify(message, type),
+            getStorage: (key: string) => self.host?.getProject()?.pluginStorage?.[pluginId]?.[key],
+            setStorage: (key: string, value: any) => self.host?.dispatch({ type: 'SET_PLUGIN_STORAGE', payload: { pluginId, key, value } }),
+        };
+    }
+
     /** Get the live PluginAPI for a loaded plugin (used to run a custom command's handler). */
     getApi(pluginId: string): PluginAPI | undefined {
         return this.loadedPlugins.get(pluginId)?.api;
@@ -218,6 +280,28 @@ export class PluginManagerService {
     /** The plugin id that owns a registered command type (e.g. "pluginId.cmd" → "pluginId"). */
     getCommandOwner(type: string): string | undefined {
         return this.registeredCommands.get(type)?.pluginId;
+    }
+
+    // ── Test-play suspend/resume ──────────────────────────────────────────────
+    // Plugins flagged `hideInTestPlay` are suspended (their onDisable runs → editor UI like a floating
+    // panel/button tears itself down) while the editor is test-playing, then restored (onEnable) after.
+    // Their registered commands/effects stay registered — only their own UI is hidden. No state dispatch.
+    private testPlayActive = false;
+    setTestPlayActive(active: boolean): void {
+        if (this.testPlayActive === active) return;
+        this.testPlayActive = active;
+        const project = this.host?.getProject();
+        if (!project) return;
+        for (const [id, loaded] of this.loadedPlugins.entries()) {
+            const p = (project.plugins || {})[id];
+            if (!p || !p.hideInTestPlay) continue;
+            try {
+                if (active) loaded.hooks.onDisable?.(loaded.api);
+                else loaded.hooks.onEnable?.(loaded.api);
+            } catch (e) {
+                console.error(`[PluginManager] test-play ${active ? 'hide' : 'restore'} failed for ${id}:`, e);
+            }
+        }
     }
 
     // ── Hooks ─────────────────────────────────────────────────────────────────
@@ -241,6 +325,12 @@ export class PluginManagerService {
 
     // ── Source parsing / sandbox ──────────────────────────────────────────────
 
+    /** Public: read a plugin's manifest from its source WITHOUT installing it (for an install preview /
+     *  trust prompt). Returns null if the source has no valid manifest. */
+    peekManifest(source: string): PluginManifest | null {
+        return this.extractManifest(source);
+    }
+
     /** Extract just the manifest from source (run in a throwaway sandbox), for validation. */
     private extractManifest(source: string): PluginManifest | null {
         try {
@@ -257,26 +347,37 @@ export class PluginManagerService {
         }
     }
 
-    private sandboxPreamble(): string {
+    /** Editor extensions (`target: editor|both`) run on the author's machine with FULL trust (DOM /
+     *  network allowed) and are never shipped to players — so they get NO sandbox shadowing. Runtime
+     *  plugins (default) stay sandboxed because they're bundled into exported games run by others. */
+    private sandboxPreamble(target?: PluginManifest['target']): string {
+        if (target === 'editor' || target === 'both') return '';
+        // NOTE: 'eval' must NOT be here — `var eval = undefined;` is a SyntaxError under "use strict"
+        // and would make EVERY plugin fail to load ("Plugin must define a manifest"). It's blocked via a
+        // static usage check in parsePluginSource instead. 'Function' (a normal identifier) is safe to shadow.
         const blocked = [
             'document', 'window', 'globalThis', 'self',
             'fetch', 'XMLHttpRequest', 'WebSocket',
             'localStorage', 'sessionStorage', 'indexedDB',
-            'eval', 'Function',
+            'Function',
             'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
             'requestAnimationFrame', 'queueMicrotask', 'importScripts', 'require',
         ];
         return blocked.map(g => `var ${g} = undefined;`).join('\n');
     }
 
-    private parsePluginSource(source: string, api: PluginAPI): PluginHooks {
+    private parsePluginSource(source: string, api: PluginAPI, target?: PluginManifest['target']): PluginHooks {
+        const fullTrust = target === 'editor' || target === 'both';
         try {
-            if (/\.\s*constructor\b/.test(source)) {
+            if (!fullTrust && /\.\s*constructor\b/.test(source)) {
                 throw new Error('Access to ".constructor" is blocked in the plugin sandbox.');
+            }
+            if (!fullTrust && /\beval\s*\(/.test(source)) {
+                throw new Error('eval() is blocked in the plugin sandbox.');
             }
             const hooksFn = new Function('api', `
                 "use strict";
-                ${this.sandboxPreamble()}
+                ${this.sandboxPreamble(target)}
                 ${source}
                 return typeof plugin !== 'undefined' ? plugin : {};
             `);
@@ -346,6 +447,10 @@ export class PluginManagerService {
                 return { ...defaults, ...saved };
             },
 
+            getResource: (name: string) => {
+                return project()?.plugins?.[pluginId]?.resources?.[name];
+            },
+
             getStorage: (key: string) => {
                 const p = project();
                 return p?.pluginStorage?.[pluginId]?.[key];
@@ -366,6 +471,36 @@ export class PluginManagerService {
                 self.registeredEffects.set(fullType, { def: { ...effectDef, type: fullType }, pluginId });
                 self.notifyListeners();
             },
+
+            registerPanel: (panel: EditorPanelContribution) => {
+                const fullId = panel.id.startsWith(pluginId + '.') ? panel.id : `${pluginId}.${panel.id}`;
+                self.registeredPanels.set(fullId, { def: { ...panel, id: fullId }, pluginId });
+                self.notifyListeners();
+            },
+
+            registerMenuItem: (item: EditorMenuItemContribution) => {
+                const fullId = item.id.startsWith(pluginId + '.') ? item.id : `${pluginId}.${item.id}`;
+                self.registeredMenuItems.set(fullId, { def: { ...item, id: fullId }, pluginId });
+                self.notifyListeners();
+            },
+
+            registerDatabaseCategory: (category: EditorDatabaseCategory) => {
+                const fullId = category.id.startsWith(pluginId + '.') ? category.id : `${pluginId}.${category.id}`;
+                self.registeredDbCategories.set(fullId, { def: { ...category, id: fullId }, pluginId });
+                self.notifyListeners();
+            },
+
+            getRecords: (categoryId: string): ExtensionRecord[] => {
+                const fullId = categoryId.startsWith(pluginId + '.') ? categoryId : `${pluginId}.${categoryId}`;
+                const recs = project()?.pluginStorage?.[pluginId]?.[`${EXT_DB_STORAGE_PREFIX}${fullId}`];
+                return Array.isArray(recs) ? recs : [];
+            },
+
+            registerUIElementType: (def: EditorUIElementType) => {
+                const fullType = def.type.startsWith(pluginId + '.') ? def.type : `${pluginId}.${def.type}`;
+                self.registeredUIElementTypes.set(fullType, { def: { ...def, type: fullType }, pluginId });
+                self.notifyListeners();
+            },
         };
     }
 }
@@ -374,7 +509,8 @@ export class PluginManagerService {
 export function createPlugin(
     manifest: PluginManifest,
     source: string,
-    config: Record<string, any> = {}
+    config: Record<string, any> = {},
+    resources?: Record<string, string>
 ): VNPlugin {
     return {
         manifest,
@@ -382,6 +518,7 @@ export function createPlugin(
         installedAt: new Date().toISOString(),
         config,
         source,
+        ...(resources && Object.keys(resources).length > 0 ? { resources } : {}),
     };
 }
 

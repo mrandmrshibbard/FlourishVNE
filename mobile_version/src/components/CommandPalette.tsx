@@ -14,7 +14,7 @@ export const COMMAND_CATEGORIES = {
     'Characters': {
         color: 'bg-blue-500/20 border-blue-500 text-blue-300',
         headerColor: 'bg-blue-600/30 text-blue-200',
-        commands: [CommandType.ShowCharacter, CommandType.HideCharacter]
+        commands: [CommandType.ShowCharacter, CommandType.HideCharacter, CommandType.SetCharacterLayer]
     },
     'Scenes': {
         color: 'bg-green-500/20 border-green-500 text-green-300',
@@ -86,6 +86,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
     const formatCommandName = (commandType: CommandType): string =>
         t(`names.${commandType}`, { defaultValue: commandType.replace(/([A-Z])/g, ' $1').trim() });
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set(Object.keys(COMMAND_CATEGORIES)));
+    const [search, setSearch] = useState('');
     // Re-render when plugins register/unregister custom commands.
     const [, forceTick] = useState(0);
     useEffect(() => {
@@ -115,14 +116,23 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0">
+            <div className="px-1.5 py-1 border-b border-[var(--border-subtle)] flex-shrink-0 space-y-1">
                 <h2 className="text-xs font-bold text-white">{t('paletteTitle')}</h2>
+                <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder={t('searchCommands', { defaultValue: 'Search commands…' })}
+                    className="w-full text-xs px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-subtle)] text-[var(--text-primary)] outline-none focus:border-[var(--accent-cyan)]"
+                />
             </div>
-            
+
             <div className="flex-1 overflow-y-auto px-1 py-1 space-y-1">
                 {Object.entries(COMMAND_CATEGORIES).map(([categoryName, category]) => {
-                    const isCollapsed = collapsedCategories.has(categoryName);
-                    
+                    const q = search.trim().toLowerCase();
+                    const cmds = category.commands.filter(ct => !HIDDEN_COMMANDS.has(ct) && (!q || formatCommandName(ct).toLowerCase().includes(q) || String(ct).toLowerCase().includes(q)));
+                    if (q && cmds.length === 0) return null;
+                    const isCollapsed = q ? false : collapsedCategories.has(categoryName);
+
                     return (
                         <div key={categoryName} className="space-y-0.5">
                             {/* Category Header */}
@@ -141,8 +151,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                             {/* Commands in Category */}
                             {!isCollapsed && (
                                 <div className="space-y-0.5 pl-2">
-                                    {category.commands
-                                        .filter(commandType => !HIDDEN_COMMANDS.has(commandType))
+                                    {cmds
                                         .map(commandType => (
                                             <div
                                                 key={commandType}
@@ -161,8 +170,11 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                 })}
 
                 {/* Plugin-provided custom commands */}
-                {customCommands.length > 0 && (() => {
-                    const isCollapsed = collapsedCategories.has('Plugins');
+                {(() => {
+                    const q = search.trim().toLowerCase();
+                    const filtered = customCommands.filter(c => !q || (c.displayName || '').toLowerCase().includes(q) || String(c.type || '').toLowerCase().includes(q));
+                    if (filtered.length === 0) return null;
+                    const isCollapsed = q ? false : collapsedCategories.has('Plugins');
                     return (
                         <div key="Plugins" className="space-y-0.5">
                             <button
@@ -174,7 +186,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ onDragStart }) => {
                             </button>
                             {!isCollapsed && (
                                 <div className="space-y-0.5 pl-2">
-                                    {customCommands.map(cmd => (
+                                    {filtered.map(cmd => (
                                         <div
                                             key={cmd.type}
                                             draggable

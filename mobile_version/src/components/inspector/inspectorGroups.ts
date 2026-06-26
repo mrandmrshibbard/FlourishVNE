@@ -86,6 +86,9 @@ export function getCommandGroups(command: VNCommand | null | undefined): Inspect
         case CommandType.ShowCharacter:
             // character + expression; position/scale/orientation; visual effects; transition.
             return order(['content', 'transform', 'effects', 'animation', 'conditions']);
+        case CommandType.SetCharacterLayer:
+            // character + the layers to change; optional transition.
+            return order(['content', 'animation', 'conditions']);
         case CommandType.HideCharacter:
         case CommandType.HideText:
         case CommandType.HideImage:

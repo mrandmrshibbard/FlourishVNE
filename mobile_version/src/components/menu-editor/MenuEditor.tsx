@@ -5,11 +5,13 @@ import { useProject } from '../../contexts/ProjectContext';
 import { useToast } from '../../contexts/ToastContext';
 import { VNID } from '../../types';
 import { VNProject } from '../../types/project';
-import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement } from '../../features/ui/types';
+import { VNUIScreen, VNUIElement, UIElementType, UISettingsSliderElement, UISettingsToggleElement, UIButtonElement, UITextElement, UIImageElement, UISaveSlotGridElement, UICharacterPreviewElement, UITextInputElement, UIDropdownElement, UICheckboxElement, UIAssetCyclerElement, UICGGalleryElement, UIInventoryGridElement, UIMeterElement, UICustomizerElement, UICustomElement } from '../../features/ui/types';
 import { VNCharacter, VNCharacterLayer } from '../../features/character/types';
 import { UIActionType } from '../../types/shared';
 import ResizableDraggable from './ResizableDraggable';
-import { createUIElement } from '../../utils/uiElementFactory';
+import { createUIElement, createCustomUIElement } from '../../utils/uiElementFactory';
+import { pluginManager } from '../../features/plugins/PluginManagerService';
+import { useExtensionUIElementTypes } from '../ExtensionPanelsHost';
 import { fontSettingsToStyle, extractTextGradientStyle } from '../../utils/styleUtils';
 import { GradientText } from '../ui/GradientText';
 import { PlusIcon, SparklesIcon } from '../icons';
@@ -595,6 +597,135 @@ const UIElementRenderer: React.FC<{ element: VNUIElement, project: VNProject }> 
                 </div>
             </div>;
         }
+        case UIElementType.Customizer: {
+            const cz = element as UICustomizerElement;
+            const czChar = cz.characterId ? project.characters[cz.characterId] : null;
+            if (!czChar) return <div className="w-full h-full border-2 border-dashed border-[var(--accent-purple)] flex items-center justify-center text-[var(--text-secondary)]"><span className="bg-black/50 p-1 rounded text-xs">Customizer — pick a character</span></div>;
+            // Composite using each category's variable DEFAULT (canvas has no live values); fall back to
+            // the chosen/first expression for layers without a category.
+            const czFallback = (cz.expressionId && czChar.expressions[cz.expressionId]) || Object.values(czChar.expressions)[0];
+            const czImgs: string[] = [];
+            const czVids: string[] = [];
+            let czHasVid = false;
+            if (czChar.baseVideoUrl) { czVids.push(czChar.baseVideoUrl); czHasVid = true; }
+            else if (czChar.baseImageUrl) { czImgs.push(czChar.baseImageUrl); }
+            Object.entries(czChar.layers).forEach(([layerId, layer]: [string, any]) => {
+                const cat = (cz.categories || []).find(c => c.layerId === layerId);
+                let assetId: string | null = null;
+                if (cat) assetId = String((project.variables[cat.variableId]?.defaultValue ?? '') || '') || null;
+                if (!assetId && czFallback) assetId = czFallback.layerConfiguration[layerId] || null;
+                const asset = assetId ? layer.assets[assetId] : null;
+                if (asset?.videoUrl) { czVids.push(asset.videoUrl); czHasVid = true; }
+                else if (asset?.imageUrl) { czImgs.push(asset.imageUrl); }
+            });
+            // Faithful preview: mirror the runtime (composite + per-category swatch grids) so every
+            // property adjustment (layout, swatch size/gap, selected highlight, colors, labels) shows
+            // live on the canvas. Selection uses each category variable's DEFAULT (canvas isn't playing).
+            const czSwatchSize = cz.swatchSize ?? 48;
+            const czSwatchGap = cz.swatchGap ?? 6;
+            const czSel = cz.selectedColor || '#8a2be2';
+            const czArrowColor = cz.arrowColor || '#ffffff';
+            const czArrowSize = cz.arrowSize ?? 28;
+            const czButtonColor = cz.buttonColor || 'rgba(255,255,255,0.12)';
+            const czButtonText = cz.buttonTextColor || '#ffffff';
+            const czLayout = cz.layout || 'preview-left';
+            const czPv = `${cz.previewPercent ?? 45}%`;
+            const czUiImg = (a?: { id: string } | null) => a ? ((project.images[a.id] as any)?.imageUrl || (project.backgrounds[a.id] as any)?.imageUrl || null) : null;
+            const czArrowUrl = czUiImg(cz.arrowImage);
+            const czFrameUrl = czUiImg(cz.backgroundImage);
+            const czAssetUrl = (a: any) => a?.imageUrl || a?.videoUrl || null;
+            const czPreview = (
+                <div className="relative" style={czLayout === 'preview-top' ? { height: czPv, width: '100%', flexShrink: 0 } : { width: czPv, height: '100%', flexShrink: 0 }}>
+                    {(czHasVid ? czVids : czImgs).map((u, i) => czHasVid
+                        ? <video key={i} src={u} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />
+                        : <img key={i} src={u} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ zIndex: i }} />)}
+                </div>
+            );
+            // Non-interactive mirror of one category's picker so the canvas matches the runtime style.
+            const czRenderPicker = (cat: any, cur: string, assets: any[]) => {
+                const pstyle = cat.pickerStyle || 'swatches';
+                if (pstyle === 'arrows') {
+                    const curAsset = assets.find(a => a.id === cur) || assets[0];
+                    const cu = curAsset ? czAssetUrl(curAsset) : null;
+                    const arrow = (flip: boolean) => czArrowUrl
+                        ? <img src={czArrowUrl} alt="" style={{ width: czArrowSize, height: czArrowSize, objectFit: 'contain', transform: flip ? 'scaleX(-1)' : undefined }} />
+                        : <span style={{ fontSize: czArrowSize, lineHeight: 1, color: czArrowColor }}>{flip ? '◀' : '▶'}</span>;
+                    return <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {arrow(true)}
+                        <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                            {cu && <div style={{ width: czSwatchSize, height: czSwatchSize, margin: '0 auto' }}><img src={cu} alt="" className="w-full h-full object-contain" /></div>}
+                            <div className="text-[10px] text-white/80 truncate">{curAsset?.name || ''}</div>
+                        </div>
+                        {arrow(false)}
+                    </div>;
+                }
+                if (pstyle === 'dropdown') {
+                    const curAsset = assets.find(a => a.id === cur) || assets[0];
+                    return <div style={{ width: '100%', padding: '4px 6px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', color: czButtonText, border: `1px solid ${cz.borderColor || 'rgba(255,255,255,0.2)'}`, fontSize: 11 }} className="flex items-center justify-between"><span className="truncate">{curAsset?.name || ''}</span><span>▾</span></div>;
+                }
+                if (pstyle === 'buttons') {
+                    return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {assets.map(a => <span key={a.id} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: cur === a.id ? czSel : czButtonColor, color: czButtonText }}>{a.name}</span>)}
+                    </div>;
+                }
+                return <div style={{ display: 'flex', flexWrap: 'wrap', gap: czSwatchGap }}>
+                    {assets.map(asset => {
+                        const meta = cz.optionMeta?.[asset.id];
+                        const swUrl = meta?.swatchImage ? czUiImg(meta.swatchImage) : null;
+                        return (
+                            <div key={asset.id} title={asset.name} style={{ position: 'relative', width: czSwatchSize, height: czSwatchSize, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.3)', boxShadow: cur === asset.id ? `0 0 0 3px ${czSel}` : 'inset 0 0 0 1px rgba(255,255,255,0.15)' }}>
+                                {swUrl ? <img src={swUrl} alt="" className="w-full h-full object-contain" /> : asset.imageUrl ? <img src={asset.imageUrl} alt="" className="w-full h-full object-contain" /> : asset.videoUrl ? <video src={asset.videoUrl} muted className="w-full h-full object-contain" /> : <div className="w-full h-full" />}
+                                {meta?.conditions?.length ? <span style={{ position: 'absolute', top: 1, right: 2, fontSize: 9 }}>🔒</span> : null}
+                            </div>
+                        );
+                    })}
+                </div>;
+            };
+            const czPickers = (
+                <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: 6 }}>
+                    {(cz.categories || []).map(cat => {
+                        const layer = czChar.layers[cat.layerId];
+                        if (!layer) return null;
+                        let cur = String((project.variables[cat.variableId]?.defaultValue ?? '') || '');
+                        if (!cur && czFallback) cur = czFallback.layerConfiguration[cat.layerId] || '';
+                        const assets = Object.values(layer.assets) as any[];
+                        return (
+                            <div key={cat.layerId}>
+                                {cz.showLabels !== false && <div className="text-[10px] text-white/80 mb-1 truncate">{cat.label || layer.name}</div>}
+                                {czRenderPicker(cat, cur, assets)}
+                            </div>
+                        );
+                    })}
+                    {(cz.categories || []).length === 0 && <div className="text-[10px] text-white/50">No categories yet — set them up in the Customizer's properties.</div>}
+                    {(cz.showRandomize || cz.showReset) && (cz.categories || []).length > 0 && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                            {cz.showRandomize && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.randomizeLabel || 'Randomize'}</span>}
+                            {cz.showReset && <span style={{ fontSize: 10, padding: '4px 12px', borderRadius: 6, background: czButtonColor, color: czButtonText }}>{cz.resetLabel || 'Reset'}</span>}
+                        </div>
+                    )}
+                </div>
+            );
+            return <div className="w-full h-full overflow-hidden flex" style={{ background: cz.backgroundColor || 'rgba(0,0,0,0.25)', ...(czFrameUrl ? { backgroundImage: `url(${czFrameUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}), borderRadius: cz.borderRadius ?? 8, border: cz.borderColor ? `1px solid ${cz.borderColor}` : '1px dashed var(--accent-purple)', flexDirection: czLayout === 'preview-top' ? 'column' : 'row' }}>
+                {czLayout === 'preview-right' ? <>{czPickers}{czPreview}</> : <>{czPreview}{czPickers}</>}
+            </div>;
+        }
+        case UIElementType.Custom: {
+            const el = element as UICustomElement;
+            const def = pluginManager.getUIElementType(el.pluginType);
+            if (!def) return <div className="w-full h-full bg-amber-500/20 text-amber-300 text-[10px] flex items-center justify-center text-center p-1">Custom element — its extension isn't enabled.</div>;
+            const getVar = (nameOrId: string) => {
+                let id = nameOrId;
+                if (!(project.variables as any)[id]) {
+                    const found = Object.values(project.variables).find((v: any) => v.name?.toLowerCase() === String(nameOrId).toLowerCase()) as any;
+                    if (found) id = found.id;
+                }
+                return (project.variables as any)[id]?.defaultValue;
+            };
+            let html = '';
+            try { html = def.render(el.props || {}, { getVariable: getVar, isEditor: true }); }
+            catch (e) { html = '<div style="color:#f87171;font:11px sans-serif;padding:4px">render error</div>'; }
+            return <div className="w-full h-full overflow-hidden" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: html }} />;
+        }
         default:
             return <div className="w-full h-full bg-red-500/20 text-red-300">Unknown Element</div>;
     }
@@ -779,11 +910,25 @@ const MenuEditor: React.FC<{
             } else if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 handleDeleteSelected();
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                // Nudge selected element(s) by a small % step (Shift = coarser) for pixel-ish fine-tuning.
+                if (selectedElementIds.length === 0) return;
+                e.preventDefault();
+                const step = e.shiftKey ? 2 : 0.5;
+                const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+                const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+                selectedElementIds.forEach(id => {
+                    const el = screen.elements[id];
+                    if (!el) return;
+                    const nx = Math.round(Math.max(0, Math.min(100, (el.x ?? 0) + dx)) * 100) / 100;
+                    const ny = Math.round(Math.max(0, Math.min(100, (el.y ?? 0) + dy)) * 100) / 100;
+                    dispatch({ type: 'UPDATE_UI_ELEMENT', payload: { screenId: activeScreenId, elementId: id, updates: { x: nx, y: ny } } });
+                });
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [screen, handleCopy, handleCut, handlePaste, handleSelectAll, handleDeleteSelected]);
+    }, [screen, handleCopy, handleCut, handlePaste, handleSelectAll, handleDeleteSelected, selectedElementIds, activeScreenId, dispatch]);
 
     // Early return AFTER all hooks to satisfy Rules of Hooks
     if (!screen) return <Panel title={t('menuEditor.title')}>{t('menuEditor.screenNotFound')}</Panel>;
@@ -812,12 +957,21 @@ const MenuEditor: React.FC<{
         });
     }, [dispatch, activeScreenId]);
     
+    const extensionUIElementTypes = useExtensionUIElementTypes();
+
     const handleAddElement = (type: UIElementType) => {
         const newElement = createUIElement(type, project);
         if (newElement) {
             dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
             setSelectedElementIds([newElement.id]);
         }
+    };
+
+    // Add a custom (extension-contributed) element type.
+    const handleAddCustomElement = (def: { type: string; displayName: string; defaultProps?: Record<string, any>; defaultSize?: { width: number; height: number } }) => {
+        const newElement = createCustomUIElement(def.type, def.displayName, def.defaultProps, def.defaultSize);
+        dispatch({ type: 'ADD_UI_ELEMENT', payload: { screenId: activeScreenId, element: newElement } });
+        setSelectedElementIds([newElement.id]);
     };
 
     const handleAddVideoElement = () => {
@@ -1147,22 +1301,26 @@ const MenuEditor: React.FC<{
                     <SparklesIcon className="w-5 h-5" /> Template Wizard
                 </button>
                 
-                {/* Individual Element Buttons */}
-                <div className="grid grid-cols-2 md:grid-cols-11 gap-2">
+                {/* Individual Element Buttons — a single horizontally-scrollable row so the toolbar
+                    keeps a fixed (one-row) height instead of wrapping into many rows in a narrow
+                    window (which previously squeezed the canvas, especially when popped out). */}
+                <div className="flex flex-nowrap overflow-x-auto gap-2 pb-1 [&>button]:flex-shrink-0 [&>button]:whitespace-nowrap">
                     <button onClick={() => handleAddElement(UIElementType.Button)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Button</button>
                     <button onClick={() => handleAddElement(UIElementType.Text)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text</button>
                     <button onClick={() => handleAddElement(UIElementType.Image)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Image</button>
                     <button onClick={handleAddVideoElement} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Video</button>
-                    <button onClick={() => handleAddElement(UIElementType.CharacterPreview)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Character</button>
+                    <button onClick={() => handleAddElement(UIElementType.Customizer)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Customizer</button>
                     <button onClick={() => handleAddElement(UIElementType.TextInput)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Text Input</button>
                     <button onClick={() => handleAddElement(UIElementType.Dropdown)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Dropdown</button>
                     <button onClick={() => handleAddElement(UIElementType.Checkbox)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Checkbox</button>
-                    <button onClick={() => handleAddElement(UIElementType.AssetCycler)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Cycler</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsSlider)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Slider</button>
                     <button onClick={() => handleAddElement(UIElementType.SettingsToggle)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Toggle</button>
                     <button onClick={() => handleAddElement(UIElementType.CGGallery)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> CG Gallery</button>
                     <button onClick={() => handleAddElement(UIElementType.Inventory)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Inventory</button>
                     <button onClick={() => handleAddElement(UIElementType.Meter)} className="bg-[var(--accent-purple)] hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-purple-400/30"><PlusIcon /> Meter</button>
+                    {extensionUIElementTypes.map(({ def }) => (
+                        <button key={def.type} onClick={() => handleAddCustomElement(def)} title={`From extension: ${def.type}`} className="bg-violet-700 hover:opacity-80 p-2 rounded-md flex items-center justify-center gap-2 font-semibold text-xs shadow-md border border-violet-400/30"><PlusIcon /> {def.icon ? def.icon + ' ' : ''}{def.displayName}</button>
+                    ))}
                 </div>
             </div>
             

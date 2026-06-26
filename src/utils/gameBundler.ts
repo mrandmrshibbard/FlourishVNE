@@ -6,6 +6,7 @@
 
 import JSZip from 'jszip';
 import { VNProject } from '../types/project';
+import { VNPlugin } from '../types/plugins';
 import { UIActionType } from '../types/shared';
 import { getGameEngineCode } from './gameEngineBundle';
 
@@ -325,9 +326,31 @@ async function fetchVendorScripts(): Promise<{ react: string; reactDom: string; 
  * Generates a self-contained HTML file with the game engine embedded
  * Fetches React/ReactDOM/Tailwind at build time and inlines them for true offline play
  */
+/**
+ * Remove add-ons that must NOT ship inside a playable game build:
+ *  - Editor extensions (`manifest.target === 'editor'`) — they only extend the editor and run unsandboxed.
+ *  - Any plugin the user opted out of via `includeInBuild === false`.
+ * Their plugin-scoped storage is dropped too (e.g. a Story Bible's notes don't belong in the game).
+ * Runtime plugins (the default) are kept so games that intentionally use a plugin still work.
+ */
+export function stripBuildExcludedPlugins(project: VNProject): VNProject {
+  const plugins = (project.plugins || {}) as Record<string, VNPlugin>;
+  const keptPlugins: Record<string, VNPlugin> = {};
+  const keptStorage: Record<string, any> = {};
+  for (const [id, p] of Object.entries(plugins)) {
+    const editorOnly = p?.manifest?.target === 'editor';
+    const optedOut = (p as VNPlugin).includeInBuild === false;
+    if (editorOnly || optedOut) continue;
+    keptPlugins[id] = p;
+    if (project.pluginStorage && project.pluginStorage[id] !== undefined) keptStorage[id] = project.pluginStorage[id];
+  }
+  return { ...project, plugins: keptPlugins, pluginStorage: keptStorage };
+}
+
 export async function generateStandaloneHTML(project: VNProject): Promise<string> {
   const gameEngineCode = getMinimalGameEngine();
-  const projectData = JSON.stringify(project);
+  // Never ship editor-only extensions (or plugins the user excluded) inside a playable game.
+  const projectData = JSON.stringify(stripBuildExcludedPlugins(project));
 
   const vendor = await fetchVendorScripts();
   const hasInlinedReact = vendor.react.length > 0 && vendor.reactDom.length > 0;

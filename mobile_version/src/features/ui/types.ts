@@ -440,6 +440,9 @@ export enum UIElementType {
     HotSpot = 'HotSpot',
     draggableImageElement = 'draggableImageElement',
     Meter = 'Meter',
+    Customizer = 'Customizer',
+    /** An element type contributed by an extension (rendered via a registered HTML renderer). */
+    Custom = 'Custom',
 }
 
 /**
@@ -919,10 +922,74 @@ export interface UIMeterElement extends BaseUIElement {
     alignY?: 'top' | 'center' | 'bottom';
 }
 
+/** Player-facing character customization / dress-up. Bundles what the old AssetCycler +
+ *  CharacterPreview did into ONE element: it reads the character's existing layers as "categories",
+ *  each category lets the player pick from that layer's assets, and the choice is stored in an
+ *  auto-managed variable — so the look flows into scenes automatically (ShowCharacter reads the same
+ *  variables). Additive: old projects keep their AssetCycler/CharacterPreview elements. */
+export interface UICustomizerCategory {
+    layerId: VNID;        // the character layer this category customizes
+    label?: string;       // shown above the picker (defaults to the layer name)
+    variableId: VNID;     // auto-created string variable holding the selected asset id
+    pickerStyle?: 'swatches' | 'arrows' | 'buttons' | 'dropdown'; // how the player picks (default 'swatches')
+}
+
+/** Per-option (per-asset) rules for a Customizer, keyed by asset id. Replaces the old AssetCycler
+ *  filterPattern with plain conditions. */
+export interface UICustomizerOptionMeta {
+    conditions?: VNCondition[];   // gating conditions (other category vars, coins, flags…)
+    whenUnmet?: 'hide' | 'lock';  // conditions fail → hide the option (default) or show it locked
+    swatchImage?: UIAsset | null; // optional custom thumbnail shown in the picker for this option
+}
+export interface UICustomizerElement extends BaseUIElement {
+    type: UIElementType.Customizer;
+    characterId: VNID;
+    expressionId?: VNID;          // fallback look for layers without a category/selection
+    categories: UICustomizerCategory[];
+    layout?: 'preview-left' | 'preview-right' | 'preview-top';
+    previewPercent?: number;      // % of the element devoted to the live preview (default 45)
+    showLabels?: boolean;         // show category labels (default true)
+    font?: VNFontSettings;        // labels + asset names
+    backgroundColor?: string;     // element panel background
+    borderColor?: string;
+    borderRadius?: number;
+    swatchSize?: number;          // px per swatch (default 48)
+    swatchGap?: number;           // px between swatches (default 6)
+    selectedColor?: string;       // highlight ring for the selected swatch / button
+    // 2b theming — all additive-optional
+    backgroundImage?: UIAsset | null;  // frame/panel image behind the whole element
+    arrowImage?: UIAsset | null;       // custom arrow for the 'arrows' picker (left side is mirrored)
+    arrowColor?: string;               // arrow tint when no arrowImage (default light)
+    arrowSize?: number;                // arrow size in px (default 28)
+    buttonColor?: string;              // 'buttons' picker: unselected button background
+    buttonTextColor?: string;          // 'buttons' picker: button text color
+    // 2c — per-option rules + quick actions
+    optionMeta?: Record<VNID, UICustomizerOptionMeta>; // per-asset rules, keyed by asset id
+    showRandomize?: boolean;           // show a Randomize button
+    showReset?: boolean;               // show a Reset-to-default button
+    randomizeLabel?: string;           // default "Randomize"
+    resetLabel?: string;               // default "Reset"
+}
+
+/**
+ * An element type contributed by an extension (Phase C4). The extension registers a renderer
+ * (`api.registerUIElementType`) that returns an HTML string from `props`; the editor canvas and the game
+ * engine both render it inside the standard positioned/resizable element box. `props` holds the values
+ * the user edits in the generated inspector. If the owning extension is missing, the element renders
+ * nothing (save/load-safe).
+ */
+export interface UICustomElement extends BaseUIElement {
+    type: UIElementType.Custom;
+    /** The registered custom element type id (namespaced: `pluginId.typeId`). */
+    pluginType: string;
+    /** Field values configured in the inspector (keys defined by the type's `inspector` spec). */
+    props: Record<string, any>;
+}
+
 export type VNUIElement =
     | UIButtonElement | UITextElement | UIImageElement | UISaveSlotGridElement
     | UISettingsSliderElement | UISettingsToggleElement | UICharacterPreviewElement | UITextInputElement | UIDropdownElement | UICheckboxElement | UIAssetCyclerElement | UICGGalleryElement | UIInventoryGridElement
-    | UIHotSpotElement | UIdraggableImageElementElement | UIMeterElement;
+    | UIHotSpotElement | UIdraggableImageElementElement | UIMeterElement | UICustomizerElement | UICustomElement;
 
 /** An extra background plane on a screen (for multi-plane parallax backdrops). */
 export interface VNScreenBackgroundLayer {
